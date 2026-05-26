@@ -1,0 +1,110 @@
+// Package config manages CLI credential profiles in ~/.plivo/config.toml,
+// with fallback to PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN env vars.
+package config
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/BurntSushi/toml"
+	"github.com/plivo/plivo-cli/internal/clierr"
+)
+
+type Profile struct {
+	AuthID            string `toml:"auth_id"`
+	AuthToken         string `toml:"auth_token"`
+	DefaultSubaccount string `toml:"default_subaccount,omitempty"`
+	Region            string `toml:"region,omitempty"`
+}
+
+type Config struct {
+	Active   string             `toml:"active"`
+	Profiles map[string]Profile `toml:"profiles"`
+}
+
+var ErrNoCredentials = errors.New("no credentials: set PLIVO_AUTH_ID/PLIVO_AUTH_TOKEN or run `plivo auth login`")
+
+// Path returns the config file path: ~/.plivo/config.toml.
+func Path() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".plivo", "config.toml"), nil
+}
+
+func Load() (*Config, error) {
+	p, err := Path()
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &Config{Profiles: map[string]Profile{}}, nil
+		}
+		return nil, err
+	}
+	var c Config
+	if _, err := toml.Decode(string(data), &c); err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", p, err)
+	}
+	if c.Profiles == nil {
+		c.Profiles = map[string]Profile{}
+	}
+	return &c, nil
+}
+
+func Save(c *Config) error {
+	p, err := Path()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0700); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return toml.NewEncoder(f).Encode(c)
+}
+
+// Resolve returns the credentials to use.
+// Order: explicit profileName → active profile in config → PLIVO_AUTH_ID/TOKEN env vars.
+// The second return value is the source label ("profile-name" or "env").
+func Resolve(profileName string) (Profile, string, error) {
+	cfg, err := Load()
+	if err != nil {
+		return Profile{}, "", err
+	}
+	name := profileName
+	if name == "" {
+		name = cfg.Active
+	}
+	if name != "" {
+		if p, ok := cfg.Profiles[name]; ok && p.AuthID != "" && p.AuthToken != "" {
+			return p, name, nil
+		}
+		if profileName != "" {
+			return Profile{}, "", fmt.Errorf("profile %q not found in %s", profileName, mustPath())
+		}
+	}
+	authID := os.Getenv("PLIVO_AUTH_ID")
+	authToken := os.Getenv("PLIVO_AUTH_TOKEN")
+	if authID != "" && authToken != "" {
+		return Profile{AuthID: authID, AuthToken: authToken}, "env", nil
+	}
+	return Profile{}, "", clierr.AuthMissing()
+}
+
+func mustPath() string {
+	p, err := Path()
+	if err != nil {
+		return "~/.plivo/config.toml"
+	}
+	return p
+}
