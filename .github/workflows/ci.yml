@@ -46,6 +46,23 @@ jobs:
           fi
           echo "✓ go.mod tidy"
 
+      - name: go test (race + coverage)
+        run: |
+          go test -race -coverprofile=coverage.out -covermode=atomic ./...
+          echo
+          go tool cover -func=coverage.out | tail -20
+          echo
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ {sub(/%/,""); print $3}')
+          echo "Total coverage: ${total}%"
+
+      - name: upload coverage artefact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ github.run_id }}
+          path: coverage.out
+          retention-days: 14
+
       - name: build
         run: go build -o plivo .
 
