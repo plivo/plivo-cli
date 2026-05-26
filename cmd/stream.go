@@ -30,14 +30,14 @@ var streamGetCmd = &cobra.Command{
 }
 
 var (
-	streamStartURL           string
-	streamStartTrack         string
-	streamStartBiDi          bool
-	streamStartContentType   string
-	streamStartCallbackURL   string
-	streamStartStatusURL     string
-	streamStartExtraHeaders  string
-	streamStartServiceType   string
+	streamStartURL          string
+	streamStartTrack        string
+	streamStartBiDi         bool
+	streamStartContentType  string
+	streamStartCallbackURL  string
+	streamStartStatusURL    string
+	streamStartExtraHeaders string
+	streamStartServiceType  string
 )
 
 var streamStartCmd = &cobra.Command{
@@ -135,10 +135,10 @@ func runStreamStart(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	body := map[string]any{
-		"service_url":    streamStartURL,
-		"audio_track":    streamStartTrack,
-		"bidirectional":  streamStartBiDi,
-		"content_type":   streamStartContentType,
+		"service_url":   streamStartURL,
+		"audio_track":   streamStartTrack,
+		"bidirectional": streamStartBiDi,
+		"content_type":  streamStartContentType,
 	}
 	callback := streamStartCallbackURL
 	if callback == "" {

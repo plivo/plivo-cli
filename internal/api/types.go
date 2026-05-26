@@ -27,22 +27,22 @@ type Account struct {
 }
 
 type Number struct {
-	Number          string `json:"number"`
-	Type            string `json:"type"`
-	Region          string `json:"region,omitempty"`
-	Country         string `json:"country,omitempty"`
-	NumberType      string `json:"number_type,omitempty"`
-	Application     string `json:"application,omitempty"`
-	AppID           string `json:"app_id,omitempty"`
-	Subaccount      string `json:"sub_account,omitempty"`
-	Alias           string `json:"alias,omitempty"`
-	MonthlyRental   string `json:"monthly_rental_rate,omitempty"`
-	VoiceEnabled    bool   `json:"voice_enabled,omitempty"`
-	SMSEnabled      bool   `json:"sms_enabled,omitempty"`
-	MMSEnabled      bool   `json:"mms_enabled,omitempty"`
-	AddedOn         string `json:"added_on,omitempty"`
-	RenewalDate     string `json:"renewal_date,omitempty"`
-	ResourceURI     string `json:"resource_uri,omitempty"`
+	Number        string `json:"number"`
+	Type          string `json:"type"`
+	Region        string `json:"region,omitempty"`
+	Country       string `json:"country,omitempty"`
+	NumberType    string `json:"number_type,omitempty"`
+	Application   string `json:"application,omitempty"`
+	AppID         string `json:"app_id,omitempty"`
+	Subaccount    string `json:"sub_account,omitempty"`
+	Alias         string `json:"alias,omitempty"`
+	MonthlyRental string `json:"monthly_rental_rate,omitempty"`
+	VoiceEnabled  bool   `json:"voice_enabled,omitempty"`
+	SMSEnabled    bool   `json:"sms_enabled,omitempty"`
+	MMSEnabled    bool   `json:"mms_enabled,omitempty"`
+	AddedOn       string `json:"added_on,omitempty"`
+	RenewalDate   string `json:"renewal_date,omitempty"`
+	ResourceURI   string `json:"resource_uri,omitempty"`
 }
 
 type NumberList struct {
@@ -66,25 +66,25 @@ func (n *Number) ResolvedAppID() string {
 }
 
 type Application struct {
-	APIID                string `json:"api_id,omitempty"`
-	AppID                string `json:"app_id"`
-	AppName              string `json:"app_name"`
-	AnswerURL            string `json:"answer_url,omitempty"`
-	AnswerMethod         string `json:"answer_method,omitempty"`
-	HangupURL            string `json:"hangup_url,omitempty"`
-	HangupMethod         string `json:"hangup_method,omitempty"`
-	FallbackAnswerURL    string `json:"fallback_answer_url,omitempty"`
-	FallbackMethod       string `json:"fallback_method,omitempty"`
-	MessageURL           string `json:"message_url,omitempty"`
-	MessageMethod        string `json:"message_method,omitempty"`
-	DefaultNumberApp     bool   `json:"default_number_app,omitempty"`
-	DefaultEndpointApp   bool   `json:"default_endpoint_app,omitempty"`
-	SubAccount           string `json:"sub_account,omitempty"`
-	LogIncomingMessages  bool   `json:"log_incoming_messages,omitempty"`
-	SIPURI               string `json:"sip_uri,omitempty"`
-	PublicURI            bool   `json:"public_uri,omitempty"`
-	Enabled              bool   `json:"enabled,omitempty"`
-	ResourceURI          string `json:"resource_uri,omitempty"`
+	APIID               string `json:"api_id,omitempty"`
+	AppID               string `json:"app_id"`
+	AppName             string `json:"app_name"`
+	AnswerURL           string `json:"answer_url,omitempty"`
+	AnswerMethod        string `json:"answer_method,omitempty"`
+	HangupURL           string `json:"hangup_url,omitempty"`
+	HangupMethod        string `json:"hangup_method,omitempty"`
+	FallbackAnswerURL   string `json:"fallback_answer_url,omitempty"`
+	FallbackMethod      string `json:"fallback_method,omitempty"`
+	MessageURL          string `json:"message_url,omitempty"`
+	MessageMethod       string `json:"message_method,omitempty"`
+	DefaultNumberApp    bool   `json:"default_number_app,omitempty"`
+	DefaultEndpointApp  bool   `json:"default_endpoint_app,omitempty"`
+	SubAccount          string `json:"sub_account,omitempty"`
+	LogIncomingMessages bool   `json:"log_incoming_messages,omitempty"`
+	SIPURI              string `json:"sip_uri,omitempty"`
+	PublicURI           bool   `json:"public_uri,omitempty"`
+	Enabled             bool   `json:"enabled,omitempty"`
+	ResourceURI         string `json:"resource_uri,omitempty"`
 }
 
 type ApplicationList struct {
@@ -94,20 +94,20 @@ type ApplicationList struct {
 }
 
 type Message struct {
-	APIID            string `json:"api_id,omitempty"`
-	MessageUUID      string `json:"message_uuid"`
-	From             string `json:"from_number"`
-	To               string `json:"to_number"`
-	Text             string `json:"text,omitempty"`
-	Type             string `json:"message_type"`
-	Direction        string `json:"message_direction,omitempty"`
-	State            string `json:"message_state,omitempty"`
-	TotalAmount      string `json:"total_amount,omitempty"`
-	TotalRate        string `json:"total_rate,omitempty"`
-	Units            int    `json:"units,omitempty"`
-	MessageTime      string `json:"message_time,omitempty"`
-	ErrorCode        string `json:"error_code,omitempty"`
-	ResourceURI      string `json:"resource_uri,omitempty"`
+	APIID       string `json:"api_id,omitempty"`
+	MessageUUID string `json:"message_uuid"`
+	From        string `json:"from_number"`
+	To          string `json:"to_number"`
+	Text        string `json:"text,omitempty"`
+	Type        string `json:"message_type"`
+	Direction   string `json:"message_direction,omitempty"`
+	State       string `json:"message_state,omitempty"`
+	TotalAmount string `json:"total_amount,omitempty"`
+	TotalRate   string `json:"total_rate,omitempty"`
+	Units       int    `json:"units,omitempty"`
+	MessageTime string `json:"message_time,omitempty"`
+	ErrorCode   string `json:"error_code,omitempty"`
+	ResourceURI string `json:"resource_uri,omitempty"`
 }
 
 type MessageList struct {
@@ -118,27 +118,27 @@ type MessageList struct {
 
 // MessageSendResponse is the response from POST /Message/.
 type MessageSendResponse struct {
-	APIID        string   `json:"api_id"`
-	Message      string   `json:"message"`
-	MessageUUID  []string `json:"message_uuid"`
+	APIID       string   `json:"api_id"`
+	Message     string   `json:"message"`
+	MessageUUID []string `json:"message_uuid"`
 }
 
 type Call struct {
-	APIID         string `json:"api_id,omitempty"`
-	CallUUID      string `json:"call_uuid"`
-	From          string `json:"from_number"`
-	To            string `json:"to_number"`
-	Direction     string `json:"call_direction"`
-	CallDuration  int    `json:"call_duration,omitempty"`
-	BillDuration  int    `json:"bill_duration,omitempty"`
-	TotalAmount   string `json:"total_amount,omitempty"`
-	TotalRate     string `json:"total_rate,omitempty"`
-	AnswerTime    string `json:"answer_time,omitempty"`
-	EndTime       string `json:"end_time,omitempty"`
-	InitTime      string `json:"initiation_time,omitempty"`
-	HangupCause   string `json:"hangup_cause_name,omitempty"`
-	HangupSource  string `json:"hangup_source,omitempty"`
-	ResourceURI   string `json:"resource_uri,omitempty"`
+	APIID        string `json:"api_id,omitempty"`
+	CallUUID     string `json:"call_uuid"`
+	From         string `json:"from_number"`
+	To           string `json:"to_number"`
+	Direction    string `json:"call_direction"`
+	CallDuration int    `json:"call_duration,omitempty"`
+	BillDuration int    `json:"bill_duration,omitempty"`
+	TotalAmount  string `json:"total_amount,omitempty"`
+	TotalRate    string `json:"total_rate,omitempty"`
+	AnswerTime   string `json:"answer_time,omitempty"`
+	EndTime      string `json:"end_time,omitempty"`
+	InitTime     string `json:"initiation_time,omitempty"`
+	HangupCause  string `json:"hangup_cause_name,omitempty"`
+	HangupSource string `json:"hangup_source,omitempty"`
+	ResourceURI  string `json:"resource_uri,omitempty"`
 }
 
 type CallList struct {
@@ -186,6 +186,7 @@ type ScopedToken struct {
 	CreatedAt   string   `json:"created_at,omitempty"`
 	LastUsedAt  string   `json:"last_used_at,omitempty"`
 }
+
 // Recording — /Account/{id}/Recording/
 type Recording struct {
 	APIID               string `json:"api_id,omitempty"`
@@ -207,7 +208,6 @@ type RecordingList struct {
 	Meta    ListMeta    `json:"meta"`
 	Objects []Recording `json:"objects"`
 }
-
 
 // VerifySession — /Account/{id}/Verify/Session/
 type VerifySession struct {
@@ -235,7 +235,6 @@ type VerifySessionList struct {
 	Objects []VerifySession `json:"objects"`
 }
 
-
 // LookupNumber — https://lookup.plivo.com/v1/Number/{number}?type=carrier
 type LookupNumber struct {
 	APIID       string `json:"api_id,omitempty"`
@@ -260,6 +259,7 @@ type LookupNumber struct {
 	} `json:"carrier"`
 	ResourceURI string `json:"resource_uri,omitempty"`
 }
+
 // Subaccount — /Account/{id}/Subaccount/
 type Subaccount struct {
 	APIID       string `json:"api_id,omitempty"`
@@ -278,7 +278,6 @@ type SubaccountList struct {
 	Meta    ListMeta     `json:"meta"`
 	Objects []Subaccount `json:"objects"`
 }
-
 
 // Endpoint — /Account/{id}/Endpoint/ (SIP endpoints)
 type Endpoint struct {
@@ -300,7 +299,6 @@ type EndpointList struct {
 	Objects []Endpoint `json:"objects"`
 }
 
-
 // CnamLookup — /Account/{id}/CnamLookup/{number}/
 type CnamLookup struct {
 	APIID      string `json:"api_id,omitempty"`
@@ -311,22 +309,21 @@ type CnamLookup struct {
 	Charge     string `json:"charge,omitempty"`
 }
 
-
 // MaskingSession — /Account/{id}/MaskingSession/ (number-masking)
 type MaskingSession struct {
-	APIID            string `json:"api_id,omitempty"`
-	SessionUUID      string `json:"session_uuid"`
-	FirstParty       string `json:"first_party,omitempty"`
-	SecondParty      string `json:"second_party,omitempty"`
-	VirtualNumber    string `json:"virtual_number,omitempty"`
-	Status           string `json:"status,omitempty"`
-	Mode             string `json:"mode,omitempty"`
-	SessionExpiry    int    `json:"session_expiry,omitempty"`
-	CallTimeLimit    int    `json:"call_time_limit,omitempty"`
-	Recording        bool   `json:"record,omitempty"`
-	CreatedOn        string `json:"created_on,omitempty"`
-	ExpiresOn        string `json:"expires_on,omitempty"`
-	ResourceURI      string `json:"resource_uri,omitempty"`
+	APIID         string `json:"api_id,omitempty"`
+	SessionUUID   string `json:"session_uuid"`
+	FirstParty    string `json:"first_party,omitempty"`
+	SecondParty   string `json:"second_party,omitempty"`
+	VirtualNumber string `json:"virtual_number,omitempty"`
+	Status        string `json:"status,omitempty"`
+	Mode          string `json:"mode,omitempty"`
+	SessionExpiry int    `json:"session_expiry,omitempty"`
+	CallTimeLimit int    `json:"call_time_limit,omitempty"`
+	Recording     bool   `json:"record,omitempty"`
+	CreatedOn     string `json:"created_on,omitempty"`
+	ExpiresOn     string `json:"expires_on,omitempty"`
+	ResourceURI   string `json:"resource_uri,omitempty"`
 }
 
 type MaskingSessionList struct {
@@ -335,16 +332,15 @@ type MaskingSessionList struct {
 	Objects []MaskingSession `json:"objects"`
 }
 
-
 // ComplianceDocument — /Account/{id}/ComplianceDocument/
 type ComplianceDocument struct {
-	APIID                  string         `json:"api_id,omitempty"`
-	ID                     string         `json:"id,omitempty"`
-	DocumentTypeID         string         `json:"document_type_id,omitempty"`
-	Alias                  string         `json:"alias,omitempty"`
-	MetaInformation        map[string]any `json:"meta_information,omitempty"`
-	FileName               string         `json:"file_name,omitempty"`
-	CreatedAt              string         `json:"created_at,omitempty"`
+	APIID           string         `json:"api_id,omitempty"`
+	ID              string         `json:"id,omitempty"`
+	DocumentTypeID  string         `json:"document_type_id,omitempty"`
+	Alias           string         `json:"alias,omitempty"`
+	MetaInformation map[string]any `json:"meta_information,omitempty"`
+	FileName        string         `json:"file_name,omitempty"`
+	CreatedAt       string         `json:"created_at,omitempty"`
 }
 
 type ComplianceDocumentList struct {
@@ -352,7 +348,6 @@ type ComplianceDocumentList struct {
 	Meta    ListMeta             `json:"meta"`
 	Objects []ComplianceDocument `json:"objects"`
 }
-
 
 // Conference — /Account/{id}/Conference/
 type ConferenceMember struct {
@@ -381,7 +376,6 @@ type ConferenceList struct {
 	APIID       string   `json:"api_id"`
 	Conferences []string `json:"conferences,omitempty"`
 }
-
 
 // MPC — /Account/{id}/MultiPartyCall/
 type MPC struct {
@@ -420,7 +414,6 @@ type MPCParticipantList struct {
 	Objects []MPCParticipant `json:"objects"`
 }
 
-
 // AudioStream — /Account/{id}/Call/{uuid}/Stream/
 type AudioStream struct {
 	StreamID      string `json:"stream_id,omitempty"`
@@ -440,26 +433,25 @@ type AudioStreamList struct {
 	Objects []AudioStream `json:"objects,omitempty"`
 }
 
-
 // Brand10DLC — /Account/{id}/10dlc/Brand/
 type Brand10DLC struct {
-	APIID            string `json:"api_id,omitempty"`
-	BrandID          string `json:"brand_id"`
-	BrandAlias       string `json:"brand_alias,omitempty"`
-	LegalEntityName  string `json:"legal_entity_name,omitempty"`
-	BrandStatus      string `json:"brand_status,omitempty"`
-	BrandType        string `json:"brand_type,omitempty"`
-	EntityType       string `json:"entity_type,omitempty"`
-	Vertical         string `json:"vertical,omitempty"`
-	Website          string `json:"website,omitempty"`
-	EIN              string `json:"ein,omitempty"`
+	APIID             string `json:"api_id,omitempty"`
+	BrandID           string `json:"brand_id"`
+	BrandAlias        string `json:"brand_alias,omitempty"`
+	LegalEntityName   string `json:"legal_entity_name,omitempty"`
+	BrandStatus       string `json:"brand_status,omitempty"`
+	BrandType         string `json:"brand_type,omitempty"`
+	EntityType        string `json:"entity_type,omitempty"`
+	Vertical          string `json:"vertical,omitempty"`
+	Website           string `json:"website,omitempty"`
+	EIN               string `json:"ein,omitempty"`
 	EINIssuingCountry string `json:"ein_issuing_country,omitempty"`
-	StockSymbol      string `json:"stock_symbol,omitempty"`
-	StockExchange    string `json:"stock_exchange,omitempty"`
-	Email            string `json:"email,omitempty"`
-	Phone            string `json:"phone,omitempty"`
-	CreatedAt        string `json:"created_at,omitempty"`
-	ResourceURI      string `json:"resource_uri,omitempty"`
+	StockSymbol       string `json:"stock_symbol,omitempty"`
+	StockExchange     string `json:"stock_exchange,omitempty"`
+	Email             string `json:"email,omitempty"`
+	Phone             string `json:"phone,omitempty"`
+	CreatedAt         string `json:"created_at,omitempty"`
+	ResourceURI       string `json:"resource_uri,omitempty"`
 }
 
 type Brand10DLCList struct {
@@ -468,34 +460,33 @@ type Brand10DLCList struct {
 	Brands []Brand10DLC `json:"brands"`
 }
 
-
 // Campaign10DLC — /Account/{id}/10dlc/Campaign/
 type Campaign10DLC struct {
-	APIID                    string `json:"api_id,omitempty"`
-	CampaignID               string `json:"campaign_id"`
-	CampaignAlias            string `json:"campaign_alias,omitempty"`
-	BrandID                  string `json:"brand_id,omitempty"`
-	Usecase                  string `json:"usecase,omitempty"`
-	SubUsecases              []string `json:"sub_usecases,omitempty"`
-	Description              string `json:"description,omitempty"`
-	CampaignStatus           string `json:"campaign_status,omitempty"`
-	MessageFlow              string `json:"message_flow,omitempty"`
-	SampleMessage1           string `json:"sample_message_1,omitempty"`
-	SampleMessage2           string `json:"sample_message_2,omitempty"`
-	HelpKeywords             string `json:"help_keywords,omitempty"`
-	HelpMessage              string `json:"help_message,omitempty"`
-	OptInKeywords            string `json:"opt_in_keywords,omitempty"`
-	OptInMessage             string `json:"opt_in_message,omitempty"`
-	OptOutKeywords           string `json:"opt_out_keywords,omitempty"`
-	OptOutMessage            string `json:"opt_out_message,omitempty"`
-	EmbeddedLink             bool   `json:"embedded_link,omitempty"`
-	EmbeddedPhone            bool   `json:"embedded_phone,omitempty"`
-	AgeGated                 bool   `json:"age_gated,omitempty"`
-	DirectLending            bool   `json:"direct_lending,omitempty"`
-	AffiliateMarketing       bool   `json:"affiliate_marketing,omitempty"`
-	NumberPool               bool   `json:"number_pool,omitempty"`
-	CreatedAt                string `json:"created_at,omitempty"`
-	ResourceURI              string `json:"resource_uri,omitempty"`
+	APIID              string   `json:"api_id,omitempty"`
+	CampaignID         string   `json:"campaign_id"`
+	CampaignAlias      string   `json:"campaign_alias,omitempty"`
+	BrandID            string   `json:"brand_id,omitempty"`
+	Usecase            string   `json:"usecase,omitempty"`
+	SubUsecases        []string `json:"sub_usecases,omitempty"`
+	Description        string   `json:"description,omitempty"`
+	CampaignStatus     string   `json:"campaign_status,omitempty"`
+	MessageFlow        string   `json:"message_flow,omitempty"`
+	SampleMessage1     string   `json:"sample_message_1,omitempty"`
+	SampleMessage2     string   `json:"sample_message_2,omitempty"`
+	HelpKeywords       string   `json:"help_keywords,omitempty"`
+	HelpMessage        string   `json:"help_message,omitempty"`
+	OptInKeywords      string   `json:"opt_in_keywords,omitempty"`
+	OptInMessage       string   `json:"opt_in_message,omitempty"`
+	OptOutKeywords     string   `json:"opt_out_keywords,omitempty"`
+	OptOutMessage      string   `json:"opt_out_message,omitempty"`
+	EmbeddedLink       bool     `json:"embedded_link,omitempty"`
+	EmbeddedPhone      bool     `json:"embedded_phone,omitempty"`
+	AgeGated           bool     `json:"age_gated,omitempty"`
+	DirectLending      bool     `json:"direct_lending,omitempty"`
+	AffiliateMarketing bool     `json:"affiliate_marketing,omitempty"`
+	NumberPool         bool     `json:"number_pool,omitempty"`
+	CreatedAt          string   `json:"created_at,omitempty"`
+	ResourceURI        string   `json:"resource_uri,omitempty"`
 }
 
 type Campaign10DLCList struct {
@@ -503,7 +494,6 @@ type Campaign10DLCList struct {
 	Meta      ListMeta        `json:"meta"`
 	Campaigns []Campaign10DLC `json:"campaigns"`
 }
-
 
 // NumberLink10DLC — /Account/{id}/10dlc/NumberLinking/
 type NumberLink10DLC struct {
@@ -521,22 +511,21 @@ type NumberLink10DLCList struct {
 	Objects []NumberLink10DLC `json:"objects"`
 }
 
-
 // TollFreeVerification — /Account/{id}/TollFreeVerification/
 type TollFreeVerification struct {
-	APIID                  string   `json:"api_id,omitempty"`
-	ProfileUUID            string   `json:"profile_uuid"`
-	Status                 string   `json:"status,omitempty"`
-	BusinessName           string   `json:"business_name,omitempty"`
-	BusinessWebsite        string   `json:"business_website,omitempty"`
-	UseCase                string   `json:"use_case,omitempty"`
-	UseCaseSummary         string   `json:"use_case_summary,omitempty"`
-	MessageVolume          string   `json:"message_volume,omitempty"`
-	ProductionMessageContent string `json:"production_message_content,omitempty"`
-	OptInWorkflow          string   `json:"opt_in_workflow,omitempty"`
-	NumbersList            []string `json:"numbers_list,omitempty"`
-	CreatedAt              string   `json:"created_at,omitempty"`
-	ResourceURI            string   `json:"resource_uri,omitempty"`
+	APIID                    string   `json:"api_id,omitempty"`
+	ProfileUUID              string   `json:"profile_uuid"`
+	Status                   string   `json:"status,omitempty"`
+	BusinessName             string   `json:"business_name,omitempty"`
+	BusinessWebsite          string   `json:"business_website,omitempty"`
+	UseCase                  string   `json:"use_case,omitempty"`
+	UseCaseSummary           string   `json:"use_case_summary,omitempty"`
+	MessageVolume            string   `json:"message_volume,omitempty"`
+	ProductionMessageContent string   `json:"production_message_content,omitempty"`
+	OptInWorkflow            string   `json:"opt_in_workflow,omitempty"`
+	NumbersList              []string `json:"numbers_list,omitempty"`
+	CreatedAt                string   `json:"created_at,omitempty"`
+	ResourceURI              string   `json:"resource_uri,omitempty"`
 }
 
 type TollFreeVerificationList struct {
@@ -545,20 +534,19 @@ type TollFreeVerificationList struct {
 	Objects []TollFreeVerification `json:"objects"`
 }
 
-
 // Powerpack — /Account/{id}/Powerpack/
 type Powerpack struct {
-	APIID                   string `json:"api_id,omitempty"`
-	UUID                    string `json:"uuid"`
-	Name                    string `json:"name,omitempty"`
-	StickySender            bool   `json:"sticky_sender,omitempty"`
-	LocalConnect            bool   `json:"local_connect,omitempty"`
-	ApplicationType         string `json:"application_type,omitempty"`
-	ApplicationID           string `json:"application_id,omitempty"`
-	NumberPriority          string `json:"number_priority,omitempty"`
-	NumberPoolUUID          string `json:"number_pool,omitempty"`
-	CreatedOn               string `json:"created_on,omitempty"`
-	ResourceURI             string `json:"resource_uri,omitempty"`
+	APIID           string `json:"api_id,omitempty"`
+	UUID            string `json:"uuid"`
+	Name            string `json:"name,omitempty"`
+	StickySender    bool   `json:"sticky_sender,omitempty"`
+	LocalConnect    bool   `json:"local_connect,omitempty"`
+	ApplicationType string `json:"application_type,omitempty"`
+	ApplicationID   string `json:"application_id,omitempty"`
+	NumberPriority  string `json:"number_priority,omitempty"`
+	NumberPoolUUID  string `json:"number_pool,omitempty"`
+	CreatedOn       string `json:"created_on,omitempty"`
+	ResourceURI     string `json:"resource_uri,omitempty"`
 }
 
 type PowerpackList struct {
@@ -581,5 +569,3 @@ type PowerpackNumberList struct {
 	Meta    ListMeta          `json:"meta"`
 	Objects []PowerpackNumber `json:"objects"`
 }
-
-

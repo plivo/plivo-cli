@@ -23,21 +23,21 @@ type Code string
 
 const (
 	// Auth — credential / session problems.
-	CodeAuthMissing        Code = "AUTH_MISSING"
-	CodeAuthInvalid        Code = "AUTH_INVALID"
-	CodeAuthForbidden      Code = "AUTH_FORBIDDEN"
-	CodeAuthExpired        Code = "AUTH_EXPIRED"
-	Code2FARequired        Code = "AUTH_2FA_REQUIRED"
-	CodeRecaptchaRequired  Code = "AUTH_RECAPTCHA_REQUIRED"
+	CodeAuthMissing         Code = "AUTH_MISSING"
+	CodeAuthInvalid         Code = "AUTH_INVALID"
+	CodeAuthForbidden       Code = "AUTH_FORBIDDEN"
+	CodeAuthExpired         Code = "AUTH_EXPIRED"
+	Code2FARequired         Code = "AUTH_2FA_REQUIRED"
+	CodeRecaptchaRequired   Code = "AUTH_RECAPTCHA_REQUIRED"
 	CodeContactoNotLoggedIn Code = "CONTACTO_NOT_LOGGED_IN"
 
 	// Input / state problems.
-	CodeValidation        Code = "VALIDATION_ERROR"
-	CodeResourceNotFound  Code = "RESOURCE_NOT_FOUND"
-	CodeResourceConflict  Code = "RESOURCE_CONFLICT"
+	CodeValidation         Code = "VALIDATION_ERROR"
+	CodeResourceNotFound   Code = "RESOURCE_NOT_FOUND"
+	CodeResourceConflict   Code = "RESOURCE_CONFLICT"
 	CodeDestructiveRefused Code = "DESTRUCTIVE_REFUSED"
-	CodeBadFlag           Code = "BAD_FLAG"
-	CodeBadInput          Code = "BAD_INPUT"
+	CodeBadFlag            Code = "BAD_FLAG"
+	CodeBadInput           Code = "BAD_INPUT"
 
 	// Capability / policy gates from upstream Plivo.
 	CodeGeoPermissionDenied Code = "GEO_PERMISSION_DENIED"
@@ -45,11 +45,11 @@ const (
 	CodeInsufficientFunds   Code = "INSUFFICIENT_FUNDS"
 
 	// Transport / upstream errors.
-	CodeRateLimited        Code = "RATE_LIMITED"
-	CodeUpstreamTimeout    Code = "UPSTREAM_TIMEOUT"
+	CodeRateLimited         Code = "RATE_LIMITED"
+	CodeUpstreamTimeout     Code = "UPSTREAM_TIMEOUT"
 	CodeUpstreamUnavailable Code = "UPSTREAM_UNAVAILABLE"
-	CodeUpstreamError      Code = "UPSTREAM_ERROR"
-	CodeNetworkError       Code = "NETWORK_ERROR"
+	CodeUpstreamError       Code = "UPSTREAM_ERROR"
+	CodeNetworkError        Code = "NETWORK_ERROR"
 
 	// Catch-alls.
 	CodeInternalError Code = "INTERNAL_ERROR"

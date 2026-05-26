@@ -39,12 +39,12 @@ var callGetCmd = &cobra.Command{
 }
 
 var (
-	callMakeFrom         string
-	callMakeTo           string
-	callMakeAnswerURL    string
-	callMakeAnswerMethod string
-	callMakeHangupURL    string
-	callMakeRingURL      string
+	callMakeFrom          string
+	callMakeTo            string
+	callMakeAnswerURL     string
+	callMakeAnswerMethod  string
+	callMakeHangupURL     string
+	callMakeRingURL       string
 	callMakeMachineDetect string
 )
 
@@ -310,12 +310,12 @@ var callDTMFCmd = &cobra.Command{
 }
 
 var (
-	callRecordTimeLimit       int
-	callRecordFileFormat      string
-	callRecordCallbackURL     string
-	callRecordCallbackMethod  string
-	callRecordTranscribe      bool
-	callRecordBothLegs        bool
+	callRecordTimeLimit      int
+	callRecordFileFormat     string
+	callRecordCallbackURL    string
+	callRecordCallbackMethod string
+	callRecordTranscribe     bool
+	callRecordBothLegs       bool
 )
 
 var callRecordCmd = &cobra.Command{

@@ -37,14 +37,14 @@ var tfvGetCmd = &cobra.Command{
 }
 
 var (
-	tfvSubmitBizName       string
-	tfvSubmitBizWebsite    string
-	tfvSubmitUseCase       string
+	tfvSubmitBizName        string
+	tfvSubmitBizWebsite     string
+	tfvSubmitUseCase        string
 	tfvSubmitUseCaseSummary string
-	tfvSubmitMessageVolume string
+	tfvSubmitMessageVolume  string
 	tfvSubmitMessageContent string
-	tfvSubmitOptIn         string
-	tfvSubmitNumbers       string
+	tfvSubmitOptIn          string
+	tfvSubmitNumbers        string
 )
 
 var tfvSubmitCmd = &cobra.Command{
@@ -186,4 +186,3 @@ func runTfvSubmit(cmd *cobra.Command, args []string) error {
 		{"message", resp.Message},
 	})
 }
-

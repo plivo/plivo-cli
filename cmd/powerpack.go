@@ -195,9 +195,9 @@ func runPowerpackCreate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	body := map[string]any{
-		"name":           ppCreateName,
-		"sticky_sender":  ppCreateStickySender,
-		"local_connect":  ppCreateLocalConnect,
+		"name":          ppCreateName,
+		"sticky_sender": ppCreateStickySender,
+		"local_connect": ppCreateLocalConnect,
 	}
 	if ppCreateApplicationType != "" {
 		body["application_type"] = ppCreateApplicationType

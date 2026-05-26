@@ -24,8 +24,8 @@ import (
 // PHLO config service routes (via regional Contacto auth-api gateway).
 // `/phlo` and `/flow` are aliases server-side.
 const (
-	phloListPath    = "/v1/contacto-core/contacto-config/phlo"
-	phloItemPath    = "/v1/contacto-core/contacto-config/phlo/" // append uuid
+	phloListPath     = "/v1/contacto-core/contacto-config/phlo"
+	phloItemPath     = "/v1/contacto-core/contacto-config/phlo/" // append uuid
 	vibeGeneratePath = "/v1/ai-assist/vibe-agent/generate"
 )
 

@@ -195,18 +195,18 @@ func runCampaignCreate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	body := map[string]any{
-		"campaign_alias":   campCreateAlias,
-		"brand_id":         campCreateBrand,
-		"usecase":          campCreateUsecase,
-		"description":      campCreateDescription,
-		"message_flow":     campCreateMessageFlow,
-		"sample_message_1": campCreateSample1,
-		"embedded_link":    campCreateEmbedLink,
-		"embedded_phone":   campCreateEmbedPhone,
-		"age_gated":        campCreateAgeGated,
-		"direct_lending":   campCreateDirectLend,
+		"campaign_alias":      campCreateAlias,
+		"brand_id":            campCreateBrand,
+		"usecase":             campCreateUsecase,
+		"description":         campCreateDescription,
+		"message_flow":        campCreateMessageFlow,
+		"sample_message_1":    campCreateSample1,
+		"embedded_link":       campCreateEmbedLink,
+		"embedded_phone":      campCreateEmbedPhone,
+		"age_gated":           campCreateAgeGated,
+		"direct_lending":      campCreateDirectLend,
 		"affiliate_marketing": campCreateAffiliate,
-		"number_pool":      campCreateNumberPool,
+		"number_pool":         campCreateNumberPool,
 	}
 	addIfSet := func(k, v string) {
 		if v != "" {
