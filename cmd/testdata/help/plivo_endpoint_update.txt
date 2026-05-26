@@ -6,6 +6,7 @@ Usage:
 Flags:
       --alias string      new alias
       --app-id string     new application id
+  -h, --help              help for update
       --password string   new password
 
 Global Flags:

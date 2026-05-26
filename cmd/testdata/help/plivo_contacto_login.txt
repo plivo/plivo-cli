@@ -6,6 +6,7 @@ Usage:
 Flags:
       --email string      Contacto email (prompted if omitted)
       --env string        environment: dev|prod (default "dev")
+  -h, --help              help for login
       --password string   password (prompted if omitted; reads from stdin without echoing)
 
 Global Flags:

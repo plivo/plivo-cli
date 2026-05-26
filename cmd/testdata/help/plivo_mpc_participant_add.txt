@@ -5,6 +5,7 @@ Usage:
 
 Flags:
       --from string   source number for the dial-out (required)
+  -h, --help          help for add
       --role string   participant role: agent|supervisor|customer (default "agent")
       --to string     destination number to add (required)
 

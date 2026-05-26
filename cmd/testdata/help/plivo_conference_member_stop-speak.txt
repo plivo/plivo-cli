@@ -3,6 +3,9 @@ Stop TTS playback to a member
 Usage:
   plivo conference member stop-speak <conference_name> <member_id> [flags]
 
+Flags:
+  -h, --help   help for stop-speak
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

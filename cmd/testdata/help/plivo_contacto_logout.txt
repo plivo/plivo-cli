@@ -3,6 +3,9 @@ Clear the saved Contacto session
 Usage:
   plivo contacto logout [flags]
 
+Flags:
+  -h, --help   help for logout
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

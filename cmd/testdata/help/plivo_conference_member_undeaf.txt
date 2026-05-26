@@ -3,6 +3,9 @@ Undeafen a member
 Usage:
   plivo conference member undeaf <conference_name> <member_id> [flags]
 
+Flags:
+  -h, --help   help for undeaf
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

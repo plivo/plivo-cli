@@ -5,6 +5,7 @@ Usage:
 
 Flags:
       --cascade   also detach numbers/endpoints
+  -h, --help      help for delete
 
 Global Flags:
       --all                        auto-paginate through all pages

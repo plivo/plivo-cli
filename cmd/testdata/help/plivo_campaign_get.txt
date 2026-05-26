@@ -3,6 +3,9 @@ Get a campaign by ID
 Usage:
   plivo campaign get <campaign_id> [flags]
 
+Flags:
+  -h, --help   help for get
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

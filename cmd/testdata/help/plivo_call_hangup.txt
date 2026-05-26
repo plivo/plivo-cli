@@ -3,6 +3,9 @@ Hang up a live call (requires --yes)
 Usage:
   plivo call hangup <call_uuid> [flags]
 
+Flags:
+  -h, --help   help for hangup
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

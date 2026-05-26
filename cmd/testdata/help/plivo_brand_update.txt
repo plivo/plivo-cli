@@ -5,6 +5,7 @@ Usage:
 
 Flags:
       --email string     support email
+  -h, --help             help for update
       --phone string     support phone
       --website string   website URL
 

@@ -4,6 +4,7 @@ Usage:
   plivo conference member play <conference_name> <member_id> [flags]
 
 Flags:
+  -h, --help          help for play
       --length int    stop after N seconds
       --loop          loop playback
       --mix           mix with conference audio (default true)

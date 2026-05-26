@@ -11,6 +11,9 @@ Available Commands:
   use         Set the active profile
   whoami      Verify credentials and print active account
 
+Flags:
+  -h, --help   help for auth
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

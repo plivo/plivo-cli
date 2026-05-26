@@ -5,6 +5,7 @@ Usage:
 
 Flags:
       --alias string         filter by alias
+  -h, --help                 help for list
       --limit int            results per page (max 20) (default 20)
       --offset int           pagination offset
       --services string      filter by services: voice|sms|mms|voice,sms ...

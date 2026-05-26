@@ -10,6 +10,7 @@ Flags:
       --default-number-app           set as default for new numbers
       --fallback-answer-url string   backup webhook if answer-url fails
       --hangup-url string            webhook for call hangup
+  -h, --help                         help for create
       --log-incoming-messages        log inbound SMS content (default true)
       --message-url string           webhook for inbound SMS
 

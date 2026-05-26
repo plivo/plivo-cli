@@ -10,6 +10,9 @@ Available Commands:
   list        List multi-party calls
   participant Per-participant actions inside an MPC
 
+Flags:
+  -h, --help   help for mpc
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

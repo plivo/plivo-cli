@@ -3,6 +3,9 @@ Release a rented number (requires --yes; stops monthly billing)
 Usage:
   plivo number release <number> [flags]
 
+Flags:
+  -h, --help   help for release
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

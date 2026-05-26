@@ -15,6 +15,9 @@ Available Commands:
   unhold      Take a participant off hold
   unmute      Unmute a participant
 
+Flags:
+  -h, --help   help for participant
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

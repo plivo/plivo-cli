@@ -11,6 +11,9 @@ Available Commands:
   list        List messages
   send        Send an SMS/MMS (defaults to dry-run; pass --yes to actually send)
 
+Flags:
+  -h, --help   help for message
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

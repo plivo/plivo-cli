@@ -14,6 +14,9 @@ Available Commands:
   record      Start recording a conference
   stop-record Stop the active recording on a conference
 
+Flags:
+  -h, --help   help for conference
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

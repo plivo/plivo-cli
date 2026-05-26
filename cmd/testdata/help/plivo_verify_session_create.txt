@@ -7,6 +7,7 @@ Flags:
       --alpha-sender string   alphanumeric sender id
       --app-uuid string       Verify application uuid (required)
       --channel string        delivery channel: sms|voice|whatsapp (default "sms")
+  -h, --help                  help for create
       --locale string         BCP-47 locale, e.g. en-US
       --method string         HTTP method for callback URL
       --recipient string      E.164 destination number (required)

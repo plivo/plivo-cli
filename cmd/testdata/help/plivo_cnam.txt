@@ -3,6 +3,9 @@ Caller-ID Name (CNAM) lookup for a US/CA number (spends money — requires --yes
 Usage:
   plivo cnam <number> [flags]
 
+Flags:
+  -h, --help   help for cnam
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

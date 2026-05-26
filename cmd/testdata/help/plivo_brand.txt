@@ -9,6 +9,9 @@ Available Commands:
   list        List registered brands
   update      Update mutable brand fields
 
+Flags:
+  -h, --help   help for brand
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

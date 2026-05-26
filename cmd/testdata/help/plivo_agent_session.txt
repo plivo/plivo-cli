@@ -7,6 +7,9 @@ Available Commands:
   clear       Delete the saved vibe-agent session file
   show        Show the current vibe-agent session (session_id, last turn, workflow size)
 
+Flags:
+  -h, --help   help for session
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

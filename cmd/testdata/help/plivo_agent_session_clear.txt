@@ -3,6 +3,9 @@ Delete the saved vibe-agent session file
 Usage:
   plivo agent session clear [flags]
 
+Flags:
+  -h, --help   help for clear
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

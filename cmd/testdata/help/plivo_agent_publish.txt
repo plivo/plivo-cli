@@ -11,6 +11,9 @@ After this, 'plivo agent run' will succeed against the agent.
 Usage:
   plivo agent publish <uuid> [flags]
 
+Flags:
+  -h, --help   help for publish
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

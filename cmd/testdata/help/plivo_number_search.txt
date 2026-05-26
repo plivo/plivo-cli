@@ -5,6 +5,7 @@ Usage:
 
 Flags:
       --country string   ISO country code, e.g. US (required)
+  -h, --help             help for search
       --limit int        results per page (default 20)
       --offset int       pagination offset
       --pattern string   digit pattern

@@ -4,6 +4,7 @@ Usage:
   plivo conference member speak <conference_name> <member_id> [flags]
 
 Flags:
+  -h, --help              help for speak
       --language string   BCP-47 language code (default "en-US")
       --text string       TTS text (required)
       --voice string      MAN|WOMAN (default "WOMAN")

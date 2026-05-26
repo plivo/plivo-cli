@@ -11,6 +11,9 @@ Available Commands:
   search      Search available numbers to rent
   update      Update settings on a rented number
 
+Flags:
+  -h, --help   help for number
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

@@ -14,6 +14,9 @@ Available Commands:
   undeaf      Undeafen a member
   unmute      Unmute a member
 
+Flags:
+  -h, --help   help for member
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

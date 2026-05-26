@@ -3,6 +3,9 @@ Get account details (name, billing mode, credits, address)
 Usage:
   plivo account get [flags]
 
+Flags:
+  -h, --help   help for get
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

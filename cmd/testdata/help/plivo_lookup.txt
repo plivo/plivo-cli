@@ -4,6 +4,7 @@ Usage:
   plivo lookup <number> [flags]
 
 Flags:
+  -h, --help          help for lookup
       --type string   lookup type (currently only 'carrier' is supported by Plivo) (default "carrier")
 
 Global Flags:

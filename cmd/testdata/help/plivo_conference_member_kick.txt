@@ -3,6 +3,9 @@ Kick a member from the conference (requires --yes)
 Usage:
   plivo conference member kick <conference_name> <member_id> [flags]
 
+Flags:
+  -h, --help   help for kick
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

@@ -3,6 +3,9 @@ Stop one stream (with id) or all streams (without id) on a call
 Usage:
   plivo stream stop <call_uuid> [stream_id] [flags]
 
+Flags:
+  -h, --help   help for stop
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

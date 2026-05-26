@@ -9,6 +9,9 @@ Available Commands:
   list        List Verify sessions
   validate    Submit the OTP to validate a session
 
+Flags:
+  -h, --help   help for session
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

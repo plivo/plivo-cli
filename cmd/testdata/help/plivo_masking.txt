@@ -9,6 +9,9 @@ Aliases:
 Available Commands:
   session     Manage number-masking sessions
 
+Flags:
+  -h, --help   help for masking
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

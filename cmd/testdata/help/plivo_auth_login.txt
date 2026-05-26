@@ -4,6 +4,7 @@ Usage:
   plivo auth login [flags]
 
 Flags:
+  -h, --help          help for login
   -n, --name string   profile name (default "default")
 
 Global Flags:

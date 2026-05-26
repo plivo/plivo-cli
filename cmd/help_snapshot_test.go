@@ -49,8 +49,14 @@ func collectCmdPaths(root *cobra.Command) [][]string {
 // captureHelp returns the rendered --help text for the command at the given
 // path. Uses cobra.Command.Help() rather than rootCmd.Execute([..., "--help"])
 // so cobra's internal flag/args state doesn't get polluted between tests.
+//
+// Calls InitDefaultHelpFlag() on every command in the tree first so the
+// `-h, --help` line is present in the output deterministically — without this,
+// help rendering differs depending on whether any prior test went through
+// rootCmd.Execute() (which adds --help lazily).
 func captureHelp(t *testing.T, path []string) string {
 	t.Helper()
+	ensureHelpFlagOnTree(rootCmd)
 
 	var cmd *cobra.Command
 	if len(path) <= 1 {
@@ -76,6 +82,26 @@ func captureHelp(t *testing.T, path []string) string {
 		t.Fatalf("Help() failed for %v: %v", path, err)
 	}
 	return buf.String()
+}
+
+// ensureHelpFlagOnTree walks every command and forces the default -h/--help
+// flag into existence. Idempotent.
+func ensureHelpFlagOnTree(c *cobra.Command) {
+	c.InitDefaultHelpFlag()
+	for _, child := range c.Commands() {
+		ensureHelpFlagOnTree(child)
+	}
+}
+
+// TestMain warms up cobra's lazily-added commands (the `help` subcommand and
+// the `completion` subcommand) so they appear consistently in every snapshot
+// regardless of test ordering. Without this, the snapshot for `plivo --help`
+// includes/excludes these commands depending on whether some earlier test in
+// the same package went through rootCmd.Execute().
+func TestMain(m *testing.M) {
+	rootCmd.InitDefaultHelpCmd()
+	rootCmd.InitDefaultCompletionCmd()
+	os.Exit(m.Run())
 }
 
 // goldenPath returns the testdata file path for a given command path slice.

@@ -17,10 +17,12 @@ Available Commands:
   call        Make and inspect voice calls
   campaign    10DLC campaign registration (use cases for a brand)
   cnam        Caller-ID Name (CNAM) lookup for a US/CA number (spends money — requires --yes)
+  completion  Generate the autocompletion script for the specified shell
   compliance  Manage compliance documents (KYC, business proofs)
   conference  Inspect and control live audio conferences
   contacto    Manage Contacto session (used by `plivo agent` for AI agent CRUD)
   endpoint    Manage SIP endpoints (registered SIP devices/usernames)
+  help        Help about any command
   link        10DLC number-to-campaign linking
   lookup      Carrier + format lookup for an E.164 number (lookup.plivo.com)
   masking     Number-Masking sessions (privacy-preserving call/SMS bridge)
@@ -38,6 +40,7 @@ Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending
       --explain                    explain what the command will do before executing
+  -h, --help                       help for plivo
       --hodor-server plivo agent   base URL for hodor (used by plivo agent and `plivo auth token`)
       --log-level string           log level: debug|info|warn|error|none (default "warn")
       --no-color                   disable colored output

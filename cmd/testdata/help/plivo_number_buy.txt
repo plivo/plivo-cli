@@ -5,6 +5,7 @@ Usage:
 
 Flags:
       --app-id string   auto-attach to this application after purchase
+  -h, --help            help for buy
 
 Global Flags:
       --all                        auto-paginate through all pages

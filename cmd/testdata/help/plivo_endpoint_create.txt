@@ -6,6 +6,7 @@ Usage:
 Flags:
       --alias string      human-friendly label
       --app-id string     application to attach
+  -h, --help              help for create
       --password string   SIP password (required)
       --username string   SIP username (required)
 

@@ -13,6 +13,9 @@ Available Commands:
   list        List subaccounts
   update      Update a subaccount
 
+Flags:
+  -h, --help   help for subaccount
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

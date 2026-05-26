@@ -8,6 +8,9 @@ Available Commands:
   list        List numbers attached to a powerpack
   remove      Remove a number from a powerpack (requires --yes)
 
+Flags:
+  -h, --help   help for number
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

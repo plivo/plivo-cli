@@ -4,6 +4,7 @@ Usage:
   plivo powerpack number list <uuid> [flags]
 
 Flags:
+  -h, --help         help for list
       --limit int    results per page (default 20)
       --offset int   pagination offset
 

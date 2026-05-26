@@ -11,9 +11,9 @@ import (
 
 func TestNumber_ResolvedAppID(t *testing.T) {
 	cases := []struct {
-		name        string
-		n           Number
-		wantAppID   string
+		name      string
+		n         Number
+		wantAppID string
 	}{
 		{
 			name:      "AppID directly populated",

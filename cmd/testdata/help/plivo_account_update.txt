@@ -6,6 +6,7 @@ Usage:
 Flags:
       --address string    billing address
       --city string       city
+  -h, --help              help for update
       --name string       account name
       --timezone string   IANA timezone (e.g. Asia/Kolkata)
 

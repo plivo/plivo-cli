@@ -5,6 +5,7 @@ Usage:
 
 Flags:
       --app string      application id to wire (one of --app or --number required)
+  -h, --help            help for attach
       --number string   phone number to wire (resolves to its application)
       --region string   runner-service region for the answer URL (default "us-east-1")
 

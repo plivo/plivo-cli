@@ -8,6 +8,7 @@ Flags:
       --answer-url string      new answer URL
       --app-name string        new application name
       --hangup-url string      new hangup URL
+  -h, --help                   help for update
       --message-url string     new message URL
 
 Global Flags:

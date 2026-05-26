@@ -5,6 +5,7 @@ Usage:
 
 Flags:
       --enabled       enable on creation (default true)
+  -h, --help          help for create
       --name string   subaccount name (required)
 
 Global Flags:

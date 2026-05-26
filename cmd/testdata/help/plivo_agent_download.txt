@@ -13,6 +13,7 @@ Usage:
   plivo agent download <uuid> [flags]
 
 Flags:
+  -h, --help         help for download
       --out string   output filename (default: <phlo_name>-config.json)
 
 Global Flags:

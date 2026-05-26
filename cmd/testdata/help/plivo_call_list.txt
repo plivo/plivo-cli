@@ -6,6 +6,7 @@ Usage:
 Flags:
       --direction string   inbound|outbound
       --from string        filter by from_number
+  -h, --help               help for list
       --limit int          results per page (default 20)
       --offset int         pagination offset
       --to string          filter by to_number

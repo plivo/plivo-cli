@@ -8,12 +8,32 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
+
+// resetAllFlags walks the command tree and resets every flag to its DefValue
+// + clears the Changed bit. Required because cmd globals (yesFlag, dryRunFlag,
+// msgSendSrc, …) persist across rootCmd.Execute() calls and pollute later
+// tests — including the help snapshots, which would otherwise drift on the
+// second run under `go test -count=N`.
+func resetAllFlags(c *cobra.Command) {
+	visit := func(f *pflag.Flag) {
+		_ = f.Value.Set(f.DefValue)
+		f.Changed = false
+	}
+	c.Flags().VisitAll(visit)
+	c.PersistentFlags().VisitAll(visit)
+	for _, child := range c.Commands() {
+		resetAllFlags(child)
+	}
+}
 
 // execCmd resets global flag state, sets argv, and invokes rootCmd.Execute.
 // Returns the error from cobra (NOT the wrapped CLI error envelope) plus the
@@ -71,6 +91,12 @@ func execCmd(t *testing.T, args ...string) (err error, stdout, stderr string) {
 	os.Stderr = origStderr
 	rootCmd.SetOut(nil)
 	rootCmd.SetErr(nil)
+	rootCmd.SetArgs(nil)
+
+	// Reset every flag on every command to its default — without this, a
+	// later test (especially help_snapshot_test) sees stale flag values and
+	// fails under `-count >= 2`.
+	resetAllFlags(rootCmd)
 
 	return err, outBuf.String(), errBuf.String()
 }
@@ -90,18 +116,30 @@ func setFakeCreds(t *testing.T) {
 // startCapturingHTTPServer returns an httptest server that records URLs hit
 // and replies with the given JSON. Use for spend-verb tests where we want to
 // confirm that --yes actually causes an HTTP call.
-func startCapturingHTTPServer(t *testing.T, respStatus int, respBody string) (srv *httptest.Server, hitURLs *[]string) {
+//
+// Access to the hits slice is mutex-guarded so the test can safely race against
+// the HTTP handler (the standard http.Server runs handlers on a worker pool).
+func startCapturingHTTPServer(t *testing.T, respStatus int, respBody string) (srv *httptest.Server, get func() []string) {
 	t.Helper()
+	var mu sync.Mutex
 	urls := make([]string, 0, 4)
-	hitURLs = &urls
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
 		urls = append(urls, r.Method+" "+r.URL.Path)
-		hitURLs = &urls
+		mu.Unlock()
 		w.WriteHeader(respStatus)
 		_, _ = w.Write([]byte(respBody))
 	}))
 	t.Cleanup(srv.Close)
-	return srv, &urls
+	get = func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		// Return a copy so callers can't see racing appends.
+		out := make([]string, len(urls))
+		copy(out, urls)
+		return out
+	}
+	return srv, get
 }
 
 // ─── Destructive verbs refuse without --yes ──────────────────────────────────
@@ -119,6 +157,7 @@ func TestDestructiveVerbs_refuseWithoutYes(t *testing.T) {
 		{"number release", []string{"number", "release", "+14155551234"}},
 		{"call hangup", []string{"call", "hangup", "CALL-UUID"}},
 		{"recording delete", []string{"recording", "delete", "REC-UUID"}},
+		{"agent delete", []string{"agent", "delete", "AGENT-UUID"}},
 		{"subaccount delete", []string{"subaccount", "delete", "SAxxx"}},
 		{"endpoint delete", []string{"endpoint", "delete", "EP-ID"}},
 		{"application delete", []string{"application", "delete", "APP-ID"}},
@@ -190,7 +229,8 @@ func TestSpendVerbs_defaultToDryRun(t *testing.T) {
 	setFakeCreds(t)
 
 	srv, hits := startCapturingHTTPServer(t, 200, `{}`)
-	t.Cleanup(srv.Close)
+	// (t.Cleanup is already wired inside startCapturingHTTPServer)
+	_ = srv
 
 	// Override api.Client.HTTP for every new client created during this test
 	// by intercepting api.New via a small hack: we patch the http.DefaultTransport
@@ -229,9 +269,9 @@ func TestSpendVerbs_defaultToDryRun(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			before := len(*hits)
+			before := len(hits())
 			err, _, stderr := execCmd(t, tc.args...)
-			after := len(*hits)
+			after := len(hits())
 			if err != nil {
 				t.Errorf("plivo %s — expected nil err on default dry-run path, got: %v", strings.Join(tc.args, " "), err)
 			}

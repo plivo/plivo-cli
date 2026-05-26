@@ -4,6 +4,7 @@ Usage:
   plivo verify session validate <session_uuid> [flags]
 
 Flags:
+  -h, --help         help for validate
       --otp string   OTP code received by the recipient (required)
 
 Global Flags:

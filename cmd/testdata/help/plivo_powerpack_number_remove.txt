@@ -3,6 +3,9 @@ Remove a number from a powerpack (requires --yes)
 Usage:
   plivo powerpack number remove <uuid> <number> [flags]
 
+Flags:
+  -h, --help   help for remove
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

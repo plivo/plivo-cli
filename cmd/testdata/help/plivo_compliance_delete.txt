@@ -3,6 +3,9 @@ Delete a compliance document (requires --yes)
 Usage:
   plivo compliance delete <document_id> [flags]
 
+Flags:
+  -h, --help   help for delete
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

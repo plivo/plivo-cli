@@ -3,6 +3,9 @@ Get a message by UUID
 Usage:
   plivo message get <message_uuid> [flags]
 
+Flags:
+  -h, --help   help for get
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

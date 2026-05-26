@@ -3,6 +3,9 @@ Get an MPC by uuid or friendly_name
 Usage:
   plivo mpc get <mpc_uuid_or_name> [flags]
 
+Flags:
+  -h, --help   help for get
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

@@ -6,6 +6,7 @@ Usage:
 Flags:
       --call-time-limit int     max per-call duration in seconds
       --first-party string      first party E.164 (required)
+  -h, --help                    help for create
       --mode string             voice|sms|both (default "both")
       --record                  record calls in this session
       --second-party string     second party E.164 (required)

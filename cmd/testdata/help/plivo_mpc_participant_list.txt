@@ -4,6 +4,7 @@ Usage:
   plivo mpc participant list <mpc_uuid_or_name> [flags]
 
 Flags:
+  -h, --help         help for list
       --limit int    results per page (default 20)
       --offset int   pagination offset
 

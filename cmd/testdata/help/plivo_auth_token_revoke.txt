@@ -7,6 +7,9 @@ immediately. The id is the same value 'plivo auth token list' shows
 Usage:
   plivo auth token revoke <stk_…> [flags]
 
+Flags:
+  -h, --help   help for revoke
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

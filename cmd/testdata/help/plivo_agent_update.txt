@@ -5,6 +5,7 @@ Usage:
 
 Flags:
       --from string   path to workflow JSON file
+  -h, --help          help for update
       --name string   rename the agent (sends just {"name":...} via PATCH)
 
 Global Flags:

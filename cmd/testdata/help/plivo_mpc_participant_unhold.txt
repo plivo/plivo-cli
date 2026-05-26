@@ -3,6 +3,9 @@ Take a participant off hold
 Usage:
   plivo mpc participant unhold <mpc_uuid_or_name> <participant_id> [flags]
 
+Flags:
+  -h, --help   help for unhold
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

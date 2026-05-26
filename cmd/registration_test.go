@@ -108,13 +108,13 @@ func TestSubcommands_registered(t *testing.T) {
 
 func TestNestedSubcommands_registered(t *testing.T) {
 	nests := map[string][]string{
-		"auth token":          {"mint", "list", "revoke"},
-		"verify session":      {"create", "get", "list", "validate"},
-		"masking session":     {"create", "get", "list", "delete"},
-		"conference member":   {"kick", "mute", "unmute", "deaf", "undeaf", "play", "stop-play", "speak", "stop-speak"},
-		"mpc participant":     {"list", "add", "kick", "mute", "unmute", "hold", "unhold"},
-		"powerpack number":   {"list", "add", "remove"},
-		"agent session":       {"show", "clear"},
+		"auth token":        {"mint", "list", "revoke"},
+		"verify session":    {"create", "get", "list", "validate"},
+		"masking session":   {"create", "get", "list", "delete"},
+		"conference member": {"kick", "mute", "unmute", "deaf", "undeaf", "play", "stop-play", "speak", "stop-speak"},
+		"mpc participant":   {"list", "add", "kick", "mute", "unmute", "hold", "unhold"},
+		"powerpack number":  {"list", "add", "remove"},
+		"agent session":     {"show", "clear"},
 	}
 	for path, verbs := range nests {
 		path := path

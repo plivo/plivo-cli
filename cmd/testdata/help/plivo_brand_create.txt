@@ -10,6 +10,7 @@ Flags:
       --ein-issuing-country string   ISO-2 country issuing the EIN (default "US")
       --email string                 support email
       --entity-type string           PRIVATE_PROFIT|PUBLIC_PROFIT|NON_PROFIT|GOVERNMENT|SOLE_PROPRIETOR (default "PRIVATE_PROFIT")
+  -h, --help                         help for create
       --legal-name string            legal entity name (required)
       --phone string                 support phone E.164
       --stock-exchange string        exchange code (PUBLIC_PROFIT only)

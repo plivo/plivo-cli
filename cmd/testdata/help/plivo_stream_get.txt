@@ -3,6 +3,9 @@ Get details for one stream on a call
 Usage:
   plivo stream get <call_uuid> <stream_id> [flags]
 
+Flags:
+  -h, --help   help for get
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

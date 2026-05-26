@@ -13,6 +13,9 @@ Available Commands:
   logout      Clear the saved Contacto session
   whoami      Print the currently logged-in Contacto session
 
+Flags:
+  -h, --help   help for contacto
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

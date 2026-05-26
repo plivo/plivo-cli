@@ -5,6 +5,7 @@ Usage:
 
 Flags:
       --digits string   DTMF digits to send, e.g. 1234# (required)
+  -h, --help            help for dtmf
       --leg string      aleg|bleg (default "aleg")
 
 Global Flags:

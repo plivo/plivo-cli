@@ -12,6 +12,9 @@ Available Commands:
   list        List campaigns
   update      Update mutable campaign fields
 
+Flags:
+  -h, --help   help for campaign
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

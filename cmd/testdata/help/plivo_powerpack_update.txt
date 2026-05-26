@@ -4,6 +4,7 @@ Usage:
   plivo powerpack update <uuid> [flags]
 
 Flags:
+  -h, --help                   help for update
       --local-connect string   true|false
       --name string            new name
       --sticky-sender string   true|false

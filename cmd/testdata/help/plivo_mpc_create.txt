@@ -4,6 +4,7 @@ Usage:
   plivo mpc create [flags]
 
 Flags:
+  -h, --help                   help for create
       --max-participants int   cap on simultaneous participants
       --name string            friendly_name for the MPC (required)
       --record                 auto-record the MPC

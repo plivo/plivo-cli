@@ -5,6 +5,7 @@ Usage:
 
 Flags:
       --description string        new description
+  -h, --help                      help for update
       --message-flow string       new message flow
       --sample-message-1 string   new sample 1
       --sample-message-2 string   new sample 2

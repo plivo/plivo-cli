@@ -5,6 +5,7 @@ Usage:
 
 Flags:
       --campaign-id string   10DLC campaign id (required)
+  -h, --help                 help for create
       --number string        E.164 number (required)
 
 Global Flags:

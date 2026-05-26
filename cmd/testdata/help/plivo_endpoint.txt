@@ -13,6 +13,9 @@ Available Commands:
   list        List SIP endpoints
   update      Update a SIP endpoint
 
+Flags:
+  -h, --help   help for endpoint
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

@@ -3,6 +3,9 @@ Stop any TTS currently playing in a live call
 Usage:
   plivo call stop-speak <call_uuid> [flags]
 
+Flags:
+  -h, --help   help for stop-speak
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

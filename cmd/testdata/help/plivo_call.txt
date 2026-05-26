@@ -17,6 +17,9 @@ Available Commands:
   stop-speak  Stop any TTS currently playing in a live call
   transfer    Transfer one or both legs of a live call to new PlivoXML URLs
 
+Flags:
+  -h, --help   help for call
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

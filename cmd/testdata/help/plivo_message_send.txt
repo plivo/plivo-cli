@@ -5,6 +5,7 @@ Usage:
 
 Flags:
       --dst <           destination, separate multiple with < (required)
+  -h, --help            help for send
       --method string   callback method GET|POST (default "POST")
       --src string      sender (E.164, shortcode, or sender ID) (required)
       --text string     message body (required)

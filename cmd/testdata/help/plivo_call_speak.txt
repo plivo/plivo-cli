@@ -4,6 +4,7 @@ Usage:
   plivo call speak <call_uuid> [flags]
 
 Flags:
+  -h, --help              help for speak
       --language string   language code, e.g. en-US, en-GB, hi-IN (default "en-US")
       --legs string       aleg|bleg|both (default "aleg")
       --mix               mix with the call audio (else replace) (default true)

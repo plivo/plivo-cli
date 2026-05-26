@@ -9,6 +9,9 @@ Available Commands:
   start       Start a new audio stream on a call
   stop        Stop one stream (with id) or all streams (without id) on a call
 
+Flags:
+  -h, --help   help for stream
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

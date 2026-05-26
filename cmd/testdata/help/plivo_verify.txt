@@ -6,6 +6,9 @@ Usage:
 Available Commands:
   session     Manage Verify sessions
 
+Flags:
+  -h, --help   help for verify
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

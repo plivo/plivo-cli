@@ -9,6 +9,9 @@ Piped / --output json: returns the raw response.
 Usage:
   plivo auth token list [flags]
 
+Flags:
+  -h, --help   help for list
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

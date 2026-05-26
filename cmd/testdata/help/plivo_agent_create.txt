@@ -20,6 +20,7 @@ Flags:
   -c, --continue string        continue the saved vibe session with this follow-up message (one turn, non-interactive)
       --from string            E.164 caller-id (e.g. +14695184352) to fill into any outbound initiate_call nodes the LLM emits — required if the agent does outbound calls
       --from-template string   copy an existing agent uuid as the starting point (skips the LLM and lands a savable draft in one shot)
+  -h, --help                   help for create
       --name string            agent name (override the LLM-suggested name)
       --prompt string          initial description (skips the interactive prompt)
       --session-id string      explicit session uuid to resume (default: read from ~/.plivo/vibe-session.json). Requires --continue.

@@ -24,6 +24,9 @@ Available Commands:
   session     Inspect or clear the saved vibe-agent create session (~/.plivo/vibe-session.json)
   update      Update an existing Vibe Agent (--from <workflow.json> or --name <new-name>)
 
+Flags:
+  -h, --help   help for agent
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

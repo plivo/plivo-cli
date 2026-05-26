@@ -8,6 +8,7 @@ Flags:
       --answer-url string          URL returning PlivoXML to play on answer (default: Plivo's hello demo) (default "https://s3.amazonaws.com/static.plivo.com/answer.xml")
       --from string                source number (E.164) — must be on your account (required)
       --hangup-url string          URL hit when call ends
+  -h, --help                       help for make
       --machine-detection string   none|true|hangup
       --ring-url string            URL hit when call starts ringing
       --to string                  destination number (E.164) (required)

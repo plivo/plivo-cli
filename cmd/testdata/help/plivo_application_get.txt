@@ -3,6 +3,9 @@ Get application details
 Usage:
   plivo application get <app_id> [flags]
 
+Flags:
+  -h, --help   help for get
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

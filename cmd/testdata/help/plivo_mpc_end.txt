@@ -3,6 +3,9 @@ End the MPC and hang up all participants (requires --yes)
 Usage:
   plivo mpc end <mpc_uuid_or_name> [flags]
 
+Flags:
+  -h, --help   help for end
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

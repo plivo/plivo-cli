@@ -11,6 +11,9 @@ Available Commands:
   list        List toll-free verification profiles
   submit      Submit a new toll-free verification profile
 
+Flags:
+  -h, --help   help for tollfree
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

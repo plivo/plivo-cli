@@ -6,6 +6,7 @@ Usage:
 Flags:
       --business-name string                business name (required)
       --business-website string             business website URL
+  -h, --help                                help for submit
       --message-volume string               expected volume: LOW|MEDIUM|HIGH
       --numbers string                      comma-separated toll-free numbers to verify
       --opt-in-workflow string              describe how recipients opt in

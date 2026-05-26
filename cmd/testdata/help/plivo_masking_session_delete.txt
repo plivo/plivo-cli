@@ -3,6 +3,9 @@ End a masking session (requires --yes)
 Usage:
   plivo masking session delete <session_uuid> [flags]
 
+Flags:
+  -h, --help   help for delete
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

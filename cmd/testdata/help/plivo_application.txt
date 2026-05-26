@@ -13,6 +13,9 @@ Available Commands:
   list        List applications
   update      Update an application
 
+Flags:
+  -h, --help   help for application
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

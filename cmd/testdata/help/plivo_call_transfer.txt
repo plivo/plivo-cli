@@ -8,6 +8,7 @@ Flags:
       --aleg-url string      new URL for A-leg (caller side)
       --bleg-method string   GET|POST (default "POST")
       --bleg-url string      new URL for B-leg (callee side)
+  -h, --help                 help for transfer
       --legs string          which leg(s) to act on: aleg|bleg|both (default "aleg")
 
 Global Flags:

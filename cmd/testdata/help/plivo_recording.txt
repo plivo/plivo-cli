@@ -11,6 +11,9 @@ Available Commands:
   get         Get a recording by ID
   list        List recordings
 
+Flags:
+  -h, --help   help for recording
+
 Global Flags:
       --all                        auto-paginate through all pages
       --dry-run                    print the HTTP request without sending

@@ -12,6 +12,7 @@ Flags:
       --direct-lending            direct-lending arrangements
       --embedded-link             messages contain links
       --embedded-phone            messages contain phone numbers
+  -h, --help                      help for create
       --help-keywords string      comma-separated help keywords (default "HELP")
       --help-message string       auto-reply to HELP
       --message-flow string       describe how recipients opt in (required)

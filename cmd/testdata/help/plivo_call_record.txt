@@ -8,6 +8,7 @@ Flags:
       --callback-method string   GET|POST (default "POST")
       --callback-url string      URL hit when recording finishes
       --file-format string       mp3|wav (default "mp3")
+  -h, --help                     help for record
       --time-limit int           max recording length in seconds (default 60)
       --transcribe               request transcription
 

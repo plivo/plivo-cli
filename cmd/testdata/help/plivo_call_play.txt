@@ -4,6 +4,7 @@ Usage:
   plivo call play <call_uuid> [flags]
 
 Flags:
+  -h, --help          help for play
       --legs string   aleg|bleg|both (default "aleg")
       --length int    stop after N seconds (0 = full file)
       --loop          loop the playback

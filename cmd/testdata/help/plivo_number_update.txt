@@ -6,6 +6,7 @@ Usage:
 Flags:
       --alias string        set alias
       --app-id string       associate an application
+  -h, --help                help for update
       --subaccount string   move under subaccount
 
 Global Flags:
