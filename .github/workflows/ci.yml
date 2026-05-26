@@ -2,9 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [main, beta]
+    # main has no Go code yet (governance-only until v1.0 cut), so we only
+    # gate beta and feat/* on push. PRs targeting either are still checked.
+    branches:
+      - beta
+      - 'feat/**'
   pull_request:
-    branches: [main, beta]
+    branches:
+      - beta
+      - main
 
 permissions:
   contents: read
@@ -13,8 +19,6 @@ jobs:
   smoke:
     name: smoke
     runs-on: ubuntu-latest
-    # Skip if there's no Go code on this branch (e.g. main pre-v1.0).
-    if: hashFiles('go.mod') != ''
     steps:
       - uses: actions/checkout@v4
 
@@ -184,28 +188,26 @@ jobs:
         run: |
           # Spend/destructive verbs must exit 5 with DESTRUCTIVE_REFUSED when
           # --yes is missing. This is the safety contract — guard it in CI.
-          set +e
+          assert_refused() {
+            local label="$1"
+            shift
+            if "$@" --dry-run 2>&1 | grep -q "DESTRUCTIVE_REFUSED"; then
+              echo "✓ $label refused without --yes"
+            else
+              echo "✗ $label did not refuse"
+              exit 1
+            fi
+          }
 
-          ./plivo number release +14155551234 --dry-run 2>&1 | grep -q "DESTRUCTIVE_REFUSED" \
-            && echo "✓ number release refused without --yes" \
-            || { echo "✗ number release did not refuse"; exit 1; }
-
-          ./plivo call hangup CALL-FAKE --dry-run 2>&1 | grep -q "DESTRUCTIVE_REFUSED" \
-            && echo "✓ call hangup refused without --yes" \
-            || { echo "✗ call hangup did not refuse"; exit 1; }
-
-          ./plivo recording delete REC-FAKE --dry-run 2>&1 | grep -q "DESTRUCTIVE_REFUSED" \
-            && echo "✓ recording delete refused without --yes" \
-            || { echo "✗ recording delete did not refuse"; exit 1; }
+          assert_refused "number release"   ./plivo number release +14155551234
+          assert_refused "call hangup"      ./plivo call hangup CALL-FAKE
+          assert_refused "recording delete" ./plivo recording delete REC-FAKE
 
   cross-build:
     name: cross-build (${{ matrix.os }}/${{ matrix.arch }})
     runs-on: ubuntu-latest
     needs: smoke
-    if: |
-      hashFiles('go.mod') != '' &&
-      github.event_name == 'push' &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/beta'
     strategy:
       fail-fast: false
       matrix:
