@@ -1,0 +1,23 @@
+Update a SIP endpoint
+
+Usage:
+  plivo endpoint update <endpoint_id> [flags]
+
+Flags:
+      --alias string      new alias
+      --app-id string     new application id
+  -h, --help              help for update
+      --password string   new password
+
+Global Flags:
+      --all                        auto-paginate through all pages
+      --dry-run                    print the HTTP request without sending
+      --explain                    explain what the command will do before executing
+      --hodor-server plivo agent   base URL for hodor (used by plivo agent and `plivo auth token`)
+      --log-level string           log level: debug|info|warn|error|none (default "warn")
+      --no-color                   disable colored output
+  -o, --output string              output format: table|json (default: table for TTY, json otherwise)
+      --profile string             named profile from ~/.plivo/config.toml
+  -q, --quiet                      suppress non-data output
+      --timeout int                request timeout in seconds (default 30)
+  -y, --yes                        skip confirmation prompts

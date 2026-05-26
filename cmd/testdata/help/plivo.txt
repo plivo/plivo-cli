@@ -1,0 +1,53 @@
+plivo is a command-line interface for the Plivo REST API.
+
+Credentials resolve in order:
+  1. --profile flag
+  2. active profile in ~/.plivo/config.toml
+  3. PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN env vars
+
+Usage:
+  plivo [command]
+
+Available Commands:
+  account     Inspect and update the active Plivo account
+  agent       Manage Plivo Vibe AI agents
+  application Manage Plivo applications (voice/messaging webhooks)
+  auth        Manage credentials and profiles
+  brand       10DLC brand registration (US A2P 10-digit-long-code messaging)
+  call        Make and inspect voice calls
+  campaign    10DLC campaign registration (use cases for a brand)
+  cnam        Caller-ID Name (CNAM) lookup for a US/CA number (spends money — requires --yes)
+  completion  Generate the autocompletion script for the specified shell
+  compliance  Manage compliance documents (KYC, business proofs)
+  conference  Inspect and control live audio conferences
+  contacto    Manage Contacto session (used by `plivo agent` for AI agent CRUD)
+  endpoint    Manage SIP endpoints (registered SIP devices/usernames)
+  help        Help about any command
+  link        10DLC number-to-campaign linking
+  lookup      Carrier + format lookup for an E.164 number (lookup.plivo.com)
+  masking     Number-Masking sessions (privacy-preserving call/SMS bridge)
+  message     Send and inspect SMS/MMS messages
+  mpc         Multi-Party Calls (MPC) — group voice rooms with dynamic participants
+  number      Manage account phone numbers
+  powerpack   Powerpacks — number pools for high-volume SMS
+  recording   List, fetch, and delete call/conference recordings
+  stream      Live audio streams on a call (WebSocket bridge for transcription / agents)
+  subaccount  Manage subaccounts under the master account
+  tollfree    Toll-free verification (US TFN messaging compliance)
+  verify      Plivo Verify — OTP / phone-number verification sessions
+
+Flags:
+      --all                        auto-paginate through all pages
+      --dry-run                    print the HTTP request without sending
+      --explain                    explain what the command will do before executing
+  -h, --help                       help for plivo
+      --hodor-server plivo agent   base URL for hodor (used by plivo agent and `plivo auth token`)
+      --log-level string           log level: debug|info|warn|error|none (default "warn")
+      --no-color                   disable colored output
+  -o, --output string              output format: table|json (default: table for TTY, json otherwise)
+      --profile string             named profile from ~/.plivo/config.toml
+  -q, --quiet                      suppress non-data output
+      --timeout int                request timeout in seconds (default 30)
+  -y, --yes                        skip confirmation prompts
+
+Use "plivo [command] --help" for more information about a command.
