@@ -1,0 +1,42 @@
+plivo agent run — invoke an HTTP-triggered agent flow.
+
+Outbound voice agents typically have a Start node with triggers: ["http"] —
+they expect to be POSTed with a JSON body that fills the Start node's
+payload_format (e.g. {"phone_number": "+91XXXXXXXXXX"}). The flow then
+places its own outbound call via the initiate_call node and runs the
+AI agent on connection.
+
+This is the RIGHT invocation for agent flows. 'plivo call make' is for
+direct outbound calls with a static answer_url — different model.
+
+The agent must be PUBLISHED (state=ACTIVE, enabled=true). Drafts will
+return 'No phlo found' from the runner.
+
+Example:
+  plivo agent run a566fd28-... --phone-number +919891859683
+  plivo agent run <uuid> --param phone_number=+91X --param greeting="Hi"
+
+Decide between this and 'plivo call make':
+  agent run    — when Start.triggers contains "http" (most voice-AI agents)
+  call make    — when you want to place a direct outbound call yourself
+                 and supply a static answer_url (legacy / non-agent flows)
+
+Usage:
+  plivo agent run <uuid> [flags]
+
+Flags:
+      --param stringArray     extra Start-node payload params as key=value (repeatable)
+      --phone-number string   shorthand for --param phone_number=<E.164> — the most common Start-node trigger param
+
+Global Flags:
+      --all                        auto-paginate through all pages
+      --dry-run                    print the HTTP request without sending
+      --explain                    explain what the command will do before executing
+      --hodor-server plivo agent   base URL for hodor (used by plivo agent and `plivo auth token`)
+      --log-level string           log level: debug|info|warn|error|none (default "warn")
+      --no-color                   disable colored output
+  -o, --output string              output format: table|json (default: table for TTY, json otherwise)
+      --profile string             named profile from ~/.plivo/config.toml
+  -q, --quiet                      suppress non-data output
+      --timeout int                request timeout in seconds (default 30)
+  -y, --yes                        skip confirmation prompts
