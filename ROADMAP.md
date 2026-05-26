@@ -1,0 +1,45 @@
+# Roadmap
+
+Pre-release. Status is captured here so users have visibility into what's coming. Dates are aspirational and may slip.
+
+## Now — `beta` branch
+
+The `beta` branch carries the full working CLI. Everything below is implemented and live there:
+
+- Single static Go binary, dual TTY/JSON output, stable error envelope
+- `auth`, `account`, `subaccount`
+- `number` (list/get/search/buy/update/release), `application` (CRUD), `endpoint` (CRUD)
+- `message` (send/list/get), `call` (make/list/get + hangup/transfer/play/speak/dtmf/record + stop verbs)
+- `conference` (list/get/hangup + member kick/mute/unmute/deaf/undeaf/play/speak), `mpc` (multi-party), `stream` (live audio bridge)
+- `recording` (list/get/delete)
+- `verify` session, `lookup`, `cnam`
+- `masking` session, `compliance` documents
+- `10DLC`: `brand`, `campaign`, `link`
+- `tollfree` verification, `powerpack`
+
+## Next
+
+- Shell completion (`plivo completion bash|zsh|fish|powershell`)
+- Update-check on startup with cached version-stamp
+- Homebrew tap + Docker image distribution
+- `--columns` / `--properties` for table output
+- `command_not_found` suggestions
+- OS-keychain credential storage (Mac Keychain, libsecret, Windows Credential Manager)
+
+## Later
+
+- Plugin-by-PATH mechanism (`plivo-<name>` binaries on `$PATH`)
+- `plivo watch <resource>` live-tail
+- Per-command `--subaccount` for impersonation
+- `plivo api <resource>:<verb>` generic escape hatch via OpenAPI schema
+- apt / yum / scoop distribution
+- `--query` JMESPath filter for JSON output
+
+## Cut
+
+`main` branch promotion happens at v1.0.0 with:
+- All "Now" features stable
+- All "Next" items shipped
+- Docs site published
+
+Versioning follows [SemVer](https://semver.org). Until v1.0.0 the surface may change without deprecation cycles.
