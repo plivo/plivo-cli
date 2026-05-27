@@ -85,11 +85,13 @@ jobs:
 
       - name: smoke - per-group --help (no HTTP)
         run: |
-          # Every top-level command group must successfully render --help.
+          # Every public-build top-level command group must render --help.
           # Catches cobra-registration regressions, missing flag definitions, etc.
+          # `contacto` + `auth token` are internal-only (build tag `internal`)
+          # and absent from this public build; `agent` ships as a coming-soon stub.
           groups=(
             account agent application auth brand call campaign cnam compliance
-            conference contacto endpoint link lookup masking message mpc number
+            conference endpoint link lookup masking message mpc number
             powerpack recording stream subaccount tollfree verify
           )
           for cmd in "${groups[@]}"; do
