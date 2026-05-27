@@ -41,10 +41,12 @@ func isFlagRequired(cmd *cobra.Command, flagName string) bool {
 // ─── Top-level groups registered ─────────────────────────────────────────────
 
 func TestRootCmd_allTopLevelGroupsRegistered(t *testing.T) {
-	// The 24 groups that should appear directly under `plivo`.
+	// The public-v1 top-level groups under `plivo`. `agent` is present as a
+	// coming-soon stub; `contacto` + `auth token` are internal-only (build
+	// tag `internal`) and verified separately in internal_registration_test.go.
 	groups := []string{
 		"account", "agent", "application", "auth", "brand", "call",
-		"campaign", "cnam", "compliance", "conference", "contacto",
+		"campaign", "cnam", "compliance", "conference",
 		"endpoint", "link", "lookup", "masking", "message", "mpc",
 		"number", "powerpack", "recording", "stream", "subaccount",
 		"tollfree", "verify",
@@ -64,8 +66,7 @@ func TestSubcommands_registered(t *testing.T) {
 		verbs []string
 	}{
 		{"account", []string{"get", "update"}},
-		{"auth", []string{"login", "list", "use", "remove", "whoami", "token"}},
-		{"contacto", []string{"login", "logout", "whoami"}},
+		{"auth", []string{"login", "list", "use", "remove", "whoami"}}, // `token` is internal-only
 		{"subaccount", []string{"list", "get", "create", "update", "delete"}},
 		{"number", []string{"list", "get", "search", "buy", "update", "release"}},
 		{"application", []string{"create", "list", "get", "update", "delete"}},
@@ -91,7 +92,8 @@ func TestSubcommands_registered(t *testing.T) {
 		{"link", []string{"list", "create", "delete"}},
 		{"tollfree", []string{"list", "get", "submit"}},
 		{"powerpack", []string{"list", "get", "create", "update", "delete", "number"}},
-		{"agent", []string{"list", "get", "create", "update", "publish", "download", "delete", "run", "attach", "session"}},
+		// `agent` subcommands are internal-only; the public build ships a
+		// flat coming-soon stub with no subcommands.
 	}
 	for _, tc := range cases {
 		t.Run(tc.group, func(t *testing.T) {
@@ -108,13 +110,12 @@ func TestSubcommands_registered(t *testing.T) {
 
 func TestNestedSubcommands_registered(t *testing.T) {
 	nests := map[string][]string{
-		"auth token":        {"mint", "list", "revoke"},
 		"verify session":    {"create", "get", "list", "validate"},
 		"masking session":   {"create", "get", "list", "delete"},
 		"conference member": {"kick", "mute", "unmute", "deaf", "undeaf", "play", "stop-play", "speak", "stop-speak"},
 		"mpc participant":   {"list", "add", "kick", "mute", "unmute", "hold", "unhold"},
 		"powerpack number":  {"list", "add", "remove"},
-		"agent session":     {"show", "clear"},
+		// `auth token` + `agent session` are internal-only (see internal_registration_test.go).
 	}
 	for path, verbs := range nests {
 		path := path
@@ -202,7 +203,7 @@ func TestRequiredFlags(t *testing.T) {
 		{[]string{"conference", "member", "speak"}, []string{"text"}},
 		{[]string{"stream", "start"}, []string{"url"}},
 		{[]string{"powerpack", "create"}, []string{"name"}},
-		{[]string{"auth", "token", "mint"}, []string{"modules"}},
+		// `auth token mint --modules` is internal-only.
 	}
 	for _, tc := range cases {
 		t.Run(strings.Join(tc.path, "_"), func(t *testing.T) {
@@ -221,7 +222,8 @@ func TestRequiredFlags(t *testing.T) {
 func TestRootPersistentFlags(t *testing.T) {
 	expected := []string{
 		"profile", "output", "quiet", "no-color", "log-level",
-		"yes", "dry-run", "explain", "timeout", "all", "hodor-server",
+		"yes", "dry-run", "explain", "timeout", "all",
+		// "hodor-server" is internal-only (verified in internal_registration_test.go)
 	}
 	for _, name := range expected {
 		t.Run(name, func(t *testing.T) {

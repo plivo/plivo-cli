@@ -1,43 +1,22 @@
-plivo agent — manage AI agents (PHLO flows) from the command line.
+Plivo Vibe AI agents — build, publish, and run AI voice agents from your terminal.
 
-Requires a Contacto session: run 'plivo contacto login' first.
-
-These commands hit the same regional Contacto API gateway the web console uses,
-so anything they do is visible immediately in the dev console UI.
-
-The attach subcommand uses your Plivo classic credentials (PLIVO_AUTH_ID +
-PLIVO_AUTH_TOKEN) against api.plivo.com to rewire an application's answer URL —
-that's a public Plivo REST operation, not Contacto-side.
+Coming soon — this surface is not part of the current release.
+Track progress: https://github.com/plivo/plivo-cli/blob/main/ROADMAP.md
 
 Usage:
-  plivo agent [command]
-
-Available Commands:
-  attach      Attach an agent to a Plivo application (rewrites answer/message/hangup URLs)
-  create      Create a Vibe Agent — interactive on first call, resumable via -c on subsequent calls
-  delete      Delete a Vibe Agent permanently (requires --yes)
-  download    Download an agent's full config JSON (for inspection, diffing, version control)
-  get         Get a single Vibe Agent by uuid
-  list        List Vibe Agents on the active Contacto org
-  publish     Promote a DRAFT agent to ACTIVE so the runner can serve it
-  run         HTTP-trigger an agent flow (use this for outbound agents whose Start node has triggers: ["http"])
-  session     Inspect or clear the saved vibe-agent create session (~/.plivo/vibe-session.json)
-  update      Update an existing Vibe Agent (--from <workflow.json> or --name <new-name>)
+  plivo agent [flags]
 
 Flags:
   -h, --help   help for agent
 
 Global Flags:
-      --all                        auto-paginate through all pages
-      --dry-run                    print the HTTP request without sending
-      --explain                    explain what the command will do before executing
-      --hodor-server plivo agent   base URL for hodor (used by plivo agent and `plivo auth token`)
-      --log-level string           log level: debug|info|warn|error|none (default "warn")
-      --no-color                   disable colored output
-  -o, --output string              output format: table|json (default: table for TTY, json otherwise)
-      --profile string             named profile from ~/.plivo/config.toml
-  -q, --quiet                      suppress non-data output
-      --timeout int                request timeout in seconds (default 30)
-  -y, --yes                        skip confirmation prompts
-
-Use "plivo agent [command] --help" for more information about a command.
+      --all                auto-paginate through all pages
+      --dry-run            print the HTTP request without sending
+      --explain            explain what the command will do before executing
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts

@@ -55,7 +55,7 @@ var authWhoamiCmd = &cobra.Command{
 func init() {
 	authLoginCmd.Flags().StringVarP(&authLoginName, "name", "n", "default", "profile name")
 	authCmd.AddCommand(authLoginCmd, authListCmd, authUseCmd, authRemoveCmd, authWhoamiCmd)
-	authCmd.AddCommand(authTokenCmd)
+	// `auth token` is registered in authToken.go (internal build tag only).
 	rootCmd.AddCommand(authCmd)
 }
 

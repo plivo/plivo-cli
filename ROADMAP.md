@@ -17,6 +17,15 @@ The `beta` branch carries the full working CLI. Everything below is implemented 
 - `10DLC`: `brand`, `campaign`, `link`
 - `tollfree` verification, `powerpack`
 
+## Coming soon
+
+- **AI voice agents** (`plivo agent`) — build, publish, and run Vibe AI voice
+  agents from the terminal. The public build ships a `plivo agent` placeholder
+  that points here; the full surface (create / run / publish / attach / session)
+  is gated behind the `internal` build tag while it still depends on
+  Plivo-internal services. It graduates to the public build once those
+  dependencies are externalized.
+
 ## Next
 
 - Shell completion (`plivo completion bash|zsh|fish|powershell`)

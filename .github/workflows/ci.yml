@@ -50,7 +50,7 @@ jobs:
           fi
           echo "✓ go.mod tidy"
 
-      - name: go test (race + coverage)
+      - name: go test (race + coverage) — public build
         run: |
           go test -race -coverprofile=coverage.out -covermode=atomic ./...
           echo
@@ -58,6 +58,14 @@ jobs:
           echo
           total=$(go tool cover -func=coverage.out | awk '/^total:/ {sub(/%/,""); print $3}')
           echo "Total coverage: ${total}%"
+
+      - name: go build + test — internal build (-tags internal)
+        run: |
+          # The agent / contacto / auth-token surface is gated behind the
+          # `internal` build tag. Build + test it here so it doesn't rot, even
+          # though it doesn't ship in the public v1 binary.
+          go build -tags internal -o /dev/null .
+          go test -tags internal -race ./...
 
       - name: upload coverage artefact
         if: always()
@@ -212,10 +220,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: linux,  arch: amd64 }
-          - { os: linux,  arch: arm64 }
-          - { os: darwin, arch: amd64 }
-          - { os: darwin, arch: arm64 }
+          - { os: linux,   arch: amd64, ext: "" }
+          - { os: linux,   arch: arm64, ext: "" }
+          - { os: darwin,  arch: amd64, ext: "" }
+          - { os: darwin,  arch: arm64, ext: "" }
+          - { os: windows, arch: amd64, ext: ".exe" }
+          - { os: windows, arch: arm64, ext: ".exe" }
     steps:
       - uses: actions/checkout@v4
 
@@ -231,7 +241,7 @@ jobs:
           CGO_ENABLED: "0"
         run: |
           mkdir -p dist
-          go build -ldflags="-s -w" -o "dist/plivo_${{ matrix.os }}_${{ matrix.arch }}" .
+          go build -ldflags="-s -w" -o "dist/plivo_${{ matrix.os }}_${{ matrix.arch }}${{ matrix.ext }}" .
 
       - name: artefact size
         run: ls -lh dist/

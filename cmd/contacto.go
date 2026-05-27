@@ -1,3 +1,8 @@
+//go:build internal
+
+// Gated behind the `internal` build tag: the Contacto session is only useful
+// to authenticate the `agent` surface, which is itself internal-only.
+
 package cmd
 
 import (
