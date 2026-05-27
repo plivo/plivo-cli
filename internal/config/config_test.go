@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/zalando/go-keyring"
 )
 
 // withHomeDir redirects os.UserHomeDir() to a tmp dir so tests don't pollute
@@ -22,6 +24,57 @@ func clearEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("PLIVO_AUTH_ID", "")
 	t.Setenv("PLIVO_AUTH_TOKEN", "")
+}
+
+// TestMain swaps in go-keyring's in-memory mock so credential tests never touch
+// (or prompt) the developer's real OS keychain.
+func TestMain(m *testing.M) {
+	keyring.MockInit()
+	os.Exit(m.Run())
+}
+
+// ─── OS keychain token storage ───────────────────────────────────────────────
+
+func TestKeychain_setGetDelete(t *testing.T) {
+	if err := SetToken("kc-profile", "tok-secret"); err != nil {
+		t.Fatalf("SetToken: %v", err)
+	}
+	got, err := GetToken("kc-profile")
+	if err != nil || got != "tok-secret" {
+		t.Fatalf("GetToken = %q, %v; want tok-secret", got, err)
+	}
+	if err := DeleteToken("kc-profile"); err != nil {
+		t.Fatalf("DeleteToken: %v", err)
+	}
+	// A miss returns ("", nil), not an error.
+	got, err = GetToken("kc-profile")
+	if err != nil || got != "" {
+		t.Fatalf("GetToken after delete = %q, %v; want \"\", nil", got, err)
+	}
+	// Deleting a missing entry is a no-op.
+	if err := DeleteToken("never-existed"); err != nil {
+		t.Errorf("DeleteToken(missing) = %v; want nil", err)
+	}
+}
+
+// TestResolve_keychainBackedProfile verifies Resolve pulls the token from the
+// keychain when config.toml has the auth_id but no auth_token.
+func TestResolve_keychainBackedProfile(t *testing.T) {
+	withHomeDir(t)
+	clearEnv(t)
+	_ = Save(&Config{Active: "kc", Profiles: map[string]Profile{"kc": {AuthID: "MAkc"}}})
+	if err := SetToken("kc", "tok-from-keychain"); err != nil {
+		t.Fatalf("SetToken: %v", err)
+	}
+	t.Cleanup(func() { _ = DeleteToken("kc") })
+
+	prof, src, err := Resolve("")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if prof.AuthToken != "tok-from-keychain" || prof.AuthID != "MAkc" || src != "kc" {
+		t.Errorf("Resolve = %+v src=%q; want token sourced from keychain", prof, src)
+	}
 }
 
 // ─── Path / Load / Save ──────────────────────────────────────────────────────

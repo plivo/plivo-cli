@@ -85,10 +85,15 @@ func runAuthLogin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("auth_id and auth_token are required")
 	}
 
-	cfg.Profiles[authLoginName] = config.Profile{
-		AuthID:    authID,
-		AuthToken: authToken,
+	prof := config.Profile{AuthID: authID}
+	storedInKeychain := true
+	if err := config.SetToken(authLoginName, authToken); err != nil {
+		// No usable OS keychain (e.g. a headless Linux box with no Secret
+		// Service). Fall back to storing the token in config.toml (0600).
+		prof.AuthToken = authToken
+		storedInKeychain = false
 	}
+	cfg.Profiles[authLoginName] = prof
 	if cfg.Active == "" {
 		cfg.Active = authLoginName
 	}
@@ -97,7 +102,11 @@ func runAuthLogin(cmd *cobra.Command, args []string) error {
 	}
 
 	path, _ := config.Path()
-	fmt.Fprintf(os.Stderr, "Saved profile %q to %s\n", authLoginName, path)
+	if storedInKeychain {
+		fmt.Fprintf(os.Stderr, "Saved profile %q to %s (auth token stored in your OS keychain)\n", authLoginName, path)
+	} else {
+		fmt.Fprintf(os.Stderr, "Saved profile %q to %s (OS keychain unavailable — auth token stored in the config file)\n", authLoginName, path)
+	}
 	return nil
 }
 
@@ -160,6 +169,9 @@ func runAuthRemove(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("profile %q not found", name)
 	}
 	delete(cfg.Profiles, name)
+	// Best-effort removal from the OS keychain (no-op if the token lived in
+	// the config file instead).
+	_ = config.DeleteToken(name)
 	if cfg.Active == name {
 		cfg.Active = ""
 	}

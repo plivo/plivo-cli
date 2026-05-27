@@ -14,7 +14,7 @@ import (
 
 type Profile struct {
 	AuthID            string `toml:"auth_id"`
-	AuthToken         string `toml:"auth_token"`
+	AuthToken         string `toml:"auth_token,omitempty"`
 	DefaultSubaccount string `toml:"default_subaccount,omitempty"`
 	Region            string `toml:"region,omitempty"`
 }
@@ -86,11 +86,21 @@ func Resolve(profileName string) (Profile, string, error) {
 		name = cfg.Active
 	}
 	if name != "" {
-		if p, ok := cfg.Profiles[name]; ok && p.AuthID != "" && p.AuthToken != "" {
-			return p, name, nil
+		if p, ok := cfg.Profiles[name]; ok && p.AuthID != "" {
+			// Token precedence: a token in config.toml (legacy, or the
+			// fallback used when no OS keychain is available) wins; otherwise
+			// pull it from the OS keychain where `auth login` now stores it.
+			if p.AuthToken == "" {
+				if tok, err := GetToken(name); err == nil {
+					p.AuthToken = tok
+				}
+			}
+			if p.AuthToken != "" {
+				return p, name, nil
+			}
 		}
 		if profileName != "" {
-			return Profile{}, "", fmt.Errorf("profile %q not found in %s", profileName, mustPath())
+			return Profile{}, "", fmt.Errorf("profile %q not found or has no stored token in %s", profileName, mustPath())
 		}
 	}
 	authID := os.Getenv("PLIVO_AUTH_ID")
