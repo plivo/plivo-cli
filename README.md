@@ -8,12 +8,33 @@ Single Go binary. Manages numbers, applications, messages, calls, recordings, co
 
 ## Install
 
-> Available once `beta` is promoted. For now, build from source on the [`beta`](https://github.com/plivo/plivo-cli/tree/beta) branch.
+> Pre-release: the one-liners below work once the repo is public and a release
+> is published. Until then, build from source (bottom).
+
+**macOS / Linux / WSL / Git Bash** (auto-detects OS + arch):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/beta/install.sh | bash
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/plivo/plivo-cli/beta/install.ps1 | iex
+```
+
+Both installers fetch the matching release binary (`darwin`/`linux`/`windows` ×
+`amd64`/`arm64`). Override with `PLIVO_CLI_VERSION` (a release tag) and
+`PLIVO_INSTALL_DIR` (target directory).
+
+**Build from source** (any platform with Go):
 
 ```bash
 git clone -b beta https://github.com/plivo/plivo-cli.git
 cd plivo-cli
-make install   # → ~/go/bin/plivo
+make install        # → $GOPATH/bin/plivo
+# or cross-compile every target:
+make build-all      # → dist/plivo_<os>_<arch>[.exe]
 ```
 
 ## Quickstart
