@@ -70,6 +70,14 @@ Output is a table on a terminal and JSON when piped; force either with `-o table
 | 4 | Rate limit (429) |
 | 5 | Destructive operation refused (missing `--yes`) |
 
+## Documentation
+
+- `plivo help` and `plivo <command> --help` — every command is self-documenting.
+- [Command reference](docs/COMMANDS.md) — the full command tree (regenerate with `make docs`).
+- [examples/](examples/) — runnable scripts for common tasks.
+- [Error codes](docs/errors.md) — exit codes and the JSON error envelope.
+- [Plivo REST API reference](https://www.plivo.com/docs/) — the underlying API.
+
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md).
