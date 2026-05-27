@@ -37,12 +37,14 @@ export PLIVO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 # Verify the active account
 plivo auth whoami
 
-# Everyday operations
-plivo number list
-plivo number search --country US --type local --limit 5
-plivo message send --src +1... --dst +1... --text "hi" --yes
-plivo call list --limit 5
+# Everyday operations — `plivo <service> <resource> <verb>`
+plivo numbers list
+plivo numbers search --country US --type local --limit 5
+plivo sms messages send --src +1... --dst +1... --text "hi" --yes
+plivo voice calls list --limit 5
 ```
+
+Commands follow a `plivo <service> <resource> <verb>` grammar (`voice`, `sms`, `numbers`, `verify`, `account`). The pre-grammar short forms still work as aliases — `plivo call list` resolves to `plivo voice calls list`.
 
 Output is a table on a terminal and JSON when piped; force either with `-o table|json`. Spend operations default to a dry run and require `--yes` to execute.
 

@@ -85,18 +85,23 @@ jobs:
 
       - name: smoke - per-group --help (no HTTP)
         run: |
-          # Every public-build top-level command group must render --help.
-          # Catches cobra-registration regressions, missing flag definitions, etc.
+          # Every public-build command group must render --help. Catches
+          # cobra-registration regressions, missing flag definitions, etc.
           # `contacto` + `auth token` are internal-only (build tag `internal`)
           # and absent from this public build; `agent` ships as a coming-soon stub.
           groups=(
-            account agent application auth brand call campaign cnam compliance
-            conference endpoint link lookup masking message mpc number
-            powerpack recording stream subaccount tollfree verify
+            "account" "agent" "auth" "lookup" "numbers" "sms" "verify" "voice"
+            "account subaccounts" "account applications" "account compliance"
+            "numbers masking" "numbers masking sessions"
+            "voice calls" "voice calls streams" "voice conferences"
+            "voice multiparty" "voice recordings" "voice endpoints"
+            "sms messages" "sms 10dlc" "sms 10dlc brands" "sms powerpacks"
+            "sms tollfree" "verify sessions"
           )
           for cmd in "${groups[@]}"; do
             echo "==> plivo $cmd --help"
-            ./plivo "$cmd" --help > /dev/null
+            read -ra parts <<< "$cmd"
+            ./plivo "${parts[@]}" --help > /dev/null
           done
 
       - name: smoke - dry-run URL construction
@@ -111,7 +116,7 @@ jobs:
           # Verify each representative command builds the expected REST URL.
           # --dry-run never sends the HTTP request; it just prints what would
           # have been sent. Catches URL-construction regressions across the
-          # 26 top-level groups without needing a real Plivo account.
+          # service grammar without needing a real Plivo account.
           set -e
 
           assert_url() {
@@ -131,61 +136,71 @@ jobs:
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/" \
             ./plivo account get --dry-run
 
-          assert_url "subaccount list" \
+          assert_url "account subaccounts list" \
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/Subaccount/" \
-            ./plivo subaccount list --dry-run --limit 5
+            ./plivo account subaccounts list --dry-run --limit 5
 
-          assert_url "number list" \
+          assert_url "numbers list" \
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/Number/" \
-            ./plivo number list --dry-run --limit 5
+            ./plivo numbers list --dry-run --limit 5
 
-          assert_url "application list" \
+          assert_url "account applications list" \
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/Application/" \
-            ./plivo application list --dry-run
+            ./plivo account applications list --dry-run
 
-          assert_url "message send" \
+          assert_url "sms messages send" \
             "POST https://api.plivo.com/v1/Account/[A-Z0-9]+/Message/" \
-            ./plivo message send --src +14155551234 --dst +14155556789 --text hi --dry-run
+            ./plivo sms messages send --src +14155551234 --dst +14155556789 --text hi --dry-run
 
-          assert_url "call list" \
+          assert_url "voice calls list" \
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/Call/" \
-            ./plivo call list --dry-run
+            ./plivo voice calls list --dry-run
 
-          assert_url "recording list" \
+          assert_url "voice recordings list" \
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/Recording/" \
-            ./plivo recording list --dry-run --limit 3
+            ./plivo voice recordings list --dry-run --limit 3
 
-          assert_url "conference list" \
+          assert_url "voice conferences list" \
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/Conference/" \
-            ./plivo conference list --dry-run
+            ./plivo voice conferences list --dry-run
 
-          assert_url "mpc list" \
+          assert_url "voice multiparty list" \
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/MultiPartyCall/" \
-            ./plivo mpc list --dry-run --limit 3
+            ./plivo voice multiparty list --dry-run --limit 3
 
-          assert_url "verify session list" \
+          assert_url "verify sessions list" \
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/Verify/Session/" \
-            ./plivo verify session list --dry-run --limit 3
+            ./plivo verify sessions list --dry-run --limit 3
 
           assert_url "lookup (separate base host)" \
             "GET https://lookup.plivo.com/v1/Number/\+14155552671\?type=carrier" \
             ./plivo lookup +14155552671 --dry-run
 
-          assert_url "brand list (10DLC path)" \
+          assert_url "sms 10dlc brands list (10DLC path)" \
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/10dlc/Brand/" \
-            ./plivo brand list --dry-run --limit 3
+            ./plivo sms 10dlc brands list --dry-run --limit 3
 
-          assert_url "masking session list (Masking/Session segments)" \
+          assert_url "numbers masking sessions list (Masking/Session segments)" \
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/Masking/Session/" \
-            ./plivo masking session list --dry-run --limit 3
+            ./plivo numbers masking sessions list --dry-run --limit 3
 
-          assert_url "powerpack list" \
+          assert_url "sms powerpacks list" \
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/Powerpack/" \
-            ./plivo powerpack list --dry-run --limit 3
+            ./plivo sms powerpacks list --dry-run --limit 3
 
-          assert_url "endpoint list" \
+          assert_url "voice endpoints list" \
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/Endpoint/" \
-            ./plivo endpoint list --dry-run --limit 3
+            ./plivo voice endpoints list --dry-run --limit 3
+
+          # Legacy alias shim: pre-grammar commands must still resolve to the
+          # same REST URL after the three-segment migration.
+          assert_url "legacy 'call list' -> voice calls" \
+            "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/Call/" \
+            ./plivo call list --dry-run
+
+          assert_url "legacy 'msg send' -> sms messages" \
+            "POST https://api.plivo.com/v1/Account/[A-Z0-9]+/Message/" \
+            ./plivo msg send --src +14155551234 --dst +14155556789 --text hi --dry-run
 
       - name: smoke - destructive verbs refuse without --yes
         env:
@@ -209,9 +224,9 @@ jobs:
             fi
           }
 
-          assert_refused "number release"   ./plivo number release +14155551234
-          assert_refused "call hangup"      ./plivo call hangup CALL-FAKE
-          assert_refused "recording delete" ./plivo recording delete REC-FAKE
+          assert_refused "numbers release"         ./plivo numbers release +14155551234
+          assert_refused "voice calls hangup"      ./plivo voice calls hangup CALL-FAKE
+          assert_refused "voice recordings delete" ./plivo voice recordings delete REC-FAKE
 
   cross-build:
     name: cross-build (${{ matrix.os }}/${{ matrix.arch }})
