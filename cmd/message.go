@@ -13,8 +13,8 @@ import (
 )
 
 var messageCmd = &cobra.Command{
-	Use:     "message",
-	Aliases: []string{"msg"},
+	Use:     "messages",
+	Aliases: []string{"msg", "message"},
 	Short:   "Send and inspect SMS/MMS messages",
 }
 
@@ -76,7 +76,7 @@ func init() {
 	messageListCmd.Flags().StringVar(&msgListTo, "to", "", "filter by to_number")
 
 	messageCmd.AddCommand(messageSendCmd, messageListCmd, messageGetCmd)
-	rootCmd.AddCommand(messageCmd)
+	smsCmd.AddCommand(messageCmd)
 }
 
 func runMessageSend(cmd *cobra.Command, args []string) error {

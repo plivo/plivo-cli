@@ -13,8 +13,9 @@ import (
 )
 
 var linkCmd = &cobra.Command{
-	Use:   "link",
-	Short: "10DLC number-to-campaign linking",
+	Use:     "links",
+	Aliases: []string{"link"},
+	Short:   "10DLC number-to-campaign linking",
 }
 
 var (
@@ -60,7 +61,7 @@ func init() {
 	_ = linkCreateCmd.MarkFlagRequired("campaign-id")
 
 	linkCmd.AddCommand(linkListCmd, linkCreateCmd, linkDeleteCmd)
-	rootCmd.AddCommand(linkCmd)
+	sms10dlcCmd.AddCommand(linkCmd)
 }
 
 func runLinkList(cmd *cobra.Command, args []string) error {

@@ -14,8 +14,8 @@ import (
 )
 
 var campaignCmd = &cobra.Command{
-	Use:     "campaign",
-	Aliases: []string{"camp"},
+	Use:     "campaigns",
+	Aliases: []string{"camp", "campaign"},
 	Short:   "10DLC campaign registration (use cases for a brand)",
 }
 
@@ -119,7 +119,7 @@ func init() {
 	campUpdateCmd.Flags().StringVar(&campUpdateSample2, "sample-message-2", "", "new sample 2")
 
 	campaignCmd.AddCommand(campListCmd, campGetCmd, campCreateCmd, campUpdateCmd)
-	rootCmd.AddCommand(campaignCmd)
+	sms10dlcCmd.AddCommand(campaignCmd)
 }
 
 func runCampaignList(cmd *cobra.Command, args []string) error {

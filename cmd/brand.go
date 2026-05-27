@@ -13,8 +13,9 @@ import (
 )
 
 var brandCmd = &cobra.Command{
-	Use:   "brand",
-	Short: "10DLC brand registration (US A2P 10-digit-long-code messaging)",
+	Use:     "brands",
+	Aliases: []string{"brand"},
+	Short:   "10DLC brand registration (US A2P 10-digit-long-code messaging)",
 }
 
 var (
@@ -93,7 +94,7 @@ func init() {
 	brandUpdateCmd.Flags().StringVar(&brandUpdateWebsite, "website", "", "website URL")
 
 	brandCmd.AddCommand(brandListCmd, brandGetCmd, brandCreateCmd, brandUpdateCmd)
-	rootCmd.AddCommand(brandCmd)
+	sms10dlcCmd.AddCommand(brandCmd)
 }
 
 func runBrandList(cmd *cobra.Command, args []string) error {

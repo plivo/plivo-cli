@@ -13,8 +13,8 @@ import (
 )
 
 var powerpackCmd = &cobra.Command{
-	Use:     "powerpack",
-	Aliases: []string{"pp"},
+	Use:     "powerpacks",
+	Aliases: []string{"pp", "powerpack"},
 	Short:   "Powerpacks — number pools for high-volume SMS",
 }
 
@@ -73,8 +73,9 @@ var ppDeleteCmd = &cobra.Command{
 
 // number sub-group
 var ppNumberCmd = &cobra.Command{
-	Use:   "number",
-	Short: "Manage numbers inside a powerpack",
+	Use:     "numbers",
+	Aliases: []string{"number"},
+	Short:   "Manage numbers inside a powerpack",
 }
 
 var (
@@ -124,7 +125,7 @@ func init() {
 
 	ppNumberCmd.AddCommand(ppNumListCmd, ppNumAddCmd, ppNumRemoveCmd)
 	powerpackCmd.AddCommand(ppListCmd, ppGetCmd, ppCreateCmd, ppUpdateCmd, ppDeleteCmd, ppNumberCmd)
-	rootCmd.AddCommand(powerpackCmd)
+	smsCmd.AddCommand(powerpackCmd)
 }
 
 func runPowerpackList(cmd *cobra.Command, args []string) error {
