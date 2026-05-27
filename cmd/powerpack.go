@@ -125,7 +125,7 @@ func init() {
 
 	ppNumberCmd.AddCommand(ppNumListCmd, ppNumAddCmd, ppNumRemoveCmd)
 	powerpackCmd.AddCommand(ppListCmd, ppGetCmd, ppCreateCmd, ppUpdateCmd, ppDeleteCmd, ppNumberCmd)
-	smsCmd.AddCommand(powerpackCmd)
+	messageCmd.AddCommand(powerpackCmd)
 }
 
 func runPowerpackList(cmd *cobra.Command, args []string) error {

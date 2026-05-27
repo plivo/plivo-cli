@@ -70,7 +70,7 @@ func init() {
 	tfvSubmitCmd.Flags().StringVar(&tfvSubmitNumbers, "numbers", "", "comma-separated toll-free numbers to verify")
 
 	tollfreeCmd.AddCommand(tfvListCmd, tfvGetCmd, tfvSubmitCmd)
-	smsCmd.AddCommand(tollfreeCmd)
+	messageCmd.AddCommand(tollfreeCmd)
 }
 
 func runTfvList(cmd *cobra.Command, args []string) error {
