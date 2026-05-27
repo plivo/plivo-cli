@@ -1,0 +1,30 @@
+10DLC campaign registration (use cases for a brand)
+
+Usage:
+  plivo message 10dlc campaigns [command]
+
+Aliases:
+  campaigns, camp, campaign
+
+Available Commands:
+  create      Register a new campaign (spends money — TCR fee, requires --yes)
+  get         Get a campaign by ID
+  list        List campaigns
+  update      Update mutable campaign fields
+
+Flags:
+  -h, --help   help for campaigns
+
+Global Flags:
+      --all                auto-paginate through all pages
+      --dry-run            print the HTTP request without sending
+      --explain            explain what the command will do before executing
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts
+
+Use "plivo message 10dlc campaigns [command] --help" for more information about a command.

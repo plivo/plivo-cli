@@ -1,0 +1,39 @@
+Make and inspect voice calls
+
+Usage:
+  plivo voice calls [command]
+
+Aliases:
+  calls, call
+
+Available Commands:
+  dtmf        Send DTMF tones into a live call
+  get         Get a call by UUID
+  hangup      Hang up a live call (requires --yes)
+  list        List calls
+  make        Make an outbound call (defaults to dry-run; pass --yes to actually dial)
+  play        Play audio file(s) into a live call
+  record      Start recording a live call
+  speak       Speak text into a live call via TTS
+  stop-play   Stop any audio currently playing in a live call
+  stop-record Stop the active recording on a live call
+  stop-speak  Stop any TTS currently playing in a live call
+  streams     Live audio streams on a call (WebSocket bridge for transcription / agents)
+  transfer    Transfer one or both legs of a live call to new PlivoXML URLs
+
+Flags:
+  -h, --help   help for calls
+
+Global Flags:
+      --all                auto-paginate through all pages
+      --dry-run            print the HTTP request without sending
+      --explain            explain what the command will do before executing
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts
+
+Use "plivo voice calls [command] --help" for more information about a command.

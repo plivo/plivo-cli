@@ -1,0 +1,7 @@
+# actionlint config — declare Plivo's custom org runner label so lint doesn't
+# flag it as unknown. `ubuntu-latest-m-plivo` is a Plivo-managed runner whose
+# egress IP is on the org's GitHub IP allow-list (GitHub's shared hosted
+# runners are not, which is why we can't use plain `ubuntu-latest`).
+self-hosted-runner:
+  labels:
+    - ubuntu-latest-m-plivo

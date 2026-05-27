@@ -1,0 +1,24 @@
+Speak text into a live call via TTS
+
+Usage:
+  plivo voice calls speak <call_uuid> [flags]
+
+Flags:
+  -h, --help              help for speak
+      --language string   language code, e.g. en-US, en-GB, hi-IN (default "en-US")
+      --legs string       aleg|bleg|both (default "aleg")
+      --mix               mix with the call audio (else replace) (default true)
+      --text string       text to speak via TTS (required)
+      --voice string      voice: MAN|WOMAN (default "WOMAN")
+
+Global Flags:
+      --all                auto-paginate through all pages
+      --dry-run            print the HTTP request without sending
+      --explain            explain what the command will do before executing
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts
