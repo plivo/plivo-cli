@@ -1,19 +1,16 @@
-# plivo
+# Plivo CLI
 
-**Send a text or make a phone ring — from your terminal, in one command.**
+**The official Plivo developer CLI — built for the terminal, scriptable for AI coding agents.**
 
-`plivo` is the official command-line interface for the Plivo platform: a single static Go binary that speaks the full public Plivo REST API, with JSON-native output built for scripting, automation, and AI agents.
+A single static Go binary for provisioning numbers, wiring voice-agent applications, inspecting calls, sending messages, and running everything in the Plivo platform from a terminal — with JSON-native output, stable exit codes, and a command grammar designed to be invoked by both humans and AI coding agents.
 
-```bash
-# Text someone
-plivo message send --src +14155550100 --dst +14155550199 --text "Shipped!" --yes
+**With the CLI, you can:**
 
-# Make a call that speaks a message when answered
-plivo voice calls make --from +14155550100 --to +14155550199 \
-  --answer-url https://example.com/answer.xml --yes
-```
-
-Numbers, calls, conferences, multi-party rooms, audio streams, messaging, verify, lookups, 10DLC, powerpacks, toll-free — the whole API, scriptable.
+- Provision phone numbers, applications, and 10DLC registrations
+- Wire numbers to your voice-agent webhook handlers
+- Inspect call records, audio streams, recordings, and conferences
+- Send messages, run number lookups, manage verify sessions
+- Script everything — table for humans, JSON for pipelines, predictable exit codes for retries
 
 > **Status:** pre-release. Install one-liners activate once the first release is published.
 
@@ -35,29 +32,50 @@ Both installers fetch the matching release binary (`darwin`/`linux`/`windows` ×
 
 ## Quickstart
 
-Authenticate, then start issuing commands.
+Wire up a voice agent in a few minutes:
 
 ```bash
-# Interactive login — stores a profile in ~/.plivo/config.toml
+# 1. Authenticate (stores a profile in ~/.plivo/config.toml, with the token in the OS keychain)
 plivo auth login
 
-# Or pass credentials via environment variables
-export PLIVO_AUTH_ID=MAxxxxxxxxxxxxxxxxxxxx
-export PLIVO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-# Verify the active account
+# 2. Confirm your account and see your numbers
 plivo auth whoami
-
-# Everyday operations — `plivo <service> <resource> <verb>`
 plivo numbers list
-plivo numbers search --country US --type local --limit 5
-plivo message send --src +1... --dst +1... --text "hi" --yes
-plivo voice calls list --limit 5
+
+# 3. Create an application pointing at your bot's answer URL
+plivo account applications create \
+  --app-name "my-voice-agent" \
+  --answer-url https://my-bot.example.com/answer \
+  --yes
+
+# 4. Attach a number to the application
+plivo numbers update +14155550100 --app-id <app_uuid> --yes
+
+# 5. Make a test call to verify everything's wired
+plivo voice calls make --from +14155550100 --to <your-phone> --yes
+
+# 6. Inspect what happened
+plivo voice calls get <call_uuid>
 ```
 
-Commands follow a `plivo <service> <resource> <verb>` grammar (`voice`, `message`, `numbers`, `verify`, `account`); messaging is shorter — `plivo message send` — with protocol as a flag (`--type sms|mms|whatsapp`). Pre-grammar short forms still work as aliases — `plivo call list` resolves to `plivo voice calls list`, and `plivo sms …` / `plivo msg …` resolve to `plivo message …`.
+Once you have a working setup, the same flow scripts cleanly into CI, integration tests, and AI-agent-driven workflows.
 
-Output is a table on a terminal and JSON when piped; force either with `-o table|json`. Spend operations default to a dry run and require `--yes` to execute.
+You can also pass credentials via environment variables instead of `plivo auth login`:
+
+```bash
+export PLIVO_AUTH_ID=MAxxxxxxxxxxxxxxxxxxxx
+export PLIVO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+## Output
+
+Output is a human table on a TTY and JSON when piped, so you can do:
+
+```bash
+plivo voice calls list --limit 50 | jq '.[] | select(.hangup_cause != "NORMAL_CLEARING")'
+```
+
+Force either format with `-o table|json`. Spend operations default to a dry run and require `--yes` to execute.
 
 ## Exit codes
 
@@ -70,21 +88,24 @@ Output is a table on a terminal and JSON when piped; force either with `-o table
 | 4 | Rate limit (429) |
 | 5 | Destructive operation refused (missing `--yes`) |
 
+Stable per category — scripts and AI-agent driver loops can branch on them.
+
+## Command grammar
+
+Commands follow `plivo <service> <resource> <verb>` — for example `plivo voice calls list`, `plivo numbers buy`, `plivo account applications create`. Messaging is the shorter `plivo message send` (protocol via `--type sms|mms|whatsapp`). Pre-grammar short forms (`plivo call list`, `plivo msg send`, etc.) continue to work as aliases.
+
+For the full command reference, see [`docs/COMMANDS.md`](docs/COMMANDS.md) (auto-generated from the live command tree).
+
 ## Documentation
 
-- `plivo help` and `plivo <command> --help` — every command is self-documenting.
-- [Command reference](docs/COMMANDS.md) — the full command tree (regenerate with `make docs`).
-- [examples/](examples/) — runnable scripts for common tasks.
-- [Error codes](docs/errors.md) — exit codes and the JSON error envelope.
-- [Plivo REST API reference](https://www.plivo.com/docs/) — the underlying API.
-
-## Roadmap
-
-See [ROADMAP.md](ROADMAP.md).
+- [`docs/COMMANDS.md`](docs/COMMANDS.md) — full command reference
+- [`examples/`](examples/) — runnable scripts for common tasks
+- [`CHANGELOG.md`](CHANGELOG.md) — release-by-release changes
+- [plivo.com/docs](https://www.plivo.com/docs) — platform docs (XML grammar, webhooks, REST API reference)
 
 ## Support
 
-Open an issue at [github.com/plivo/plivo-cli/issues](https://github.com/plivo/plivo-cli/issues). For security reports, see [SECURITY.md](SECURITY.md). This repository is read-only for users; please file an issue rather than a pull request.
+Open an issue at [github.com/plivo/plivo-cli/issues](https://github.com/plivo/plivo-cli/issues). For security reports, see [SECURITY.md](SECURITY.md). This repository is read-only for users; please file an issue rather than a pull request — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

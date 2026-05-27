@@ -14,12 +14,20 @@ The template below is for Plivo maintainers.
 
 -
 
+## Breaking change?
+
+- [ ] Yes — describe the migration path below and bump CHANGELOG accordingly
+- [ ] No
+
+<!-- If yes: what breaks, who's affected, how do users migrate? -->
+
 ## Testing
 
 - [ ] `go build ./... && go build -tags internal ./...`
 - [ ] `go test ./... -race`
 - [ ] `gofmt -l .` is clean
 - [ ] Help snapshots regenerated if the command tree changed (`go test ./cmd/ -update`)
+- [ ] Command reference regenerated if commands or flags changed (`make docs`)
 
 ## Related issues
 
