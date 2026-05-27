@@ -18,7 +18,7 @@ permissions:
 jobs:
   smoke:
     name: smoke
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-m-plivo
     steps:
       - uses: actions/checkout@v4
 
@@ -213,7 +213,7 @@ jobs:
 
   cross-build:
     name: cross-build (${{ matrix.os }}/${{ matrix.arch }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-m-plivo
     needs: smoke
     if: github.event_name == 'push' && github.ref == 'refs/heads/beta'
     strategy:
