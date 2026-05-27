@@ -49,6 +49,10 @@ func Execute() {
 	}
 }
 
+// Root returns the fully constructed root command. Used by tools/gendocs to
+// render the command reference; it is not part of the runtime path.
+func Root() *cobra.Command { return rootCmd }
+
 // legacyAlias maps a pre-grammar top-level command (and its short alias) to its
 // new path under the `plivo <service> <resource>` grammar. Lets `plivo call
 // list` keep working as `plivo voice calls list`. The canonical (unchanged)

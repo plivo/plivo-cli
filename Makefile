@@ -17,7 +17,7 @@ VERSION := $(shell git describe --tags --always 2>/dev/null || echo dev)
 # -s removes the symbol table, -w drops DWARF debug info — typical for release.
 LDFLAGS := -s -w -X $(PKG)/internal/version.Value=$(VERSION)
 
-.PHONY: default build tiny build-all install run clean fmt vet test help
+.PHONY: default build tiny build-all install run clean fmt vet test docs help
 
 default: ## Debug build with symbols (best for local dev)
 	go build -o $(BINARY) .
@@ -56,6 +56,9 @@ vet: ## go vet
 
 test: ## go test
 	go test ./...
+
+docs: ## Regenerate the command reference (docs/COMMANDS.md)
+	go run ./tools/gendocs -o docs/COMMANDS.md
 
 clean: ## Remove build artefacts
 	rm -f $(BINARY)
