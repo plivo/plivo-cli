@@ -15,8 +15,8 @@ Available Commands:
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
   lookup      Carrier + format lookup for an E.164 number (lookup.plivo.com)
+  message     Send messages (SMS/MMS/WhatsApp); manage 10DLC, powerpacks, toll-free
   numbers     Manage account phone numbers
-  sms         Messaging — SMS/MMS, 10DLC, powerpacks, toll-free
   verify      Plivo Verify — OTP / phone-number verification sessions
   voice       Voice — calls, conferences, multiparty, recordings, endpoints
 

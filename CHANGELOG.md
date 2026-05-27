@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Three-segment command grammar: `plivo <service> <resource> <verb>` (e.g.
-  `plivo voice calls list`, `plivo sms messages send`, `plivo numbers search`).
+  `plivo voice calls list`, `plivo message send`, `plivo numbers search`).
 - Cross-platform installers for macOS, Linux, and Windows (`install.sh`,
   `install.ps1`), with architecture auto-detection.
 - `plivo agent` ships as a coming-soon stub in the public build.
@@ -18,9 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   number linking.
 
 ### Changed
-- Commands are now grouped under service namespaces (`voice`, `sms`, `numbers`,
-  `verify`, `account`). The pre-grammar short forms (`plivo call list`,
-  `plivo msg send`, …) continue to work as aliases.
+- Commands are now grouped under service namespaces (`voice`, `message`,
+  `numbers`, `verify`, `account`). The pre-grammar short forms (`plivo call
+  list`, `plivo msg send`, …) continue to work as aliases.
+- Messaging uses a two-segment form: `plivo message send` (was `plivo sms
+  messages send`); message protocol is the `--type sms|mms|whatsapp` flag.
+  `sms` and `msg` remain aliases of `message`.
 
 ### Removed
 - Legacy `account compliance` (the older `/ComplianceDocument/` endpoint),

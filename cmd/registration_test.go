@@ -46,7 +46,7 @@ func TestRootCmd_allTopLevelGroupsRegistered(t *testing.T) {
 	// coming-soon stub; `contacto` + `auth token` are internal-only (build tag
 	// `internal`) and verified separately in internal_registration_test.go.
 	groups := []string{
-		"account", "agent", "auth", "lookup", "numbers", "sms", "verify", "voice",
+		"account", "agent", "auth", "lookup", "message", "numbers", "verify", "voice",
 	}
 	for _, g := range groups {
 		t.Run(g, func(t *testing.T) {
@@ -84,12 +84,12 @@ func TestSubcommands_registered(t *testing.T) {
 		{"voice calls streams", []string{"list", "get", "start", "stop"}},
 		{"voice recordings", []string{"list", "get", "delete"}},
 		{"verify", []string{"sessions"}},
-		{"sms messages", []string{"send", "list", "get"}},
-		{"sms 10dlc brands", []string{"list", "get", "create", "update"}},
-		{"sms 10dlc campaigns", []string{"list", "get", "create", "update"}},
-		{"sms 10dlc links", []string{"list", "create", "delete"}},
-		{"sms tollfree", []string{"list", "get", "submit"}},
-		{"sms powerpacks", []string{"list", "get", "create", "update", "delete", "numbers"}},
+		{"message", []string{"send", "list", "get", "10dlc", "powerpacks", "tollfree"}},
+		{"message 10dlc brands", []string{"list", "get", "create", "update"}},
+		{"message 10dlc campaigns", []string{"list", "get", "create", "update"}},
+		{"message 10dlc links", []string{"list", "create", "delete"}},
+		{"message tollfree", []string{"list", "get", "submit"}},
+		{"message powerpacks", []string{"list", "get", "create", "update", "delete", "numbers"}},
 		// `agent` subcommands are internal-only; the public build ships a
 		// flat coming-soon stub with no subcommands.
 	}
@@ -114,7 +114,7 @@ func TestNestedSubcommands_registered(t *testing.T) {
 		"numbers masking sessions":     {"create", "get", "list", "delete"},
 		"voice conferences member":     {"kick", "mute", "unmute", "deaf", "undeaf", "play", "stop-play", "speak", "stop-speak"},
 		"voice multiparty participant": {"list", "add", "kick", "mute", "unmute", "hold", "unhold"},
-		"sms powerpacks numbers":       {"list", "add", "remove"},
+		"message powerpacks numbers":   {"list", "add", "remove"},
 		// `auth token` + `agent session` are internal-only (see internal_registration_test.go).
 	}
 	for path, verbs := range nests {
@@ -150,8 +150,8 @@ func TestLegacyAliases_resolveViaShim(t *testing.T) {
 		{"rec", "recordings"},
 		{"endpoint", "endpoints"},
 		{"ep", "endpoints"},
-		{"message", "messages"},
-		{"msg", "messages"},
+		{"message", "message"},
+		{"msg", "message"},
 		{"brand", "brands"},
 		{"campaign", "campaigns"},
 		{"camp", "campaigns"},
@@ -196,7 +196,8 @@ func TestInContextAliases_resolve(t *testing.T) {
 		{[]string{"voice", "ep"}, "endpoints"},
 		{[]string{"voice", "mpc"}, "multiparty"},
 		{[]string{"voice", "calls", "stream"}, "streams"},
-		{[]string{"sms", "msg"}, "messages"},
+		{[]string{"sms"}, "message"},
+		{[]string{"msg"}, "message"},
 		{[]string{"sms", "pp"}, "powerpacks"},
 		{[]string{"account", "sub"}, "subaccounts"},
 		{[]string{"account", "app"}, "applications"},
@@ -235,7 +236,7 @@ func TestRequiredFlags(t *testing.T) {
 		path  []string
 		flags []string
 	}{
-		{[]string{"sms", "messages", "send"}, []string{"src", "dst", "text"}},
+		{[]string{"message", "send"}, []string{"src", "dst", "text"}},
 		{[]string{"voice", "calls", "make"}, []string{"from", "to"}},
 		{[]string{"voice", "calls", "play"}, []string{"urls"}},
 		{[]string{"voice", "calls", "speak"}, []string{"text"}},
@@ -250,16 +251,16 @@ func TestRequiredFlags(t *testing.T) {
 		{[]string{"verify", "sessions", "create"}, []string{"recipient", "app-uuid"}},
 		{[]string{"verify", "sessions", "validate"}, []string{"otp"}},
 		{[]string{"numbers", "masking", "sessions", "create"}, []string{"first-party", "second-party"}},
-		{[]string{"sms", "10dlc", "brands", "create"}, []string{"alias", "legal-name"}},
-		{[]string{"sms", "10dlc", "campaigns", "create"}, []string{"alias", "brand-id", "usecase", "description", "message-flow", "sample-message-1"}},
-		{[]string{"sms", "10dlc", "links", "create"}, []string{"number", "campaign-id"}},
-		{[]string{"sms", "tollfree", "submit"}, []string{"business-name", "use-case"}},
+		{[]string{"message", "10dlc", "brands", "create"}, []string{"alias", "legal-name"}},
+		{[]string{"message", "10dlc", "campaigns", "create"}, []string{"alias", "brand-id", "usecase", "description", "message-flow", "sample-message-1"}},
+		{[]string{"message", "10dlc", "links", "create"}, []string{"number", "campaign-id"}},
+		{[]string{"message", "tollfree", "submit"}, []string{"business-name", "use-case"}},
 		{[]string{"voice", "multiparty", "create"}, []string{"name"}},
 		{[]string{"voice", "multiparty", "participant", "add"}, []string{"from", "to"}},
 		{[]string{"voice", "conferences", "member", "play"}, []string{"urls"}},
 		{[]string{"voice", "conferences", "member", "speak"}, []string{"text"}},
 		{[]string{"voice", "calls", "streams", "start"}, []string{"url"}},
-		{[]string{"sms", "powerpacks", "create"}, []string{"name"}},
+		{[]string{"message", "powerpacks", "create"}, []string{"name"}},
 		// `auth token mint --modules` is internal-only.
 	}
 	for _, tc := range cases {

@@ -90,14 +90,14 @@ jobs:
           # `contacto` + `auth token` are internal-only (build tag `internal`)
           # and absent from this public build; `agent` ships as a coming-soon stub.
           groups=(
-            "account" "agent" "auth" "lookup" "numbers" "sms" "verify" "voice"
+            "account" "agent" "auth" "lookup" "message" "numbers" "verify" "voice"
             "account subaccounts" "account applications"
             "numbers masking" "numbers masking sessions"
             "numbers compliance" "numbers compliance requirements"
             "voice calls" "voice calls streams" "voice conferences"
             "voice multiparty" "voice recordings" "voice endpoints"
-            "sms messages" "sms 10dlc" "sms 10dlc brands" "sms powerpacks"
-            "sms tollfree" "verify sessions"
+            "message" "message 10dlc" "message 10dlc brands" "message powerpacks"
+            "message tollfree" "verify sessions"
           )
           for cmd in "${groups[@]}"; do
             echo "==> plivo $cmd --help"
@@ -149,9 +149,9 @@ jobs:
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/Application/" \
             ./plivo account applications list --dry-run
 
-          assert_url "sms messages send" \
+          assert_url "message send" \
             "POST https://api.plivo.com/v1/Account/[A-Z0-9]+/Message/" \
-            ./plivo sms messages send --src +14155551234 --dst +14155556789 --text hi --dry-run
+            ./plivo message send --src +14155551234 --dst +14155556789 --text hi --dry-run
 
           assert_url "voice calls list" \
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/Call/" \
@@ -177,17 +177,17 @@ jobs:
             "GET https://lookup.plivo.com/v1/Number/\+14155552671\?type=carrier" \
             ./plivo lookup +14155552671 --dry-run
 
-          assert_url "sms 10dlc brands list (10DLC path)" \
+          assert_url "message 10dlc brands list (10DLC path)" \
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/10dlc/Brand/" \
-            ./plivo sms 10dlc brands list --dry-run --limit 3
+            ./plivo message 10dlc brands list --dry-run --limit 3
 
           assert_url "numbers masking sessions list (Masking/Session segments)" \
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/Masking/Session/" \
             ./plivo numbers masking sessions list --dry-run --limit 3
 
-          assert_url "sms powerpacks list" \
+          assert_url "message powerpacks list" \
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/Powerpack/" \
-            ./plivo sms powerpacks list --dry-run --limit 3
+            ./plivo message powerpacks list --dry-run --limit 3
 
           assert_url "voice endpoints list" \
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/Endpoint/" \
@@ -211,7 +211,7 @@ jobs:
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/Call/" \
             ./plivo call list --dry-run
 
-          assert_url "legacy 'msg send' -> sms messages" \
+          assert_url "legacy 'msg send' -> message send" \
             "POST https://api.plivo.com/v1/Account/[A-Z0-9]+/Message/" \
             ./plivo msg send --src +14155551234 --dst +14155556789 --text hi --dry-run
 

@@ -1,0 +1,31 @@
+Register a new brand (spends money — TCR registration fee, requires --yes)
+
+Usage:
+  plivo message 10dlc brands create [flags]
+
+Flags:
+      --alias string                 human-friendly alias (required)
+      --brand-type string            STANDARD|LOW_VOLUME_STANDARD|SOLE_PROPRIETOR (default "STANDARD")
+      --ein string                   tax ID / EIN
+      --ein-issuing-country string   ISO-2 country issuing the EIN (default "US")
+      --email string                 support email
+      --entity-type string           PRIVATE_PROFIT|PUBLIC_PROFIT|NON_PROFIT|GOVERNMENT|SOLE_PROPRIETOR (default "PRIVATE_PROFIT")
+  -h, --help                         help for create
+      --legal-name string            legal entity name (required)
+      --phone string                 support phone E.164
+      --stock-exchange string        exchange code (PUBLIC_PROFIT only)
+      --stock-symbol string          ticker (PUBLIC_PROFIT only)
+      --vertical string              industry vertical (e.g. TECHNOLOGY, RETAIL)
+      --website string               primary website URL
+
+Global Flags:
+      --all                auto-paginate through all pages
+      --dry-run            print the HTTP request without sending
+      --explain            explain what the command will do before executing
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts

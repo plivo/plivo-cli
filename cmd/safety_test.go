@@ -176,9 +176,9 @@ func TestDestructiveVerbs_refuseWithoutYes(t *testing.T) {
 		{"voice multiparty end", []string{"voice", "multiparty", "end", "MPC-UUID"}},
 		{"voice multiparty participant kick", []string{"voice", "multiparty", "participant", "kick", "MPC-UUID", "PART-ID"}},
 		{"voice calls streams stop", []string{"voice", "calls", "streams", "stop", "CALL-UUID"}},
-		{"sms powerpacks delete", []string{"sms", "powerpacks", "delete", "PP-UUID"}},
-		{"sms powerpacks numbers remove", []string{"sms", "powerpacks", "numbers", "remove", "PP-UUID", "+14155551234"}},
-		{"sms 10dlc links delete", []string{"sms", "10dlc", "links", "delete", "LINK-ID"}},
+		{"message powerpacks delete", []string{"message", "powerpacks", "delete", "PP-UUID"}},
+		{"message powerpacks numbers remove", []string{"message", "powerpacks", "numbers", "remove", "PP-UUID", "+14155551234"}},
+		{"message 10dlc links delete", []string{"message", "10dlc", "links", "delete", "LINK-ID"}},
 	}
 
 	for _, tc := range cases {
@@ -268,15 +268,15 @@ func TestSpendVerbs_defaultToDryRun(t *testing.T) {
 		name string
 		args []string
 	}{
-		{"sms messages send", []string{"sms", "messages", "send", "--src", "+1", "--dst", "+1", "--text", "hi"}},
+		{"message send", []string{"message", "send", "--src", "+1", "--dst", "+1", "--text", "hi"}},
 		{"voice calls make", []string{"voice", "calls", "make", "--from", "+1", "--to", "+1"}},
 		{"verify sessions create", []string{"verify", "sessions", "create", "--recipient", "+1", "--app-uuid", "abc"}},
 		{"numbers cnam", []string{"numbers", "cnam", "+14155551234"}},
 		{"numbers masking sessions create", []string{"numbers", "masking", "sessions", "create", "--first-party", "+1", "--second-party", "+2"}},
 		{"voice multiparty create", []string{"voice", "multiparty", "create", "--name", "ci-test"}},
-		{"sms 10dlc brands create", []string{"sms", "10dlc", "brands", "create", "--alias", "ci", "--legal-name", "ACME Inc"}},
-		{"sms 10dlc campaigns create", []string{
-			"sms", "10dlc", "campaigns", "create",
+		{"message 10dlc brands create", []string{"message", "10dlc", "brands", "create", "--alias", "ci", "--legal-name", "ACME Inc"}},
+		{"message 10dlc campaigns create", []string{
+			"message", "10dlc", "campaigns", "create",
 			"--alias", "ci",
 			"--brand-id", "b1",
 			"--usecase", "MARKETING",

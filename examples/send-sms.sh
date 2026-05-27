@@ -11,7 +11,7 @@ SRC="${SRC:-+14155550100}"
 DST="${DST:-+14155550199}"
 TEXT="${TEXT:-Hello from the Plivo CLI}"
 
-plivo sms messages send \
+plivo message send \
   --src "$SRC" \
   --dst "$DST" \
   --text "$TEXT" \

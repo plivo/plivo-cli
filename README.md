@@ -6,7 +6,7 @@
 
 ```bash
 # Text someone
-plivo sms messages send --src +14155550100 --dst +14155550199 --text "Shipped!" --yes
+plivo message send --src +14155550100 --dst +14155550199 --text "Shipped!" --yes
 
 # Make a call that speaks a message when answered
 plivo voice calls make --from +14155550100 --to +14155550199 \
@@ -51,11 +51,11 @@ plivo auth whoami
 # Everyday operations — `plivo <service> <resource> <verb>`
 plivo numbers list
 plivo numbers search --country US --type local --limit 5
-plivo sms messages send --src +1... --dst +1... --text "hi" --yes
+plivo message send --src +1... --dst +1... --text "hi" --yes
 plivo voice calls list --limit 5
 ```
 
-Commands follow a `plivo <service> <resource> <verb>` grammar (`voice`, `sms`, `numbers`, `verify`, `account`). The pre-grammar short forms still work as aliases — `plivo call list` resolves to `plivo voice calls list`.
+Commands follow a `plivo <service> <resource> <verb>` grammar (`voice`, `message`, `numbers`, `verify`, `account`); messaging is shorter — `plivo message send` — with protocol as a flag (`--type sms|mms|whatsapp`). Pre-grammar short forms still work as aliases — `plivo call list` resolves to `plivo voice calls list`, and `plivo sms …` / `plivo msg …` resolve to `plivo message …`.
 
 Output is a table on a terminal and JSON when piped; force either with `-o table|json`. Spend operations default to a dry run and require `--yes` to execute.
 

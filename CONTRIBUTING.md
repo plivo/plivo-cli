@@ -39,9 +39,9 @@ go test ./cmd/ -update
 ### Command grammar
 
 User-facing commands follow `plivo <service> <resource> <verb>` (for example
-`plivo voice calls list`, `plivo sms messages send`). Pre-grammar short forms are
-preserved as aliases through a small rewrite shim in `cmd/root.go`; keep that map
-in sync when adding or renaming commands.
+`plivo voice calls list`); messaging is the shorter `plivo message send` (protocol
+via `--type`). Pre-grammar short forms are preserved as aliases through a small
+rewrite shim in `cmd/root.go`; keep that map in sync when adding or renaming commands.
 
 ### Internal vs. public surface
 
