@@ -72,7 +72,8 @@ func execCmd(t *testing.T, args ...string) (err error, stdout, stderr string) {
 	var outBuf, errBuf bytes.Buffer
 	rootCmd.SetOut(wOut)
 	rootCmd.SetErr(wErr)
-	rootCmd.SetArgs(args)
+	// Mirror production Execute(): the legacy-alias shim runs before cobra.
+	rootCmd.SetArgs(rewriteLegacyArgs(args))
 
 	// Capture pipe data in background.
 	done := make(chan struct{})
@@ -154,23 +155,23 @@ func TestDestructiveVerbs_refuseWithoutYes(t *testing.T) {
 		name string
 		args []string
 	}{
-		{"number release", []string{"number", "release", "+14155551234"}},
-		{"call hangup", []string{"call", "hangup", "CALL-UUID"}},
-		{"recording delete", []string{"recording", "delete", "REC-UUID"}},
+		{"numbers release", []string{"numbers", "release", "+14155551234"}},
+		{"voice calls hangup", []string{"voice", "calls", "hangup", "CALL-UUID"}},
+		{"voice recordings delete", []string{"voice", "recordings", "delete", "REC-UUID"}},
 		// `agent delete` is internal-only; verified in internal_registration_test.go.
-		{"subaccount delete", []string{"subaccount", "delete", "SAxxx"}},
-		{"endpoint delete", []string{"endpoint", "delete", "EP-ID"}},
-		{"application delete", []string{"application", "delete", "APP-ID"}},
-		{"compliance delete", []string{"compliance", "delete", "DOC-ID"}},
-		{"masking session delete", []string{"masking", "session", "delete", "SESS-UUID"}},
-		{"conference hangup", []string{"conference", "hangup", "room-1"}},
-		{"conference member kick", []string{"conference", "member", "kick", "room-1", "member-id"}},
-		{"mpc end", []string{"mpc", "end", "MPC-UUID"}},
-		{"mpc participant kick", []string{"mpc", "participant", "kick", "MPC-UUID", "PART-ID"}},
-		{"stream stop", []string{"stream", "stop", "CALL-UUID"}},
-		{"powerpack delete", []string{"powerpack", "delete", "PP-UUID"}},
-		{"powerpack number remove", []string{"powerpack", "number", "remove", "PP-UUID", "+14155551234"}},
-		{"link delete", []string{"link", "delete", "LINK-ID"}},
+		{"account subaccounts delete", []string{"account", "subaccounts", "delete", "SAxxx"}},
+		{"voice endpoints delete", []string{"voice", "endpoints", "delete", "EP-ID"}},
+		{"account applications delete", []string{"account", "applications", "delete", "APP-ID"}},
+		{"account compliance delete", []string{"account", "compliance", "delete", "DOC-ID"}},
+		{"numbers masking sessions delete", []string{"numbers", "masking", "sessions", "delete", "SESS-UUID"}},
+		{"voice conferences hangup", []string{"voice", "conferences", "hangup", "room-1"}},
+		{"voice conferences member kick", []string{"voice", "conferences", "member", "kick", "room-1", "member-id"}},
+		{"voice multiparty end", []string{"voice", "multiparty", "end", "MPC-UUID"}},
+		{"voice multiparty participant kick", []string{"voice", "multiparty", "participant", "kick", "MPC-UUID", "PART-ID"}},
+		{"voice calls streams stop", []string{"voice", "calls", "streams", "stop", "CALL-UUID"}},
+		{"sms powerpacks delete", []string{"sms", "powerpacks", "delete", "PP-UUID"}},
+		{"sms powerpacks numbers remove", []string{"sms", "powerpacks", "numbers", "remove", "PP-UUID", "+14155551234"}},
+		{"sms 10dlc links delete", []string{"sms", "10dlc", "links", "delete", "LINK-ID"}},
 	}
 
 	for _, tc := range cases {
@@ -184,6 +185,17 @@ func TestDestructiveVerbs_refuseWithoutYes(t *testing.T) {
 				t.Errorf("plivo %s — expected DESTRUCTIVE_REFUSED in error, got: %v", strings.Join(tc.args, " "), err)
 			}
 		})
+	}
+}
+
+// TestLegacyForm_executesThroughShim proves a pre-grammar invocation still runs
+// end-to-end (shim → cobra → command), not just that it resolves via Find. Old
+// `call hangup` must still hit the destructive-refusal contract.
+func TestLegacyForm_executesThroughShim(t *testing.T) {
+	setFakeCreds(t)
+	err, _, _ := execCmd(t, "call", "hangup", "CALL-UUID")
+	if err == nil || !strings.Contains(err.Error(), "DESTRUCTIVE_REFUSED") {
+		t.Errorf("legacy `call hangup` should still refuse without --yes, got: %v", err)
 	}
 }
 
@@ -201,9 +213,9 @@ func TestDestructiveVerbs_acceptWithYes(t *testing.T) {
 		name string
 		args []string
 	}{
-		{"number release --yes --dry-run", []string{"number", "release", "+14155551234", "--yes", "--dry-run"}},
-		{"call hangup --yes --dry-run", []string{"call", "hangup", "CALL-UUID", "--yes", "--dry-run"}},
-		{"recording delete --yes --dry-run", []string{"recording", "delete", "REC-UUID", "--yes", "--dry-run"}},
+		{"numbers release --yes --dry-run", []string{"numbers", "release", "+14155551234", "--yes", "--dry-run"}},
+		{"voice calls hangup --yes --dry-run", []string{"voice", "calls", "hangup", "CALL-UUID", "--yes", "--dry-run"}},
+		{"voice recordings delete --yes --dry-run", []string{"voice", "recordings", "delete", "REC-UUID", "--yes", "--dry-run"}},
 	}
 
 	for _, tc := range cases {
@@ -249,15 +261,15 @@ func TestSpendVerbs_defaultToDryRun(t *testing.T) {
 		name string
 		args []string
 	}{
-		{"message send", []string{"message", "send", "--src", "+1", "--dst", "+1", "--text", "hi"}},
-		{"call make", []string{"call", "make", "--from", "+1", "--to", "+1"}},
-		{"verify session create", []string{"verify", "session", "create", "--recipient", "+1", "--app-uuid", "abc"}},
-		{"cnam", []string{"cnam", "+14155551234"}},
-		{"masking session create", []string{"masking", "session", "create", "--first-party", "+1", "--second-party", "+2"}},
-		{"mpc create", []string{"mpc", "create", "--name", "ci-test"}},
-		{"brand create", []string{"brand", "create", "--alias", "ci", "--legal-name", "ACME Inc"}},
-		{"campaign create", []string{
-			"campaign", "create",
+		{"sms messages send", []string{"sms", "messages", "send", "--src", "+1", "--dst", "+1", "--text", "hi"}},
+		{"voice calls make", []string{"voice", "calls", "make", "--from", "+1", "--to", "+1"}},
+		{"verify sessions create", []string{"verify", "sessions", "create", "--recipient", "+1", "--app-uuid", "abc"}},
+		{"numbers cnam", []string{"numbers", "cnam", "+14155551234"}},
+		{"numbers masking sessions create", []string{"numbers", "masking", "sessions", "create", "--first-party", "+1", "--second-party", "+2"}},
+		{"voice multiparty create", []string{"voice", "multiparty", "create", "--name", "ci-test"}},
+		{"sms 10dlc brands create", []string{"sms", "10dlc", "brands", "create", "--alias", "ci", "--legal-name", "ACME Inc"}},
+		{"sms 10dlc campaigns create", []string{
+			"sms", "10dlc", "campaigns", "create",
 			"--alias", "ci",
 			"--brand-id", "b1",
 			"--usecase", "MARKETING",

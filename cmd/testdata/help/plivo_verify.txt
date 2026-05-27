@@ -4,7 +4,7 @@ Usage:
   plivo verify [command]
 
 Available Commands:
-  session     Manage Verify sessions
+  sessions    Manage Verify sessions
 
 Flags:
   -h, --help   help for verify

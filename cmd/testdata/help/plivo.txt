@@ -11,29 +11,14 @@ Usage:
 Available Commands:
   account     Inspect and update the active Plivo account
   agent       Manage Plivo Vibe AI agents (coming soon)
-  application Manage Plivo applications (voice/messaging webhooks)
   auth        Manage credentials and profiles
-  brand       10DLC brand registration (US A2P 10-digit-long-code messaging)
-  call        Make and inspect voice calls
-  campaign    10DLC campaign registration (use cases for a brand)
-  cnam        Caller-ID Name (CNAM) lookup for a US/CA number (spends money — requires --yes)
   completion  Generate the autocompletion script for the specified shell
-  compliance  Manage compliance documents (KYC, business proofs)
-  conference  Inspect and control live audio conferences
-  endpoint    Manage SIP endpoints (registered SIP devices/usernames)
   help        Help about any command
-  link        10DLC number-to-campaign linking
   lookup      Carrier + format lookup for an E.164 number (lookup.plivo.com)
-  masking     Number-Masking sessions (privacy-preserving call/SMS bridge)
-  message     Send and inspect SMS/MMS messages
-  mpc         Multi-Party Calls (MPC) — group voice rooms with dynamic participants
-  number      Manage account phone numbers
-  powerpack   Powerpacks — number pools for high-volume SMS
-  recording   List, fetch, and delete call/conference recordings
-  stream      Live audio streams on a call (WebSocket bridge for transcription / agents)
-  subaccount  Manage subaccounts under the master account
-  tollfree    Toll-free verification (US TFN messaging compliance)
+  numbers     Manage account phone numbers
+  sms         Messaging — SMS/MMS, 10DLC, powerpacks, toll-free
   verify      Plivo Verify — OTP / phone-number verification sessions
+  voice       Voice — calls, conferences, multiparty, recordings, endpoints
 
 Flags:
       --all                auto-paginate through all pages

@@ -38,18 +38,15 @@ func isFlagRequired(cmd *cobra.Command, flagName string) bool {
 	return false
 }
 
-// ─── Top-level groups registered ─────────────────────────────────────────────
+// ─── Top-level services registered ───────────────────────────────────────────
 
 func TestRootCmd_allTopLevelGroupsRegistered(t *testing.T) {
-	// The public-v1 top-level groups under `plivo`. `agent` is present as a
-	// coming-soon stub; `contacto` + `auth token` are internal-only (build
-	// tag `internal`) and verified separately in internal_registration_test.go.
+	// The public-v1 top-level surface under `plivo` after the three-segment
+	// grammar: service groups (voice/sms) + standalone services. `agent` is a
+	// coming-soon stub; `contacto` + `auth token` are internal-only (build tag
+	// `internal`) and verified separately in internal_registration_test.go.
 	groups := []string{
-		"account", "agent", "application", "auth", "brand", "call",
-		"campaign", "cnam", "compliance", "conference",
-		"endpoint", "link", "lookup", "masking", "message", "mpc",
-		"number", "powerpack", "recording", "stream", "subaccount",
-		"tollfree", "verify",
+		"account", "agent", "auth", "lookup", "numbers", "sms", "verify", "voice",
 	}
 	for _, g := range groups {
 		t.Run(g, func(t *testing.T) {
@@ -58,48 +55,51 @@ func TestRootCmd_allTopLevelGroupsRegistered(t *testing.T) {
 	}
 }
 
-// ─── Subcommands registered under each group ────────────────────────────────
+// ─── Subcommands registered under each group (full grammar path) ─────────────
 
 func TestSubcommands_registered(t *testing.T) {
 	cases := []struct {
-		group string
+		path  string // space-separated grammar path to the group
 		verbs []string
 	}{
 		{"account", []string{"get", "update"}},
 		{"auth", []string{"login", "list", "use", "remove", "whoami"}}, // `token` is internal-only
-		{"subaccount", []string{"list", "get", "create", "update", "delete"}},
-		{"number", []string{"list", "get", "search", "buy", "update", "release"}},
-		{"application", []string{"create", "list", "get", "update", "delete"}},
-		{"endpoint", []string{"list", "get", "create", "update", "delete"}},
-		{"message", []string{"send", "list", "get"}},
-		{"call", []string{
+		{"account subaccounts", []string{"list", "get", "create", "update", "delete"}},
+		{"account applications", []string{"create", "list", "get", "update", "delete"}},
+		{"account compliance", []string{"list", "get", "delete"}},
+		{"numbers", []string{"list", "get", "search", "buy", "update", "release", "cnam", "masking"}},
+		{"numbers masking", []string{"sessions"}},
+		{"voice endpoints", []string{"list", "get", "create", "update", "delete"}},
+		{"voice calls", []string{
 			"make", "list", "get",
 			"hangup", "transfer",
 			"play", "stop-play",
 			"speak", "stop-speak",
 			"dtmf",
 			"record", "stop-record",
+			"streams",
 		}},
-		{"conference", []string{"list", "get", "hangup", "record", "stop-record", "member"}},
-		{"mpc", []string{"list", "get", "create", "end", "participant"}},
-		{"stream", []string{"list", "get", "start", "stop"}},
-		{"recording", []string{"list", "get", "delete"}},
-		{"verify", []string{"session"}},
-		{"masking", []string{"session"}},
-		{"compliance", []string{"list", "get", "delete"}},
-		{"brand", []string{"list", "get", "create", "update"}},
-		{"campaign", []string{"list", "get", "create", "update"}},
-		{"link", []string{"list", "create", "delete"}},
-		{"tollfree", []string{"list", "get", "submit"}},
-		{"powerpack", []string{"list", "get", "create", "update", "delete", "number"}},
+		{"voice conferences", []string{"list", "get", "hangup", "record", "stop-record", "member"}},
+		{"voice multiparty", []string{"list", "get", "create", "end", "participant"}},
+		{"voice calls streams", []string{"list", "get", "start", "stop"}},
+		{"voice recordings", []string{"list", "get", "delete"}},
+		{"verify", []string{"sessions"}},
+		{"sms messages", []string{"send", "list", "get"}},
+		{"sms 10dlc brands", []string{"list", "get", "create", "update"}},
+		{"sms 10dlc campaigns", []string{"list", "get", "create", "update"}},
+		{"sms 10dlc links", []string{"list", "create", "delete"}},
+		{"sms tollfree", []string{"list", "get", "submit"}},
+		{"sms powerpacks", []string{"list", "get", "create", "update", "delete", "numbers"}},
 		// `agent` subcommands are internal-only; the public build ships a
 		// flat coming-soon stub with no subcommands.
 	}
 	for _, tc := range cases {
-		t.Run(tc.group, func(t *testing.T) {
+		t.Run(strings.ReplaceAll(tc.path, " ", "_"), func(t *testing.T) {
+			group := strings.Fields(tc.path)
 			for _, v := range tc.verbs {
-				if cmd := findCmdNoFail(tc.group, v); cmd == nil {
-					t.Errorf("plivo %s %s — not registered", tc.group, v)
+				full := append(append([]string(nil), group...), v)
+				if cmd := findCmdNoFail(full...); cmd == nil {
+					t.Errorf("plivo %s — not registered", strings.Join(full, " "))
 				}
 			}
 		})
@@ -110,20 +110,20 @@ func TestSubcommands_registered(t *testing.T) {
 
 func TestNestedSubcommands_registered(t *testing.T) {
 	nests := map[string][]string{
-		"verify session":    {"create", "get", "list", "validate"},
-		"masking session":   {"create", "get", "list", "delete"},
-		"conference member": {"kick", "mute", "unmute", "deaf", "undeaf", "play", "stop-play", "speak", "stop-speak"},
-		"mpc participant":   {"list", "add", "kick", "mute", "unmute", "hold", "unhold"},
-		"powerpack number":  {"list", "add", "remove"},
+		"verify sessions":              {"create", "get", "list", "validate"},
+		"numbers masking sessions":     {"create", "get", "list", "delete"},
+		"voice conferences member":     {"kick", "mute", "unmute", "deaf", "undeaf", "play", "stop-play", "speak", "stop-speak"},
+		"voice multiparty participant": {"list", "add", "kick", "mute", "unmute", "hold", "unhold"},
+		"sms powerpacks numbers":       {"list", "add", "remove"},
 		// `auth token` + `agent session` are internal-only (see internal_registration_test.go).
 	}
 	for path, verbs := range nests {
 		path := path
 		verbs := verbs
-		t.Run(path, func(t *testing.T) {
+		t.Run(strings.ReplaceAll(path, " ", "_"), func(t *testing.T) {
 			parts := strings.Fields(path)
 			for _, v := range verbs {
-				full := append(parts, v)
+				full := append(append([]string(nil), parts...), v)
 				if cmd := findCmdNoFail(full...); cmd == nil {
 					t.Errorf("plivo %s — not registered", strings.Join(full, " "))
 				}
@@ -132,42 +132,96 @@ func TestNestedSubcommands_registered(t *testing.T) {
 	}
 }
 
-// ─── Aliases ─────────────────────────────────────────────────────────────────
+// ─── Legacy aliases resolve through the arg-rewrite shim ─────────────────────
 
-func TestAliases_resolve(t *testing.T) {
+// Pre-grammar top-level commands (and their short aliases) must keep working
+// via rewriteLegacyArgs, which expands them into their new grammar path.
+func TestLegacyAliases_resolveViaShim(t *testing.T) {
 	cases := []struct {
-		alias    string
-		expected string
+		legacy string // what the user types as the first word
+		want   string // the command name it must ultimately resolve to
 	}{
-		{"msg", "message"},
-		{"app", "application"},
-		{"conf", "conference"},
-		{"pp", "powerpack"},
-		{"sub", "subaccount"},
-		{"ep", "endpoint"},
-		{"mask", "masking"},
+		{"call", "calls"},
+		{"stream", "streams"},
+		{"conference", "conferences"},
+		{"conf", "conferences"},
+		{"mpc", "multiparty"},
+		{"recording", "recordings"},
+		{"rec", "recordings"},
+		{"endpoint", "endpoints"},
+		{"ep", "endpoints"},
+		{"message", "messages"},
+		{"msg", "messages"},
+		{"brand", "brands"},
+		{"campaign", "campaigns"},
+		{"camp", "campaigns"},
+		{"link", "links"},
+		{"powerpack", "powerpacks"},
+		{"pp", "powerpacks"},
+		{"tollfree", "tollfree"},
 		{"tfv", "tollfree"},
-		{"rec", "recording"},
-		{"camp", "campaign"},
+		{"number", "numbers"},
+		{"cnam", "cnam"},
+		{"masking", "masking"},
+		{"mask", "masking"},
+		{"subaccount", "subaccounts"},
+		{"sub", "subaccounts"},
+		{"application", "applications"},
+		{"app", "applications"},
+		{"compliance", "compliance"},
 	}
 	for _, tc := range cases {
-		t.Run(tc.alias, func(t *testing.T) {
-			cmd, _, err := rootCmd.Find([]string{tc.alias})
+		t.Run(tc.legacy, func(t *testing.T) {
+			rewritten := rewriteLegacyArgs([]string{tc.legacy})
+			cmd, _, err := rootCmd.Find(rewritten)
 			if err != nil || cmd == nil {
-				t.Fatalf("alias %q didn't resolve: %v", tc.alias, err)
+				t.Fatalf("legacy %q (→ %v) didn't resolve: %v", tc.legacy, rewritten, err)
 			}
-			if cmd.Name() != tc.expected {
-				t.Errorf("alias %q resolved to %q, want %q", tc.alias, cmd.Name(), tc.expected)
+			if cmd.Name() != tc.want {
+				t.Errorf("legacy %q (→ %v) resolved to %q, want %q", tc.legacy, rewritten, cmd.Name(), tc.want)
 			}
 		})
 	}
 }
 
-func TestAliases_mpcPartIsParticipant(t *testing.T) {
-	// 'mpc part' alias for 'mpc participant'
-	cmd, _, err := rootCmd.Find([]string{"mpc", "part"})
+// In-context cobra aliases (the short forms kept on each renamed command) must
+// still resolve under their service parent.
+func TestInContextAliases_resolve(t *testing.T) {
+	cases := []struct {
+		path []string
+		want string
+	}{
+		{[]string{"voice", "conf"}, "conferences"},
+		{[]string{"voice", "rec"}, "recordings"},
+		{[]string{"voice", "ep"}, "endpoints"},
+		{[]string{"voice", "mpc"}, "multiparty"},
+		{[]string{"voice", "calls", "stream"}, "streams"},
+		{[]string{"sms", "msg"}, "messages"},
+		{[]string{"sms", "pp"}, "powerpacks"},
+		{[]string{"account", "sub"}, "subaccounts"},
+		{[]string{"account", "app"}, "applications"},
+		{[]string{"numbers", "mask"}, "masking"},
+		{[]string{"verify", "session"}, "sessions"},
+	}
+	for _, tc := range cases {
+		t.Run(strings.Join(tc.path, "_"), func(t *testing.T) {
+			cmd, _, err := rootCmd.Find(tc.path)
+			if err != nil || cmd == nil {
+				t.Fatalf("%v didn't resolve: %v", tc.path, err)
+			}
+			if cmd.Name() != tc.want {
+				t.Errorf("%v resolved to %q, want %q", tc.path, cmd.Name(), tc.want)
+			}
+		})
+	}
+}
+
+func TestLegacyAlias_mpcPartIsParticipant(t *testing.T) {
+	// 'mpc part' → shim → 'voice multiparty part' → participant.
+	rewritten := rewriteLegacyArgs([]string{"mpc", "part"})
+	cmd, _, err := rootCmd.Find(rewritten)
 	if err != nil || cmd == nil {
-		t.Fatalf("'mpc part' alias didn't resolve: %v", err)
+		t.Fatalf("'mpc part' (→ %v) didn't resolve: %v", rewritten, err)
 	}
 	if cmd.Name() != "participant" {
 		t.Errorf("'mpc part' resolved to %q, want participant", cmd.Name())
@@ -181,28 +235,28 @@ func TestRequiredFlags(t *testing.T) {
 		path  []string
 		flags []string
 	}{
-		{[]string{"message", "send"}, []string{"src", "dst", "text"}},
-		{[]string{"call", "make"}, []string{"from", "to"}},
-		{[]string{"call", "play"}, []string{"urls"}},
-		{[]string{"call", "speak"}, []string{"text"}},
-		{[]string{"call", "dtmf"}, []string{"digits"}},
-		{[]string{"application", "create"}, []string{"app-name", "answer-url"}},
-		{[]string{"endpoint", "create"}, []string{"username", "password"}},
-		{[]string{"subaccount", "create"}, []string{"name"}},
-		{[]string{"number", "search"}, []string{"country"}},
-		{[]string{"verify", "session", "create"}, []string{"recipient", "app-uuid"}},
-		{[]string{"verify", "session", "validate"}, []string{"otp"}},
-		{[]string{"masking", "session", "create"}, []string{"first-party", "second-party"}},
-		{[]string{"brand", "create"}, []string{"alias", "legal-name"}},
-		{[]string{"campaign", "create"}, []string{"alias", "brand-id", "usecase", "description", "message-flow", "sample-message-1"}},
-		{[]string{"link", "create"}, []string{"number", "campaign-id"}},
-		{[]string{"tollfree", "submit"}, []string{"business-name", "use-case"}},
-		{[]string{"mpc", "create"}, []string{"name"}},
-		{[]string{"mpc", "participant", "add"}, []string{"from", "to"}},
-		{[]string{"conference", "member", "play"}, []string{"urls"}},
-		{[]string{"conference", "member", "speak"}, []string{"text"}},
-		{[]string{"stream", "start"}, []string{"url"}},
-		{[]string{"powerpack", "create"}, []string{"name"}},
+		{[]string{"sms", "messages", "send"}, []string{"src", "dst", "text"}},
+		{[]string{"voice", "calls", "make"}, []string{"from", "to"}},
+		{[]string{"voice", "calls", "play"}, []string{"urls"}},
+		{[]string{"voice", "calls", "speak"}, []string{"text"}},
+		{[]string{"voice", "calls", "dtmf"}, []string{"digits"}},
+		{[]string{"account", "applications", "create"}, []string{"app-name", "answer-url"}},
+		{[]string{"voice", "endpoints", "create"}, []string{"username", "password"}},
+		{[]string{"account", "subaccounts", "create"}, []string{"name"}},
+		{[]string{"numbers", "search"}, []string{"country"}},
+		{[]string{"verify", "sessions", "create"}, []string{"recipient", "app-uuid"}},
+		{[]string{"verify", "sessions", "validate"}, []string{"otp"}},
+		{[]string{"numbers", "masking", "sessions", "create"}, []string{"first-party", "second-party"}},
+		{[]string{"sms", "10dlc", "brands", "create"}, []string{"alias", "legal-name"}},
+		{[]string{"sms", "10dlc", "campaigns", "create"}, []string{"alias", "brand-id", "usecase", "description", "message-flow", "sample-message-1"}},
+		{[]string{"sms", "10dlc", "links", "create"}, []string{"number", "campaign-id"}},
+		{[]string{"sms", "tollfree", "submit"}, []string{"business-name", "use-case"}},
+		{[]string{"voice", "multiparty", "create"}, []string{"name"}},
+		{[]string{"voice", "multiparty", "participant", "add"}, []string{"from", "to"}},
+		{[]string{"voice", "conferences", "member", "play"}, []string{"urls"}},
+		{[]string{"voice", "conferences", "member", "speak"}, []string{"text"}},
+		{[]string{"voice", "calls", "streams", "start"}, []string{"url"}},
+		{[]string{"sms", "powerpacks", "create"}, []string{"name"}},
 		// `auth token mint --modules` is internal-only.
 	}
 	for _, tc := range cases {
@@ -257,24 +311,20 @@ func TestRootPersistentFlags_shortNames(t *testing.T) {
 // ─── Args validators on positional-arg commands ─────────────────────────────
 
 func TestArgsValidators(t *testing.T) {
-	// Note: no-arg commands like `account get` rely on cobra's default
-	// behaviour, which silently accepts trailing garbage. Tightening those
-	// to cobra.NoArgs is a small follow-up UX fix tracked separately —
-	// not in P1 scope.
 	cases := []struct {
 		path   []string
 		desc   string
 		validN int // expected number of positional args
 	}{
-		{[]string{"number", "get"}, "number get <number>", 1},
-		{[]string{"number", "buy"}, "number buy <number>", 1},
-		{[]string{"number", "release"}, "number release <number>", 1},
-		{[]string{"application", "delete"}, "application delete <app_id>", 1},
-		{[]string{"call", "hangup"}, "call hangup <uuid>", 1},
-		{[]string{"call", "dtmf"}, "call dtmf <uuid>", 1},
-		{[]string{"stream", "get"}, "stream get <call_uuid> <stream_id>", 2},
-		{[]string{"conference", "member", "kick"}, "kick <conf> <member>", 2},
-		{[]string{"mpc", "participant", "kick"}, "participant kick <mpc> <part>", 2},
+		{[]string{"numbers", "get"}, "numbers get <number>", 1},
+		{[]string{"numbers", "buy"}, "numbers buy <number>", 1},
+		{[]string{"numbers", "release"}, "numbers release <number>", 1},
+		{[]string{"account", "applications", "delete"}, "applications delete <app_id>", 1},
+		{[]string{"voice", "calls", "hangup"}, "calls hangup <uuid>", 1},
+		{[]string{"voice", "calls", "dtmf"}, "calls dtmf <uuid>", 1},
+		{[]string{"voice", "calls", "streams", "get"}, "streams get <call_uuid> <stream_id>", 2},
+		{[]string{"voice", "conferences", "member", "kick"}, "kick <conf> <member>", 2},
+		{[]string{"voice", "multiparty", "participant", "kick"}, "participant kick <mpc> <part>", 2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.desc, func(t *testing.T) {

@@ -1,17 +1,10 @@
-Inspect and update the active Plivo account
+Get a subaccount by auth_id
 
 Usage:
-  plivo account [command]
-
-Available Commands:
-  applications Manage Plivo applications (voice/messaging webhooks)
-  compliance   Manage compliance documents (KYC, business proofs)
-  get          Get account details (name, billing mode, credits, address)
-  subaccounts  Manage subaccounts under the master account
-  update       Update account profile fields
+  plivo account subaccounts get <subauth_id> [flags]
 
 Flags:
-  -h, --help   help for account
+  -h, --help   help for get
 
 Global Flags:
       --all                auto-paginate through all pages
@@ -24,5 +17,3 @@ Global Flags:
   -q, --quiet              suppress non-data output
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts
-
-Use "plivo account [command] --help" for more information about a command.

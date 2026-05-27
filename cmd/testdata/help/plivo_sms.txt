@@ -1,17 +1,16 @@
-Inspect and update the active Plivo account
+Messaging — SMS/MMS, 10DLC, powerpacks, toll-free
 
 Usage:
-  plivo account [command]
+  plivo sms [command]
 
 Available Commands:
-  applications Manage Plivo applications (voice/messaging webhooks)
-  compliance   Manage compliance documents (KYC, business proofs)
-  get          Get account details (name, billing mode, credits, address)
-  subaccounts  Manage subaccounts under the master account
-  update       Update account profile fields
+  10dlc       US A2P 10DLC registration — brands, campaigns, links
+  messages    Send and inspect SMS/MMS messages
+  powerpacks  Powerpacks — number pools for high-volume SMS
+  tollfree    Toll-free verification (US TFN messaging compliance)
 
 Flags:
-  -h, --help   help for account
+  -h, --help   help for sms
 
 Global Flags:
       --all                auto-paginate through all pages
@@ -25,4 +24,4 @@ Global Flags:
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts
 
-Use "plivo account [command] --help" for more information about a command.
+Use "plivo sms [command] --help" for more information about a command.

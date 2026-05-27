@@ -1,17 +1,17 @@
-Inspect and update the active Plivo account
+List numbers rented to your account
 
 Usage:
-  plivo account [command]
-
-Available Commands:
-  applications Manage Plivo applications (voice/messaging webhooks)
-  compliance   Manage compliance documents (KYC, business proofs)
-  get          Get account details (name, billing mode, credits, address)
-  subaccounts  Manage subaccounts under the master account
-  update       Update account profile fields
+  plivo numbers list [flags]
 
 Flags:
-  -h, --help   help for account
+      --alias string         filter by alias
+  -h, --help                 help for list
+      --limit int            results per page (max 20) (default 20)
+      --offset int           pagination offset
+      --services string      filter by services: voice|sms|mms|voice,sms ...
+      --starts-with string   prefix filter on E.164
+      --subaccount string    filter by subaccount auth_id
+      --type string          filter by type: local|tollfree|mobile|fixed
 
 Global Flags:
       --all                auto-paginate through all pages
@@ -24,5 +24,3 @@ Global Flags:
   -q, --quiet              suppress non-data output
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts
-
-Use "plivo account [command] --help" for more information about a command.

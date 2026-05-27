@@ -1,17 +1,21 @@
-Inspect and update the active Plivo account
+Inspect and control live audio conferences
 
 Usage:
-  plivo account [command]
+  plivo voice conferences [command]
+
+Aliases:
+  conferences, conf, conference
 
 Available Commands:
-  applications Manage Plivo applications (voice/messaging webhooks)
-  compliance   Manage compliance documents (KYC, business proofs)
-  get          Get account details (name, billing mode, credits, address)
-  subaccounts  Manage subaccounts under the master account
-  update       Update account profile fields
+  get         Get conference details (members, run time)
+  hangup      End the entire conference (requires --yes)
+  list        List active conference names
+  member      Per-member actions inside a conference
+  record      Start recording a conference
+  stop-record Stop the active recording on a conference
 
 Flags:
-  -h, --help   help for account
+  -h, --help   help for conferences
 
 Global Flags:
       --all                auto-paginate through all pages
@@ -25,4 +29,4 @@ Global Flags:
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts
 
-Use "plivo account [command] --help" for more information about a command.
+Use "plivo voice conferences [command] --help" for more information about a command.

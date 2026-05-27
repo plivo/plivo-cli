@@ -1,17 +1,16 @@
-Inspect and update the active Plivo account
+Create a powerpack
 
 Usage:
-  plivo account [command]
-
-Available Commands:
-  applications Manage Plivo applications (voice/messaging webhooks)
-  compliance   Manage compliance documents (KYC, business proofs)
-  get          Get account details (name, billing mode, credits, address)
-  subaccounts  Manage subaccounts under the master account
-  update       Update account profile fields
+  plivo sms powerpacks create [flags]
 
 Flags:
-  -h, --help   help for account
+      --application-id string     application uuid (when application-type=xml_application)
+      --application-type string   default_message|xml_application
+  -h, --help                      help for create
+      --local-connect             use a local-prefix-matching number
+      --name string               powerpack name (required)
+      --number-priority string    ordered priority list (e.g. "local,tollfree")
+      --sticky-sender             send from same number to same recipient
 
 Global Flags:
       --all                auto-paginate through all pages
@@ -24,5 +23,3 @@ Global Flags:
   -q, --quiet              suppress non-data output
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts
-
-Use "plivo account [command] --help" for more information about a command.
