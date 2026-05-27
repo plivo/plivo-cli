@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/plivo/plivo-cli/internal/api"
@@ -42,9 +43,80 @@ Credentials resolve in order:
 }
 
 func Execute() {
+	rootCmd.SetArgs(rewriteLegacyArgs(os.Args[1:]))
 	if err := rootCmd.Execute(); err != nil {
 		handleError(err)
 	}
+}
+
+// legacyAlias maps a pre-grammar top-level command (and its short alias) to its
+// new path under the `plivo <service> <resource>` grammar. Lets `plivo call
+// list` keep working as `plivo voice calls list`. The canonical (unchanged)
+// services — numbers, account, verify, auth, lookup, agent — are absent on
+// purpose; they resolve natively.
+var legacyAlias = map[string][]string{
+	"call":        {"voice", "calls"},
+	"stream":      {"voice", "calls", "streams"},
+	"conference":  {"voice", "conferences"},
+	"conf":        {"voice", "conferences"},
+	"mpc":         {"voice", "multiparty"},
+	"recording":   {"voice", "recordings"},
+	"rec":         {"voice", "recordings"},
+	"endpoint":    {"voice", "endpoints"},
+	"ep":          {"voice", "endpoints"},
+	"message":     {"sms", "messages"},
+	"msg":         {"sms", "messages"},
+	"brand":       {"sms", "10dlc", "brands"},
+	"campaign":    {"sms", "10dlc", "campaigns"},
+	"camp":        {"sms", "10dlc", "campaigns"},
+	"link":        {"sms", "10dlc", "links"},
+	"powerpack":   {"sms", "powerpacks"},
+	"pp":          {"sms", "powerpacks"},
+	"tollfree":    {"sms", "tollfree"},
+	"tfv":         {"sms", "tollfree"},
+	"number":      {"numbers"},
+	"cnam":        {"numbers", "cnam"},
+	"masking":     {"numbers", "masking"},
+	"mask":        {"numbers", "masking"},
+	"subaccount":  {"account", "subaccounts"},
+	"sub":         {"account", "subaccounts"},
+	"application": {"account", "applications"},
+	"app":         {"account", "applications"},
+	"compliance":  {"account", "compliance"},
+}
+
+// valueFlags are the global flags that consume the following token as their
+// value, so the shim doesn't mistake that value for a command word.
+var valueFlags = map[string]bool{
+	"--profile": true, "--output": true, "-o": true,
+	"--log-level": true, "--timeout": true,
+}
+
+// rewriteLegacyArgs expands the first legacy command word it finds into its new
+// grammar path, leaving everything else untouched. It skips leading global
+// flags (and their values) so forms like `plivo --profile prod call list` still
+// rewrite. If the first real command word isn't a legacy alias, args pass
+// through unchanged.
+func rewriteLegacyArgs(args []string) []string {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if strings.HasPrefix(a, "-") {
+			continue
+		}
+		if i > 0 && valueFlags[args[i-1]] {
+			continue // this token is a value belonging to the previous flag
+		}
+		repl, ok := legacyAlias[a]
+		if !ok {
+			return args // first command word is already new-grammar (or unknown)
+		}
+		out := make([]string, 0, len(args)+len(repl)-1)
+		out = append(out, args[:i]...)
+		out = append(out, repl...)
+		out = append(out, args[i+1:]...)
+		return out
+	}
+	return args
 }
 
 func init() {
