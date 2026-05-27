@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 # install plivo cli — one-line installer
 #
-# Usage:
+# Usage (while the code lives on the beta branch, pre-v1.0):
+#   curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/beta/install.sh | bash
+#
+# At the v1.0 cut the canonical install.sh moves to the default branch:
 #   curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | bash
+#
+# Requires the repo to be public and a published GitHub release whose assets
+# are named plivo_<os>_<arch> (see `make build-all`).
 #
 # Env overrides:
 #   PLIVO_CLI_VERSION   tag to install (default: latest)
