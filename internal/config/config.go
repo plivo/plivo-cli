@@ -91,9 +91,14 @@ func Resolve(profileName string) (Profile, string, error) {
 			// fallback used when no OS keychain is available) wins; otherwise
 			// pull it from the OS keychain where `auth login` now stores it.
 			if p.AuthToken == "" {
-				if tok, err := GetToken(name); err == nil {
-					p.AuthToken = tok
+				tok, err := GetToken(name)
+				if err != nil {
+					// A real keychain failure (locked / access denied) — not a
+					// plain miss, which GetToken maps to ("", nil). Surface it
+					// instead of falling through to a confusing AUTH_MISSING.
+					return Profile{}, "", fmt.Errorf("reading auth token for profile %q from the OS keychain: %w", name, err)
 				}
+				p.AuthToken = tok
 			}
 			if p.AuthToken != "" {
 				return p, name, nil

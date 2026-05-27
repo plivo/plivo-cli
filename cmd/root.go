@@ -90,7 +90,10 @@ var legacyAlias = map[string][]string{
 }
 
 // valueFlags are the global flags that consume the following token as their
-// value, so the shim doesn't mistake that value for a command word.
+// value, so the shim doesn't mistake that value for a command word. Any global
+// flag that takes a value must be listed here. (--hodor-server is internal-only,
+// absent from the public build, and never precedes a legacy alias — so it's
+// intentionally omitted.)
 var valueFlags = map[string]bool{
 	"--profile": true, "--output": true, "-o": true,
 	"--log-level": true, "--timeout": true,
