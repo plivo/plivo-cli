@@ -86,7 +86,7 @@ var legacyAlias = map[string][]string{
 	"sub":         {"account", "subaccounts"},
 	"application": {"account", "applications"},
 	"app":         {"account", "applications"},
-	"compliance":  {"account", "compliance"},
+	"compliance":  {"numbers", "compliance"},
 }
 
 // valueFlags are the global flags that consume the following token as their

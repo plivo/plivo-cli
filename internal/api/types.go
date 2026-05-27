@@ -332,21 +332,105 @@ type MaskingSessionList struct {
 	Objects []MaskingSession `json:"objects"`
 }
 
-// ComplianceDocument — /Account/{id}/ComplianceDocument/
-type ComplianceDocument struct {
-	APIID           string         `json:"api_id,omitempty"`
-	ID              string         `json:"id,omitempty"`
-	DocumentTypeID  string         `json:"document_type_id,omitempty"`
-	Alias           string         `json:"alias,omitempty"`
-	MetaInformation map[string]any `json:"meta_information,omitempty"`
-	FileName        string         `json:"file_name,omitempty"`
-	CreatedAt       string         `json:"created_at,omitempty"`
+// Compliance — /Account/{id}/PhoneNumber/Compliance/ (unified number-compliance API).
+
+// ComplianceRequiredField is one field a document type asks for.
+type ComplianceRequiredField struct {
+	FieldName    string `json:"field_name"`
+	FriendlyName string `json:"friendly_name,omitempty"`
+	FieldType    string `json:"field_type,omitempty"`
+	Required     bool   `json:"required"`
+	Format       string `json:"format,omitempty"`
+	MinLength    int    `json:"min_length,omitempty"`
+	MaxLength    int    `json:"max_length,omitempty"`
 }
 
-type ComplianceDocumentList struct {
-	APIID   string               `json:"api_id"`
-	Meta    ListMeta             `json:"meta"`
-	Objects []ComplianceDocument `json:"objects"`
+// ComplianceDocumentType is a document required for a jurisdiction.
+type ComplianceDocumentType struct {
+	DocumentTypeID string                    `json:"document_type_id"`
+	Name           string                    `json:"name,omitempty"`
+	Description    string                    `json:"description,omitempty"`
+	ProofRequired  bool                      `json:"proof_required"`
+	RequiredFields []ComplianceRequiredField `json:"required_fields,omitempty"`
+}
+
+// ComplianceRequirements — GET /PhoneNumber/Compliance/Requirements
+type ComplianceRequirements struct {
+	APIID         string                   `json:"api_id,omitempty"`
+	RequirementID string                   `json:"requirement_id,omitempty"`
+	CountryISO    string                   `json:"country_iso,omitempty"`
+	NumberType    string                   `json:"number_type,omitempty"`
+	UserType      string                   `json:"user_type,omitempty"`
+	DocumentTypes []ComplianceDocumentType `json:"document_types,omitempty"`
+}
+
+// ComplianceEndUser — nested end-user object (expand=end_user).
+type ComplianceEndUser struct {
+	EndUserID string `json:"end_user_id,omitempty"`
+	Type      string `json:"type,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Email     string `json:"email,omitempty"`
+}
+
+// ComplianceDoc — nested uploaded document (expand=documents).
+type ComplianceDoc struct {
+	DocumentID     string `json:"document_id,omitempty"`
+	DocumentTypeID string `json:"document_type_id,omitempty"`
+	FileName       string `json:"file_name,omitempty"`
+	DownloadURL    string `json:"download_url,omitempty"`
+}
+
+// ComplianceLinkedNumber — nested linked number (expand=linked_numbers).
+type ComplianceLinkedNumber struct {
+	Number     string `json:"number,omitempty"`
+	NumberType string `json:"number_type,omitempty"`
+}
+
+// ComplianceApplication — /Account/{id}/PhoneNumber/Compliance/{compliance_id}
+type ComplianceApplication struct {
+	APIID           string                   `json:"api_id,omitempty"`
+	ComplianceID    string                   `json:"compliance_id,omitempty"`
+	Alias           string                   `json:"alias,omitempty"`
+	Status          string                   `json:"status,omitempty"`
+	CountryISO      string                   `json:"country_iso,omitempty"`
+	NumberType      string                   `json:"number_type,omitempty"`
+	UserType        string                   `json:"user_type,omitempty"`
+	CallbackURL     string                   `json:"callback_url,omitempty"`
+	CallbackMethod  string                   `json:"callback_method,omitempty"`
+	RejectionReason string                   `json:"rejection_reason,omitempty"`
+	CreatedAt       string                   `json:"created_at,omitempty"`
+	UpdatedAt       string                   `json:"updated_at,omitempty"`
+	EndUser         *ComplianceEndUser       `json:"end_user,omitempty"`
+	Documents       []ComplianceDoc          `json:"documents,omitempty"`
+	LinkedNumbers   []ComplianceLinkedNumber `json:"linked_numbers,omitempty"`
+}
+
+type ComplianceApplicationList struct {
+	APIID   string                  `json:"api_id"`
+	Meta    ListMeta                `json:"meta"`
+	Objects []ComplianceApplication `json:"objects"`
+}
+
+// ComplianceCreateResp — POST /PhoneNumber/Compliance/ (auto-submits).
+type ComplianceCreateResp struct {
+	APIID        string `json:"api_id,omitempty"`
+	ComplianceID string `json:"compliance_id,omitempty"`
+	Message      string `json:"message,omitempty"`
+}
+
+// ComplianceLinkReport — per-number result of a bulk link.
+type ComplianceLinkReport struct {
+	Number  string `json:"number,omitempty"`
+	Status  string `json:"status,omitempty"`
+	Remarks string `json:"remarks,omitempty"`
+}
+
+// ComplianceLinkResp — POST /PhoneNumber/Compliance/Link/
+type ComplianceLinkResp struct {
+	APIID        string                 `json:"api_id,omitempty"`
+	TotalCount   int                    `json:"total_count,omitempty"`
+	UpdatedCount int                    `json:"updated_count,omitempty"`
+	Report       []ComplianceLinkReport `json:"report,omitempty"`
 }
 
 // Conference — /Account/{id}/Conference/
