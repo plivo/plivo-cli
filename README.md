@@ -1,8 +1,19 @@
 # plivo
 
-The official command-line interface for the Plivo platform.
+**Send a text or make a phone ring — from your terminal, in one command.**
 
-A single static Go binary for managing phone numbers, applications, messages, calls, recordings, conferences, multi-party calls, audio streams, verify sessions, lookups, 10DLC registration, powerpacks, and toll-free verification — the full public Plivo REST API, with JSON-native output for scripting and automation.
+`plivo` is the official command-line interface for the Plivo platform: a single static Go binary that speaks the full public Plivo REST API, with JSON-native output built for scripting, automation, and AI agents.
+
+```bash
+# Text someone
+plivo sms messages send --src +14155550100 --dst +14155550199 --text "Shipped!" --yes
+
+# Make a call that speaks a message when answered
+plivo voice calls make --from +14155550100 --to +14155550199 \
+  --answer-url https://example.com/answer.xml --yes
+```
+
+Numbers, calls, conferences, multi-party rooms, audio streams, messaging, verify, lookups, 10DLC, powerpacks, toll-free — the whole API, scriptable.
 
 > **Status:** pre-release. Install one-liners activate once the first release is published.
 
