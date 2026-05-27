@@ -1,12 +1,16 @@
-Manage compliance documents (KYC, business proofs)
+Regulatory compliance for phone numbers (requirements, applications, linking)
 
 Usage:
-  plivo account compliance [command]
+  plivo numbers compliance [command]
 
 Available Commands:
-  delete      Delete a compliance document (requires --yes)
-  get         Get a compliance document by ID
-  list        List compliance documents
+  create       Create + submit a compliance application (multipart; auto-submits)
+  delete       Delete a compliance application (requires --yes)
+  get          Get a compliance application by ID
+  link         Bulk-link numbers to accepted compliance applications
+  list         List compliance applications
+  requirements List documents/fields required to activate a regulated number
+  update       Update a rejected compliance application (multipart; auto-resubmits)
 
 Flags:
   -h, --help   help for compliance
@@ -23,4 +27,4 @@ Global Flags:
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts
 
-Use "plivo account compliance [command] --help" for more information about a command.
+Use "plivo numbers compliance [command] --help" for more information about a command.

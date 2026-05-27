@@ -9,6 +9,7 @@ Aliases:
 Available Commands:
   buy         Rent a phone number (requires --yes; spends money)
   cnam        Caller-ID Name (CNAM) lookup for a US/CA number (spends money — requires --yes)
+  compliance  Regulatory compliance for phone numbers (requirements, applications, linking)
   get         Get details of a rented number
   list        List numbers rented to your account
   masking     Number-Masking sessions (privacy-preserving call/SMS bridge)

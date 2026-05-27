@@ -1,0 +1,53 @@
+Create and submit a compliance application for a regulated phone number.
+Sent as multipart/form-data: the --data JSON is the "data" part and each --file
+is an uploaded document.
+
+--data (inline or @file.json) is the application payload:
+
+  {
+    "country_iso": "US",
+    "number_type": "local",                 // local | mobile | tollfree
+    "alias": "acme-us-local",
+    "end_user": {
+      "type": "business",                   // individual | business
+      "name": "Acme Inc",
+      "email": "ops@acme.com"
+    },
+    "documents": [
+      { "document_type_id": "<id>", "data_fields": { "registration_number": "..." } }
+    ],
+    "callback_url": "https://example.com/compliance"   // optional
+  }
+
+--file attaches one upload per document; the field name maps positionally to the
+documents[] array, so documents[0].file is the file for documents[0]. The path
+may be bare or prefixed with @ (PDF/JPEG/PNG, max 5 MB).
+
+Discover the document_type_id values and required data_fields first with
+`plivo numbers compliance requirements ...`.
+
+Usage:
+  plivo numbers compliance create [flags]
+
+Examples:
+  plivo numbers compliance create \
+    --data @app.json \
+    --file documents[0].file=@passport.pdf \
+    --file documents[1].file=@address-proof.pdf
+
+Flags:
+      --data string        application JSON; inline or @file.json (required)
+      --file stringArray   document upload as field=path, e.g. documents[0].file=@id.pdf (repeatable)
+  -h, --help               help for create
+
+Global Flags:
+      --all                auto-paginate through all pages
+      --dry-run            print the HTTP request without sending
+      --explain            explain what the command will do before executing
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts

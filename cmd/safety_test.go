@@ -25,7 +25,14 @@ import (
 // second run under `go test -count=N`.
 func resetAllFlags(c *cobra.Command) {
 	visit := func(f *pflag.Flag) {
-		_ = f.Value.Set(f.DefValue)
+		// Slice flags (StringArray etc.) must be cleared via Replace: calling
+		// Set(DefValue) on them APPENDS the literal default ("[]") rather than
+		// resetting, which pollutes later runs (and snapshots under -count=2).
+		if sv, ok := f.Value.(pflag.SliceValue); ok {
+			_ = sv.Replace(nil)
+		} else {
+			_ = f.Value.Set(f.DefValue)
+		}
 		f.Changed = false
 	}
 	c.Flags().VisitAll(visit)
@@ -162,7 +169,7 @@ func TestDestructiveVerbs_refuseWithoutYes(t *testing.T) {
 		{"account subaccounts delete", []string{"account", "subaccounts", "delete", "SAxxx"}},
 		{"voice endpoints delete", []string{"voice", "endpoints", "delete", "EP-ID"}},
 		{"account applications delete", []string{"account", "applications", "delete", "APP-ID"}},
-		{"account compliance delete", []string{"account", "compliance", "delete", "DOC-ID"}},
+		{"numbers compliance delete", []string{"numbers", "compliance", "delete", "DOC-ID"}},
 		{"numbers masking sessions delete", []string{"numbers", "masking", "sessions", "delete", "SESS-UUID"}},
 		{"voice conferences hangup", []string{"voice", "conferences", "hangup", "room-1"}},
 		{"voice conferences member kick", []string{"voice", "conferences", "member", "kick", "room-1", "member-id"}},
@@ -300,6 +307,28 @@ func TestSpendVerbs_defaultToDryRun(t *testing.T) {
 }
 
 // ─── Sanity: api.Client.IsScopedToken consistency under destructive flow ────
+
+// TestCompliance_dryRunNoNetwork exercises the create (multipart) and link
+// (JSON) command paths end-to-end in dry-run: no network, no file opened, and
+// the compliance URL is printed.
+func TestCompliance_dryRunNoNetwork(t *testing.T) {
+	setFakeCreds(t)
+
+	err, _, stderr := execCmd(t, "numbers", "compliance", "create",
+		"--data", `{"country_iso":"US","number_type":"local"}`,
+		"--file", "documents[0].file=@/no/such/file.pdf", "--dry-run")
+	if err != nil {
+		t.Errorf("compliance create --dry-run: unexpected err: %v", err)
+	}
+	if !strings.Contains(stderr, "PhoneNumber/Compliance/") {
+		t.Errorf("create dry-run should print the compliance URL, got: %q", stderr)
+	}
+
+	err, _, _ = execCmd(t, "numbers", "compliance", "link", "--link", "+14155551234=CMP1", "--dry-run")
+	if err != nil {
+		t.Errorf("compliance link --dry-run: unexpected err: %v", err)
+	}
+}
 
 func TestNew_clientPicksAuthMode(t *testing.T) {
 	// Sanity check that the helper api.New respects the token shape so the

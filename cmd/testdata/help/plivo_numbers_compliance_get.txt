@@ -1,10 +1,14 @@
-Get a compliance document by ID
+Get a compliance application by ID
 
 Usage:
-  plivo account compliance get <document_id> [flags]
+  plivo numbers compliance get <compliance_id> [flags]
+
+Examples:
+  plivo numbers compliance get <compliance_id> --expand end_user,documents,linked_numbers
 
 Flags:
-  -h, --help   help for get
+      --expand string   comma-separated: end_user,documents,linked_numbers
+  -h, --help            help for get
 
 Global Flags:
       --all                auto-paginate through all pages

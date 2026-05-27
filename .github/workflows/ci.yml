@@ -91,8 +91,9 @@ jobs:
           # and absent from this public build; `agent` ships as a coming-soon stub.
           groups=(
             "account" "agent" "auth" "lookup" "numbers" "sms" "verify" "voice"
-            "account subaccounts" "account applications" "account compliance"
+            "account subaccounts" "account applications"
             "numbers masking" "numbers masking sessions"
+            "numbers compliance" "numbers compliance requirements"
             "voice calls" "voice calls streams" "voice conferences"
             "voice multiparty" "voice recordings" "voice endpoints"
             "sms messages" "sms 10dlc" "sms 10dlc brands" "sms powerpacks"
@@ -191,6 +192,18 @@ jobs:
           assert_url "voice endpoints list" \
             "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/Endpoint/" \
             ./plivo voice endpoints list --dry-run --limit 3
+
+          assert_url "numbers compliance requirements" \
+            "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/PhoneNumber/Compliance/Requirements/" \
+            ./plivo numbers compliance requirements --country US --number-type local --user-type business --dry-run
+
+          assert_url "numbers compliance list" \
+            "GET https://api.plivo.com/v1/Account/[A-Z0-9]+/PhoneNumber/Compliance/" \
+            ./plivo numbers compliance list --dry-run
+
+          assert_url "numbers compliance create (multipart upload)" \
+            "POST https://api.plivo.com/v1/Account/[A-Z0-9]+/PhoneNumber/Compliance/" \
+            ./plivo numbers compliance create --data '{"country_iso":"US"}' --dry-run
 
           # Legacy alias shim: pre-grammar commands must still resolve to the
           # same REST URL after the three-segment migration.

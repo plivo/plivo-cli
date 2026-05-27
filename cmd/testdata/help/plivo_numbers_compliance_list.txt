@@ -1,12 +1,17 @@
-List compliance documents
+List compliance applications
 
 Usage:
-  plivo account compliance list [flags]
+  plivo numbers compliance list [flags]
 
 Flags:
-  -h, --help         help for list
-      --limit int    results per page (default 20)
-      --offset int   pagination offset
+      --alias string         filter by alias
+      --country string       filter by ISO country code
+  -h, --help                 help for list
+      --limit int            results per page (default 20)
+      --number-type string   filter by number type
+      --offset int           pagination offset
+      --status string        filter by status
+      --user-type string     filter by user type
 
 Global Flags:
       --all                auto-paginate through all pages

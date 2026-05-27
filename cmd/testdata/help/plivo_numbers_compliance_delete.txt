@@ -1,7 +1,7 @@
-Delete a compliance document (requires --yes)
+Delete a compliance application (requires --yes)
 
 Usage:
-  plivo account compliance delete <document_id> [flags]
+  plivo numbers compliance delete <compliance_id> [flags]
 
 Flags:
   -h, --help   help for delete

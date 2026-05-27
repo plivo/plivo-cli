@@ -1,16 +1,17 @@
-Inspect and update the active Plivo account
+Update a REJECTED compliance application and resubmit it. Same --data / --file
+shape as create. Documents are FULLY REPLACED — re-attach every required file,
+not only the changed ones. Only applications in 'rejected' status can be updated.
 
 Usage:
-  plivo account [command]
+  plivo numbers compliance update <compliance_id> [flags]
 
-Available Commands:
-  applications Manage Plivo applications (voice/messaging webhooks)
-  get          Get account details (name, billing mode, credits, address)
-  subaccounts  Manage subaccounts under the master account
-  update       Update account profile fields
+Examples:
+  plivo numbers compliance update <compliance_id> --data @fixed.json --file documents[0].file=@passport.pdf
 
 Flags:
-  -h, --help   help for account
+      --data string        updated application JSON; inline or @file.json (required)
+      --file stringArray   document upload as field=path (repeatable; replaces all documents)
+  -h, --help               help for update
 
 Global Flags:
       --all                auto-paginate through all pages
@@ -23,5 +24,3 @@ Global Flags:
   -q, --quiet              suppress non-data output
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts
-
-Use "plivo account [command] --help" for more information about a command.

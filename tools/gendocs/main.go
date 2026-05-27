@@ -73,6 +73,10 @@ func writeCmd(b *strings.Builder, c *cobra.Command) {
 		b.WriteString("```\n" + fenced + "\n```\n\n")
 	}
 
+	if c.Example != "" {
+		b.WriteString("Examples:\n\n```\n" + strings.TrimRight(c.Example, "\n") + "\n```\n\n")
+	}
+
 	if len(c.Aliases) > 0 {
 		quoted := make([]string, len(c.Aliases))
 		for i, a := range c.Aliases {
