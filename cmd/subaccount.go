@@ -13,8 +13,8 @@ import (
 )
 
 var subaccountCmd = &cobra.Command{
-	Use:     "subaccount",
-	Aliases: []string{"sub"},
+	Use:     "subaccounts",
+	Aliases: []string{"sub", "subaccount"},
 	Short:   "Manage subaccounts under the master account",
 }
 
@@ -78,7 +78,7 @@ func init() {
 	subUpdateCmd.Flags().StringVar(&subUpdateEnabled, "enabled", "", "true|false")
 
 	subaccountCmd.AddCommand(subListCmd, subGetCmd, subCreateCmd, subUpdateCmd, subDeleteCmd)
-	rootCmd.AddCommand(subaccountCmd)
+	accountCmd.AddCommand(subaccountCmd)
 }
 
 func runSubList(cmd *cobra.Command, args []string) error {

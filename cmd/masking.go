@@ -19,8 +19,9 @@ var maskingCmd = &cobra.Command{
 }
 
 var maskingSessionCmd = &cobra.Command{
-	Use:   "session",
-	Short: "Manage number-masking sessions",
+	Use:     "sessions",
+	Aliases: []string{"session"},
+	Short:   "Manage number-masking sessions",
 }
 
 var (
@@ -80,7 +81,7 @@ func init() {
 
 	maskingSessionCmd.AddCommand(maskingSessionCreateCmd, maskingSessionGetCmd, maskingSessionListCmd, maskingSessionDeleteCmd)
 	maskingCmd.AddCommand(maskingSessionCmd)
-	rootCmd.AddCommand(maskingCmd)
+	numberCmd.AddCommand(maskingCmd)
 }
 
 func runMaskingCreate(cmd *cobra.Command, args []string) error {

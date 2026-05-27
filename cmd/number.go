@@ -13,8 +13,9 @@ import (
 )
 
 var numberCmd = &cobra.Command{
-	Use:   "number",
-	Short: "Manage account phone numbers",
+	Use:     "numbers",
+	Aliases: []string{"number"},
+	Short:   "Manage account phone numbers",
 }
 
 var (

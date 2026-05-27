@@ -18,8 +18,9 @@ var verifyCmd = &cobra.Command{
 }
 
 var verifySessionCmd = &cobra.Command{
-	Use:   "session",
-	Short: "Manage Verify sessions",
+	Use:     "sessions",
+	Aliases: []string{"session"},
+	Short:   "Manage Verify sessions",
 }
 
 var (

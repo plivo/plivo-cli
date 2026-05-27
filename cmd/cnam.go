@@ -16,7 +16,7 @@ var cnamCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(cnamCmd)
+	numberCmd.AddCommand(cnamCmd)
 }
 
 func runCnam(cmd *cobra.Command, args []string) error {

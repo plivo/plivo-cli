@@ -13,8 +13,8 @@ import (
 )
 
 var applicationCmd = &cobra.Command{
-	Use:     "application",
-	Aliases: []string{"app"},
+	Use:     "applications",
+	Aliases: []string{"app", "application"},
 	Short:   "Manage Plivo applications (voice/messaging webhooks)",
 }
 
@@ -101,7 +101,7 @@ func init() {
 	applicationDeleteCmd.Flags().BoolVar(&appDeleteCascade, "cascade", false, "also detach numbers/endpoints")
 
 	applicationCmd.AddCommand(applicationCreateCmd, applicationListCmd, applicationGetCmd, applicationUpdateCmd, applicationDeleteCmd)
-	rootCmd.AddCommand(applicationCmd)
+	accountCmd.AddCommand(applicationCmd)
 }
 
 func runAppCreate(cmd *cobra.Command, args []string) error {

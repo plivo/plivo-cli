@@ -47,7 +47,7 @@ func init() {
 	cdListCmd.Flags().IntVar(&cdListOffset, "offset", 0, "pagination offset")
 
 	complianceCmd.AddCommand(cdListCmd, cdGetCmd, cdDeleteCmd)
-	rootCmd.AddCommand(complianceCmd)
+	accountCmd.AddCommand(complianceCmd)
 }
 
 func runComplianceList(cmd *cobra.Command, args []string) error {
