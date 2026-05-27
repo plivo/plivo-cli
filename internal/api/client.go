@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -154,6 +156,95 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 		return nil, nil
 	}
 
+	if out != nil {
+		if err := json.Unmarshal(respBytes, out); err != nil {
+			return nil, fmt.Errorf("decode response: %w (body: %s)", err, string(respBytes))
+		}
+	}
+	return nil, nil
+}
+
+// DoMultipart sends a multipart/form-data request: a "data" form field set to
+// dataJSON, plus one file part per files entry (form field name -> file path,
+// e.g. "documents[0].file" -> "/path/passport.pdf"). Auth, headers, dry-run,
+// and error handling mirror Do; used by the compliance create/update verbs.
+func (c *Client) DoMultipart(method, fullURL string, dataJSON []byte, files map[string]string, out any) (*APIError, error) {
+	if c.DryRun {
+		fmt.Fprintf(os.Stderr, "[dry-run] %s %s (multipart/form-data)\n", method, fullURL)
+		if len(dataJSON) > 0 {
+			var pretty bytes.Buffer
+			if json.Indent(&pretty, dataJSON, "  ", "  ") == nil {
+				fmt.Fprintf(os.Stderr, "  data:\n  %s\n", pretty.String())
+			} else {
+				fmt.Fprintf(os.Stderr, "  data: %s\n", string(dataJSON))
+			}
+		}
+		for field, path := range files {
+			fmt.Fprintf(os.Stderr, "  file: %s=%s\n", field, path)
+		}
+		return nil, nil
+	}
+
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	if len(dataJSON) > 0 {
+		if err := w.WriteField("data", string(dataJSON)); err != nil {
+			return nil, fmt.Errorf("write data field: %w", err)
+		}
+	}
+	for field, path := range files {
+		f, err := os.Open(path)
+		if err != nil {
+			return nil, fmt.Errorf("open %s: %w", path, err)
+		}
+		part, err := w.CreateFormFile(field, filepath.Base(path))
+		if err != nil {
+			_ = f.Close()
+			return nil, fmt.Errorf("create form file %s: %w", field, err)
+		}
+		if _, err := io.Copy(part, f); err != nil {
+			_ = f.Close()
+			return nil, fmt.Errorf("copy %s: %w", path, err)
+		}
+		_ = f.Close()
+	}
+	if err := w.Close(); err != nil {
+		return nil, fmt.Errorf("close multipart writer: %w", err)
+	}
+
+	if c.LogRequest != nil {
+		c.LogRequest(method, fullURL, nil)
+	}
+
+	req, err := http.NewRequest(method, fullURL, &buf)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	if c.IsScopedToken() {
+		req.Header.Set("Authorization", "Bearer "+c.AuthToken)
+	} else {
+		req.SetBasicAuth(c.AuthID, c.AuthToken)
+	}
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "plivo-cli/"+version.Value)
+
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return parseError(resp.StatusCode, resp.Header.Get("X-Request-ID"), respBytes), nil
+	}
+	if resp.StatusCode == 204 || len(respBytes) == 0 {
+		return nil, nil
+	}
 	if out != nil {
 		if err := json.Unmarshal(respBytes, out); err != nil {
 			return nil, fmt.Errorf("decode response: %w (body: %s)", err, string(respBytes))
