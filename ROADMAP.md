@@ -7,15 +7,14 @@ Pre-release. Status is captured here so users have visibility into what's coming
 The `beta` branch carries the full working CLI. Everything below is implemented and live there:
 
 - Single static Go binary, dual TTY/JSON output, stable error envelope
-- `auth`, `account`, `subaccount`
-- `number` (list/get/search/buy/update/release), `application` (CRUD), `endpoint` (CRUD)
-- `message` (send/list/get), `call` (make/list/get + hangup/transfer/play/speak/dtmf/record + stop verbs)
-- `conference` (list/get/hangup + member kick/mute/unmute/deaf/undeaf/play/speak), `mpc` (multi-party), `stream` (live audio bridge)
-- `recording` (list/get/delete)
-- `verify` session, `lookup`, `cnam`
-- `masking` session, `compliance` documents
-- `10DLC`: `brand`, `campaign`, `link`
-- `tollfree` verification, `powerpack`
+- Three-segment grammar `plivo <service> <resource> <verb>`; pre-grammar short forms kept as aliases
+- Credential profiles via `auth login`, with the auth token stored in the OS keychain (Keychain / libsecret / Credential Manager)
+- `account` (get/update), `account subaccounts`, `account applications`, `account compliance`
+- `numbers` (list/get/search/buy/update/release), `numbers cnam`, `numbers masking sessions`
+- `voice calls` (make/list/get + hangup/transfer/play/speak/dtmf/record + stop verbs), `voice calls streams` (live audio bridge)
+- `voice conferences` (+ members), `voice multiparty`, `voice recordings`, `voice endpoints`
+- `sms messages` (send/list/get), `sms 10dlc` (brands/campaigns/links), `sms powerpacks`, `sms tollfree`
+- `verify sessions`, `lookup`
 
 ## Coming soon
 
@@ -33,7 +32,6 @@ The `beta` branch carries the full working CLI. Everything below is implemented 
 - Homebrew tap + Docker image distribution
 - `--columns` / `--properties` for table output
 - `command_not_found` suggestions
-- OS-keychain credential storage (Mac Keychain, libsecret, Windows Credential Manager)
 
 ## Later
 
