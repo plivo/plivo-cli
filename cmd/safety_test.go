@@ -157,7 +157,7 @@ func TestDestructiveVerbs_refuseWithoutYes(t *testing.T) {
 		{"number release", []string{"number", "release", "+14155551234"}},
 		{"call hangup", []string{"call", "hangup", "CALL-UUID"}},
 		{"recording delete", []string{"recording", "delete", "REC-UUID"}},
-		{"agent delete", []string{"agent", "delete", "AGENT-UUID"}},
+		// `agent delete` is internal-only; verified in internal_registration_test.go.
 		{"subaccount delete", []string{"subaccount", "delete", "SAxxx"}},
 		{"endpoint delete", []string{"endpoint", "delete", "EP-ID"}},
 		{"application delete", []string{"application", "delete", "APP-ID"}},

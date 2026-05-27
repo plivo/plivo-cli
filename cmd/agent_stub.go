@@ -1,0 +1,42 @@
+//go:build !internal
+
+package cmd
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+)
+
+// agentCmd is a placeholder in the public build. The full Vibe AI agent surface
+// (create / run / publish / attach / download / session …) depends on
+// Plivo-internal services and ships only in internal builds (`-tags internal`).
+//
+// This stub keeps `plivo agent` discoverable and tells users it's coming,
+// rather than the command simply not existing.
+var agentCmd = &cobra.Command{
+	Use:   "agent",
+	Short: "Manage Plivo Vibe AI agents (coming soon)",
+	Long: `Plivo Vibe AI agents — build, publish, and run AI voice agents from your terminal.
+
+Coming soon — this surface is not part of the current release.
+Track progress: https://github.com/plivo/plivo-cli/blob/main/ROADMAP.md`,
+	// Accept any args so `plivo agent create`, `plivo agent run`, etc. all land
+	// on the coming-soon notice instead of an "unknown command" error.
+	Args: cobra.ArbitraryArgs,
+	// Swallow unknown flags (e.g. `--prompt`, `--from`) so a user copy-pasting
+	// a future agent command still gets the coming-soon notice rather than an
+	// "unknown flag" error. `--help` stays functional (it's a known flag).
+	FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Fprintln(os.Stderr, "plivo agent — AI voice agents from the CLI — is coming soon.")
+		fmt.Fprintln(os.Stderr, "Track it in the roadmap:")
+		fmt.Fprintln(os.Stderr, "  https://github.com/plivo/plivo-cli/blob/main/ROADMAP.md")
+		return nil
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(agentCmd)
+}

@@ -58,8 +58,9 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&explainFlag, "explain", false, "explain what the command will do before executing")
 	rootCmd.PersistentFlags().IntVar(&timeoutSec, "timeout", 30, "request timeout in seconds")
 	rootCmd.PersistentFlags().BoolVar(&allFlag, "all", false, "auto-paginate through all pages")
-	rootCmd.PersistentFlags().StringVar(&hodorServer, "hodor-server", os.Getenv("PLIVO_HODOR_SERVER"),
-		"base URL for hodor (used by `plivo agent` and `plivo auth token`)")
+	// --hodor-server is registered only in internal builds (cmd/internal_flags.go),
+	// since the agent + auth-token surfaces that use it are internal-only. The
+	// backing var lives below and stays "" in the public v1 build.
 }
 
 // getClient resolves credentials and returns a configured API client.

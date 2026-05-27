@@ -1,3 +1,5 @@
+//go:build internal
+
 package config
 
 import (

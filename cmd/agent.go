@@ -1,3 +1,9 @@
+//go:build internal
+
+// Gated behind the `internal` build tag: the Vibe AI agent surface depends on
+// Plivo-internal services (Contacto gateway, aiassist, PHLO config, hodor) and
+// is not part of the public v1. Build with `-tags internal` to include it.
+
 package cmd
 
 import (

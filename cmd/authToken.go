@@ -1,3 +1,8 @@
+//go:build internal
+
+// Gated behind the `internal` build tag: scoped tokens are minted by hodor, a
+// Plivo-internal service, so this surface ships only in internal builds.
+
 package cmd
 
 import (
@@ -92,6 +97,8 @@ func init() {
 	_ = authTokenMintCmd.MarkFlagRequired("modules")
 
 	authTokenCmd.AddCommand(authTokenMintCmd, authTokenListCmd, authTokenRevokeCmd)
+	// Registered here (not in auth.go) so it only attaches in internal builds.
+	authCmd.AddCommand(authTokenCmd)
 }
 
 // parseTTL parses durations including 'd' suffix (Go's time.ParseDuration only

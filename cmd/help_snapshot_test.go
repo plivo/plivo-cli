@@ -1,3 +1,10 @@
+//go:build !internal
+
+// Help snapshots validate the public v1 command tree. The internal build adds
+// agent / contacto / auth-token commands, so its tree intentionally differs —
+// snapshot validation is scoped to the public build only. The internal surface
+// is validated structurally in internal_registration_test.go.
+
 package cmd
 
 import (

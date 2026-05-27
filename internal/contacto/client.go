@@ -1,3 +1,5 @@
+//go:build internal
+
 // Package contacto provides a thin HTTP client for Contacto-authenticated
 // requests: agent CRUD via PHLO config service, vibe-agent SSE via aiassist.
 //
