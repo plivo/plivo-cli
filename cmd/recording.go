@@ -13,8 +13,8 @@ import (
 )
 
 var recordingCmd = &cobra.Command{
-	Use:     "recording",
-	Aliases: []string{"rec"},
+	Use:     "recordings",
+	Aliases: []string{"rec", "recording"},
 	Short:   "List, fetch, and delete call/conference recordings",
 }
 
@@ -56,7 +56,7 @@ func init() {
 	recordingListCmd.Flags().StringVar(&recListToTime, "to-time", "", "filter recordings before this ISO time")
 
 	recordingCmd.AddCommand(recordingListCmd, recordingGetCmd, recordingDeleteCmd)
-	rootCmd.AddCommand(recordingCmd)
+	voiceCmd.AddCommand(recordingCmd)
 }
 
 func runRecordingList(cmd *cobra.Command, args []string) error {

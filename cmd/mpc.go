@@ -13,8 +13,9 @@ import (
 )
 
 var mpcCmd = &cobra.Command{
-	Use:   "mpc",
-	Short: "Multi-Party Calls (MPC) — group voice rooms with dynamic participants",
+	Use:     "multiparty",
+	Aliases: []string{"mpc"},
+	Short:   "Multi-Party Calls (MPC) — group voice rooms with dynamic participants",
 }
 
 var (
@@ -144,7 +145,7 @@ func init() {
 	mpcParticipantCmd.AddCommand(mpcPartListCmd, mpcPartAddCmd, mpcPartKickCmd,
 		mpcPartMuteCmd, mpcPartUnmuteCmd, mpcPartHoldCmd, mpcPartUnholdCmd)
 	mpcCmd.AddCommand(mpcListCmd, mpcGetCmd, mpcCreateCmd, mpcEndCmd, mpcParticipantCmd)
-	rootCmd.AddCommand(mpcCmd)
+	voiceCmd.AddCommand(mpcCmd)
 }
 
 func runMPCList(cmd *cobra.Command, args []string) error {

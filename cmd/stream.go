@@ -11,8 +11,9 @@ import (
 )
 
 var streamCmd = &cobra.Command{
-	Use:   "stream",
-	Short: "Live audio streams on a call (WebSocket bridge for transcription / agents)",
+	Use:     "streams",
+	Aliases: []string{"stream"},
+	Short:   "Live audio streams on a call (WebSocket bridge for transcription / agents)",
 }
 
 var streamListCmd = &cobra.Command{
@@ -66,7 +67,7 @@ func init() {
 	streamStartCmd.Flags().StringVar(&streamStartServiceType, "service-type", "", "Plivo service type override")
 
 	streamCmd.AddCommand(streamListCmd, streamGetCmd, streamStartCmd, streamStopCmd)
-	rootCmd.AddCommand(streamCmd)
+	callCmd.AddCommand(streamCmd)
 }
 
 func runStreamList(cmd *cobra.Command, args []string) error {

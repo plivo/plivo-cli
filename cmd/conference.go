@@ -11,8 +11,8 @@ import (
 )
 
 var conferenceCmd = &cobra.Command{
-	Use:     "conference",
-	Aliases: []string{"conf"},
+	Use:     "conferences",
+	Aliases: []string{"conf", "conference"},
 	Short:   "Inspect and control live audio conferences",
 }
 
@@ -162,7 +162,7 @@ func init() {
 		confMemberSpeakCmd, confMemberStopSpeakCmd)
 
 	conferenceCmd.AddCommand(confListCmd, confGetCmd, confHangupCmd, confRecordCmd, confStopRecordCmd, confMemberCmd)
-	rootCmd.AddCommand(conferenceCmd)
+	voiceCmd.AddCommand(conferenceCmd)
 }
 
 func runConferenceList(cmd *cobra.Command, args []string) error {

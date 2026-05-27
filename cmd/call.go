@@ -13,8 +13,9 @@ import (
 )
 
 var callCmd = &cobra.Command{
-	Use:   "call",
-	Short: "Make and inspect voice calls",
+	Use:     "calls",
+	Aliases: []string{"call"},
+	Short:   "Make and inspect voice calls",
 }
 
 var (
@@ -106,7 +107,7 @@ func init() {
 	callCmd.AddCommand(callListCmd, callGetCmd, callMakeCmd, callHangupCmd, callTransferCmd,
 		callPlayCmd, callStopPlayCmd, callSpeakCmd, callStopSpeakCmd, callDTMFCmd,
 		callRecordCmd, callStopRecordCmd)
-	rootCmd.AddCommand(callCmd)
+	voiceCmd.AddCommand(callCmd)
 }
 
 var callHangupCmd = &cobra.Command{

@@ -13,8 +13,8 @@ import (
 )
 
 var endpointCmd = &cobra.Command{
-	Use:     "endpoint",
-	Aliases: []string{"ep"},
+	Use:     "endpoints",
+	Aliases: []string{"ep", "endpoint"},
 	Short:   "Manage SIP endpoints (registered SIP devices/usernames)",
 }
 
@@ -85,7 +85,7 @@ func init() {
 	epUpdateCmd.Flags().StringVar(&epUpdateAppID, "app-id", "", "new application id")
 
 	endpointCmd.AddCommand(epListCmd, epGetCmd, epCreateCmd, epUpdateCmd, epDeleteCmd)
-	rootCmd.AddCommand(endpointCmd)
+	voiceCmd.AddCommand(endpointCmd)
 }
 
 func runEndpointList(cmd *cobra.Command, args []string) error {
