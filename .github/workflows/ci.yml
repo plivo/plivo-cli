@@ -98,6 +98,7 @@ jobs:
             "voice multiparty" "voice recordings" "voice endpoints"
             "message" "message 10dlc" "message 10dlc brands" "message powerpacks"
             "message tollfree" "verify sessions"
+            "buddy" "buddy chat" "buddy escalations"
           )
           for cmd in "${groups[@]}"; do
             echo "==> plivo $cmd --help"
@@ -204,6 +205,14 @@ jobs:
           assert_url "numbers compliance create (multipart upload)" \
             "POST https://api.plivo.com/v1/Account/[A-Z0-9]+/PhoneNumber/Compliance/" \
             ./plivo numbers compliance create --data '{"country_iso":"US"}' --dry-run
+
+          assert_url "buddy chat (SSE, on the global hodor edge)" \
+            "POST https://global-auth-api\.contacto\.com/v1/aiassist/buddy-ext/chat" \
+            ./plivo buddy chat "ping" --dry-run
+
+          assert_url "buddy escalations" \
+            "GET https://global-auth-api\.contacto\.com/v1/aiassist/buddy-ext/escalations" \
+            ./plivo buddy escalations --dry-run
 
           # Legacy alias shim: pre-grammar commands must still resolve to the
           # same REST URL after the three-segment migration.
