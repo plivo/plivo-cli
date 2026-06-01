@@ -17,6 +17,18 @@ import (
 	"github.com/plivo/plivo-cli/internal/version"
 )
 
+// URL convention (enforced by TestNoDirectCXServiceURLs):
+//
+//   - api.plivo.com / lookup.plivo.com → Plivo customer APIs, hit directly.
+//   - *.contacto.com / *.contactodev.com / *.plivops.com hosts MUST be hodor
+//     edges (global + regional). Every CX-internal service (aiassist,
+//     contacto-core, dobby, pai-voice, …) is reached only via hodor — never
+//     directly — so hodor can resolve region from creds, enforce the
+//     internal-services IP allowlist, rate-limit per auth_id, and audit-log.
+//     That's a security boundary.
+//
+// Adding a new hodor edge? Also add it to allowedCXHosts in
+// url_boundary_test.go, or the build fails.
 const (
 	DefaultBaseURL    = "https://api.plivo.com/v1"
 	DefaultLookupBase = "https://lookup.plivo.com/v1"
