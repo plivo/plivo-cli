@@ -653,3 +653,68 @@ type PowerpackNumberList struct {
 	Meta    ListMeta          `json:"meta"`
 	Objects []PowerpackNumber `json:"objects"`
 }
+
+// Buddy — /v1/aiassist/buddy-ext (Plivo's customer-facing AI assistant).
+// Auth: HTTP Basic with the user's auth_id:auth_token; region is resolved
+// server-side from the creds. Chat uses Server-Sent Events.
+
+// BuddyAttachment represents a file uploaded with a buddy chat (base64 data: URL).
+type BuddyAttachment struct {
+	MediaType string `json:"mediaType"`
+	Filename  string `json:"filename"`
+	URL       string `json:"url"`
+}
+
+// BuddyTurn is one prior message in the conversation history.
+type BuddyTurn struct {
+	Role        string            `json:"role"` // "user" | "assistant"
+	Text        string            `json:"text"`
+	Attachments []BuddyAttachment `json:"attachments,omitempty"`
+}
+
+// BuddyUserContext personalises Buddy's responses with account context.
+//
+// Field shape mirrors the server's strict Pydantic model — notably, `plan` is
+// an enum (free_trial / professional / enterprise) and a bare account_type
+// (e.g. "standard") 400s the request, so the CLI omits it rather than
+// guessing. Any unknown field on the server is silently dropped (extra:
+// ignore), so a `callUUID` here would be a no-op; voice-debug context is
+// carried inline in the chat message instead.
+type BuddyUserContext struct {
+	Email     string `json:"email,omitempty"`
+	Plan      string `json:"plan,omitempty"`
+	Region    string `json:"region,omitempty"`
+	CountryID string `json:"countryId,omitempty"`
+	Balance   string `json:"balance,omitempty"`
+	Currency  string `json:"currency,omitempty"`
+}
+
+// BuddyChatRequest is the POST body for /v1/aiassist/buddy-ext/chat.
+type BuddyChatRequest struct {
+	Message     string            `json:"message"`
+	History     []BuddyTurn       `json:"history,omitempty"`
+	Attachments []BuddyAttachment `json:"attachments,omitempty"`
+	UserContext BuddyUserContext  `json:"userContext"`
+	PageURL     string            `json:"pageUrl,omitempty"`
+}
+
+// BuddyEscalation is one row from GET /v1/aiassist/buddy-ext/escalations.
+// Shape mirrors the aiassist `BuddyEscalation` ORM model surfaced by
+// `data_adapters/buddy_escalation.list_escalations()`.
+type BuddyEscalation struct {
+	UUID              string `json:"uuid,omitempty"`
+	Status            string `json:"status,omitempty"`
+	EscalationSummary string `json:"escalation_summary,omitempty"`
+	CreatedAt         string `json:"created_at,omitempty"`
+	PylonTicketID     string `json:"pylon_ticket_id,omitempty"`
+	PylonContactID    string `json:"pylon_contact_id,omitempty"`
+}
+
+// BuddyEscalationsResponse is the standard Plivo envelope returned by the
+// escalations endpoint: { api_id, status, data: { escalations: [...] } }.
+type BuddyEscalationsResponse struct {
+	APIID string `json:"api_id"`
+	Data  struct {
+		Escalations []BuddyEscalation `json:"escalations"`
+	} `json:"data"`
+}

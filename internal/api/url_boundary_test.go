@@ -1,0 +1,189 @@
+package api
+
+import (
+	"bufio"
+	"fmt"
+	"go/ast"
+	"go/build/constraint"
+	"go/parser"
+	"go/token"
+	"net/url"
+	"os"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"strconv"
+	"strings"
+	"testing"
+)
+
+// TestNoDirectCXServiceURLs is a security-boundary check on the public CLI:
+// every call to a Plivo CX / ops service (regional aiassist, dobby, pai-voice,
+// core-service, …) MUST go via hodor — direct hits would bypass hodor's
+// auth-resolution, internal-services IP allowlist, per-auth_id rate limit,
+// and audit logs.
+//
+// Rule: any URL literal whose host ends in one of the internal domain
+// suffixes (".contacto.com", ".contactodev.com", ".plivops.com") must be in
+// allowedCXHosts. URLs to api.plivo.com / lookup.plivo.com / third-party /
+// Plivo docs hosts are unconstrained — this isn't a general allowlist, just
+// a CX-services gate.
+//
+// Files behind `//go:build internal` are skipped: the internal binary is
+// allowed dev/staging hosts that don't ship in the public release.
+func TestNoDirectCXServiceURLs(t *testing.T) {
+	// Allowed CX hosts are all hodor edges (one global, two regional).
+	// Hodor handles region-routing, IP allowlist, audit, and rate-limit;
+	// everything CX-internal sits behind it.
+	allowedCXHosts := map[string]bool{
+		"global-auth-api.contacto.com":     true, // global hodor edge (proxies to regional aiassist)
+		"ap-south-1-auth-api.contacto.com": true, // regional hodor — India
+		"us-east-1-auth-api.contacto.com":  true, // regional hodor — US
+	}
+	// Internal Plivo CX / ops domains. Any host suffix-matched here is gated
+	// by allowedCXHosts. .contactodev.com (dev variant) should never appear
+	// in public code — internal-only files are skipped, public files must
+	// not reference it.
+	cxDomainSuffixes := []string{
+		".contacto.com",
+		".contactodev.com",
+		".plivops.com",
+	}
+	isCXHost := func(host string) bool {
+		for _, suf := range cxDomainSuffixes {
+			if strings.HasSuffix(host, suf) {
+				return true
+			}
+		}
+		return false
+	}
+
+	moduleRoot := findModuleRoot(t)
+	fset := token.NewFileSet()
+	// Plausible https:// URL match inside a Go string literal. We stop at
+	// whitespace, quotes, backslashes, and closing brackets so the URL
+	// doesn't bleed into surrounding code. url.Parse cleans up the rest.
+	urlRE := regexp.MustCompile(`https?://[^\s"'\\)\]}` + "`" + `]+`)
+
+	var offenders []string
+
+	walkErr := filepath.WalkDir(moduleRoot, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			base := d.Name()
+			// Skip vendored / hidden / node deps; everything else is in scope.
+			if base == "vendor" || base == "node_modules" || (strings.HasPrefix(base, ".") && base != ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		if requiresInternalBuildTag(path) {
+			return nil
+		}
+
+		f, perr := parser.ParseFile(fset, path, nil, 0)
+		if perr != nil {
+			t.Errorf("parse %s: %v", path, perr)
+			return nil
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
+			}
+			s, qerr := strconv.Unquote(lit.Value)
+			if qerr != nil {
+				return true
+			}
+			for _, m := range urlRE.FindAllString(s, -1) {
+				u, uerr := url.Parse(m)
+				if uerr != nil {
+					continue
+				}
+				host := u.Hostname()
+				if !isCXHost(host) {
+					continue // non-CX host, unconstrained
+				}
+				if allowedCXHosts[host] {
+					continue // allowed hodor edge
+				}
+				pos := fset.Position(lit.Pos())
+				rel, _ := filepath.Rel(moduleRoot, pos.Filename)
+				offenders = append(offenders, fmt.Sprintf("%s:%d → %s (host %q not in allowlist)", rel, pos.Line, m, host))
+			}
+			return true
+		})
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("walk: %v", walkErr)
+	}
+
+	if len(offenders) > 0 {
+		t.Errorf("direct CX-service URL(s) found (must go via hodor — see api.Client.BuddyURL / HodorURL):\n  %s\n\n"+
+			"If this is a new hodor edge, add it to allowedCXHosts in %s.",
+			strings.Join(offenders, "\n  "),
+			"internal/api/url_boundary_test.go")
+	}
+}
+
+// findModuleRoot walks up from this test file until it finds the go.mod.
+// We need the module root so the walk picks up every package, not just
+// internal/api.
+func findModuleRoot(t *testing.T) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	dir := filepath.Dir(file)
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatalf("no go.mod found walking up from %s", file)
+		}
+		dir = parent
+	}
+}
+
+// requiresInternalBuildTag reports whether the file's build constraint
+// requires `internal` to compile (i.e. it's absent from the public build).
+// For tags we don't know about (GOOS, GOARCH, ...) we assume they're set,
+// so a constraint like "linux && internal" reports true but plain "linux"
+// reports false.
+func requiresInternalBuildTag(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	publicEval := func(tag string) bool { return tag != "internal" }
+	for i := 0; i < 30 && sc.Scan(); i++ {
+		line := sc.Text()
+		if strings.HasPrefix(strings.TrimSpace(line), "package ") {
+			return false
+		}
+		if !constraint.IsGoBuild(line) && !constraint.IsPlusBuild(line) {
+			continue
+		}
+		expr, err := constraint.Parse(line)
+		if err != nil {
+			continue
+		}
+		// Would this file compile in the public build (no `internal` tag)?
+		if !expr.Eval(publicEval) {
+			return true
+		}
+	}
+	_ = sc.Err() // scan errors here just mean we couldn't read the build header; treat as public
+	return false
+}

@@ -60,6 +60,18 @@ plivo voice calls get <call_uuid>
 
 Once you have a working setup, the same flow scripts cleanly into CI, integration tests, and AI-agent-driven workflows.
 
+## Ask the assistant
+
+Plivo's AI assistant lives in the terminal too — for docs / pricing questions, or to debug a specific call:
+
+```bash
+plivo ask "What does Plivo SMS error 30007 mean?"
+plivo ask --call-uuid <uuid> "Debug what happened on this call"
+plivo support           # list your past support escalations
+```
+
+Tokens stream as they arrive; long voice-debug runs (2–5 min) print live status until the root cause lands. Ctrl-C cancels cleanly. `-o json` emits one JSONL event per SSE frame for scripting and AI agents.
+
 You can also pass credentials via environment variables instead of `plivo auth login`:
 
 ```bash

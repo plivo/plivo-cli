@@ -46,7 +46,7 @@ func TestRootCmd_allTopLevelGroupsRegistered(t *testing.T) {
 	// coming-soon stub; `contacto` + `auth token` are internal-only (build tag
 	// `internal`) and verified separately in internal_registration_test.go.
 	groups := []string{
-		"account", "agent", "auth", "lookup", "message", "numbers", "verify", "voice",
+		"account", "agent", "ask", "auth", "lookup", "message", "numbers", "support", "verify", "voice",
 	}
 	for _, g := range groups {
 		t.Run(g, func(t *testing.T) {
@@ -323,6 +323,7 @@ func TestArgsValidators(t *testing.T) {
 		{[]string{"numbers", "get"}, "numbers get <number>", 1},
 		{[]string{"numbers", "buy"}, "numbers buy <number>", 1},
 		{[]string{"numbers", "release"}, "numbers release <number>", 1},
+		{[]string{"ask"}, "ask <msg>", 1},
 		{[]string{"numbers", "compliance", "get"}, "compliance get <id>", 1},
 		{[]string{"numbers", "compliance", "update"}, "compliance update <id>", 1},
 		{[]string{"numbers", "compliance", "delete"}, "compliance delete <id>", 1},
