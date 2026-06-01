@@ -1,5 +1,3 @@
-//go:build internal
-
 package api
 
 import (

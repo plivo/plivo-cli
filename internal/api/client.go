@@ -32,11 +32,15 @@ import (
 const (
 	DefaultBaseURL    = "https://api.plivo.com/v1"
 	DefaultLookupBase = "https://lookup.plivo.com/v1"
+	// DefaultBuddyBase is the prod hodor edge that hosts /v1/aiassist/buddy-ext
+	// (Plivo Buddy — customer-facing AI assistant). Plivo Basic auth.
+	DefaultBuddyBase = "https://global-auth-api.contacto.com"
 )
 
 type Client struct {
 	BaseURL      string
 	HodorBaseURL string // optional; used for /v1/agent/ and /v1/auth/token/ routes
+	BuddyBaseURL string // hodor edge for /v1/aiassist/buddy-ext (Plivo Basic auth)
 	AuthID       string
 	AuthToken    string
 	HTTP         *http.Client
@@ -68,10 +72,11 @@ func New(authID, authToken string, timeout time.Duration) *Client {
 		timeout = 30 * time.Second
 	}
 	return &Client{
-		BaseURL:   DefaultBaseURL,
-		AuthID:    authID,
-		AuthToken: authToken,
-		HTTP:      &http.Client{Timeout: timeout},
+		BaseURL:      DefaultBaseURL,
+		BuddyBaseURL: DefaultBuddyBase,
+		AuthID:       authID,
+		AuthToken:    authToken,
+		HTTP:         &http.Client{Timeout: timeout},
 	}
 }
 
@@ -89,6 +94,16 @@ func (c *Client) AccountURL(parts ...string) string {
 // slash; the caller appends ?type=carrier (required by the API).
 func (c *Client) LookupURL(number string) string {
 	return DefaultLookupBase + "/Number/" + number
+}
+
+// BuddyURL joins BuddyBaseURL with the given absolute path (e.g.
+// "/v1/aiassist/buddy-ext/chat"). Used by the `plivo buddy …` commands.
+func (c *Client) BuddyURL(path string) string {
+	base := strings.TrimRight(c.BuddyBaseURL, "/")
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return base + path
 }
 
 // Do executes an HTTP request with basic auth and JSON encoding.

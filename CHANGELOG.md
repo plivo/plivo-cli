@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `plivo ask "<query>"` + `plivo support` — talks to Plivo's customer-facing
+  AI assistant via `/v1/aiassist/buddy-ext` (SSE streaming, Plivo Basic auth).
+  `--call-uuid` adds voice-debug context. Ctrl-C cancels cleanly; `-o json`
+  emits JSONL events for scripts and AI agents. `plivo support` lists past
+  escalations.
 - Three-segment command grammar: `plivo <service> <resource> <verb>` (e.g.
   `plivo voice calls list`, `plivo message send`, `plivo numbers search`).
 - Cross-platform installers for macOS, Linux, and Windows (`install.sh`,
