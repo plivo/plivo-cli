@@ -24,6 +24,7 @@ import (
 	"github.com/plivo/plivo-cli/internal/config"
 	"github.com/plivo/plivo-cli/internal/contacto"
 	"github.com/plivo/plivo-cli/internal/output"
+	"github.com/plivo/plivo-cli/internal/version"
 	"github.com/spf13/cobra"
 )
 
@@ -1061,6 +1062,7 @@ func runAgentRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", version.UserAgent())
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("runner request failed: %w", err)

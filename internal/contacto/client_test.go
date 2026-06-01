@@ -113,8 +113,8 @@ func TestDo_setsAllStandardHeaders(t *testing.T) {
 	if seenAccept != "application/json" {
 		t.Errorf("Accept = %q (non-SSE path should be application/json)", seenAccept)
 	}
-	if !strings.HasPrefix(seenUA, "plivo-cli/") {
-		t.Errorf("User-Agent = %q", seenUA)
+	if !strings.HasPrefix(seenUA, "Plivo-CLI/") {
+		t.Errorf("User-Agent = %q, want Plivo-CLI/ prefix", seenUA)
 	}
 	if seenURLPath != "/v1/contacto-core/contacto-config/phlo" {
 		t.Errorf("URL path = %q", seenURLPath)

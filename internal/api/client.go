@@ -162,7 +162,7 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "plivo-cli/"+version.Value)
+	req.Header.Set("User-Agent", version.UserAgent())
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
@@ -254,7 +254,7 @@ func (c *Client) DoMultipart(method, fullURL string, dataJSON []byte, files map[
 	}
 	req.Header.Set("Content-Type", w.FormDataContentType())
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "plivo-cli/"+version.Value)
+	req.Header.Set("User-Agent", version.UserAgent())
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
