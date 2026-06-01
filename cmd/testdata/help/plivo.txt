@@ -12,6 +12,7 @@ Available Commands:
   account     Inspect and update the active Plivo account
   agent       Manage Plivo Vibe AI agents (coming soon)
   auth        Manage credentials and profiles
+  buddy       Plivo Buddy — AI assistant for docs, pricing, and debugging
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
   lookup      Carrier + format lookup for an E.164 number (lookup.plivo.com)
