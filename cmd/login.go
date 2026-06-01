@@ -21,6 +21,7 @@ var (
 	loginAuthTokenStdin bool
 	loginName           string
 	loginNoVerify       bool
+	loginBrowser        bool
 )
 
 // loginCmd is the unified entry point for adding/replacing a credential
@@ -41,10 +42,11 @@ keychain is available.
 By default, the CLI validates the credentials by calling GET /Account/
 before saving — use --no-verify to skip if you're offline or hitting a
 local mock.`,
-	Example: `  plivo login                                  # prompts for both
-  plivo login --auth-id MAxxxxxxxxxxxxxxxxxxxx   # prompts for token only
+	Example: `  plivo login --browser                             # opens browser (recommended)
+  plivo login                                       # interactive prompts
+  plivo login --auth-id MAxxxxxxxxxxxxxxxxxxxx      # prompts for token only
   echo "$TOKEN" | plivo login --auth-id MAxx --auth-token-stdin
-  plivo login --name staging                     # save under a named profile`,
+  plivo login --name staging                        # save under a named profile`,
 	RunE: runLogin,
 }
 
@@ -73,11 +75,20 @@ func init() {
 		"profile name to save under")
 	loginCmd.Flags().BoolVar(&loginNoVerify, "no-verify", false,
 		"skip the GET /Account/ validation hit (offline / mock use only)")
+	loginCmd.Flags().BoolVar(&loginBrowser, "browser", false,
+		"log in via your default browser (PKCE loopback OAuth); recommended")
 
 	rootCmd.AddCommand(loginCmd, logoutCmd)
 }
 
 func runLogin(cmd *cobra.Command, args []string) error {
+	// --browser: loopback-OAuth (PKCE) flow. Skips all manual cred entry —
+	// opens the user's default browser to hodor's /v1/accounts/cli/authorize,
+	// captures the callback on 127.0.0.1, and persists the bundle directly.
+	if loginBrowser {
+		return runLoginBrowser()
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return err
