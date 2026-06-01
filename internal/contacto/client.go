@@ -196,5 +196,5 @@ func (c *Client) applyHeaders(req *http.Request, hasBody, isSSE bool) {
 	} else {
 		req.Header.Set("Accept", "application/json")
 	}
-	req.Header.Set("User-Agent", "plivo-cli/"+version.Value)
+	req.Header.Set("User-Agent", version.UserAgent())
 }

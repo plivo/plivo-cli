@@ -53,7 +53,7 @@ func (c *Client) StreamSSE(ctx context.Context, method, fullURL string, body any
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	req.Header.Set("User-Agent", "plivo-cli/"+version.Value)
+	req.Header.Set("User-Agent", version.UserAgent())
 
 	// SSE needs an unbounded timeout — clone the client to avoid mutating it.
 	streamClient := &http.Client{
