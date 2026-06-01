@@ -15,7 +15,7 @@ The `beta` branch carries the full working CLI. Everything below is implemented 
 - `voice conferences` (+ members), `voice multiparty`, `voice recordings`, `voice endpoints`
 - `message` (send/list/get), `message 10dlc` (brands/campaigns/links), `message powerpacks`, `message tollfree`
 - `verify sessions`, `lookup`
-- `buddy` — chat with Plivo's AI assistant from the terminal (docs Q&A, voice-debug with `--call-uuid`); past escalations via `buddy escalations`
+- `ask` — chat with Plivo's AI assistant from the terminal (docs Q&A, voice-debug with `--call-uuid`); past support escalations via `plivo support`
 
 ## Coming soon
 

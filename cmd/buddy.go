@@ -19,66 +19,62 @@ import (
 	"golang.org/x/term"
 )
 
-// buddyCmd is the `plivo buddy …` service: a customer-facing AI assistant
-// hosted at hodor's /v1/aiassist/buddy-ext (Plivo Basic auth — exactly the
-// creds the rest of the CLI already uses).
-var buddyCmd = &cobra.Command{
-	Use:   "buddy",
-	Short: "Plivo Buddy — AI assistant for docs, pricing, and debugging",
-	Long: `plivo buddy talks to Plivo's customer-facing AI assistant from your terminal.
-Ask docs / pricing questions, get a call debugged, or list past escalations —
-all signed in with the same auth_id / auth_token the rest of the CLI uses.`,
-}
+// ask + support talk to Plivo's customer-facing AI assistant (internally
+// "Buddy") hosted at hodor's /v1/aiassist/buddy-ext (Plivo Basic auth — same
+// creds the rest of the CLI uses).
 
-// chat flags
+// ask flags
 var (
-	buddyChatCallUUID string
-	buddyChatVerbose  bool
-	buddyChatDebug    bool
-	buddyURLOverride  string // --buddy-url; overrides env + config + default
+	askCallUUID      string
+	askVerbose       bool
+	askDebug         bool
+	buddyURLOverride string // --buddy-url; overrides env + config + default
 )
 
-var buddyChatCmd = &cobra.Command{
-	Use:   "chat <message>",
-	Short: "Ask Buddy a question (streams the answer as it comes)",
-	Long: `Send a single message to Plivo Buddy and stream the response.
+var askCmd = &cobra.Command{
+	Use:   "ask <message>",
+	Short: "Ask Plivo's AI assistant (streams the answer as it comes)",
+	Long: `Send a single message to Plivo's AI assistant and stream the response.
 
-Buddy uses Server-Sent Events: token text streams to stdout as it arrives,
-live "narration" status appears on stderr and is overwritten in place, and
-the final summary lands on stdout. Long flows (voice-debug can run 2–5
-minutes) work fine — there is no overall HTTP timeout. Ctrl-C cancels and
-exits 130; no auto-retry (debugger runs are not idempotent).
+The assistant uses Server-Sent Events: token text streams to stdout as it
+arrives, live status appears on stderr and is overwritten in place, and the
+final summary lands on stdout. Long flows (voice-debug can run 2–5 minutes)
+work fine — there is no overall HTTP timeout. Ctrl-C cancels and exits 130;
+no auto-retry (debugger runs are not idempotent).
 
-Pass --call-uuid for voice-debug context; --verbose to show Buddy's tool
-calls; -o json to emit each SSE event as one JSONL line (handy for scripts
-and AI agents).`,
-	Example: `  plivo buddy chat "What does Plivo SMS error code 30007 mean?"
-  plivo buddy chat --call-uuid 21e68d29-... "Debug what happened on this call"
-  plivo buddy chat -o json "What's the rate for outbound voice to Brazil?"`,
+Pass --call-uuid for voice-debug context; --verbose to show the assistant's
+tool calls; -o json to emit each SSE event as one JSONL line (handy for
+scripts and AI agents).`,
+	Example: `  plivo ask "What does Plivo SMS error code 30007 mean?"
+  plivo ask --call-uuid 21e68d29-... "Debug what happened on this call"
+  plivo ask -o json "What's the rate for outbound voice to Brazil?"`,
 	Args: cobra.ExactArgs(1),
-	RunE: runBuddyChat,
+	RunE: runAsk,
 }
 
-var buddyEscalationsCmd = &cobra.Command{
-	Use:     "escalations",
-	Short:   "List your past Buddy escalations",
-	Example: "  plivo buddy escalations",
-	RunE:    runBuddyEscalations,
+var supportCmd = &cobra.Command{
+	Use:     "support",
+	Short:   "List your past support escalations (filed via `plivo ask`)",
+	Example: "  plivo support\n  plivo support -o json",
+	RunE:    runSupport,
 }
 
 func init() {
-	buddyCmd.PersistentFlags().StringVar(&buddyURLOverride, "buddy-url", "",
-		"override the Buddy hodor URL (also via PLIVO_BUDDY_URL env, or [buddy].hodor_url in config)")
+	// --buddy-url is operator territory (dev/staging override); attach to both
+	// user-facing commands so it works on either invocation.
+	for _, c := range []*cobra.Command{askCmd, supportCmd} {
+		c.Flags().StringVar(&buddyURLOverride, "buddy-url", "",
+			"override the assistant's hodor URL (also via PLIVO_BUDDY_URL env, or [buddy].hodor_url in config)")
+	}
 
-	buddyChatCmd.Flags().StringVar(&buddyChatCallUUID, "call-uuid", "",
-		"voice-debug context: the call UUID Buddy should analyse")
-	buddyChatCmd.Flags().BoolVar(&buddyChatVerbose, "verbose", false,
-		"show Buddy's tool_call / tool_output events on stderr")
-	buddyChatCmd.Flags().BoolVar(&buddyChatDebug, "debug-stream", false,
+	askCmd.Flags().StringVar(&askCallUUID, "call-uuid", "",
+		"voice-debug context: the call UUID the assistant should analyse")
+	askCmd.Flags().BoolVar(&askVerbose, "verbose", false,
+		"show the assistant's tool_call / tool_output events on stderr")
+	askCmd.Flags().BoolVar(&askDebug, "debug-stream", false,
 		"log every raw SSE frame to stderr (for debugging this CLI)")
 
-	buddyCmd.AddCommand(buddyChatCmd, buddyEscalationsCmd)
-	rootCmd.AddCommand(buddyCmd)
+	rootCmd.AddCommand(askCmd, supportCmd)
 }
 
 // applyBuddyURL applies the override precedence to c.BuddyBaseURL:
@@ -100,7 +96,7 @@ func applyBuddyURL(c *api.Client) {
 	}
 }
 
-func runBuddyChat(cmd *cobra.Command, args []string) error {
+func runAsk(cmd *cobra.Command, args []string) error {
 	message := args[0]
 
 	client, _, err := getClient()
@@ -109,24 +105,28 @@ func runBuddyChat(cmd *cobra.Command, args []string) error {
 	}
 	applyBuddyURL(client)
 
-	// Build userContext. Email isn't on the public account payload; populate
-	// plan/balance/timezone best-effort so Buddy can personalise. Failure here
-	// is non-fatal — the chat works with an empty userContext.
+	// Build userContext. The server's BuddyUserContext is a strict Pydantic
+	// model — `plan` is an enum (free_trial/professional/enterprise) and a
+	// bare account_type like "standard" 400s the request, so we only send
+	// balance (best-effort; failure is non-fatal — empty userContext works).
+	// `callUUID` is silently dropped server-side (extra: ignore), so the
+	// routing signal comes solely from the message-text suffix below.
 	uctx := api.BuddyUserContext{}
-	if buddyChatCallUUID != "" {
-		uctx.CallUUID = buddyChatCallUUID
-		message = fmt.Sprintf("%s (call_uuid: %s)", message, buddyChatCallUUID)
+	if askCallUUID != "" {
+		message = fmt.Sprintf("%s (call_uuid: %s)", message, askCallUUID)
 	}
 	var acct api.Account
 	if apiErr, gerr := client.Do("GET", client.AccountURL(), nil, nil, &acct); gerr == nil && apiErr == nil {
-		uctx.Plan = acct.AccountType
 		uctx.Balance = acct.CashCredits
 	}
 
 	body := api.BuddyChatRequest{
 		Message:     message,
 		UserContext: uctx,
-		PageURL:     "cli://plivo-buddy",
+		// Server validator requires http/https on pageUrl. A synthetic CLI URL
+		// keeps the escalation idempotency key stable per CLI session without
+		// pretending we're a real Console page.
+		PageURL: "https://cli.plivo.com/buddy",
 	}
 
 	url := client.BuddyURL("/v1/aiassist/buddy-ext/chat")
@@ -159,12 +159,12 @@ func runBuddyChat(cmd *cobra.Command, args []string) error {
 		err:       os.Stderr,
 		jsonMode:  jsonMode,
 		useANSI:   tty && !noColorFlag,
-		verbose:   buddyChatVerbose,
+		verbose:   askVerbose,
 		startedAt: time.Now(),
 	}
 
 	sseErr := client.StreamSSE(streamCtx, "POST", url, body, func(ev api.SSEEvent) bool {
-		if buddyChatDebug {
+		if askDebug {
 			fmt.Fprintf(os.Stderr, "[sse] event=%q data=%s\n", ev.Event, ev.Data)
 		}
 		return r.handle(ev)
@@ -338,7 +338,7 @@ func (r *buddyRenderer) clearNarrationLine() {
 	}
 }
 
-func runBuddyEscalations(cmd *cobra.Command, args []string) error {
+func runSupport(cmd *cobra.Command, args []string) error {
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -346,7 +346,10 @@ func runBuddyEscalations(cmd *cobra.Command, args []string) error {
 	applyBuddyURL(client)
 
 	url := client.BuddyURL("/v1/aiassist/buddy-ext/escalations")
-	var resp []api.BuddyEscalation
+	// Real response shape (from `data_adapters/buddy_escalation.py`):
+	//   { "api_id": "...", "status": "ok", "data": { "escalations": [ ... ] } }
+	// Decode the wrapper, then surface the inner slice to the user.
+	var resp api.BuddyEscalationsResponse
 	apiErr, err := client.Do("GET", url, nil, nil, &resp)
 	if err != nil {
 		return err
@@ -357,16 +360,17 @@ func runBuddyEscalations(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
+	items := resp.Data.Escalations
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONSuccess(os.Stdout, items, nil)
 	}
-	if len(resp) == 0 {
+	if len(items) == 0 {
 		fmt.Fprintln(os.Stderr, "no escalations.")
 		return nil
 	}
-	rows := [][]string{{"ID", "SUBJECT", "STATUS", "CREATED"}}
-	for _, e := range resp {
-		rows = append(rows, []string{e.ID, e.Subject, e.Status, e.CreatedAt})
+	rows := [][]string{{"UUID", "SUMMARY", "STATUS", "CREATED", "PYLON TICKET"}}
+	for _, e := range items {
+		rows = append(rows, []string{e.UUID, e.EscalationSummary, e.Status, e.CreatedAt, e.PylonTicketID})
 	}
 	return output.Table(os.Stdout, rows)
 }

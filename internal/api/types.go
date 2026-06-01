@@ -673,6 +673,13 @@ type BuddyTurn struct {
 }
 
 // BuddyUserContext personalises Buddy's responses with account context.
+//
+// Field shape mirrors the server's strict Pydantic model — notably, `plan` is
+// an enum (free_trial / professional / enterprise) and a bare account_type
+// (e.g. "standard") 400s the request, so the CLI omits it rather than
+// guessing. Any unknown field on the server is silently dropped (extra:
+// ignore), so a `callUUID` here would be a no-op; voice-debug context is
+// carried inline in the chat message instead.
 type BuddyUserContext struct {
 	Email     string `json:"email,omitempty"`
 	Plan      string `json:"plan,omitempty"`
@@ -680,7 +687,6 @@ type BuddyUserContext struct {
 	CountryID string `json:"countryId,omitempty"`
 	Balance   string `json:"balance,omitempty"`
 	Currency  string `json:"currency,omitempty"`
-	CallUUID  string `json:"callUUID,omitempty"` // CLI-only: voice-debug context
 }
 
 // BuddyChatRequest is the POST body for /v1/aiassist/buddy-ext/chat.
@@ -692,12 +698,23 @@ type BuddyChatRequest struct {
 	PageURL     string            `json:"pageUrl,omitempty"`
 }
 
-// BuddyEscalation is one entry from GET /v1/aiassist/buddy-ext/escalations.
-// Shape isn't fully specified upstream — verify field names live during
-// integration testing and adjust if needed.
+// BuddyEscalation is one row from GET /v1/aiassist/buddy-ext/escalations.
+// Shape mirrors the aiassist `BuddyEscalation` ORM model surfaced by
+// `data_adapters/buddy_escalation.list_escalations()`.
 type BuddyEscalation struct {
-	ID        string `json:"id,omitempty"`
-	Subject   string `json:"subject,omitempty"`
-	Status    string `json:"status,omitempty"`
-	CreatedAt string `json:"created_at,omitempty"`
+	UUID              string `json:"uuid,omitempty"`
+	Status            string `json:"status,omitempty"`
+	EscalationSummary string `json:"escalation_summary,omitempty"`
+	CreatedAt         string `json:"created_at,omitempty"`
+	PylonTicketID     string `json:"pylon_ticket_id,omitempty"`
+	PylonContactID    string `json:"pylon_contact_id,omitempty"`
+}
+
+// BuddyEscalationsResponse is the standard Plivo envelope returned by the
+// escalations endpoint: { api_id, status, data: { escalations: [...] } }.
+type BuddyEscalationsResponse struct {
+	APIID string `json:"api_id"`
+	Data  struct {
+		Escalations []BuddyEscalation `json:"escalations"`
+	} `json:"data"`
 }
