@@ -1,5 +1,3 @@
-//go:build internal
-
 package api
 
 import (
@@ -75,7 +73,9 @@ func (c *Client) StreamSSE(ctx context.Context, method, fullURL string, body any
 		return fmt.Errorf("SSE HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
 	}
 
-	reader := bufio.NewReader(resp.Body)
+	// 1 MiB read buffer — Buddy narration frames can be a few KB; default 4 KiB
+	// works (ReadString grows as needed) but a larger buffer is more efficient.
+	reader := bufio.NewReaderSize(resp.Body, 1<<20)
 	var ev SSEEvent
 	for {
 		line, err := reader.ReadString('\n')
