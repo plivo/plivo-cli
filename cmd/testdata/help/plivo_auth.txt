@@ -1,12 +1,11 @@
-Manage credentials and profiles
+Manage credential profiles (list / use / remove / whoami)
 
 Usage:
   plivo auth [command]
 
 Available Commands:
   list        List configured profiles
-  login       Add or update a credential profile
-  remove      Remove a profile
+  remove      Remove a profile (use `plivo logout` for the active profile)
   use         Set the active profile
   whoami      Verify credentials and print active account
 
