@@ -11,7 +11,7 @@ JSON (stderr when piped or `-o json`):
   "error": {
     "code":        "AUTH_INVALID",
     "message":     "Credentials were rejected.",
-    "hint":        "Run `plivo auth whoami` to verify, or `plivo auth login` to re-enter.",
+    "hint":        "Run `plivo auth whoami` to verify, or `plivo login` to re-enter.",
     "retryable":   false,
     "status_code": 401,
     "request_id":  "abc123",
@@ -28,7 +28,7 @@ Plain (TTY):
 
   code:        AUTH_INVALID
   http:        401
-  hint:        Run `plivo auth whoami` to verify, or `plivo auth login` to re-enter.
+  hint:        Run `plivo auth whoami` to verify, or `plivo login` to re-enter.
   request_id:  abc123
 ```
 

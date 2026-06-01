@@ -36,7 +36,7 @@ Wire up a voice agent in a few minutes:
 
 ```bash
 # 1. Authenticate (stores a profile in ~/.plivo/config.toml, with the token in the OS keychain)
-plivo auth login
+plivo login
 
 # 2. Confirm your account and see your numbers
 plivo auth whoami
@@ -72,7 +72,7 @@ plivo support           # list your past support escalations
 
 Tokens stream as they arrive; long voice-debug runs (2–5 min) print live status until the root cause lands. Ctrl-C cancels cleanly. `-o json` emits one JSONL event per SSE frame for scripting and AI agents.
 
-You can also pass credentials via environment variables instead of `plivo auth login`:
+You can also pass credentials via environment variables instead of `plivo login`:
 
 ```bash
 export PLIVO_AUTH_ID=MAxxxxxxxxxxxxxxxxxxxx

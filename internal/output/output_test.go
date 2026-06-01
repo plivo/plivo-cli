@@ -113,7 +113,7 @@ func TestJSONSuccess_prettyPrintsWithIndent(t *testing.T) {
 
 func TestJSONError_includesRequiredFields(t *testing.T) {
 	var buf bytes.Buffer
-	JSONError(&buf, "AUTH_INVALID", "bad creds", "re-run plivo auth login",
+	JSONError(&buf, "AUTH_INVALID", "bad creds", "re-run plivo login",
 		"rid-123", "https://example.com/docs", false, 401,
 		map[string]any{"flag": "--profile"})
 
@@ -132,7 +132,7 @@ func TestJSONError_includesRequiredFields(t *testing.T) {
 	}
 	mustEqual("code", "AUTH_INVALID")
 	mustEqual("message", "bad creds")
-	mustEqual("hint", "re-run plivo auth login")
+	mustEqual("hint", "re-run plivo login")
 	mustEqual("retryable", false)
 	mustEqual("status_code", float64(401))
 	mustEqual("request_id", "rid-123")

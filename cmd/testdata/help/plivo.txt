@@ -12,9 +12,11 @@ Available Commands:
   account     Inspect and update the active Plivo account
   agent       Manage Plivo Vibe AI agents (coming soon)
   ask         Ask Plivo's AI assistant (streams the answer as it comes)
-  auth        Manage credentials and profiles
+  auth        Manage credential profiles (list / use / remove / whoami)
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
+  login       Log in to Plivo (saves credentials securely to the OS keychain)
+  logout      Log out a profile (deletes its entry + removes the auth_token from the OS keychain)
   lookup      Carrier + format lookup for an E.164 number (lookup.plivo.com)
   message     Send messages (SMS/MMS/WhatsApp); manage 10DLC, powerpacks, toll-free
   numbers     Manage account phone numbers

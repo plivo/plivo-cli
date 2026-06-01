@@ -204,7 +204,7 @@ func FromHTTP(statusCode int, requestID string, body []byte) *Error {
 	switch {
 	case statusCode == http.StatusUnauthorized:
 		e.Code = CodeAuthInvalid
-		e.Hint = "Credentials were rejected. Try `plivo auth whoami` to verify, or `plivo auth login` to re-enter."
+		e.Hint = "Credentials were rejected. Try `plivo auth whoami` to verify, or `plivo login` to re-enter."
 	case statusCode == http.StatusForbidden:
 		e.Code = CodeAuthForbidden
 		e.Hint = "This account lacks permission for this resource. Check role/scope or contact support."

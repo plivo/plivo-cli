@@ -1,0 +1,38 @@
+Log in to Plivo and save credentials for subsequent commands.
+
+The auth_token is stored in your OS keychain (macOS Keychain, Windows
+Credential Manager, Linux Secret Service). The CLI falls back to writing
+the token inline in ~/.plivo/config.toml (chmod 0600) only when no
+keychain is available.
+
+By default, the CLI validates the credentials by calling GET /Account/
+before saving — use --no-verify to skip if you're offline or hitting a
+local mock.
+
+Usage:
+  plivo login [flags]
+
+Examples:
+  plivo login                                  # prompts for both
+  plivo login --auth-id MAxxxxxxxxxxxxxxxxxxxx   # prompts for token only
+  echo "$TOKEN" | plivo login --auth-id MAxx --auth-token-stdin
+  plivo login --name staging                     # save under a named profile
+
+Flags:
+      --auth-id string     Plivo auth_id (prompted if omitted)
+      --auth-token-stdin   read auth_token from stdin (for CI / scripts); hidden interactive prompt otherwise
+  -h, --help               help for login
+  -n, --name string        profile name to save under (default "default")
+      --no-verify          skip the GET /Account/ validation hit (offline / mock use only)
+
+Global Flags:
+      --all                auto-paginate through all pages
+      --dry-run            print the HTTP request without sending
+      --explain            explain what the command will do before executing
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts
