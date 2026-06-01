@@ -1063,6 +1063,7 @@ func runAgentRun(cmd *cobra.Command, args []string) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", version.UserAgent())
+	req.Header.Set("Client-Type", version.ClientType)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("runner request failed: %w", err)

@@ -54,6 +54,7 @@ func (c *Client) StreamSSE(ctx context.Context, method, fullURL string, body any
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("User-Agent", version.UserAgent())
+	req.Header.Set("Client-Type", version.ClientType)
 
 	// SSE needs an unbounded timeout — clone the client to avoid mutating it.
 	streamClient := &http.Client{
