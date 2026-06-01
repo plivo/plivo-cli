@@ -118,8 +118,8 @@ func TestDo_standardHeaders(t *testing.T) {
 	if cap.accept != "application/json" {
 		t.Errorf("Accept = %q", cap.accept)
 	}
-	if !strings.HasPrefix(cap.userAgent, "plivo-cli/") {
-		t.Errorf("User-Agent = %q, want plivo-cli/ prefix", cap.userAgent)
+	if !strings.HasPrefix(cap.userAgent, "Plivo-CLI/") {
+		t.Errorf("User-Agent = %q, want Plivo-CLI/ prefix", cap.userAgent)
 	}
 }
 
