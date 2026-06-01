@@ -170,9 +170,14 @@ func runAsk(cmd *cobra.Command, args []string) error {
 		return r.handle(ev)
 	})
 
-	// Ctrl-C: exit 130 directly (skip handleError which would print as a generic error).
+	// Ctrl-C: print whatever we've accumulated so the user sees a partial
+	// answer, then exit 130 (skip handleError which would print as a generic
+	// error).
 	if streamCtx.Err() == context.Canceled {
-		fmt.Fprintln(os.Stderr) // newline after any in-flight token
+		if !r.jsonMode && r.answerBuf.Len() > 0 {
+			fmt.Fprintln(os.Stdout, strings.TrimRight(r.answerBuf.String(), "\n"))
+		}
+		fmt.Fprintln(os.Stderr, "(cancelled)")
 		os.Exit(130)
 	}
 
@@ -186,10 +191,12 @@ func runAsk(cmd *cobra.Command, args []string) error {
 }
 
 // buddyRenderer turns SSE events into terminal output. In json mode it emits
-// one JSONL line per event; otherwise it streams tokens to stdout and keeps
-// narration on stderr (overwritten in place when ANSI is available). `out`
-// and `err` are injected (defaults: os.Stdout / os.Stderr) so tests can
-// capture output.
+// one JSONL line per event; otherwise it buffers tokens/message into a single
+// answer block printed once on `final` (more reliable against prompt themes
+// that re-render and clobber per-token streaming), while narration still goes
+// to stderr live (overwritten in place when ANSI is available) so long flows
+// show progress. `out` and `err` are injected (defaults: os.Stdout /
+// os.Stderr) so tests can capture output.
 type buddyRenderer struct {
 	out          io.Writer
 	err          io.Writer
@@ -224,18 +231,21 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		var d struct {
 			Text string `json:"text"`
 		}
-		_ = json.Unmarshal([]byte(ev.Data), &d)
-		r.clearNarrationLine()
-		fmt.Fprint(r.out, d.Text)
+		_ = json.Unmarshal(buddyInner(ev.Data), &d)
+		// Buffer tokens; we print the assembled answer in one block on
+		// `final`. Streaming per-token interacts badly with prompt themes
+		// that re-render after a command exits (Starship, P10k), which can
+		// clobber the streamed bytes visually. One clean block at the end
+		// is always visible.
 		r.answerBuf.WriteString(d.Text)
 
 	case "message":
 		var d struct {
 			Text string `json:"text"`
 		}
-		_ = json.Unmarshal([]byte(ev.Data), &d)
-		r.clearNarrationLine()
-		fmt.Fprint(r.out, d.Text)
+		_ = json.Unmarshal(buddyInner(ev.Data), &d)
+		// `message` is the no-stream / debugger-final shape; it REPLACES
+		// any accumulated answer rather than appending.
 		r.answerBuf.Reset()
 		r.answerBuf.WriteString(d.Text)
 
@@ -243,7 +253,7 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		var d struct {
 			Text string `json:"text"`
 		}
-		_ = json.Unmarshal([]byte(ev.Data), &d)
+		_ = json.Unmarshal(buddyInner(ev.Data), &d)
 		if r.useANSI {
 			fmt.Fprintf(r.err, "\r\033[2K%s", d.Text)
 			r.hadNarration = true
@@ -258,7 +268,7 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		var d struct {
 			Name string `json:"name"`
 		}
-		_ = json.Unmarshal([]byte(ev.Data), &d)
+		_ = json.Unmarshal(buddyInner(ev.Data), &d)
 		r.clearNarrationLine()
 		fmt.Fprintf(r.err, "🔧 calling %s\n", d.Name)
 
@@ -271,7 +281,7 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 			Success *bool  `json:"success"`
 			Error   string `json:"error"`
 		}
-		_ = json.Unmarshal([]byte(ev.Data), &d)
+		_ = json.Unmarshal(buddyInner(ev.Data), &d)
 		mark := "✓"
 		if (d.Success != nil && !*d.Success) || d.Error != "" {
 			mark = "✗"
@@ -286,7 +296,7 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 				URL   string `json:"url"`
 			} `json:"sources"`
 		}
-		_ = json.Unmarshal([]byte(ev.Data), &d)
+		_ = json.Unmarshal(buddyInner(ev.Data), &d)
 		if len(d.Sources) > 0 {
 			fmt.Fprintln(r.out, "\n\nSources:")
 			for i, s := range d.Sources {
@@ -303,30 +313,51 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 			Answer    string `json:"answer"`
 			LatencyMs int    `json:"latency_ms"`
 		}
-		_ = json.Unmarshal([]byte(ev.Data), &d)
-		// Fall back to final.answer if no tokens/message were streamed.
-		if r.answerBuf.Len() == 0 && d.Answer != "" {
-			r.clearNarrationLine()
-			fmt.Fprint(r.out, d.Answer)
+		_ = json.Unmarshal(buddyInner(ev.Data), &d)
+		r.clearNarrationLine()
+		// Print the assembled answer in one block. Prefer the buffered
+		// tokens/message; fall back to `final.answer` if neither streamed.
+		answer := r.answerBuf.String()
+		if answer == "" {
+			answer = d.Answer
+		}
+		if answer != "" {
+			fmt.Fprintln(r.out, strings.TrimRight(answer, "\n"))
 		}
 		latency := time.Since(r.startedAt)
 		if d.LatencyMs > 0 {
 			latency = time.Duration(d.LatencyMs) * time.Millisecond
 		}
-		fmt.Fprintf(r.err, "\n(done in %.1fs)\n", latency.Seconds())
+		fmt.Fprintf(r.err, "(done in %.1fs)\n", latency.Seconds())
 		return false
 
 	case "error":
 		var d struct {
 			Error string `json:"error"`
 		}
-		_ = json.Unmarshal([]byte(ev.Data), &d)
+		_ = json.Unmarshal(buddyInner(ev.Data), &d)
 		r.clearNarrationLine()
 		fmt.Fprintf(r.err, "\nbuddy error: %s\n", d.Error)
 		r.errorSeen = true
 		return false
 	}
 	return true
+}
+
+// buddyInner unwraps Buddy's SSE envelope. Each SSE frame's data field
+// carries a {"type":"<event>","data":{...}} object — the outer `type` is
+// redundant with the `event:` SSE line, but it's what aiassist emits via
+// `format_sse_event`. We want the inner `data` payload for per-event
+// unmarshalling. If the envelope is missing (defensive), fall back to the
+// raw bytes so old/test frames with a flat shape still parse.
+func buddyInner(raw string) []byte {
+	var env struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if json.Unmarshal([]byte(raw), &env) == nil && len(env.Data) > 0 {
+		return env.Data
+	}
+	return []byte(raw)
 }
 
 // clearNarrationLine wipes the live narration line on stderr if one is currently
