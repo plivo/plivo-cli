@@ -35,7 +35,7 @@ type BuddyConfig struct {
 	ShowToolCalls   *bool  `toml:"show_tool_calls,omitempty"`
 }
 
-var ErrNoCredentials = errors.New("no credentials: set PLIVO_AUTH_ID/PLIVO_AUTH_TOKEN or run `plivo auth login`")
+var ErrNoCredentials = errors.New("no credentials: set PLIVO_AUTH_ID/PLIVO_AUTH_TOKEN or run `plivo login`")
 
 // Path returns the config file path: ~/.plivo/config.toml.
 func Path() (string, error) {

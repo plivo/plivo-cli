@@ -1,29 +1,21 @@
 package cmd
 
 import (
-	"bufio"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/config"
 	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
+// authCmd hosts the profile-management subcommands (list / use / remove /
+// whoami). The login/logout verbs are top-level (`plivo login` /
+// `plivo logout`); see cmd/login.go.
 var authCmd = &cobra.Command{
 	Use:   "auth",
-	Short: "Manage credentials and profiles",
-}
-
-var authLoginName string
-
-var authLoginCmd = &cobra.Command{
-	Use:   "login",
-	Short: "Add or update a credential profile",
-	RunE:  runAuthLogin,
+	Short: "Manage credential profiles (list / use / remove / whoami)",
 }
 
 var authListCmd = &cobra.Command{
@@ -41,7 +33,7 @@ var authUseCmd = &cobra.Command{
 
 var authRemoveCmd = &cobra.Command{
 	Use:   "remove <profile>",
-	Short: "Remove a profile",
+	Short: "Remove a profile (use `plivo logout` for the active profile)",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runAuthRemove,
 }
@@ -53,61 +45,9 @@ var authWhoamiCmd = &cobra.Command{
 }
 
 func init() {
-	authLoginCmd.Flags().StringVarP(&authLoginName, "name", "n", "default", "profile name")
-	authCmd.AddCommand(authLoginCmd, authListCmd, authUseCmd, authRemoveCmd, authWhoamiCmd)
+	authCmd.AddCommand(authListCmd, authUseCmd, authRemoveCmd, authWhoamiCmd)
 	// `auth token` is registered in authToken.go (internal build tag only).
 	rootCmd.AddCommand(authCmd)
-}
-
-func runAuthLogin(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return err
-	}
-	reader := bufio.NewReader(os.Stdin)
-
-	fmt.Fprint(os.Stderr, "auth_id: ")
-	authID, err := reader.ReadString('\n')
-	if err != nil {
-		return err
-	}
-	authID = strings.TrimSpace(authID)
-
-	fmt.Fprint(os.Stderr, "auth_token: ")
-	tokBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
-	if err != nil {
-		return err
-	}
-	fmt.Fprintln(os.Stderr)
-	authToken := strings.TrimSpace(string(tokBytes))
-
-	if authID == "" || authToken == "" {
-		return fmt.Errorf("auth_id and auth_token are required")
-	}
-
-	prof := config.Profile{AuthID: authID}
-	storedInKeychain := true
-	if err := config.SetToken(authLoginName, authToken); err != nil {
-		// No usable OS keychain (e.g. a headless Linux box with no Secret
-		// Service). Fall back to storing the token in config.toml (0600).
-		prof.AuthToken = authToken
-		storedInKeychain = false
-	}
-	cfg.Profiles[authLoginName] = prof
-	if cfg.Active == "" {
-		cfg.Active = authLoginName
-	}
-	if err := config.Save(cfg); err != nil {
-		return err
-	}
-
-	path, _ := config.Path()
-	if storedInKeychain {
-		fmt.Fprintf(os.Stderr, "Saved profile %q to %s (auth token stored in your OS keychain)\n", authLoginName, path)
-	} else {
-		fmt.Fprintf(os.Stderr, "Saved profile %q to %s (OS keychain unavailable — auth token stored in the config file)\n", authLoginName, path)
-	}
-	return nil
 }
 
 func runAuthList(cmd *cobra.Command, args []string) error {
@@ -136,7 +76,7 @@ func runAuthList(cmd *cobra.Command, args []string) error {
 		rows = append(rows, []string{active, name, p.AuthID})
 	}
 	if len(rows) == 1 {
-		fmt.Fprintln(os.Stderr, "no profiles configured. Run `plivo auth login`.")
+		fmt.Fprintln(os.Stderr, "no profiles configured. Run `plivo login`.")
 		return nil
 	}
 	return output.Table(os.Stdout, rows)

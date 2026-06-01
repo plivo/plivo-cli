@@ -1,4 +1,4 @@
-Remove a profile
+Remove a profile (use `plivo logout` for the active profile)
 
 Usage:
   plivo auth remove <profile> [flags]

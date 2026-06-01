@@ -16,6 +16,7 @@ import (
 	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/zalando/go-keyring"
 )
 
 // resetAllFlags walks the command tree and resets every flag to its DefValue
@@ -111,8 +112,15 @@ func execCmd(t *testing.T, args ...string) (err error, stdout, stderr string) {
 
 // setFakeCreds populates env vars + redirects HOME so the dev's
 // ~/.plivo/config.toml doesn't override the test env.
+//
+// Also swaps the OS keychain for an in-memory mock — the underlying
+// go-keyring library talks to the system keychain regardless of HOME,
+// so tests that exercise SetToken/DeleteToken (e.g. login/logout) would
+// otherwise pop a real "Keychain Not Found" dialog on macOS. MockInit
+// is a no-op when not running under tests.
 func setFakeCreds(t *testing.T) {
 	t.Helper()
+	keyring.MockInit()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	t.Setenv("USERPROFILE", tmp)

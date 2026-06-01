@@ -8,14 +8,14 @@ import (
 )
 
 // These assertions only hold in the internal build (`-tags internal`), where
-// the agent / contacto / auth-token surfaces are compiled in. The public-build
-// counterparts in registration_test.go + safety_test.go deliberately omit them.
+// the agent / auth-token surfaces are compiled in. The public-build
+// counterparts in registration_test.go + safety_test.go deliberately omit
+// them. (`plivo contacto …` was retired in favour of the unified `plivo
+// login` flow — see cmd/login.go.)
 
-func TestInternal_agentContactoGroupsRegistered(t *testing.T) {
-	for _, g := range []string{"agent", "contacto"} {
-		if findCmdNoFail(g) == nil {
-			t.Errorf("internal build: top-level %q not registered", g)
-		}
+func TestInternal_agentGroupRegistered(t *testing.T) {
+	if findCmdNoFail("agent") == nil {
+		t.Errorf("internal build: top-level %q not registered", "agent")
 	}
 }
 
@@ -32,7 +32,6 @@ func TestInternal_nestedSurfaces(t *testing.T) {
 	nests := map[string][]string{
 		"auth token":    {"mint", "list", "revoke"},
 		"agent session": {"show", "clear"},
-		"contacto":      {"login", "logout", "whoami"},
 	}
 	for path, verbs := range nests {
 		parts := strings.Fields(path)
