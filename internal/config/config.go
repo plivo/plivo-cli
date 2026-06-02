@@ -17,6 +17,11 @@ type Profile struct {
 	AuthToken         string `toml:"auth_token,omitempty"`
 	DefaultSubaccount string `toml:"default_subaccount,omitempty"`
 	Region            string `toml:"region,omitempty"`
+	// Env, if set, names a non-prod hodor edge for this profile (e.g.
+	// "dev"). Resolved against cmd.loginEnvURLs at runtime. Empty (the
+	// common case) means "use the default prod edge" — we never write
+	// "prod" since that's the implicit default.
+	Env string `toml:"env,omitempty"`
 }
 
 type Config struct {

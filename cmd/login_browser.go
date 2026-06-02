@@ -52,7 +52,7 @@ type cliTokenEnvelope struct {
 //     ?state=…&code=….
 //  5. Validate state; POST /v1/accounts/cli/token with the verifier.
 //  6. Persist the bundle to ~/.plivo/config.toml + OS keychain.
-func runLoginBrowser() error {
+func runLoginBrowser(saveEnv string) error {
 	verifier, challenge, err := pkcePair()
 	if err != nil {
 		return fmt.Errorf("generate PKCE pair: %w", err)
@@ -125,6 +125,7 @@ func runLoginBrowser() error {
 	prof := config.Profile{
 		AuthID: resp.Data.PlivoAuthID,
 		Region: resp.Data.Region,
+		Env:    saveEnv, // empty for prod (the default); "dev" / "staging" persisted
 	}
 	storedInKeychain := true
 	if err := config.SetToken(loginName, resp.Data.PlivoAuthToken); err != nil {

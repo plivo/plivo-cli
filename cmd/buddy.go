@@ -82,6 +82,15 @@ func init() {
 //	--buddy-url  >  PLIVO_BUDDY_URL  >  [buddy].hodor_url  >  built-in prod default
 //
 // (Built-in default is already set by api.New, so it's the no-op fallthrough.)
+// applyBuddyURL resolves the hodor edge URL with precedence:
+//
+//	--buddy-url flag  >  PLIVO_BUDDY_URL env  >  active profile's Env  >
+//	[buddy].hodor_url config  >  built-in prod default (already on c.BuddyBaseURL)
+//
+// The "active profile's Env" step lets `plivo login --env dev` once and
+// have every subsequent command (ask, support, login --browser …) hit
+// the right edge without further flags. Only recognised envs apply —
+// unknown profile env values fall through.
 func applyBuddyURL(c *api.Client) {
 	if buddyURLOverride != "" {
 		c.BuddyBaseURL = buddyURLOverride
@@ -91,7 +100,19 @@ func applyBuddyURL(c *api.Client) {
 		c.BuddyBaseURL = u
 		return
 	}
-	if cfg, err := config.Load(); err == nil && cfg.Buddy.HodorURL != "" {
+	cfg, err := config.Load()
+	if err != nil {
+		return
+	}
+	if cfg.Active != "" {
+		if prof, ok := cfg.Profiles[cfg.Active]; ok && prof.Env != "" {
+			if u, ok := resolveLoginEnv(prof.Env); ok {
+				c.BuddyBaseURL = u
+				return
+			}
+		}
+	}
+	if cfg.Buddy.HodorURL != "" {
 		c.BuddyBaseURL = cfg.Buddy.HodorURL
 	}
 }

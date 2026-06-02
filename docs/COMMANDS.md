@@ -594,6 +594,7 @@ Flags:
       --auth-id string     Plivo auth_id (prompted if omitted)
       --auth-token-stdin   read auth_token from stdin (for CI / scripts); hidden interactive prompt otherwise
       --browser            log in via your default browser (PKCE loopback OAuth); recommended
+      --env string         target environment (default "prod"; e.g. "dev" — internal builds only). Persisted on the profile so subsequent commands inherit it.
   -n, --name string        profile name to save under (default "default")
       --no-verify          skip the GET /Account/ validation hit (offline / mock use only)
 ```
