@@ -21,6 +21,7 @@ Available Commands:
   message     Send messages (SMS/MMS/WhatsApp); manage 10DLC, powerpacks, toll-free
   numbers     Manage account phone numbers
   support     List your past support escalations (filed via `plivo ask`)
+  upgrade     Upgrade plivo to the latest release
   verify      Plivo Verify — OTP / phone-number verification sessions
   voice       Voice — calls, conferences, multiparty, recordings, endpoints
 
