@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"net"
 	"net/http"
 	"net/url"
@@ -11,6 +12,55 @@ import (
 	"testing"
 	"time"
 )
+
+// TestCLITokenEnvelope_unmarshalsHodorResponse locks in the wire shape we
+// expect from hodor's /v1/accounts/cli/token: the standard {api_id, data}
+// envelope. If hodor's response wrapper drifts (data → result, or no
+// envelope at all), this fails loudly before the silent empty-bundle path
+// in runLoginBrowser surfaces it as 'token redemption returned an empty bundle'.
+func TestCLITokenEnvelope_unmarshalsHodorResponse(t *testing.T) {
+	// Same wire shape hodor emits today (utils.BuildResponse(metaData, response, "", nil, nil)).
+	raw := `{
+		"api_id": "abc-123",
+		"data": {
+			"plivo_auth_id":   "MAFROMHODOR",
+			"plivo_auth_token": "tok-xyz",
+			"aom_uuid":         "aom-uuid-1",
+			"region":           "us-east-1"
+		}
+	}`
+
+	var got cliTokenEnvelope
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unmarshal envelope: %v", err)
+	}
+	if got.Data.PlivoAuthID != "MAFROMHODOR" {
+		t.Errorf("PlivoAuthID = %q", got.Data.PlivoAuthID)
+	}
+	if got.Data.PlivoAuthToken != "tok-xyz" {
+		t.Errorf("PlivoAuthToken = %q", got.Data.PlivoAuthToken)
+	}
+	if got.Data.AomUUID != "aom-uuid-1" {
+		t.Errorf("AomUUID = %q", got.Data.AomUUID)
+	}
+	if got.Data.Region != "us-east-1" {
+		t.Errorf("Region = %q", got.Data.Region)
+	}
+}
+
+// TestCLITokenEnvelope_emptyDataYieldsBlankBundle guards the "data wrapper
+// is missing or empty" failure mode — runLoginBrowser must NOT silently
+// store a blank profile. The empty-bundle guard in runLoginBrowser handles
+// this; this test just locks the unmarshal half of the contract.
+func TestCLITokenEnvelope_emptyDataYieldsBlankBundle(t *testing.T) {
+	var got cliTokenEnvelope
+	if err := json.Unmarshal([]byte(`{"api_id":"x","data":{}}`), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Data.PlivoAuthID != "" || got.Data.PlivoAuthToken != "" {
+		t.Errorf("expected blank fields on empty data block, got: %+v", got)
+	}
+}
 
 // TestPkcePair_satisfiesS256_relation: the verifier returned must hash
 // (via SHA256 → base64url no-pad) to exactly the challenge. This is what
