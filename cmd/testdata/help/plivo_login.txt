@@ -13,14 +13,16 @@ Usage:
   plivo login [flags]
 
 Examples:
-  plivo login                                  # prompts for both
-  plivo login --auth-id MAxxxxxxxxxxxxxxxxxxxx   # prompts for token only
+  plivo login --browser                             # opens browser (recommended)
+  plivo login                                       # interactive prompts
+  plivo login --auth-id MAxxxxxxxxxxxxxxxxxxxx      # prompts for token only
   echo "$TOKEN" | plivo login --auth-id MAxx --auth-token-stdin
-  plivo login --name staging                     # save under a named profile
+  plivo login --name staging                        # save under a named profile
 
 Flags:
       --auth-id string     Plivo auth_id (prompted if omitted)
       --auth-token-stdin   read auth_token from stdin (for CI / scripts); hidden interactive prompt otherwise
+      --browser            log in via your default browser (PKCE loopback OAuth); recommended
   -h, --help               help for login
   -n, --name string        profile name to save under (default "default")
       --no-verify          skip the GET /Account/ validation hit (offline / mock use only)
