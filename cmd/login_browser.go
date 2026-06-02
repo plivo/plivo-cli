@@ -48,8 +48,9 @@ type cliTokenEnvelope struct {
 //  2. Bind 127.0.0.1:0 (kernel picks an ephemeral port).
 //  3. Open the user's default browser to
 //     ${buddyBase}/v1/accounts/cli/authorize with the loopback cb URL.
-//  4. Wait (60s) for the browser to land back on our local listener with
-//     ?state=…&code=….
+//  4. Wait (5m) for the browser to land back on our local listener with
+//     ?state=…&code=…. Matches hodor's 10-min state TTL with comfortable
+//     headroom for login / 2FA / consent click-through.
 //  5. Validate state; POST /v1/accounts/cli/token with the verifier.
 //  6. Persist the bundle to ~/.plivo/config.toml + OS keychain.
 func runLoginBrowser(saveEnv string) error {
@@ -88,8 +89,10 @@ func runLoginBrowser(saveEnv string) error {
 		fmt.Fprintf(os.Stderr, "(could not auto-open the browser: %v)\n", err)
 	}
 
-	// Wait up to 60s for the callback from the Console redirect chain.
-	cbCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	// Wait up to 5m for the callback from the Console redirect chain.
+	// hodor's state TTL is 10 min — 5 min on the CLI side leaves plenty of
+	// room for login + 2FA + consent without the CLI giving up first.
+	cbCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	code, err := awaitLoopbackCallback(cbCtx, listener, state)
 	if err != nil {
@@ -237,7 +240,7 @@ func awaitLoopbackCallback(ctx context.Context, listener net.Listener, expectedS
 	case r := <-done:
 		return r.code, r.err
 	case <-ctx.Done():
-		return "", fmt.Errorf("timed out waiting for browser callback (60s); retry or use `plivo login --auth-id …`")
+		return "", fmt.Errorf("timed out waiting for browser callback (5m); retry or use `plivo login --auth-id …`")
 	}
 }
 
