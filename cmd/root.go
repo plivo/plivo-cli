@@ -47,6 +47,27 @@ func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		handleError(err)
 	}
+	// Success path only: print a quiet "newer version available" nudge if
+	// the upgrade cache has seen a fresher release tag. No-op on errors
+	// (don't drown a real failure under nudge noise), in scripts/CI (not a
+	// TTY), or when invoked as `plivo upgrade …` itself.
+	maybePrintUpdateHint(firstCmdWord(os.Args[1:]))
+}
+
+// firstCmdWord returns the first non-flag arg from argv (without the
+// program name). Used to identify which subcommand the user invoked so
+// `plivo upgrade` can skip its own nudge.
+func firstCmdWord(args []string) string {
+	for i, a := range args {
+		if strings.HasPrefix(a, "-") {
+			continue
+		}
+		if i > 0 && valueFlags[args[i-1]] {
+			continue
+		}
+		return a
+	}
+	return ""
 }
 
 // Root returns the fully constructed root command. Used by tools/gendocs to

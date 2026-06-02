@@ -1,0 +1,34 @@
+Upgrade plivo to the latest GitHub release.
+
+Fetches the latest release tag, compares it to the running version, then
+downloads the matching binary for your OS/arch and atomically replaces the
+current binary in place.
+
+If you installed via Homebrew this command will refuse — use `brew upgrade plivo` instead.
+
+Usage:
+  plivo upgrade [flags]
+
+Examples:
+  plivo upgrade                 # install latest
+  plivo upgrade --check         # check only, don't install
+  plivo upgrade --version v0.2.0
+  plivo upgrade --force         # reinstall even if already on latest
+
+Flags:
+      --check            report whether a newer release exists, but don't install
+      --force            reinstall even if the running binary is already on the target release
+  -h, --help             help for upgrade
+      --version string   install a specific release tag instead of latest (e.g. v0.2.0)
+
+Global Flags:
+      --all                auto-paginate through all pages
+      --dry-run            print the HTTP request without sending
+      --explain            explain what the command will do before executing
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts
