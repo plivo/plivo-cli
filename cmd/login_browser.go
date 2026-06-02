@@ -99,7 +99,21 @@ func runLoginBrowser(saveEnv string) error {
 		return err
 	}
 
-	// Redeem the code for the creds bundle.
+	// Redeem the code for the creds bundle, then persist.
+	return redeemAndPersist(client, state, code, verifier, loginName, saveEnv)
+}
+
+// redeemAndPersist performs the second half of the loopback-OAuth flow: POST
+// /v1/accounts/cli/token with the (state, code, code_verifier) triple, then
+// drop the returned bundle into ~/.plivo/config.toml + the OS keychain.
+//
+// Split out from runLoginBrowser so the wire + persistence half is
+// independently testable against an httptest hodor mock without having to
+// drive a real browser. The exact behaviour (error wrapping, empty-bundle
+// guard, keychain fallback, "first profile becomes active" rule, stderr
+// confirmation) matches what runLoginBrowser used to do inline — keep them
+// in sync if you touch one.
+func redeemAndPersist(client *api.Client, state, code, verifier, profileName, saveEnv string) error {
 	tokenURL := client.BuddyURL("/v1/accounts/cli/token")
 	body := map[string]string{
 		"state":         state,
@@ -131,13 +145,13 @@ func runLoginBrowser(saveEnv string) error {
 		Env:    saveEnv, // empty for prod (the default); "dev" / "staging" persisted
 	}
 	storedInKeychain := true
-	if err := config.SetToken(loginName, resp.Data.PlivoAuthToken); err != nil {
+	if err := config.SetToken(profileName, resp.Data.PlivoAuthToken); err != nil {
 		prof.AuthToken = resp.Data.PlivoAuthToken
 		storedInKeychain = false
 	}
-	cfg.Profiles[loginName] = prof
+	cfg.Profiles[profileName] = prof
 	if cfg.Active == "" {
-		cfg.Active = loginName
+		cfg.Active = profileName
 	}
 	if err := config.Save(cfg); err != nil {
 		return err
