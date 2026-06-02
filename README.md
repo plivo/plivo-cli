@@ -30,6 +30,15 @@ irm https://raw.githubusercontent.com/plivo/plivo-cli/beta/install.ps1 | iex
 
 Both installers fetch the matching release binary (`darwin`/`linux`/`windows` × `amd64`/`arm64`). Override with `PLIVO_CLI_VERSION` (a release tag) or `PLIVO_INSTALL_DIR` (target directory).
 
+### Upgrade
+
+```bash
+plivo upgrade           # fetch latest release, atomic in-place replace
+plivo upgrade --check   # check only, don't install
+```
+
+The CLI also prints a one-line "newer version available" hint on stderr when a TTY is attached; the check runs at most once every 24h. Set `PLIVO_NO_UPDATE_CHECK=1` to silence it. Homebrew installs are detected and routed to `brew upgrade plivo` instead.
+
 ## Quickstart
 
 Wire up a voice agent in a few minutes:
