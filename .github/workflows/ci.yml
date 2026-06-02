@@ -90,7 +90,7 @@ jobs:
           # `contacto` + `auth token` are internal-only (build tag `internal`)
           # and absent from this public build; `agent` ships as a coming-soon stub.
           groups=(
-            "account" "agent" "ask" "auth" "lookup" "message" "numbers" "support" "verify" "voice"
+            "account" "agent" "ask" "auth" "lookup" "message" "numbers" "support" "upgrade" "verify" "voice"
             "account subaccounts" "account applications"
             "numbers masking" "numbers masking sessions"
             "numbers compliance" "numbers compliance requirements"
