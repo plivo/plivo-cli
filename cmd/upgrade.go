@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -73,6 +74,12 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		rel, err = release.FetchLatest(ctx, "")
 	}
 	if err != nil {
+		// "No releases yet" is informational for both the default and
+		// --check paths — surface it as a friendly message, not exit 1.
+		if errors.Is(err, release.ErrNoReleases) {
+			fmt.Fprintln(os.Stderr, "No releases published yet — nothing to upgrade to.")
+			return nil
+		}
 		return err
 	}
 
