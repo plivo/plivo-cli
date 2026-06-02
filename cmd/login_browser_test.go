@@ -114,6 +114,7 @@ func TestBuildAuthorizeURL_hasRequiredParams(t *testing.T) {
 		"http://127.0.0.1:54321/",
 		"my-state",
 		"my-challenge",
+		"Mac MacBook-Pro",
 	)
 	u, err := url.Parse(got)
 	if err != nil {
@@ -126,7 +127,7 @@ func TestBuildAuthorizeURL_hasRequiredParams(t *testing.T) {
 		t.Errorf("path = %q", u.Path)
 	}
 	q := u.Query()
-	for _, k := range []string{"cb", "state", "code_challenge", "code_challenge_method"} {
+	for _, k := range []string{"cb", "state", "code_challenge", "code_challenge_method", "device"} {
 		if q.Get(k) == "" {
 			t.Errorf("missing query param: %s", k)
 		}
@@ -134,9 +135,28 @@ func TestBuildAuthorizeURL_hasRequiredParams(t *testing.T) {
 	if q.Get("code_challenge_method") != "S256" {
 		t.Errorf("code_challenge_method = %q, want S256", q.Get("code_challenge_method"))
 	}
+	if got := q.Get("device"); got != "Mac MacBook-Pro" {
+		t.Errorf("device = %q, want %q", got, "Mac MacBook-Pro")
+	}
 	// cb should be the exact loopback URL passed in.
 	if q.Get("cb") != "http://127.0.0.1:54321/" {
 		t.Errorf("cb = %q", q.Get("cb"))
+	}
+}
+
+// Empty device hint must not surface as `?device=` in the URL — Console's
+// fallback copy ("your machine") relies on the param being absent, not
+// empty-but-present.
+func TestBuildAuthorizeURL_omitsEmptyDevice(t *testing.T) {
+	got := buildAuthorizeURL(
+		"https://global-auth-api.contacto.com/",
+		"http://127.0.0.1:54321/",
+		"my-state",
+		"my-challenge",
+		"",
+	)
+	if strings.Contains(got, "device=") {
+		t.Errorf("URL must omit device when empty, got %q", got)
 	}
 }
 
