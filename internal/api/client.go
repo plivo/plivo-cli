@@ -153,9 +153,17 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
-	if c.IsScopedToken() {
+	// Skip auth-header injection when both creds are empty: lets callers
+	// hit unauthenticated endpoints (e.g. `plivo login --browser`'s
+	// /v1/accounts/cli/token, which uses PKCE state+code+verifier as
+	// the credential triple) without sending a stray `Authorization:
+	// Basic Og==`.
+	switch {
+	case c.IsScopedToken():
 		req.Header.Set("Authorization", "Bearer "+c.AuthToken)
-	} else {
+	case c.AuthID == "" && c.AuthToken == "":
+		// no-op — unauthenticated request
+	default:
 		req.SetBasicAuth(c.AuthID, c.AuthToken)
 	}
 	if body != nil {

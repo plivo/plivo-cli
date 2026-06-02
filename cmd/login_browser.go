@@ -20,6 +20,23 @@ import (
 	"github.com/plivo/plivo-cli/internal/config"
 )
 
+// cliTokenEnvelope is the response shape from hodor's
+// /v1/accounts/cli/token. Standard Plivo envelope (api_id + data); we
+// only need the `data` block. The Contacto JWT is intentionally NOT
+// part of the bundle (see hodor's CLIAuthCodeEntry docstring).
+//
+// Keep this as a package-level type — the round-trip test in
+// login_browser_test.go uses it to lock in the wire shape and fail fast
+// if hodor's envelope wrapper drifts.
+type cliTokenEnvelope struct {
+	Data struct {
+		PlivoAuthID    string `json:"plivo_auth_id"`
+		PlivoAuthToken string `json:"plivo_auth_token"`
+		AomUUID        string `json:"aom_uuid"`
+		Region         string `json:"region"`
+	} `json:"data"`
+}
+
 // runLoginBrowser implements `plivo login --browser`: the loopback-OAuth
 // (PKCE) flow that hands off to hodor's /v1/accounts/cli/{authorize,
 // exchange, token} endpoints + the Contacto Console's /cli/authorize
@@ -86,15 +103,7 @@ func runLoginBrowser() error {
 		"code":          code,
 		"code_verifier": verifier,
 	}
-	var resp struct {
-		Data struct {
-			PlivoAuthID       string `json:"plivo_auth_id"`
-			PlivoAuthToken    string `json:"plivo_auth_token"`
-			ContactoAuthToken string `json:"contacto_auth_token"`
-			AomUUID           string `json:"aom_uuid"`
-			Region            string `json:"region"`
-		} `json:"data"`
-	}
+	var resp cliTokenEnvelope
 	apiErr, gerr := client.Do("POST", tokenURL, body, nil, &resp)
 	if gerr != nil {
 		return clierr.NetworkError("redeeming CLI token", gerr)
