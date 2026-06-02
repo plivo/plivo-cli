@@ -5,12 +5,20 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/plivo/plivo-cli/internal/api"
+	"github.com/plivo/plivo-cli/internal/clierr"
+	"github.com/plivo/plivo-cli/internal/config"
+	"github.com/zalando/go-keyring"
 )
 
 // TestCLITokenEnvelope_unmarshalsHodorResponse locks in the wire shape we
@@ -106,6 +114,7 @@ func TestBuildAuthorizeURL_hasRequiredParams(t *testing.T) {
 		"http://127.0.0.1:54321/",
 		"my-state",
 		"my-challenge",
+		"Mac MacBook-Pro",
 	)
 	u, err := url.Parse(got)
 	if err != nil {
@@ -118,7 +127,7 @@ func TestBuildAuthorizeURL_hasRequiredParams(t *testing.T) {
 		t.Errorf("path = %q", u.Path)
 	}
 	q := u.Query()
-	for _, k := range []string{"cb", "state", "code_challenge", "code_challenge_method"} {
+	for _, k := range []string{"cb", "state", "code_challenge", "code_challenge_method", "device"} {
 		if q.Get(k) == "" {
 			t.Errorf("missing query param: %s", k)
 		}
@@ -126,9 +135,28 @@ func TestBuildAuthorizeURL_hasRequiredParams(t *testing.T) {
 	if q.Get("code_challenge_method") != "S256" {
 		t.Errorf("code_challenge_method = %q, want S256", q.Get("code_challenge_method"))
 	}
+	if got := q.Get("device"); got != "Mac MacBook-Pro" {
+		t.Errorf("device = %q, want %q", got, "Mac MacBook-Pro")
+	}
 	// cb should be the exact loopback URL passed in.
 	if q.Get("cb") != "http://127.0.0.1:54321/" {
 		t.Errorf("cb = %q", q.Get("cb"))
+	}
+}
+
+// Empty device hint must not surface as `?device=` in the URL — Console's
+// fallback copy ("your machine") relies on the param being absent, not
+// empty-but-present.
+func TestBuildAuthorizeURL_omitsEmptyDevice(t *testing.T) {
+	got := buildAuthorizeURL(
+		"https://global-auth-api.contacto.com/",
+		"http://127.0.0.1:54321/",
+		"my-state",
+		"my-challenge",
+		"",
+	)
+	if strings.Contains(got, "device=") {
+		t.Errorf("URL must omit device when empty, got %q", got)
 	}
 }
 
@@ -236,4 +264,271 @@ func itoa(i int) string {
 		i /= 10
 	}
 	return string(buf[pos:])
+}
+
+// ─── End-to-end coverage for redeemAndPersist ────────────────────────────────
+//
+// These tests exercise the second half of `plivo login --browser`: POST to
+// hodor's /v1/accounts/cli/token, validate the envelope, and persist the
+// bundle to ~/.plivo/config.toml + the OS keychain. They use a real
+// httptest.Server as the hodor mock and an in-memory keyring + temp HOME so
+// the developer's real config / Keychain never gets touched.
+//
+// The browser + loopback half is already covered by
+// TestAwaitLoopbackCallback_* above; CSRF state-mismatch lives there.
+
+// hodorTokenMock returns an httptest.Server that mimics hodor's
+// /v1/accounts/cli/token endpoint. It records each POST body (so a test can
+// assert on the PKCE verifier round-trip) and replies with status / body
+// supplied by the caller.
+type hodorTokenMock struct {
+	srv      *httptest.Server
+	mu       sync.Mutex
+	hits     []map[string]string // each entry is the decoded JSON body of one POST
+	respCode int
+	respBody string
+}
+
+func newHodorTokenMock(t *testing.T, respCode int, respBody string) *hodorTokenMock {
+	t.Helper()
+	m := &hodorTokenMock{respCode: respCode, respBody: respBody}
+	m.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/accounts/cli/token" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		raw, _ := io.ReadAll(r.Body)
+		_ = r.Body.Close()
+		var got map[string]string
+		_ = json.Unmarshal(raw, &got)
+		m.mu.Lock()
+		m.hits = append(m.hits, got)
+		m.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(m.respCode)
+		_, _ = w.Write([]byte(m.respBody))
+	}))
+	t.Cleanup(m.srv.Close)
+	return m
+}
+
+func (m *hodorTokenMock) snapshot() []map[string]string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]map[string]string, len(m.hits))
+	copy(out, m.hits)
+	return out
+}
+
+// setupBrowserLoginTestEnv wires up the bits redeemAndPersist needs:
+//   - in-memory keychain so SetToken doesn't pop a real macOS Keychain prompt
+//   - temp HOME so config.Save writes to t.TempDir() instead of ~/.plivo
+//   - an api.Client pointed at the supplied mock hodor server
+//
+// Returns the client + a deterministic profile name to use in assertions.
+func setupBrowserLoginTestEnv(t *testing.T, mockURL string) (*api.Client, string) {
+	t.Helper()
+	keyring.MockInit()
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
+	// Make sure no stray env-var-creds short-circuit Resolve elsewhere.
+	t.Setenv("PLIVO_AUTH_ID", "")
+	t.Setenv("PLIVO_AUTH_TOKEN", "")
+
+	client := api.New("", "", 5*time.Second)
+	client.BuddyBaseURL = mockURL
+	return client, "browser-login-test"
+}
+
+// TestRedeemAndPersist_happyPath drives redeemAndPersist against a mock
+// hodor that returns the success envelope, then asserts the bundle landed
+// in config + keychain AND that the POST body carried the same code_verifier
+// the test handed in (the PKCE round-trip the hodor side enforces).
+func TestRedeemAndPersist_happyPath(t *testing.T) {
+	const (
+		state    = "state-abc"
+		code     = "code-xyz"
+		verifier = "verifier-deadbeef"
+		authID   = "MA_FAKE_ID"
+		token    = "fake_token_for_testing"
+		aomUUID  = "aom-uuid-7"
+		region   = "us-east-1"
+	)
+
+	mock := newHodorTokenMock(t, http.StatusOK, `{
+		"api_id": "req-id-1",
+		"data": {
+			"plivo_auth_id":   "`+authID+`",
+			"plivo_auth_token": "`+token+`",
+			"aom_uuid":         "`+aomUUID+`",
+			"region":           "`+region+`"
+		},
+		"errors": null,
+		"message": ""
+	}`)
+	client, profileName := setupBrowserLoginTestEnv(t, mock.srv.URL)
+
+	if err := redeemAndPersist(client, state, code, verifier, profileName, ""); err != nil {
+		t.Fatalf("redeemAndPersist: %v", err)
+	}
+
+	// 1. The request hit hodor exactly once with the right (state, code,
+	//    code_verifier) triple. The PKCE verifier round-trip is the security
+	//    invariant hodor checks before issuing the bundle.
+	hits := mock.snapshot()
+	if len(hits) != 1 {
+		t.Fatalf("hodor hits = %d, want 1", len(hits))
+	}
+	if hits[0]["state"] != state {
+		t.Errorf("state on wire = %q, want %q", hits[0]["state"], state)
+	}
+	if hits[0]["code"] != code {
+		t.Errorf("code on wire = %q, want %q", hits[0]["code"], code)
+	}
+	if hits[0]["code_verifier"] != verifier {
+		t.Errorf("code_verifier on wire = %q, want %q (PKCE verifier never leaves the CLI between authorize + token phases)", hits[0]["code_verifier"], verifier)
+	}
+
+	// 2. The profile landed in config.toml with the right auth_id + region
+	//    and became the active profile (first-profile-wins).
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+	prof, ok := cfg.Profiles[profileName]
+	if !ok {
+		t.Fatalf("profile %q not saved to config", profileName)
+	}
+	if prof.AuthID != authID {
+		t.Errorf("Profile.AuthID = %q, want %q", prof.AuthID, authID)
+	}
+	if prof.Region != region {
+		t.Errorf("Profile.Region = %q, want %q", prof.Region, region)
+	}
+	if prof.Env != "" {
+		t.Errorf("Profile.Env = %q, want \"\" for prod default", prof.Env)
+	}
+	if cfg.Active != profileName {
+		t.Errorf("cfg.Active = %q, want %q (first profile wins)", cfg.Active, profileName)
+	}
+
+	// 3. The auth_token went into the OS keychain (the mock one), NOT
+	//    inline in config.toml. This is the security promise — losing it
+	//    would silently regress to plaintext-token storage.
+	if prof.AuthToken != "" {
+		t.Errorf("Profile.AuthToken = %q on disk, want empty (token should be in keychain only)", prof.AuthToken)
+	}
+	got, err := config.GetToken(profileName)
+	if err != nil {
+		t.Fatalf("GetToken: %v", err)
+	}
+	if got != token {
+		t.Errorf("GetToken = %q, want %q", got, token)
+	}
+}
+
+// TestRedeemAndPersist_brokenEnvelopeShape_returnsEmptyBundle is a regression
+// test for the hodor envelope-shape bug: the success payload landed under
+// `errors` instead of `data`. The CLI must NOT silently persist a blank
+// profile in that case — it must surface "empty bundle". If a future hodor
+// refactor moves the bundle key around again, this test fails first.
+func TestRedeemAndPersist_brokenEnvelopeShape_returnsEmptyBundle(t *testing.T) {
+	// Buggy shape: success fields under `errors`, data is null.
+	mock := newHodorTokenMock(t, http.StatusOK, `{
+		"api_id": "req-id-2",
+		"data": null,
+		"errors": {
+			"plivo_auth_id":   "MA_FAKE_ID",
+			"plivo_auth_token": "fake_token_for_testing",
+			"aom_uuid":         "aom-uuid-7",
+			"region":           "us-east-1"
+		},
+		"message": ""
+	}`)
+	client, profileName := setupBrowserLoginTestEnv(t, mock.srv.URL)
+
+	err := redeemAndPersist(client, "s", "c", "v", profileName, "")
+	if err == nil {
+		t.Fatal("want error on broken envelope shape, got nil (would have silently saved a blank profile)")
+	}
+	if !strings.Contains(err.Error(), "empty bundle") {
+		t.Errorf("error message = %q, want it to contain 'empty bundle'", err.Error())
+	}
+
+	// And critically: nothing was persisted. A regression here means we
+	// silently wrote a profile with empty auth_id which would then fail
+	// every subsequent command with a confusing "auth missing".
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+	if _, ok := cfg.Profiles[profileName]; ok {
+		t.Error("profile saved despite empty bundle — should have aborted before config.Save")
+	}
+	if tok, _ := config.GetToken(profileName); tok != "" {
+		t.Errorf("token in keychain = %q, want empty (nothing should have been stored)", tok)
+	}
+}
+
+// TestRedeemAndPersist_hodor4xxWithGlobalError surfaces the upstream
+// `errors.global_error` message cleanly via the api.Client → clierr.Error
+// path, instead of dropping it on the floor or printing a raw HTTP-400.
+// This is the typical "state expired" / "code already redeemed" failure
+// shape from hodor's CLIAuth controller.
+func TestRedeemAndPersist_hodor4xxWithGlobalError(t *testing.T) {
+	const upstreamMsg = "state not found or expired"
+	mock := newHodorTokenMock(t, http.StatusBadRequest, `{
+		"api_id": "req-id-3",
+		"data": null,
+		"errors": {"global_error": "`+upstreamMsg+`"},
+		"message": ""
+	}`)
+	client, profileName := setupBrowserLoginTestEnv(t, mock.srv.URL)
+
+	err := redeemAndPersist(client, "s", "c", "v", profileName, "")
+	if err == nil {
+		t.Fatal("want error from hodor 4xx, got nil")
+	}
+
+	// The clierr.Error should carry the upstream message verbatim — that's
+	// the actionable bit the user sees ("state expired → retry login").
+	if !strings.Contains(err.Error(), upstreamMsg) {
+		t.Errorf("err = %q, want it to contain upstream message %q", err.Error(), upstreamMsg)
+	}
+	// And it should be the structured clierr.Error, not a plain Go error —
+	// downstream renderers branch on Code / StatusCode.
+	var ce *clierr.Error
+	if !errorsAs(err, &ce) {
+		t.Fatalf("err type = %T, want *clierr.Error", err)
+	}
+	if ce.StatusCode != http.StatusBadRequest {
+		t.Errorf("clierr.StatusCode = %d, want 400", ce.StatusCode)
+	}
+
+	// 4xx → no persistence.
+	cfg, _ := config.Load()
+	if _, ok := cfg.Profiles[profileName]; ok {
+		t.Error("profile saved despite hodor 4xx")
+	}
+}
+
+// errorsAs is a tiny shim to keep the test file's import surface small
+// (errors.As would otherwise require importing "errors", which collides
+// optically with internal/clierr.Error). Behaviour matches stdlib errors.As
+// for the two-deep wrap chain we care about here.
+func errorsAs(err error, target **clierr.Error) bool {
+	for err != nil {
+		if e, ok := err.(*clierr.Error); ok {
+			*target = e
+			return true
+		}
+		type wrapper interface{ Unwrap() error }
+		w, ok := err.(wrapper)
+		if !ok {
+			return false
+		}
+		err = w.Unwrap()
+	}
+	return false
 }

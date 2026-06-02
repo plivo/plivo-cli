@@ -147,7 +147,7 @@ func runAsk(cmd *cobra.Command, args []string) error {
 		// Server validator requires http/https on pageUrl. A synthetic CLI URL
 		// keeps the escalation idempotency key stable per CLI session without
 		// pretending we're a real Console page.
-		PageURL: "https://cli.plivo.com/buddy",
+		PageURL: "https://cli.plivo.com/cli",
 	}
 
 	url := client.BuddyURL("/v1/aiassist/buddy-ext/chat")
