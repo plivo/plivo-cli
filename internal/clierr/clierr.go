@@ -110,7 +110,7 @@ func AuthMissing() *Error {
 	return &Error{
 		Code:    CodeAuthMissing,
 		Message: "No Plivo credentials configured",
-		Hint:    "Run `plivo auth login` or set PLIVO_AUTH_ID and PLIVO_AUTH_TOKEN env vars.",
+		Hint:    "Run `plivo login` or set PLIVO_AUTH_ID and PLIVO_AUTH_TOKEN env vars.",
 	}
 }
 
@@ -183,7 +183,7 @@ func FromHTTP(statusCode int, requestID string, body []byte) *Error {
 		e.Hint = "src and dst must differ. Use a destination phone number you can receive on."
 	case strings.Contains(lower, "invalid auth token") || strings.Contains(lower, "invalid credentials"):
 		e.Code = CodeAuthInvalid
-		e.Hint = "Re-check PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN, or run `plivo auth login`."
+		e.Hint = "Re-check PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN, or run `plivo login`."
 	}
 	if e.Code != "" {
 		// Status-specific retryability still applies.
