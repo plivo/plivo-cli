@@ -24,7 +24,7 @@ default: ## Debug build with symbols (best for local dev)
 	@ls -lh $(BINARY) | awk '{print "  built:", $$NF, "(", $$5, ")"}'
 
 build: ## Stripped release build (~6.6 MB)
-	go build -ldflags="$(LDFLAGS)" -o $(BINARY) .
+	go build -trimpath -ldflags="$(LDFLAGS)" -o $(BINARY) .
 	@ls -lh $(BINARY) | awk '{print "  built:", $$NF, "(", $$5, ")"}'
 
 tiny: build ## Stripped + UPX (~2.5 MB) — slower startup
@@ -34,12 +34,12 @@ tiny: build ## Stripped + UPX (~2.5 MB) — slower startup
 
 build-all: ## Cross-compile release binaries for darwin/linux/windows × amd64/arm64
 	@mkdir -p dist
-	CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="$(LDFLAGS)" -o dist/$(BINARY)_darwin_arm64 .
-	CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags="$(LDFLAGS)" -o dist/$(BINARY)_darwin_amd64 .
-	CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="$(LDFLAGS)" -o dist/$(BINARY)_linux_arm64 .
-	CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="$(LDFLAGS)" -o dist/$(BINARY)_linux_amd64 .
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="$(LDFLAGS)" -o dist/$(BINARY)_windows_amd64.exe .
-	CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -ldflags="$(LDFLAGS)" -o dist/$(BINARY)_windows_arm64.exe .
+	CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -trimpath -ldflags="$(LDFLAGS)" -o dist/$(BINARY)_darwin_arm64 .
+	CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -trimpath -ldflags="$(LDFLAGS)" -o dist/$(BINARY)_darwin_amd64 .
+	CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -trimpath -ldflags="$(LDFLAGS)" -o dist/$(BINARY)_linux_arm64 .
+	CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -trimpath -ldflags="$(LDFLAGS)" -o dist/$(BINARY)_linux_amd64 .
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="$(LDFLAGS)" -o dist/$(BINARY)_windows_amd64.exe .
+	CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -trimpath -ldflags="$(LDFLAGS)" -o dist/$(BINARY)_windows_arm64.exe .
 	@ls -lh dist/*
 
 install: build ## Install stripped binary to $GOPATH/bin
