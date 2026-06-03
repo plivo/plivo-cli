@@ -495,7 +495,6 @@ Examples:
 Flags:
 
 ```
-      --buddy-url string   override the assistant's hodor URL (also via PLIVO_BUDDY_URL env, or [buddy].hodor_url in config)
       --call-uuid string   voice-debug context: the call UUID the assistant should analyse
       --debug-stream       log every raw SSE frame to stderr (for debugging this CLI)
       --verbose            show the assistant's tool_call / tool_output events on stderr
@@ -1661,7 +1660,7 @@ Flags:
 List your past support escalations (filed via `plivo ask`)
 
 ```
-plivo support [flags]
+plivo support
 ```
 
 Examples:
@@ -1669,12 +1668,6 @@ Examples:
 ```
   plivo support
   plivo support -o json
-```
-
-Flags:
-
-```
-      --buddy-url string   override the assistant's hodor URL (also via PLIVO_BUDDY_URL env, or [buddy].hodor_url in config)
 ```
 
 ---

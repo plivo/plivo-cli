@@ -23,13 +23,12 @@ type Code string
 
 const (
 	// Auth — credential / session problems.
-	CodeAuthMissing         Code = "AUTH_MISSING"
-	CodeAuthInvalid         Code = "AUTH_INVALID"
-	CodeAuthForbidden       Code = "AUTH_FORBIDDEN"
-	CodeAuthExpired         Code = "AUTH_EXPIRED"
-	Code2FARequired         Code = "AUTH_2FA_REQUIRED"
-	CodeRecaptchaRequired   Code = "AUTH_RECAPTCHA_REQUIRED"
-	CodeContactoNotLoggedIn Code = "CONTACTO_NOT_LOGGED_IN"
+	CodeAuthMissing       Code = "AUTH_MISSING"
+	CodeAuthInvalid       Code = "AUTH_INVALID"
+	CodeAuthForbidden     Code = "AUTH_FORBIDDEN"
+	CodeAuthExpired       Code = "AUTH_EXPIRED"
+	Code2FARequired       Code = "AUTH_2FA_REQUIRED"
+	CodeRecaptchaRequired Code = "AUTH_RECAPTCHA_REQUIRED"
 
 	// Input / state problems.
 	CodeValidation         Code = "VALIDATION_ERROR"
@@ -87,7 +86,7 @@ func (e *Error) ExitCode() int {
 	}
 	switch e.Code {
 	case CodeAuthMissing, CodeAuthInvalid, CodeAuthForbidden, CodeAuthExpired,
-		Code2FARequired, CodeRecaptchaRequired, CodeContactoNotLoggedIn:
+		Code2FARequired, CodeRecaptchaRequired:
 		return 2
 	case CodeRateLimited:
 		return 4
@@ -112,14 +111,6 @@ func AuthMissing() *Error {
 		Code:    CodeAuthMissing,
 		Message: "No Plivo credentials configured",
 		Hint:    "Run `plivo auth login` or set PLIVO_AUTH_ID and PLIVO_AUTH_TOKEN env vars.",
-	}
-}
-
-func ContactoSessionMissing() *Error {
-	return &Error{
-		Code:    CodeContactoNotLoggedIn,
-		Message: "No Contacto session active",
-		Hint:    "Run `plivo contacto login --email <e> --password <p>` first.",
 	}
 }
 
@@ -180,7 +171,7 @@ func FromHTTP(statusCode int, requestID string, body []byte) *Error {
 		e.Hint = "Account-level outbound calling is off. Ask Plivo support to enable it, or use a different account."
 	case strings.Contains(lower, "recaptcha"):
 		e.Code = CodeRecaptchaRequired
-		e.Hint = "Use a CLI-friendly login (`plivo contacto login`) — the /accounts/login endpoint requires browser reCAPTCHA."
+		e.Hint = "Use the browser-based login (`plivo login --browser`) — the password-login endpoint requires browser reCAPTCHA."
 	case strings.Contains(lower, "2fa") || strings.Contains(lower, "two_fa") || strings.Contains(lower, "two-factor"):
 		e.Code = Code2FARequired
 		e.Hint = "Account has 2FA enabled. Disable for the CLI account, or use a non-2FA path."

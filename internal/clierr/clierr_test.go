@@ -49,7 +49,6 @@ func TestExitCode_byCategory(t *testing.T) {
 		{CodeAuthExpired, 2},
 		{Code2FARequired, 2},
 		{CodeRecaptchaRequired, 2},
-		{CodeContactoNotLoggedIn, 2},
 
 		// Rate-limited → 4
 		{CodeRateLimited, 4},
@@ -108,16 +107,6 @@ func TestAuthMissing(t *testing.T) {
 	}
 	if !strings.Contains(e.Hint, "plivo auth login") || !strings.Contains(e.Hint, "PLIVO_AUTH_ID") {
 		t.Errorf("hint should suggest login + env vars: %q", e.Hint)
-	}
-}
-
-func TestContactoSessionMissing(t *testing.T) {
-	e := ContactoSessionMissing()
-	if e.Code != CodeContactoNotLoggedIn {
-		t.Errorf("Code = %s", e.Code)
-	}
-	if !strings.Contains(e.Hint, "plivo contacto login") {
-		t.Errorf("hint should suggest contacto login: %q", e.Hint)
 	}
 }
 

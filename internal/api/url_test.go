@@ -88,49 +88,6 @@ func TestLookupURL(t *testing.T) {
 	}
 }
 
-func TestHodorURL(t *testing.T) {
-	t.Run("no hodor configured returns error", func(t *testing.T) {
-		c := &Client{}
-		_, err := c.HodorURL("/v1/agent/token")
-		if err == nil {
-			t.Fatal("expected error when HodorBaseURL is empty")
-		}
-		if !strings.Contains(err.Error(), "hodor server not configured") {
-			t.Errorf("error message doesn't mention configuration: %v", err)
-		}
-	})
-
-	t.Run("joins base with path", func(t *testing.T) {
-		c := &Client{HodorBaseURL: "https://hodor.example.com"}
-		got, err := c.HodorURL("/v1/agent/token")
-		if err != nil {
-			t.Fatal(err)
-		}
-		want := "https://hodor.example.com/v1/agent/token"
-		if got != want {
-			t.Errorf("HodorURL = %q, want %q", got, want)
-		}
-	})
-
-	t.Run("strips trailing slash from base", func(t *testing.T) {
-		c := &Client{HodorBaseURL: "https://hodor.example.com/"}
-		got, _ := c.HodorURL("/v1/agent/token")
-		want := "https://hodor.example.com/v1/agent/token"
-		if got != want {
-			t.Errorf("trailing slash not stripped: %q", got)
-		}
-	})
-
-	t.Run("adds leading slash to path", func(t *testing.T) {
-		c := &Client{HodorBaseURL: "https://hodor.example.com"}
-		got, _ := c.HodorURL("v1/agent/token") // no leading slash
-		want := "https://hodor.example.com/v1/agent/token"
-		if got != want {
-			t.Errorf("leading slash not added: %q", got)
-		}
-	})
-}
-
 func TestIsScopedToken(t *testing.T) {
 	cases := []struct {
 		token string

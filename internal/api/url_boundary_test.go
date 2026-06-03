@@ -17,33 +17,30 @@ import (
 	"testing"
 )
 
-// TestNoDirectCXServiceURLs is a security-boundary check on the public CLI:
-// every call to a Plivo CX / ops service (regional aiassist, dobby, pai-voice,
-// core-service, …) MUST go via hodor — direct hits would bypass hodor's
-// auth-resolution, internal-services IP allowlist, per-auth_id rate limit,
-// and audit logs.
+// TestNoDirectCXServiceURLs gates the public-build URL surface: any URL
+// literal whose host ends in a Plivo-internal domain suffix must appear
+// in allowedCXHosts. Stops the public binary from accidentally hard-coding
+// internal hosts that should be resolved at runtime via env/config.
 //
-// Rule: any URL literal whose host ends in one of the internal domain
-// suffixes (".contacto.com", ".contactodev.com", ".plivops.com") must be in
-// allowedCXHosts. URLs to api.plivo.com / lookup.plivo.com / third-party /
-// Plivo docs hosts are unconstrained — this isn't a general allowlist, just
-// a CX-services gate.
+// URLs to api.plivo.com / lookup.plivo.com / third-party hosts are
+// unconstrained — this isn't a general allowlist, just an internal-host
+// gate.
 //
-// Files behind `//go:build internal` are skipped: the internal binary is
-// allowed dev/staging hosts that don't ship in the public release.
+// Files behind `//go:build internal` are skipped: the internal binary
+// reaches dev/staging hosts that don't ship in the public release.
 func TestNoDirectCXServiceURLs(t *testing.T) {
-	// Allowed CX hosts are all hodor edges (one global, two regional).
-	// Hodor handles region-routing, IP allowlist, audit, and rate-limit;
-	// everything CX-internal sits behind it.
+	// The single public-build host backing /v1/aiassist/buddy-ext is
+	// the only internal URL the public binary is allowed to embed.
+	// Anything else must be added here AND justified in review.
 	allowedCXHosts := map[string]bool{
-		"global-auth-api.contacto.com":     true, // global hodor edge (proxies to regional aiassist)
-		"ap-south-1-auth-api.contacto.com": true, // regional hodor — India
-		"us-east-1-auth-api.contacto.com":  true, // regional hodor — US
+		"global-auth-api.contacto.com":     true,
+		"ap-south-1-auth-api.contacto.com": true,
+		"us-east-1-auth-api.contacto.com":  true,
 	}
-	// Internal Plivo CX / ops domains. Any host suffix-matched here is gated
-	// by allowedCXHosts. .contactodev.com (dev variant) should never appear
-	// in public code — internal-only files are skipped, public files must
-	// not reference it.
+	// Internal domain suffixes. Hosts suffix-matched here are gated by
+	// allowedCXHosts. Dev-variant suffixes must never appear in public
+	// code (internal-only files are skipped; public files must not
+	// reference them).
 	cxDomainSuffixes := []string{
 		".contacto.com",
 		".contactodev.com",

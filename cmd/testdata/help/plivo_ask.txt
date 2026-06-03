@@ -19,7 +19,6 @@ Examples:
   plivo ask -o json "What's the rate for outbound voice to Brazil?"
 
 Flags:
-      --buddy-url string   override the assistant's hodor URL (also via PLIVO_BUDDY_URL env, or [buddy].hodor_url in config)
       --call-uuid string   voice-debug context: the call UUID the assistant should analyse
       --debug-stream       log every raw SSE frame to stderr (for debugging this CLI)
   -h, --help               help for ask

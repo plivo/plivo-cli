@@ -30,15 +30,20 @@ type Config struct {
 	Buddy    BuddyConfig        `toml:"buddy,omitempty"`
 }
 
-// BuddyConfig is the optional [buddy] table in ~/.plivo/config.toml. Tunes the
-// `plivo buddy …` commands. Only HodorURL is consulted today; the other knobs
-// reserve schema space for v1.1 (per-frame read timeout, render toggles).
+// BuddyConfig is the optional [buddy] table in ~/.plivo/config.toml. Tunes
+// the `plivo ask` / `plivo support` commands. Only URL is consulted today;
+// the other knobs reserve schema space for v1.1 (per-frame read timeout,
+// render toggles).
 type BuddyConfig struct {
-	HodorURL        string `toml:"hodor_url,omitempty"`
+	URL             string `toml:"url,omitempty"`
 	ReadTimeoutSecs int    `toml:"read_timeout_secs,omitempty"`
 	ShowNarration   *bool  `toml:"show_narration,omitempty"`
 	ShowToolCalls   *bool  `toml:"show_tool_calls,omitempty"`
 }
+
+// EffectiveURL returns the buddy URL configured in ~/.plivo/config.toml,
+// or "" if unset (caller falls through to env / default).
+func (b BuddyConfig) EffectiveURL() string { return b.URL }
 
 var ErrNoCredentials = errors.New("no credentials: set PLIVO_AUTH_ID/PLIVO_AUTH_TOKEN or run `plivo login`")
 

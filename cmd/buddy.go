@@ -25,10 +25,9 @@ import (
 
 // ask flags
 var (
-	askCallUUID      string
-	askVerbose       bool
-	askDebug         bool
-	buddyURLOverride string // --buddy-url; overrides env + config + default
+	askCallUUID string
+	askVerbose  bool
+	askDebug    bool
 )
 
 var askCmd = &cobra.Command{
@@ -60,13 +59,6 @@ var supportCmd = &cobra.Command{
 }
 
 func init() {
-	// --buddy-url is operator territory (dev/staging override); attach to both
-	// user-facing commands so it works on either invocation.
-	for _, c := range []*cobra.Command{askCmd, supportCmd} {
-		c.Flags().StringVar(&buddyURLOverride, "buddy-url", "",
-			"override the assistant's hodor URL (also via PLIVO_BUDDY_URL env, or [buddy].hodor_url in config)")
-	}
-
 	askCmd.Flags().StringVar(&askCallUUID, "call-uuid", "",
 		"voice-debug context: the call UUID the assistant should analyse")
 	askCmd.Flags().BoolVar(&askVerbose, "verbose", false,
@@ -77,28 +69,26 @@ func init() {
 	rootCmd.AddCommand(askCmd, supportCmd)
 }
 
-// applyBuddyURL applies the override precedence to c.BuddyBaseURL:
+// applyBuddyURL resolves the AI-assistant URL with precedence:
 //
-//	--buddy-url  >  PLIVO_BUDDY_URL  >  [buddy].hodor_url  >  built-in prod default
-//
-// (Built-in default is already set by api.New, so it's the no-op fallthrough.)
-// applyBuddyURL resolves the hodor edge URL with precedence:
-//
-//	--buddy-url flag  >  PLIVO_BUDDY_URL env  >  active profile's Env  >
-//	[buddy].hodor_url config  >  built-in prod default (already on c.BuddyBaseURL)
+//	PLIVO_BUDDY_URL env  >  current `--env <X>` (login only)  >
+//	active profile's Env  >  [buddy].url config  >  built-in prod default
 //
 // The "active profile's Env" step lets `plivo login --env dev` once and
 // have every subsequent command (ask, support, login --browser …) hit
-// the right edge without further flags. Only recognised envs apply —
-// unknown profile env values fall through.
+// the right edge without further flags. The `--env <X>` tier above it
+// matters during the login command itself, before the profile is saved.
+// Only recognised envs apply — unknown profile env values fall through.
 func applyBuddyURL(c *api.Client) {
-	if buddyURLOverride != "" {
-		c.BuddyBaseURL = buddyURLOverride
-		return
-	}
 	if u := os.Getenv("PLIVO_BUDDY_URL"); u != "" {
 		c.BuddyBaseURL = u
 		return
+	}
+	if loginEnv != "" {
+		if u, ok := resolveLoginEnv(strings.ToLower(loginEnv)); ok {
+			c.BuddyBaseURL = u
+			return
+		}
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -112,8 +102,8 @@ func applyBuddyURL(c *api.Client) {
 			}
 		}
 	}
-	if cfg.Buddy.HodorURL != "" {
-		c.BuddyBaseURL = cfg.Buddy.HodorURL
+	if u := cfg.Buddy.EffectiveURL(); u != "" {
+		c.BuddyBaseURL = u
 	}
 }
 
