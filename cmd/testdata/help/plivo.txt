@@ -10,7 +10,7 @@ Usage:
 
 Available Commands:
   account     Inspect and update the active Plivo account
-  agent       Manage Plivo Vibe AI agents (coming soon)
+  agent       AI voice agents (coming soon)
   ask         Ask Plivo's AI assistant (streams the answer as it comes)
   auth        Manage credential profiles (list / use / remove / whoami)
   completion  Generate the autocompletion script for the specified shell

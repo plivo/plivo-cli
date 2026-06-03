@@ -101,4 +101,4 @@ case ":${PATH}:" in
 esac
 
 echo
-echo "Next: plivo auth login"
+echo "Next: plivo login"

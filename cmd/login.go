@@ -79,7 +79,7 @@ func init() {
 	loginCmd.Flags().BoolVar(&loginBrowser, "browser", false,
 		"log in via your default browser (PKCE loopback OAuth); recommended")
 	loginCmd.Flags().StringVar(&loginEnv, "env", "",
-		`target environment (default "prod"; e.g. "dev" — internal builds only). Persisted on the profile so subsequent commands inherit it.`)
+		`target environment (default "prod"). Persisted on the profile so subsequent commands inherit it.`)
 
 	rootCmd.AddCommand(loginCmd, logoutCmd)
 }
@@ -96,7 +96,7 @@ func resolveLoginEnvFlag() (saveEnv string, err error) {
 	normalized := strings.ToLower(loginEnv)
 	if _, ok := resolveLoginEnv(normalized); !ok {
 		return "", clierr.BadInput(fmt.Sprintf(
-			"unknown env %q. This binary supports: %s. Set PLIVO_BUDDY_URL to use an arbitrary URL.",
+			"unknown env %q. This binary supports: %s.",
 			loginEnv, strings.Join(loginEnvNames(), ", "),
 		))
 	}

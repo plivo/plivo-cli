@@ -64,4 +64,4 @@ $ver = & $Target --version 2>$null
 Write-Host "OK Installed: $(if ($ver) { $ver } else { 'plivo (run plivo --version)' })"
 Write-Host "OK Location:  $Target"
 Write-Host ""
-Write-Host "Next: plivo auth login"
+Write-Host "Next: plivo login"

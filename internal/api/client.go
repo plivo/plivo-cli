@@ -36,7 +36,7 @@ const (
 
 type Client struct {
 	BaseURL      string
-	AdminBaseURL string // optional admin-override base URL; consumed by internal-build commands only
+	AdminBaseURL string // optional admin-override base URL; unused in the public build
 	BuddyBaseURL string // endpoint for /v1/aiassist/buddy-ext (Plivo Basic auth) — see applyBuddyURL
 	AuthID       string
 	AuthToken    string

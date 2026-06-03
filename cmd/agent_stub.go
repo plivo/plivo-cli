@@ -17,11 +17,8 @@ import (
 // rather than the command simply not existing.
 var agentCmd = &cobra.Command{
 	Use:   "agent",
-	Short: "Manage Plivo Vibe AI agents (coming soon)",
-	Long: `Plivo Vibe AI agents — build, publish, and run AI voice agents from your terminal.
-
-Coming soon — this surface is not part of the current release.
-Track progress: https://github.com/plivo/plivo-cli/blob/main/ROADMAP.md`,
+	Short: "AI voice agents (coming soon)",
+	Long:  `AI voice agents — coming soon.`,
 	// Accept any args so `plivo agent create`, `plivo agent run`, etc. all land
 	// on the coming-soon notice instead of an "unknown command" error.
 	Args: cobra.ArbitraryArgs,
@@ -30,7 +27,7 @@ Track progress: https://github.com/plivo/plivo-cli/blob/main/ROADMAP.md`,
 	// "unknown flag" error. `--help` stays functional (it's a known flag).
 	FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintln(os.Stderr, "plivo agent — AI voice agents from the CLI — is coming soon.")
+		fmt.Fprintln(os.Stderr, "AI voice agents from the CLI — coming soon.")
 		fmt.Fprintln(os.Stderr, "Track it in the roadmap:")
 		fmt.Fprintln(os.Stderr, "  https://github.com/plivo/plivo-cli/blob/main/ROADMAP.md")
 		return nil

@@ -1,7 +1,4 @@
-Plivo Vibe AI agents — build, publish, and run AI voice agents from your terminal.
-
-Coming soon — this surface is not part of the current release.
-Track progress: https://github.com/plivo/plivo-cli/blob/main/ROADMAP.md
+AI voice agents — coming soon.
 
 Usage:
   plivo agent [flags]
