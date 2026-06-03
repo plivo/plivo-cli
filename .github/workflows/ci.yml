@@ -59,14 +59,6 @@ jobs:
           total=$(go tool cover -func=coverage.out | awk '/^total:/ {sub(/%/,""); print $3}')
           echo "Total coverage: ${total}%"
 
-      - name: go build + test — internal build (-tags internal)
-        run: |
-          # The agent / contacto / auth-token surface is gated behind the
-          # `internal` build tag. Build + test it here so it doesn't rot, even
-          # though it doesn't ship in the public v1 binary.
-          go build -tags internal -o /dev/null .
-          go test -tags internal -race ./...
-
       - name: upload coverage artefact
         if: always()
         uses: actions/upload-artifact@v4
@@ -87,8 +79,7 @@ jobs:
         run: |
           # Every public-build command group must render --help. Catches
           # cobra-registration regressions, missing flag definitions, etc.
-          # `contacto` + `auth token` are internal-only (build tag `internal`)
-          # and absent from this public build; `agent` ships as a coming-soon stub.
+          # `agent` ships as a coming-soon stub.
           groups=(
             "account" "agent" "ask" "auth" "lookup" "message" "numbers" "support" "upgrade" "verify" "voice"
             "account subaccounts" "account applications"
@@ -205,7 +196,7 @@ jobs:
             "POST https://api.plivo.com/v1/Account/[A-Z0-9]+/PhoneNumber/Compliance/" \
             ./plivo numbers compliance create --data '{"country_iso":"US"}' --dry-run
 
-          assert_url "ask (SSE, on the global hodor edge)" \
+          assert_url "ask (SSE)" \
             "POST https://global-auth-api\.contacto\.com/v1/aiassist/buddy-ext/chat" \
             ./plivo ask "ping" --dry-run
 

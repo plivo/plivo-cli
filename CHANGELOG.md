@@ -14,10 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `GET /Account/` before saving. `--email` and `--browser` will follow
   in subsequent releases (Phase 2 / Phase 3).
 - `plivo ask "<query>"` + `plivo support` — talks to Plivo's customer-facing
-  AI assistant via `/v1/aiassist/buddy-ext` (SSE streaming, Plivo Basic auth).
-  `--call-uuid` adds voice-debug context. Ctrl-C cancels cleanly; `-o json`
-  emits JSONL events for scripts and AI agents. `plivo support` lists past
-  escalations.
+  AI assistant via Plivo's customer assistant endpoint (SSE streaming, Plivo
+  Basic auth). `--call-uuid` adds voice-debug context. Ctrl-C cancels cleanly;
+  `-o json` emits JSONL events for scripts and AI agents. `plivo support`
+  lists past escalations.
 - Three-segment command grammar: `plivo <service> <resource> <verb>` (e.g.
   `plivo voice calls list`, `plivo message send`, `plivo numbers search`).
 - Cross-platform installers for macOS, Linux, and Windows (`install.sh`,
@@ -36,9 +36,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `sms` and `msg` remain aliases of `message`.
 
 ### Removed
-- `plivo auth login` and the internal-build `plivo contacto login` — both
-  replaced by the unified `plivo login` (no aliases; hard cut). Profile
-  management subcommands (`plivo auth list / use / remove / whoami`) stay.
+- `plivo auth login` — replaced by the unified `plivo login` (no aliases;
+  hard cut). Profile management subcommands (`plivo auth list / use /
+  remove / whoami`) stay.
 - Legacy `account compliance` (the older `/ComplianceDocument/` endpoint),
   superseded by `numbers compliance`.
 

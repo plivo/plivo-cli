@@ -23,7 +23,7 @@ The template below is for Plivo maintainers.
 
 ## Testing
 
-- [ ] `go build ./... && go build -tags internal ./...`
+- [ ] `go build ./...`
 - [ ] `go test ./... -race`
 - [ ] `gofmt -l .` is clean
 - [ ] Help snapshots regenerated if the command tree changed (`go test ./cmd/ -update`)

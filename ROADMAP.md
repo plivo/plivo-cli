@@ -8,7 +8,7 @@ The `beta` branch carries the full working CLI. Everything below is implemented 
 
 - Single static Go binary, dual TTY/JSON output, stable error envelope
 - Three-segment grammar `plivo <service> <resource> <verb>`; pre-grammar short forms kept as aliases
-- Credential profiles via `auth login`, with the auth token stored in the OS keychain (Keychain / libsecret / Credential Manager)
+- Credential profiles via `plivo login`, with the auth token stored in the OS keychain (Keychain / libsecret / Credential Manager)
 - `account` (get/update), `account subaccounts`, `account applications`
 - `numbers` (list/get/search/buy/update/release), `numbers cnam`, `numbers masking sessions`, `numbers compliance` (regulatory requirements, applications, number linking)
 - `voice calls` (make/list/get + hangup/transfer/play/speak/dtmf/record + stop verbs), `voice calls streams` (live audio bridge)
@@ -19,12 +19,7 @@ The `beta` branch carries the full working CLI. Everything below is implemented 
 
 ## Coming soon
 
-- **AI voice agents** (`plivo agent`) — build, publish, and run Vibe AI voice
-  agents from the terminal. The public build ships a `plivo agent` placeholder
-  that points here; the full surface (create / run / publish / attach / session)
-  is gated behind the `internal` build tag while it still depends on
-  Plivo-internal services. It graduates to the public build once those
-  dependencies are externalized.
+- **AI voice agents** (`plivo agent`) — AI voice agents from the terminal — coming soon.
 
 ## Next
 

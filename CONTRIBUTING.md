@@ -25,13 +25,11 @@ Releases follow [Semantic Versioning](https://semver.org). Until v1.0, the surfa
 Requirements: Go (see `go.mod` for the pinned version). The CLI is a pure-Go, statically linked binary (`CGO_ENABLED=0`).
 
 ```bash
-# Build the public binary and the internal-only build
+# Build the public binary
 go build .
-go build -tags internal .
 
-# Test (race detector + both build tags)
+# Test (race detector)
 go test ./... -race
-go test -tags internal ./... -race
 
 # Formatting + vet
 gofmt -l .
@@ -47,9 +45,5 @@ make docs
 ### Command grammar
 
 User-facing commands follow `plivo <service> <resource> <verb>` (for example `plivo voice calls list`); messaging is the shorter `plivo message send` (protocol via `--type`). Pre-grammar short forms are preserved as aliases through a small rewrite shim in `cmd/root.go`; keep that map in sync when adding or renaming commands.
-
-### Internal vs public surface
-
-The agent / Contacto / scoped-token surface is gated behind the `internal` build tag and does not ship in the public binary. Keep public-facing changes out of `//go:build internal` files.
 
 By contributing you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
