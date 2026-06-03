@@ -84,26 +84,26 @@ func init() {
 	rootCmd.AddCommand(loginCmd, logoutCmd)
 }
 
-// resolveLoginEnvFlag applies the --env flag to the runtime URL override,
-// rejects unknown envs, and returns the env name that should be persisted
-// on the profile (empty for the default "prod" — see Profile.Env).
+// resolveLoginEnvFlag validates the --env flag and returns the env name
+// that should be persisted on the profile (empty for the default "prod"
+// — see Profile.Env). The actual URL override is resolved by
+// applyBuddyURL reading loginEnv directly, so we don't need to thread a
+// URL through here.
 func resolveLoginEnvFlag() (saveEnv string, err error) {
 	if loginEnv == "" {
 		return "", nil
 	}
 	normalized := strings.ToLower(loginEnv)
-	url, ok := resolveLoginEnv(normalized)
-	if !ok {
+	if _, ok := resolveLoginEnv(normalized); !ok {
 		return "", clierr.BadInput(fmt.Sprintf(
-			"unknown env %q. This binary supports: %s. Use --buddy-url for an arbitrary URL.",
+			"unknown env %q. This binary supports: %s. Set PLIVO_BUDDY_URL to use an arbitrary URL.",
 			loginEnv, strings.Join(loginEnvNames(), ", "),
 		))
 	}
-	// --env prod is a no-op (default); don't override + don't persist.
+	// --env prod is a no-op (default); don't persist.
 	if normalized == "prod" {
 		return "", nil
 	}
-	buddyURLOverride = url
 	return normalized, nil
 }
 

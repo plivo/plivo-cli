@@ -8,8 +8,7 @@ Examples:
   plivo support -o json
 
 Flags:
-      --buddy-url string   override the assistant's hodor URL (also via PLIVO_BUDDY_URL env, or [buddy].hodor_url in config)
-  -h, --help               help for support
+  -h, --help   help for support
 
 Global Flags:
       --all                auto-paginate through all pages

@@ -168,7 +168,7 @@ func getClient() (*api.Client, string, error) {
 		return nil, "", err
 	}
 	c := api.New(p.AuthID, p.AuthToken, time.Duration(timeoutSec)*time.Second)
-	c.HodorBaseURL = hodorServer
+	c.AdminBaseURL = hodorServer
 	c.DryRun = dryRunFlag
 	if logLevel == "debug" {
 		c.LogRequest = func(method, url string, body []byte) {

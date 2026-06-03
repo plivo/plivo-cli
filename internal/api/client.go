@@ -17,30 +17,27 @@ import (
 	"github.com/plivo/plivo-cli/internal/version"
 )
 
-// URL convention (enforced by TestNoDirectCXServiceURLs):
+// URL conventions:
 //
-//   - api.plivo.com / lookup.plivo.com → Plivo customer APIs, hit directly.
-//   - *.contacto.com / *.contactodev.com / *.plivops.com hosts MUST be hodor
-//     edges (global + regional). Every CX-internal service (aiassist,
-//     contacto-core, dobby, pai-voice, …) is reached only via hodor — never
-//     directly — so hodor can resolve region from creds, enforce the
-//     internal-services IP allowlist, rate-limit per auth_id, and audit-log.
-//     That's a security boundary.
+//   - api.plivo.com / lookup.plivo.com — Plivo's customer REST APIs.
+//   - The Plivo AI-assistant endpoint backing `plivo ask` / `plivo support`
+//     lives at a separate base URL; resolved at runtime via env / config
+//     (see applyBuddyURL in cmd/buddy.go), with a built-in default below.
 //
-// Adding a new hodor edge? Also add it to allowedCXHosts in
-// url_boundary_test.go, or the build fails.
+// The URL-boundary test guards against accidentally hard-coding service
+// hosts elsewhere in the codebase — see url_boundary_test.go.
 const (
 	DefaultBaseURL    = "https://api.plivo.com/v1"
 	DefaultLookupBase = "https://lookup.plivo.com/v1"
-	// DefaultBuddyBase is the prod hodor edge that hosts /v1/aiassist/buddy-ext
-	// (Plivo Buddy — customer-facing AI assistant). Plivo Basic auth.
+	// DefaultBuddyBase is the prod endpoint serving /v1/aiassist/buddy-ext
+	// (Plivo's customer AI assistant). Plivo Basic auth.
 	DefaultBuddyBase = "https://global-auth-api.contacto.com"
 )
 
 type Client struct {
 	BaseURL      string
-	HodorBaseURL string // optional; used for /v1/agent/ and /v1/auth/token/ routes
-	BuddyBaseURL string // hodor edge for /v1/aiassist/buddy-ext (Plivo Basic auth)
+	AdminBaseURL string // optional admin-override base URL; consumed by internal-build commands only
+	BuddyBaseURL string // endpoint for /v1/aiassist/buddy-ext (Plivo Basic auth) — see applyBuddyURL
 	AuthID       string
 	AuthToken    string
 	HTTP         *http.Client
@@ -52,19 +49,6 @@ type Client struct {
 // Scoped tokens are sent as Bearer; regular tokens use HTTP Basic.
 func (c *Client) IsScopedToken() bool {
 	return strings.HasPrefix(c.AuthToken, "stk_")
-}
-
-// HodorURL joins HodorBaseURL with the given path. Returns an error if no
-// hodor server is configured.
-func (c *Client) HodorURL(path string) (string, error) {
-	if c.HodorBaseURL == "" {
-		return "", fmt.Errorf("hodor server not configured: set --hodor-server or PLIVO_HODOR_SERVER")
-	}
-	base := strings.TrimRight(c.HodorBaseURL, "/")
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	return base + path, nil
 }
 
 func New(authID, authToken string, timeout time.Duration) *Client {

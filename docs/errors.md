@@ -45,8 +45,7 @@ Stable strings — switch on these, not on the message text.
 | `AUTH_FORBIDDEN` | Upstream returned 403 (role/scope) | Account lacks permission |
 | `AUTH_EXPIRED` | Cached session token TTL elapsed | Re-login |
 | `AUTH_2FA_REQUIRED` | Account has 2FA enabled | Disable for CLI account or use non-2FA path |
-| `AUTH_RECAPTCHA_REQUIRED` | Endpoint requires browser reCAPTCHA | Use `plivo contacto login` (CLI-friendly path) |
-| `CONTACTO_NOT_LOGGED_IN` | No `~/.plivo/contacto.toml` session | Run `plivo contacto login` |
+| `AUTH_RECAPTCHA_REQUIRED` | Endpoint requires browser reCAPTCHA | Use `plivo login --browser` (CLI-friendly path) |
 
 ### Input / state
 
@@ -102,7 +101,7 @@ out=$(plivo agent list -o json 2>&1)
 exit_code=$?
 case "$exit_code" in
   0) echo "$out" | jq '.data[] | .name' ;;
-  2) plivo contacto login --email "$E" --password "$P" && retry ;;
+  2) plivo login --browser && retry ;;
   4) sleep 6 && retry ;;
   *)
      code=$(echo "$out" | jq -r '.error.code')
