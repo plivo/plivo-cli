@@ -18,29 +18,31 @@ import (
 )
 
 // TestNoDirectCXServiceURLs gates the public-build URL surface: any URL
-// literal whose host ends in a Plivo-internal domain suffix must appear
-// in allowedCXHosts. Stops the public binary from accidentally hard-coding
-// internal hosts that should be resolved at runtime via env/config.
+// literal whose host ends in one of Plivo's internal-infrastructure
+// domain suffixes must appear in allowedCXHosts. Stops the public binary
+// from accidentally hard-coding hosts that should be resolved at runtime
+// via env/config.
 //
 // URLs to api.plivo.com / lookup.plivo.com / third-party hosts are
-// unconstrained — this isn't a general allowlist, just an internal-host
-// gate.
+// unconstrained — this isn't a general allowlist, just a guard on the
+// internal-infrastructure hosts.
 //
 // Files behind `//go:build internal` are skipped: the internal binary
 // reaches dev/staging hosts that don't ship in the public release.
 func TestNoDirectCXServiceURLs(t *testing.T) {
-	// The single public-build host backing /v1/aiassist/buddy-ext is
-	// the only internal URL the public binary is allowed to embed.
-	// Anything else must be added here AND justified in review.
+	// The hosts below back the public-build assistant endpoint
+	// (/v1/aiassist/buddy-ext) and are the only such URLs the public
+	// binary is allowed to embed. Anything else must be added here AND
+	// justified in review.
 	allowedCXHosts := map[string]bool{
 		"global-auth-api.contacto.com":     true,
 		"ap-south-1-auth-api.contacto.com": true,
 		"us-east-1-auth-api.contacto.com":  true,
 	}
-	// Internal domain suffixes. Hosts suffix-matched here are gated by
-	// allowedCXHosts. Dev-variant suffixes must never appear in public
-	// code (internal-only files are skipped; public files must not
-	// reference them).
+	// Plivo's internal-infrastructure domain suffixes. Hosts suffix-matched
+	// here are gated by allowedCXHosts. Dev-variant suffixes must never
+	// appear in public code (internal-only files are skipped; public files
+	// must not reference them).
 	cxDomainSuffixes := []string{
 		".contacto.com",
 		".contactodev.com",
@@ -107,7 +109,7 @@ func TestNoDirectCXServiceURLs(t *testing.T) {
 					continue // non-CX host, unconstrained
 				}
 				if allowedCXHosts[host] {
-					continue // allowed hodor edge
+					continue // allowed auth-server edge
 				}
 				pos := fset.Position(lit.Pos())
 				rel, _ := filepath.Rel(moduleRoot, pos.Filename)
@@ -122,8 +124,8 @@ func TestNoDirectCXServiceURLs(t *testing.T) {
 	}
 
 	if len(offenders) > 0 {
-		t.Errorf("direct CX-service URL(s) found (must go via hodor — see api.Client.BuddyURL / HodorURL):\n  %s\n\n"+
-			"If this is a new hodor edge, add it to allowedCXHosts in %s.",
+		t.Errorf("direct internal-host URL(s) found (must go via the runtime-resolved auth-server edge — see api.Client.BuddyURL):\n  %s\n\n"+
+			"If this is a new auth-server edge, add it to allowedCXHosts in %s.",
 			strings.Join(offenders, "\n  "),
 			"internal/api/url_boundary_test.go")
 	}

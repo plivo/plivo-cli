@@ -19,9 +19,9 @@ import (
 	"golang.org/x/term"
 )
 
-// ask + support talk to Plivo's customer-facing AI assistant (internally
-// "Buddy") hosted at hodor's /v1/aiassist/buddy-ext (Plivo Basic auth — same
-// creds the rest of the CLI uses).
+// ask + support talk to Plivo's customer-facing AI assistant via the
+// /v1/aiassist/buddy-ext endpoint (Plivo Basic auth — same creds the
+// rest of the CLI uses).
 
 // ask flags
 var (

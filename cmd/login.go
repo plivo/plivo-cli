@@ -117,8 +117,9 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	}
 
 	// --browser: loopback-OAuth (PKCE) flow. Skips all manual cred entry —
-	// opens the user's default browser to hodor's /v1/accounts/cli/authorize,
-	// captures the callback on 127.0.0.1, and persists the bundle directly.
+	// opens the user's default browser to the auth server's
+	// /v1/accounts/cli/authorize endpoint, captures the callback on
+	// 127.0.0.1, and persists the bundle directly.
 	if loginBrowser {
 		return runLoginBrowser(saveEnv)
 	}

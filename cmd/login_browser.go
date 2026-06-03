@@ -20,14 +20,14 @@ import (
 	"github.com/plivo/plivo-cli/internal/config"
 )
 
-// cliTokenEnvelope is the response shape from hodor's
-// /v1/accounts/cli/token. Standard Plivo envelope (api_id + data); we
-// only need the `data` block. The Contacto JWT is intentionally NOT
-// part of the bundle (see hodor's CLIAuthCodeEntry docstring).
+// cliTokenEnvelope is the response shape from the auth server's
+// /v1/accounts/cli/token endpoint. Standard Plivo envelope (api_id +
+// data); we only need the `data` block. The session JWT is intentionally
+// NOT part of the bundle.
 //
 // Keep this as a package-level type — the round-trip test in
 // login_browser_test.go uses it to lock in the wire shape and fail fast
-// if hodor's envelope wrapper drifts.
+// if the envelope wrapper drifts.
 type cliTokenEnvelope struct {
 	Data struct {
 		PlivoAuthID    string `json:"plivo_auth_id"`
@@ -38,10 +38,9 @@ type cliTokenEnvelope struct {
 }
 
 // runLoginBrowser implements `plivo login --browser`: the loopback-OAuth
-// (PKCE) flow that hands off to hodor's /v1/accounts/cli/{authorize,
-// exchange, token} endpoints + the Contacto Console's /cli/authorize
-// consent page. See the package docstring in hodor's controllers/cliAuth
-// for the full protocol.
+// (PKCE) flow that hands off to the auth server's
+// /v1/accounts/cli/{authorize, exchange, token} endpoints + the Console's
+// /cli/authorize consent page.
 //
 // Sequence:
 //  1. Generate PKCE verifier + S256 challenge + state.
@@ -49,8 +48,8 @@ type cliTokenEnvelope struct {
 //  3. Open the user's default browser to
 //     ${buddyBase}/v1/accounts/cli/authorize with the loopback cb URL.
 //  4. Wait (5m) for the browser to land back on our local listener with
-//     ?state=…&code=…. Matches hodor's 10-min state TTL with comfortable
-//     headroom for login / 2FA / consent click-through.
+//     ?state=…&code=…. Matches the auth server's 10-min state TTL with
+//     comfortable headroom for login / 2FA / consent click-through.
 //  5. Validate state; POST /v1/accounts/cli/token with the verifier.
 //  6. Persist the bundle to ~/.plivo/config.toml + OS keychain.
 func runLoginBrowser(saveEnv string) error {
@@ -72,9 +71,9 @@ func runLoginBrowser(saveEnv string) error {
 	port := listener.Addr().(*net.TCPAddr).Port
 	cb := fmt.Sprintf("http://127.0.0.1:%d/", port)
 
-	// hodor URL: resolve the same way `ask` / `support` do — flag, env,
-	// config, default. The CLI's --buddy-url override applies here too
-	// since both surfaces share the global-auth-api edge.
+	// Auth-server URL: resolve the same way `ask` / `support` do — flag,
+	// env, config, default. The CLI's --buddy-url override applies here too
+	// since both surfaces share the same edge.
 	client := api.New("", "", 30*time.Second) // creds-less; auth happens in /token
 	applyBuddyURL(client)
 
@@ -90,8 +89,9 @@ func runLoginBrowser(saveEnv string) error {
 	}
 
 	// Wait up to 5m for the callback from the Console redirect chain.
-	// hodor's state TTL is 10 min — 5 min on the CLI side leaves plenty of
-	// room for login + 2FA + consent without the CLI giving up first.
+	// The auth server's state TTL is 10 min — 5 min on the CLI side
+	// leaves plenty of room for login + 2FA + consent without the CLI
+	// giving up first.
 	cbCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	code, err := awaitLoopbackCallback(cbCtx, listener, state)
@@ -108,11 +108,11 @@ func runLoginBrowser(saveEnv string) error {
 // drop the returned bundle into ~/.plivo/config.toml + the OS keychain.
 //
 // Split out from runLoginBrowser so the wire + persistence half is
-// independently testable against an httptest hodor mock without having to
-// drive a real browser. The exact behaviour (error wrapping, empty-bundle
-// guard, keychain fallback, "first profile becomes active" rule, stderr
-// confirmation) matches what runLoginBrowser used to do inline — keep them
-// in sync if you touch one.
+// independently testable against an httptest auth-server mock without
+// having to drive a real browser. The exact behaviour (error wrapping,
+// empty-bundle guard, keychain fallback, "first profile becomes active"
+// rule, stderr confirmation) matches what runLoginBrowser used to do
+// inline — keep them in sync if you touch one.
 func redeemAndPersist(client *api.Client, state, code, verifier, profileName, saveEnv string) error {
 	tokenURL := client.BuddyURL("/v1/accounts/cli/token")
 	body := map[string]string{
@@ -215,7 +215,7 @@ func buildAuthorizeURL(buddyBase, cb, state, challenge, device string) string {
 // returns empty we return "" and Console falls back to the generic copy.
 //
 // Hostname is locally-resolvable PII — visible to the user clicking the
-// consent screen, included in hodor access logs as a query param. Users
+// consent screen, included in server access logs as a query param. Users
 // who'd rather not surface it can rely on the fallback by setting their
 // machine's hostname to an empty string (rare).
 func deviceHint() string {

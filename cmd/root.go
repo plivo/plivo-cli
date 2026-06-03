@@ -25,7 +25,7 @@ var (
 	explainFlag  bool
 	timeoutSec   int
 	allFlag      bool
-	hodorServer  string
+	adminServer  string
 )
 
 var rootCmd = &cobra.Command{
@@ -110,9 +110,7 @@ var legacyAlias = map[string][]string{
 
 // valueFlags are the global flags that consume the following token as their
 // value, so the shim doesn't mistake that value for a command word. Any global
-// flag that takes a value must be listed here. (--hodor-server is internal-only,
-// absent from the public build, and never precedes a legacy alias — so it's
-// intentionally omitted.)
+// flag that takes a value must be listed here.
 var valueFlags = map[string]bool{
 	"--profile": true, "--output": true, "-o": true,
 	"--log-level": true, "--timeout": true,
@@ -156,9 +154,9 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&explainFlag, "explain", false, "explain what the command will do before executing")
 	rootCmd.PersistentFlags().IntVar(&timeoutSec, "timeout", 30, "request timeout in seconds")
 	rootCmd.PersistentFlags().BoolVar(&allFlag, "all", false, "auto-paginate through all pages")
-	// --hodor-server is registered only in internal builds (cmd/internal_flags.go),
-	// since the agent + auth-token surfaces that use it are internal-only. The
-	// backing var lives below and stays "" in the public v1 build.
+	// Additional admin-only flags are registered in build-tag-gated files;
+	// the backing var (adminServer) lives above and stays "" in the public
+	// build.
 }
 
 // getClient resolves credentials and returns a configured API client.
@@ -168,7 +166,7 @@ func getClient() (*api.Client, string, error) {
 		return nil, "", err
 	}
 	c := api.New(p.AuthID, p.AuthToken, time.Duration(timeoutSec)*time.Second)
-	c.AdminBaseURL = hodorServer
+	c.AdminBaseURL = adminServer
 	c.DryRun = dryRunFlag
 	if logLevel == "debug" {
 		c.LogRequest = func(method, url string, body []byte) {

@@ -21,17 +21,17 @@ import (
 	"github.com/zalando/go-keyring"
 )
 
-// TestCLITokenEnvelope_unmarshalsHodorResponse locks in the wire shape we
-// expect from hodor's /v1/accounts/cli/token: the standard {api_id, data}
-// envelope. If hodor's response wrapper drifts (data → result, or no
-// envelope at all), this fails loudly before the silent empty-bundle path
-// in runLoginBrowser surfaces it as 'token redemption returned an empty bundle'.
-func TestCLITokenEnvelope_unmarshalsHodorResponse(t *testing.T) {
-	// Same wire shape hodor emits today (utils.BuildResponse(metaData, response, "", nil, nil)).
+// TestCLITokenEnvelope_unmarshalsResponse locks in the wire shape we
+// expect from the auth server's /v1/accounts/cli/token: the standard
+// {api_id, data} envelope. If the response wrapper drifts (data → result,
+// or no envelope at all), this fails loudly before the silent empty-bundle
+// path in runLoginBrowser surfaces it as 'token redemption returned an empty bundle'.
+func TestCLITokenEnvelope_unmarshalsResponse(t *testing.T) {
+	// Wire shape emitted today by the auth server's standard envelope helper.
 	raw := `{
 		"api_id": "abc-123",
 		"data": {
-			"plivo_auth_id":   "MAFROMHODOR",
+			"plivo_auth_id":   "MA_TEST_FIXTURE",
 			"plivo_auth_token": "tok-xyz",
 			"aom_uuid":         "aom-uuid-1",
 			"region":           "us-east-1"
@@ -42,7 +42,7 @@ func TestCLITokenEnvelope_unmarshalsHodorResponse(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &got); err != nil {
 		t.Fatalf("unmarshal envelope: %v", err)
 	}
-	if got.Data.PlivoAuthID != "MAFROMHODOR" {
+	if got.Data.PlivoAuthID != "MA_TEST_FIXTURE" {
 		t.Errorf("PlivoAuthID = %q", got.Data.PlivoAuthID)
 	}
 	if got.Data.PlivoAuthToken != "tok-xyz" {
@@ -72,8 +72,8 @@ func TestCLITokenEnvelope_emptyDataYieldsBlankBundle(t *testing.T) {
 
 // TestPkcePair_satisfiesS256_relation: the verifier returned must hash
 // (via SHA256 → base64url no-pad) to exactly the challenge. This is what
-// hodor's PKCE check on /v1/cli/token enforces — if this test fails,
-// no CLI invocation can ever succeed.
+// the auth server's PKCE check on /v1/cli/token enforces — if this test
+// fails, no CLI invocation can ever succeed.
 func TestPkcePair_satisfiesS256_relation(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		verifier, challenge, err := pkcePair()
@@ -269,19 +269,19 @@ func itoa(i int) string {
 // ─── End-to-end coverage for redeemAndPersist ────────────────────────────────
 //
 // These tests exercise the second half of `plivo login --browser`: POST to
-// hodor's /v1/accounts/cli/token, validate the envelope, and persist the
-// bundle to ~/.plivo/config.toml + the OS keychain. They use a real
-// httptest.Server as the hodor mock and an in-memory keyring + temp HOME so
-// the developer's real config / Keychain never gets touched.
+// the auth server's /v1/accounts/cli/token, validate the envelope, and
+// persist the bundle to ~/.plivo/config.toml + the OS keychain. They use a
+// real httptest.Server as the auth-server mock and an in-memory keyring +
+// temp HOME so the developer's real config / Keychain never gets touched.
 //
 // The browser + loopback half is already covered by
 // TestAwaitLoopbackCallback_* above; CSRF state-mismatch lives there.
 
-// hodorTokenMock returns an httptest.Server that mimics hodor's
+// tokenServerMock returns an httptest.Server that mimics the auth server's
 // /v1/accounts/cli/token endpoint. It records each POST body (so a test can
 // assert on the PKCE verifier round-trip) and replies with status / body
 // supplied by the caller.
-type hodorTokenMock struct {
+type tokenServerMock struct {
 	srv      *httptest.Server
 	mu       sync.Mutex
 	hits     []map[string]string // each entry is the decoded JSON body of one POST
@@ -289,9 +289,9 @@ type hodorTokenMock struct {
 	respBody string
 }
 
-func newHodorTokenMock(t *testing.T, respCode int, respBody string) *hodorTokenMock {
+func newTokenServerMock(t *testing.T, respCode int, respBody string) *tokenServerMock {
 	t.Helper()
-	m := &hodorTokenMock{respCode: respCode, respBody: respBody}
+	m := &tokenServerMock{respCode: respCode, respBody: respBody}
 	m.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/v1/accounts/cli/token" {
 			http.Error(w, "not found", http.StatusNotFound)
@@ -312,7 +312,7 @@ func newHodorTokenMock(t *testing.T, respCode int, respBody string) *hodorTokenM
 	return m
 }
 
-func (m *hodorTokenMock) snapshot() []map[string]string {
+func (m *tokenServerMock) snapshot() []map[string]string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	out := make([]map[string]string, len(m.hits))
@@ -323,7 +323,7 @@ func (m *hodorTokenMock) snapshot() []map[string]string {
 // setupBrowserLoginTestEnv wires up the bits redeemAndPersist needs:
 //   - in-memory keychain so SetToken doesn't pop a real macOS Keychain prompt
 //   - temp HOME so config.Save writes to t.TempDir() instead of ~/.plivo
-//   - an api.Client pointed at the supplied mock hodor server
+//   - an api.Client pointed at the supplied mock auth server
 //
 // Returns the client + a deterministic profile name to use in assertions.
 func setupBrowserLoginTestEnv(t *testing.T, mockURL string) (*api.Client, string) {
@@ -342,9 +342,10 @@ func setupBrowserLoginTestEnv(t *testing.T, mockURL string) (*api.Client, string
 }
 
 // TestRedeemAndPersist_happyPath drives redeemAndPersist against a mock
-// hodor that returns the success envelope, then asserts the bundle landed
-// in config + keychain AND that the POST body carried the same code_verifier
-// the test handed in (the PKCE round-trip the hodor side enforces).
+// auth server that returns the success envelope, then asserts the bundle
+// landed in config + keychain AND that the POST body carried the same
+// code_verifier the test handed in (the PKCE round-trip the auth server
+// enforces).
 func TestRedeemAndPersist_happyPath(t *testing.T) {
 	const (
 		state    = "state-abc"
@@ -356,7 +357,7 @@ func TestRedeemAndPersist_happyPath(t *testing.T) {
 		region   = "us-east-1"
 	)
 
-	mock := newHodorTokenMock(t, http.StatusOK, `{
+	mock := newTokenServerMock(t, http.StatusOK, `{
 		"api_id": "req-id-1",
 		"data": {
 			"plivo_auth_id":   "`+authID+`",
@@ -373,12 +374,13 @@ func TestRedeemAndPersist_happyPath(t *testing.T) {
 		t.Fatalf("redeemAndPersist: %v", err)
 	}
 
-	// 1. The request hit hodor exactly once with the right (state, code,
-	//    code_verifier) triple. The PKCE verifier round-trip is the security
-	//    invariant hodor checks before issuing the bundle.
+	// 1. The request hit the auth server exactly once with the right
+	//    (state, code, code_verifier) triple. The PKCE verifier round-trip
+	//    is the security invariant the auth server checks before issuing
+	//    the bundle.
 	hits := mock.snapshot()
 	if len(hits) != 1 {
-		t.Fatalf("hodor hits = %d, want 1", len(hits))
+		t.Fatalf("auth-server hits = %d, want 1", len(hits))
 	}
 	if hits[0]["state"] != state {
 		t.Errorf("state on wire = %q, want %q", hits[0]["state"], state)
@@ -429,13 +431,14 @@ func TestRedeemAndPersist_happyPath(t *testing.T) {
 }
 
 // TestRedeemAndPersist_brokenEnvelopeShape_returnsEmptyBundle is a regression
-// test for the hodor envelope-shape bug: the success payload landed under
-// `errors` instead of `data`. The CLI must NOT silently persist a blank
-// profile in that case — it must surface "empty bundle". If a future hodor
-// refactor moves the bundle key around again, this test fails first.
+// test for the auth-server envelope-shape bug: the success payload landed
+// under `errors` instead of `data`. The CLI must NOT silently persist a
+// blank profile in that case — it must surface "empty bundle". If a future
+// auth-server refactor moves the bundle key around again, this test fails
+// first.
 func TestRedeemAndPersist_brokenEnvelopeShape_returnsEmptyBundle(t *testing.T) {
 	// Buggy shape: success fields under `errors`, data is null.
-	mock := newHodorTokenMock(t, http.StatusOK, `{
+	mock := newTokenServerMock(t, http.StatusOK, `{
 		"api_id": "req-id-2",
 		"data": null,
 		"errors": {
@@ -471,14 +474,14 @@ func TestRedeemAndPersist_brokenEnvelopeShape_returnsEmptyBundle(t *testing.T) {
 	}
 }
 
-// TestRedeemAndPersist_hodor4xxWithGlobalError surfaces the upstream
+// TestRedeemAndPersist_4xxWithGlobalError surfaces the upstream
 // `errors.global_error` message cleanly via the api.Client → clierr.Error
 // path, instead of dropping it on the floor or printing a raw HTTP-400.
 // This is the typical "state expired" / "code already redeemed" failure
-// shape from hodor's CLIAuth controller.
-func TestRedeemAndPersist_hodor4xxWithGlobalError(t *testing.T) {
+// shape from the auth server's CLI-auth controller.
+func TestRedeemAndPersist_4xxWithGlobalError(t *testing.T) {
 	const upstreamMsg = "state not found or expired"
-	mock := newHodorTokenMock(t, http.StatusBadRequest, `{
+	mock := newTokenServerMock(t, http.StatusBadRequest, `{
 		"api_id": "req-id-3",
 		"data": null,
 		"errors": {"global_error": "`+upstreamMsg+`"},
@@ -488,7 +491,7 @@ func TestRedeemAndPersist_hodor4xxWithGlobalError(t *testing.T) {
 
 	err := redeemAndPersist(client, "s", "c", "v", profileName, "")
 	if err == nil {
-		t.Fatal("want error from hodor 4xx, got nil")
+		t.Fatal("want error from auth-server 4xx, got nil")
 	}
 
 	// The clierr.Error should carry the upstream message verbatim — that's
@@ -509,7 +512,7 @@ func TestRedeemAndPersist_hodor4xxWithGlobalError(t *testing.T) {
 	// 4xx → no persistence.
 	cfg, _ := config.Load()
 	if _, ok := cfg.Profiles[profileName]; ok {
-		t.Error("profile saved despite hodor 4xx")
+		t.Error("profile saved despite auth-server 4xx")
 	}
 }
 

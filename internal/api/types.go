@@ -153,28 +153,6 @@ type GenericResponse struct {
 	Message string `json:"message"`
 }
 
-// Agent mirrors the subset of PHLO config-service's Phlo model that the CLI
-// surfaces. The full workflow lives in nested fields not exposed here.
-type Agent struct {
-	UUID         string `json:"uuid"`
-	Name         string `json:"name"`
-	Description  string `json:"description,omitempty"`
-	State        string `json:"state,omitempty"`
-	PhloType     string `json:"phlo_type,omitempty"`
-	IsDefault    bool   `json:"is_default,omitempty"`
-	OutboundPhlo bool   `json:"outbound_phlo,omitempty"`
-	Enabled      bool   `json:"enabled,omitempty"`
-	Version      int    `json:"version,omitempty"`
-	UpdatedAt    string `json:"updated_at,omitempty"`
-	CreatedAt    string `json:"created_at,omitempty"`
-}
-
-// AgentListResponse is the shape returned by PHLO config service's list endpoint.
-// Different PHLO routes return slightly different envelopes; we try common keys.
-type AgentListResponse struct {
-	Objects []Agent `json:"objects,omitempty"`
-}
-
 // ScopedToken is the response shape from POST /v1/auth/token/.
 // The Token field is populated only on creation; later reads omit it.
 type ScopedToken struct {
@@ -699,8 +677,6 @@ type BuddyChatRequest struct {
 }
 
 // BuddyEscalation is one row from GET /v1/aiassist/buddy-ext/escalations.
-// Shape mirrors the aiassist `BuddyEscalation` ORM model surfaced by
-// `data_adapters/buddy_escalation.list_escalations()`.
 type BuddyEscalation struct {
 	UUID              string `json:"uuid,omitempty"`
 	Status            string `json:"status,omitempty"`

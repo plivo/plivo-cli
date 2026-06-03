@@ -271,7 +271,7 @@ func extractMessage(body []byte) string {
 			return v
 		}
 	}
-	// Nested data.error / data.message (PHLO config service shape).
+	// nested data.error / data.message envelope.
 	if data, ok := generic["data"].(map[string]any); ok {
 		for _, key := range []string{"error", "message", "global_error"} {
 			if v, ok := data[key].(string); ok && v != "" {
@@ -279,7 +279,7 @@ func extractMessage(body []byte) string {
 			}
 		}
 	}
-	// errors.global_error (Contacto auth gateway shape).
+	// errors.global_error envelope.
 	if errs, ok := generic["errors"].(map[string]any); ok {
 		if v, ok := errs["global_error"].(string); ok && v != "" {
 			return v

@@ -309,7 +309,7 @@ func TestFromHTTP_extractsGlobalErrorKey(t *testing.T) {
 }
 
 func TestFromHTTP_extractsNestedDataError(t *testing.T) {
-	// PHLO config service shape: {"data": {"error": "..."}}
+	// nested data.error envelope: {"data": {"error": "..."}}
 	e := FromHTTP(400, "", []byte(`{"data":{"error":"nested reason"}}`))
 	if e.Message != "nested reason" {
 		t.Errorf("Message = %q", e.Message)
@@ -324,7 +324,7 @@ func TestFromHTTP_extractsNestedDataMessage(t *testing.T) {
 }
 
 func TestFromHTTP_extractsErrorsGlobalError(t *testing.T) {
-	// Contacto auth gateway shape: {"errors": {"global_error": "..."}}
+	// errors.global_error envelope: {"errors": {"global_error": "..."}}
 	e := FromHTTP(400, "", []byte(`{"errors":{"global_error":"gateway reason"}}`))
 	if e.Message != "gateway reason" {
 		t.Errorf("Message = %q", e.Message)

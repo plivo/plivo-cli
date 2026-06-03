@@ -8,9 +8,8 @@ package version
 var Value = "0.1.0-dev"
 
 // UserAgent is the value sent on every outbound HTTP request from the CLI.
-// Set as a request header so api.plivo.com / lookup.plivo.com / hodor edges
-// can identify CLI traffic in their logs and rate-limiters — same string for
-// both Plivo and CX endpoints.
+// Set as a request header so Plivo's API edges can identify CLI traffic in
+// their logs and rate-limiters.
 func UserAgent() string {
 	return "Plivo-CLI/" + Value
 }

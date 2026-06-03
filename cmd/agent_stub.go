@@ -9,9 +9,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// agentCmd is a placeholder in the public build. The full Vibe AI agent surface
-// (create / run / publish / attach / download / session …) depends on
-// Plivo-internal services and ships only in internal builds (`-tags internal`).
+// agentCmd is a placeholder in the public build. Public build only ships
+// the coming-soon stub; the full agent surface is gated behind a build
+// tag for now.
 //
 // This stub keeps `plivo agent` discoverable and tells users it's coming,
 // rather than the command simply not existing.

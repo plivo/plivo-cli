@@ -9,6 +9,6 @@ import "os"
 // tag) doesn't expose a flag that points at a Plivo-internal service. The
 // backing var lives in root.go and stays "" in the public build.
 func init() {
-	rootCmd.PersistentFlags().StringVar(&hodorServer, "hodor-server", os.Getenv("PLIVO_HODOR_SERVER"),
+	rootCmd.PersistentFlags().StringVar(&adminServer, "hodor-server", os.Getenv("PLIVO_HODOR_SERVER"),
 		"base URL for hodor (used by `plivo agent` and `plivo auth token`)")
 }

@@ -64,7 +64,7 @@ func execCmd(t *testing.T, args ...string) (err error, stdout, stderr string) {
 	outputFormat = ""
 	logLevel = "warn"
 	timeoutSec = 30
-	hodorServer = ""
+	adminServer = ""
 
 	// Capture stdout via os.Stdout redirection (cobra writes to os.Stderr/Stdout
 	// directly in several places, so we need real OS-level redirection rather
@@ -173,7 +173,6 @@ func TestDestructiveVerbs_refuseWithoutYes(t *testing.T) {
 		{"numbers release", []string{"numbers", "release", "+14155551234"}},
 		{"voice calls hangup", []string{"voice", "calls", "hangup", "CALL-UUID"}},
 		{"voice recordings delete", []string{"voice", "recordings", "delete", "REC-UUID"}},
-		// `agent delete` is internal-only; verified in internal_registration_test.go.
 		{"account subaccounts delete", []string{"account", "subaccounts", "delete", "SAxxx"}},
 		{"voice endpoints delete", []string{"voice", "endpoints", "delete", "EP-ID"}},
 		{"account applications delete", []string{"account", "applications", "delete", "APP-ID"}},
