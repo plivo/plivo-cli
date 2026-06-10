@@ -1,0 +1,44 @@
+Log in to Plivo and save credentials for subsequent commands.
+
+The auth_token is stored in your OS keychain (macOS Keychain, Windows
+Credential Manager, Linux Secret Service). The CLI falls back to writing
+the token inline in ~/.plivo/config.toml (chmod 0600) only when no
+keychain is available.
+
+By default, the CLI validates the credentials by calling GET /Account/
+before saving — use --no-verify to skip if you're offline or hitting a
+local mock.
+
+Usage:
+  plivo login [flags]
+
+Examples:
+  plivo login                                       # opens browser (default)
+  plivo login --manual                              # prompts for auth_id + token + email
+  plivo login --auth-id MAxxxxxxxxxxxxxxxxxxxx      # pre-supplies auth_id, prompts for the rest
+  echo "$TOKEN" | plivo login --auth-id MAxx --auth-token-stdin
+  plivo login --email                               # email + password (internal builds only)
+  plivo login --name staging                        # save under a named profile
+
+Flags:
+      --auth-id string     Plivo auth_id (triggers manual entry; prompts for token + email)
+      --auth-token-stdin   read auth_token from stdin (for CI / scripts); hidden interactive prompt otherwise
+      --browser            no-op (browser is the default); kept for backward compat
+      --email              log in with email + password (internal builds only — dev hodor endpoint)
+      --env string         target environment (default "prod"). Persisted on the profile so subsequent commands inherit it.
+  -h, --help               help for login
+      --manual             trigger manual auth_id + auth_token + email entry (interactive)
+  -n, --name string        profile name to save under (default "default")
+      --no-verify          skip the GET /Account/ validation hit (offline / mock use only)
+
+Global Flags:
+      --all                auto-paginate through all pages
+      --dry-run            print the HTTP request without sending
+      --explain            explain what the command will do before executing
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts

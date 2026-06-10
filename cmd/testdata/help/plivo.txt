@@ -1,0 +1,42 @@
+plivo is a command-line interface for the Plivo REST API.
+
+Credentials resolve in order:
+  1. --profile flag
+  2. active profile in ~/.plivo/config.toml
+  3. PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN env vars
+
+Usage:
+  plivo [command]
+
+Available Commands:
+  account     Inspect and update the active Plivo account
+  agent       AI voice agents (coming soon)
+  ask         Ask Plivo's AI assistant (streams the answer as it comes)
+  auth        Manage credential profiles (list / use / remove / whoami)
+  completion  Generate the autocompletion script for the specified shell
+  feedback    Share feedback about the Plivo CLI (rating + optional comment)
+  help        Help about any command
+  login       Log in to Plivo (saves credentials securely to the OS keychain)
+  logout      Log out a profile (deletes its entry + removes the auth_token from the OS keychain)
+  lookup      Carrier + format lookup for an E.164 number (lookup.plivo.com)
+  messaging   Send messages (SMS / MMS / WhatsApp) — channel-split surface
+  numbers     Manage account phone numbers
+  support     List your past support escalations (filed via `plivo ask`)
+  upgrade     Upgrade plivo to the latest release
+  verify      Plivo Verify — OTP / phone-number verification sessions
+  voice       Voice — calls, conferences, multiparty, recordings, endpoints
+
+Flags:
+      --all                auto-paginate through all pages
+      --dry-run            print the HTTP request without sending
+      --explain            explain what the command will do before executing
+  -h, --help               help for plivo
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts
+
+Use "plivo [command] --help" for more information about a command.
