@@ -1,0 +1,41 @@
+Share feedback about the Plivo CLI — a 1-5 rating and an optional comment.
+
+Run interactively to be walked through both prompts. Or pass --rating /
+--message for a one-shot submission (handy in scripts). Either field
+alone is fine — rate without commenting, or comment without rating.
+
+Comments are scrubbed client-side for phone numbers, auth tokens,
+emails and similar PII patterns before being sent. The collector
+re-runs the same scrub server-side.
+
+The feedback collector endpoint is configured via the PLIVO_FEEDBACK_ENDPOINT
+environment variable. When unset, the command surfaces a clear "not yet
+wired" message instead of dropping the submission silently.
+
+Usage:
+  plivo feedback [flags]
+
+Examples:
+  plivo feedback                              # interactive
+  plivo feedback --rating 4                   # one-shot rating only
+  plivo feedback --message "..."              # one-shot comment only
+  plivo feedback --rating 2 --message "..."   # one-shot both
+  plivo feedback --rating 5 --yes             # skip pre-submit preview
+
+Flags:
+  -h, --help             help for feedback
+      --message string   one-shot comment. Skip the interactive prompt.
+      --no-context       don't auto-attach CLI version / OS / arch metadata
+      --rating int       one-shot rating (1-5). Skip the interactive prompt.
+      --yes              skip the pre-submit preview / confirmation (default: confirm in interactive)
+
+Global Flags:
+      --all                auto-paginate through all pages
+      --dry-run            print the HTTP request without sending
+      --explain            explain what the command will do before executing
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)

@@ -1,0 +1,190 @@
+package feedback
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"runtime"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/plivo/plivo-cli/internal/version"
+)
+
+// EndpointEnvVar is the env var the CLI consults to find the collector
+// URL. Empty / unset disables network submission — the event is dropped
+// (or, on the explicit channel, surfaced as "feedback endpoint not yet
+// configured"). Lets us land the CLI surface before the backend
+// collector is wired without breaking the user flow.
+const EndpointEnvVar = "PLIVO_FEEDBACK_ENDPOINT"
+
+// MachineIDEnvVar overrides the per-machine UUID. Only used by tests
+// to make assertions deterministic.
+const MachineIDEnvVar = "PLIVO_FEEDBACK_MACHINE_ID"
+
+// Trigger is the high-level reason this event was generated. Distinct
+// values mean we can answer "rating distribution by trigger" — sentiment
+// after a milestone is rarely the same shape as sentiment after a
+// command failure.
+type Trigger string
+
+const (
+	TriggerExplicit           Trigger = "explicit_command"
+	TriggerFirstImpression    Trigger = "first_impression"
+	TriggerAnniversary7d      Trigger = "anniversary_7d"
+	TriggerAnniversary30d     Trigger = "anniversary_30d"
+	TriggerAnniversary90d     Trigger = "anniversary_90d"
+	TriggerAnniversary365d    Trigger = "anniversary_365d"
+	TriggerVersionUpgrade     Trigger = "version_upgrade"
+	TriggerMilestone50Cmds    Trigger = "milestone_50_commands"
+	TriggerMilestoneFirstCall Trigger = "milestone_first_call"
+	TriggerMilestoneFirstAsk  Trigger = "milestone_first_ask"
+)
+
+// Context captures the CLI-side state at the moment of submission. Only
+// dimension-safe fields here; no flag values, no arg values, no free
+// text other than the user's own comment.
+type Context struct {
+	CommandPath   string   `json:"command_path,omitempty"`    // dotted path; empty for the explicit cmd
+	LastOutcome   string   `json:"last_outcome,omitempty"`    // success | api_error | client_error | cancelled | timeout
+	Last3Commands []string `json:"last_3_commands,omitempty"` // paths only, most-recent-first
+	CLIVersion    string   `json:"cli_version"`
+	OS            string   `json:"os"`
+	Arch          string   `json:"arch"`
+	GoVersion     string   `json:"go_version"`
+	InstallMethod string   `json:"install_method,omitempty"` // install.sh | install.ps1 | manual | brew | unknown
+	IsCI          bool     `json:"is_ci"`
+	IsTTY         bool     `json:"is_tty"`
+}
+
+// Event is the JSON shape we ship to the collector. Field ordering
+// matches the design doc's schema verbatim so the wire format stays
+// reviewable from the doc alone.
+type Event struct {
+	Event         string    `json:"event"` // always "cli.feedback.submitted"
+	Timestamp     time.Time `json:"timestamp"`
+	SessionID     string    `json:"session_id"`
+	AnonMachineID string    `json:"anon_machine_id"`
+	AuthIDHash    string    `json:"auth_id_hash,omitempty"` // sha256:abc... ; empty if user not logged in
+
+	Rating         int    `json:"rating,omitempty"`         // 1-5, or 0 if comment-only
+	Comment        string `json:"comment,omitempty"`        // post-sanitisation
+	CommentLength  int    `json:"comment_length,omitempty"` // pre-truncation
+	RedactionCount int    `json:"redaction_count"`          // how many PII patterns fired
+
+	Trigger Trigger `json:"trigger"`
+	Context Context `json:"context"`
+}
+
+// NewEvent builds a fresh event with all the machine-side fields
+// populated. The caller fills in rating/comment/trigger/context-extras.
+// authID may be empty for not-logged-in users.
+func NewEvent(authID string) *Event {
+	return &Event{
+		Event:         "cli.feedback.submitted",
+		Timestamp:     time.Now().UTC(),
+		SessionID:     uuid.NewString(),
+		AnonMachineID: machineID(),
+		AuthIDHash:    hashAuthID(authID),
+		Context: Context{
+			CLIVersion: version.Value,
+			OS:         runtime.GOOS,
+			Arch:       runtime.GOARCH,
+			GoVersion:  runtime.Version(),
+		},
+	}
+}
+
+// SetComment runs the user-typed string through Sanitize, captures the
+// pre-truncation length, and records the redaction count.
+func (e *Event) SetComment(raw string) {
+	e.CommentLength = len(raw)
+	cleaned, count := Sanitize(raw)
+	e.Comment = cleaned
+	e.RedactionCount = count
+}
+
+// Submit POSTs the event to the configured collector. Returns an error
+// if the endpoint env var is unset (signals "backend not wired yet" to
+// the caller, which can decide how loudly to surface that) or if the
+// HTTP call fails.
+//
+// Times out at 5s — explicit-channel users actively typed this; we
+// can afford a longer budget than the contextual channel's 1s
+// fire-and-forget would allow.
+func (e *Event) Submit(ctx context.Context) error {
+	endpoint := os.Getenv(EndpointEnvVar)
+	if endpoint == "" {
+		return ErrEndpointNotConfigured
+	}
+	body, err := json.Marshal(e)
+	if err != nil {
+		return fmt.Errorf("marshal event: %w", err)
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Plivo-CLI/"+version.Value+" (feedback)")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("post feedback: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("collector returned HTTP %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// ErrEndpointNotConfigured is returned by Submit when the collector URL
+// isn't set. The CLI surfaces a clearer message; this sentinel lets the
+// caller distinguish "infra not ready" from "infra returned an error".
+var ErrEndpointNotConfigured = fmt.Errorf("PLIVO_FEEDBACK_ENDPOINT not configured")
+
+// hashAuthID returns "sha256:<first-16-hex-chars>" or "" for empty input.
+// The collector can rejoin to identity via an internal salt lookup; the
+// value as-shipped is one-way for external observers.
+func hashAuthID(authID string) string {
+	if authID == "" {
+		return ""
+	}
+	h := sha256.Sum256([]byte(authID))
+	return "sha256:" + hex.EncodeToString(h[:])[:16]
+}
+
+// machineID returns a per-machine UUID, persisted in ~/.plivo/machine-id
+// (so it survives reinstall in-place, gets regenerated on full wipe).
+// Falls through to a process-lifetime UUID if the file isn't writable.
+// PLIVO_FEEDBACK_MACHINE_ID overrides the lookup entirely (for tests).
+func machineID() string {
+	if forced := os.Getenv(MachineIDEnvVar); forced != "" {
+		return forced
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return uuid.NewString()
+	}
+	path := home + "/.plivo/machine-id"
+	if existing, err := os.ReadFile(path); err == nil {
+		if id := string(bytes.TrimSpace(existing)); id != "" {
+			return id
+		}
+	}
+	// File missing or empty — mint a new one.
+	id := uuid.NewString()
+	_ = os.MkdirAll(home+"/.plivo", 0o700)
+	_ = os.WriteFile(path, []byte(id), 0o600)
+	return id
+}
