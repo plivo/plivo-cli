@@ -1,0 +1,30 @@
+Diagnose a WhatsApp message by UUID. Asks Plivo's AI assistant to
+look up the delivery / read receipt and explain the outcome.
+
+Equivalent to:
+  plivo ask "Help me debug this WhatsApp message: <message_uuid>"
+
+Usage:
+  plivo messaging whatsapp diagnose <message_uuid> [flags]
+
+Aliases:
+  diagnose, diag
+
+Examples:
+  plivo messaging whatsapp diagnose 788444ec-…
+  plivo messaging wa diagnose 788444ec-…           # 'wa' alias for whatsapp
+
+Flags:
+  -h, --help   help for diagnose
+
+Global Flags:
+      --all                auto-paginate through all pages
+      --dry-run            print the HTTP request without sending
+      --explain            explain what the command will do before executing
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts

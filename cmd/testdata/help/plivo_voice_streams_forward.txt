@@ -1,0 +1,47 @@
+One-command local-dev experience for voice streaming.
+
+Saves the app's current answer_url, starts an ngrok tunnel + a local
+HTTP/WebSocket server, points the app at the tunnel, and forwards
+incoming call audio to your local WebSocket handler. Restores the
+original answer_url on Ctrl+C.
+
+Requires ngrok in PATH (or at ~/.plivo/bin/ngrok). Install from
+https://ngrok.com/download.
+
+Nothing is purchased, created, or deleted — the only mutation is one
+field on one app, restored on exit.
+
+Usage:
+  plivo voice streams forward [flags]
+
+Examples:
+  plivo voice streams forward \
+    --number +14155550142 \
+    --app abc-uuid-def-456 \
+    --to ws://localhost:7860/ws
+
+  # Don't restore answer_url on exit (advanced):
+  plivo voice streams forward --number +14155550142 --app abc --to ws://localhost:7860/ws --keep
+
+Flags:
+      --app string      Plivo Application UUID whose answer_url will be temporarily redirected (required)
+      --bidirectional   allow bot to send audio back to the caller (default true)
+      --codec string    audio codec advertised to Plivo: mulaw | l16 (default "mulaw")
+  -h, --help            help for forward
+      --keep            do NOT restore the original answer_url on exit (advanced)
+      --number string   E.164 number attached to --app (required)
+      --print-payload   dump full webhook bodies to terminal (verbose)
+      --rate int        sample rate in Hz (default 8000)
+      --to string       local WebSocket URL to forward call audio to, e.g. ws://localhost:7860/ws (required)
+  -y, --yes             skip the confirmation prompt
+
+Global Flags:
+      --all                auto-paginate through all pages
+      --dry-run            print the HTTP request without sending
+      --explain            explain what the command will do before executing
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)

@@ -1,0 +1,26 @@
+Update a REJECTED compliance application and resubmit it. Same --data / --file
+shape as create. Documents are FULLY REPLACED — re-attach every required file,
+not only the changed ones. Only applications in 'rejected' status can be updated.
+
+Usage:
+  plivo numbers compliance update <compliance_id> [flags]
+
+Examples:
+  plivo numbers compliance update <compliance_id> --data @fixed.json --file documents[0].file=@passport.pdf
+
+Flags:
+      --data string        updated application JSON; inline or @file.json (required)
+      --file stringArray   document upload as field=path (repeatable; replaces all documents)
+  -h, --help               help for update
+
+Global Flags:
+      --all                auto-paginate through all pages
+      --dry-run            print the HTTP request without sending
+      --explain            explain what the command will do before executing
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts
