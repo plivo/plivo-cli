@@ -1,0 +1,179 @@
+name: Release
+
+# Cuts a GitHub Release with cross-compiled binaries that `plivo upgrade`
+# (and the install.sh / install.ps1 one-liners) can fetch.
+#
+# Two ways to trigger:
+#
+#   1. workflow_dispatch — go to Actions → Release → Run workflow, enter
+#      the version (e.g. v0.1.0). The job creates the tag if it doesn't
+#      exist, builds the 6 platform binaries, and publishes the release.
+#      Easiest path for cutting a new version.
+#
+#   2. Push a tag matching v*.*.* — `git tag v0.1.0 && git push --tags`.
+#      Same build + publish flow, no UI step.
+#
+# Asset naming matches install.sh's expectation: plivo_<os>_<arch>[.exe].
+# Version string baked into the binary via the Makefile's `git describe`
+# resolution, so `plivo --version` matches the release tag.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to publish (must match v*.*.* — semver with v prefix). The tag is created if it does not already exist.'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release? (Tag suffixes like -rc, -beta auto-detect as pre-release regardless.)'
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write # required to create tags and publish releases
+
+jobs:
+  release:
+    name: Build + publish
+    runs-on: ubuntu-latest-m-plivo
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history so `git describe --tags` resolves the tag we're
+          # building. Shallow clones return short SHAs which would land
+          # in version.Value instead of v0.1.0.
+          fetch-depth: 0
+          # Use a PAT-less default token; the contents:write permission
+          # above is enough for tag creation + release publish.
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # ─── Resolve + validate version ─────────────────────────────────────
+      #
+      # workflow_dispatch: version comes from inputs.version.
+      # push to tag:     version is GITHUB_REF_NAME (e.g. refs/tags/v0.1.0).
+      #
+      # We validate the semver shape here (rather than relying on Makefile)
+      # so a malformed input fails fast — and so callers can't smuggle in
+      # things like "v0.1.0-not-a-real-release" that would silently install
+      # via `plivo upgrade --version`.
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION='${{ inputs.version }}'
+          else
+            VERSION="${GITHUB_REF_NAME}"
+          fi
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.+-]+)?$ ]]; then
+            echo "::error::Version '$VERSION' must match v*.*.* (e.g. v0.1.0, v0.2.0-rc.1)"
+            exit 1
+          fi
+          # Auto-detect pre-release from the suffix; workflow_dispatch
+          # input can also force it.
+          if [[ "$VERSION" == *-* ]] || [ "${{ inputs.prerelease }}" = "true" ]; then
+            PRERELEASE=true
+          else
+            PRERELEASE=false
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "→ building $VERSION (prerelease=$PRERELEASE)"
+
+      # ─── Create the tag (workflow_dispatch only) ─────────────────────────
+      #
+      # If we're invoked via the UI, the tag may not exist yet. We create
+      # it pointing at the current commit, then push it. softprops's action
+      # also accepts pre-existing tags so the tag-push trigger path is a
+      # no-op here.
+      - name: Create tag (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git rev-parse --quiet --verify "refs/tags/$VERSION" >/dev/null; then
+            echo "Tag $VERSION already exists; reusing."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$VERSION" -m "Release $VERSION"
+            git push origin "$VERSION"
+            echo "Tag $VERSION created and pushed."
+          fi
+          # Fast-forward the working tree's HEAD to the tag so `git describe`
+          # in the Makefile yields the clean tag rather than HEAD~ + commit.
+          git checkout "$VERSION"
+
+      # ─── Build the 6-target matrix in one job ────────────────────────────
+      #
+      # `make build-all` cross-compiles darwin/linux/windows × amd64/arm64
+      # with `-ldflags "-s -w -X .../version.Value=$VERSION"`. Naming
+      # (`dist/plivo_<os>_<arch>[.exe]`) matches install.sh's ASSET pattern.
+      - name: Build all platforms
+        run: |
+          make build-all
+          ls -lh dist/
+
+      # ─── Generate a SHA256SUMS file alongside the binaries ───────────────
+      #
+      # install.sh doesn't verify checksums today, but having them in the
+      # release lets a security-minded user audit the asset bytes. Future
+      # work: have install.sh + plivo upgrade verify SHA256SUMS.sig.
+      - name: SHA256SUMS
+        working-directory: dist
+        run: |
+          sha256sum plivo_* > SHA256SUMS
+          cat SHA256SUMS
+
+      # ─── Verify version is baked into the linux/amd64 binary ─────────────
+      #
+      # Catches the case where ldflags didn't apply (renamed version pkg
+      # path, gotcha in the Makefile, etc). Better to fail the release
+      # workflow than ship a binary that says "version dev".
+      - name: Verify embedded version string
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          # We can run the linux/amd64 build on the runner directly.
+          chmod +x dist/plivo_linux_amd64
+          GOT=$(./dist/plivo_linux_amd64 --version 2>&1 | awk '{print $NF}')
+          # Makefile's git-describe output is the bare tag (no "v" stripping),
+          # so the binary's --version should exactly match $VERSION.
+          if [ "$GOT" != "$VERSION" ]; then
+            echo "::error::Embedded version '$GOT' does not match expected '$VERSION'"
+            exit 1
+          fi
+          echo "✓ Embedded version matches: $GOT"
+
+      # ─── Publish the release with all assets ─────────────────────────────
+      #
+      # `generate_release_notes: true` lets GitHub auto-build the
+      # since-last-tag changelog. softprops/action-gh-release is the
+      # de-facto standard for this and is well-maintained.
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.version }}
+          name: ${{ steps.ver.outputs.version }}
+          prerelease: ${{ steps.ver.outputs.prerelease == 'true' }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/plivo_darwin_amd64
+            dist/plivo_darwin_arm64
+            dist/plivo_linux_amd64
+            dist/plivo_linux_arm64
+            dist/plivo_windows_amd64.exe
+            dist/plivo_windows_arm64.exe
+            dist/SHA256SUMS
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

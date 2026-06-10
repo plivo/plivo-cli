@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerabilities
+    url: https://github.com/plivo/plivo-cli/blob/main/SECURITY.md
+    about: Please report security issues privately via security@plivo.com — do not open a public issue.
+  - name: Plivo product support
+    url: https://www.plivo.com/contact/
+    about: For account, billing, or REST-API-level questions unrelated to the CLI, contact Plivo support.

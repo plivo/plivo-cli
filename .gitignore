@@ -1,0 +1,13 @@
+# build artefacts
+/plivo
+/plivo-cli
+/dist/
+*.exe
+
+# editor + OS noise
+.DS_Store
+*.log
+.vscode/
+.idea/
+.claude/
+plivo-local
