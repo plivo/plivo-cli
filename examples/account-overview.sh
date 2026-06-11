@@ -3,7 +3,7 @@
 # Print the active account and the first page of rented numbers, as JSON —
 # handy for piping into jq or feeding an automation/AI agent.
 #
-# Auth: export PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN, or run `plivo auth login` first.
+# Auth: export PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN, or run `plivo login` first.
 # These are read-only operations (no cost, no --yes needed).
 set -euo pipefail
 

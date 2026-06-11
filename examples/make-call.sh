@@ -2,7 +2,7 @@
 #
 # Place an outbound call that fetches PlivoXML from --answer-url when answered.
 #
-# Auth: export PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN, or run `plivo auth login` first.
+# Auth: export PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN, or run `plivo login` first.
 # Runs in --dry-run mode (prints the request, dials nothing). Remove --dry-run
 # (and keep --yes) to actually place the call — it costs money.
 set -euo pipefail
