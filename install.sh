@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
 # install plivo cli — cross-platform one-line installer (macOS / Linux / Windows)
 #
-# Usage (while the code lives on the beta branch, pre-v1.0):
-#   curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/beta/install.sh | bash
-#
-# At the v1.0 cut the canonical install.sh moves to the default branch:
+# Usage:
 #   curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | bash
 #
 # On native Windows (PowerShell, no bash), use install.ps1 instead:
-#   irm https://raw.githubusercontent.com/plivo/plivo-cli/beta/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/plivo/plivo-cli/main/install.ps1 | iex
 #
 # This bash installer also works on Windows under Git Bash / MSYS2 / Cygwin /
 # WSL. WSL reports as Linux and installs the Linux binary; Git Bash/MSYS/Cygwin

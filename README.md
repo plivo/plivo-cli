@@ -19,13 +19,13 @@ A single static Go binary for provisioning numbers, wiring voice-agent applicati
 **macOS / Linux / WSL / Git Bash** — auto-detects OS and architecture:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/beta/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-irm https://raw.githubusercontent.com/plivo/plivo-cli/beta/install.ps1 | iex
+irm https://raw.githubusercontent.com/plivo/plivo-cli/main/install.ps1 | iex
 ```
 
 Both installers fetch the matching release binary (`darwin`/`linux`/`windows` × `amd64`/`arm64`). Override with `PLIVO_CLI_VERSION` (a release tag) or `PLIVO_INSTALL_DIR` (target directory).
