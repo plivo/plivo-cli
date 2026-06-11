@@ -36,8 +36,25 @@ permissions:
   contents: write # required to create tags and publish releases
 
 jobs:
+  # Re-run the full test suite on the exact ref being released. Guards
+  # against shipping a broken binary even if a hot-fix tag races past CI.
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest-m-plivo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: go test (race)
+        run: go test ./... -race -count=1
+
   release:
     name: Build + publish
+    needs: tests
     runs-on: ubuntu-latest-m-plivo
     steps:
       - name: Checkout
