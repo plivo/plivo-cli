@@ -1,0 +1,744 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#F4EFE6">
+<title>plivo cli · the terminal-native way to drive Plivo</title>
+<meta name="description" content="The official Plivo developer CLI — a single static Go binary for provisioning numbers, wiring voice agents, sending messages, and running everything in the Plivo platform from a terminal.">
+<link rel="stylesheet" href="assets/tokens.css">
+<style>
+  /* ============================================================
+     index · public landing
+     ============================================================ */
+
+  .hero {
+    padding: clamp(80px, 14vw, 200px) 0 var(--s7);
+    position: relative;
+  }
+
+  .hero .row { row-gap: var(--s5); align-items: end; }
+
+  .hero .lockup { grid-column: 1 / span 9; }
+  .hero .meta-col {
+    grid-column: 10 / span 3;
+    align-self: end;
+    border-left: 1px solid hsl(var(--border));
+    padding-left: var(--s4);
+  }
+
+  .hero h1 {
+    font-family: var(--font-sora);
+    font-size: clamp(64px, 11.5vw, 200px);
+    line-height: .92;
+    letter-spacing: -.02em;
+    font-weight: 400;
+  }
+  .hero h1 .stack { display: block; }
+  .hero h1 .ital  { font-style: italic; color: hsl(var(--primary)); letter-spacing: -.025em; }
+
+  .hero .marquee {
+    margin-top: var(--s5);
+    padding: var(--s3) 0;
+    border-top: 1px solid hsl(var(--foreground));
+    border-bottom: 1px solid hsl(var(--foreground));
+    overflow: hidden;
+    position: relative;
+  }
+  .hero .marquee-track {
+    display: flex;
+    gap: var(--s5);
+    white-space: nowrap;
+    animation: scroll 30s linear infinite;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+  }
+  .hero .marquee-track span {
+    display: inline-flex; align-items: center; gap: var(--s2);
+  }
+  .hero .marquee-track .sep {
+    color: hsl(var(--primary));
+    font-family: var(--font-sora);
+    font-style: italic;
+    font-size: 18px;
+    line-height: 1;
+  }
+  @keyframes scroll {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+  }
+
+  .hero .lede-block {
+    margin-top: var(--s6);
+    display: grid;
+    grid-template-columns: 1fr 1.6fr;
+    gap: var(--s6);
+  }
+  .hero .lede-block .label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+  .hero .lede-block p {
+    font-family: var(--font-sora);
+    font-size: clamp(22px, 2.5vw, 36px);
+    line-height: 1.22;
+    color: hsl(var(--foreground));
+  }
+  .hero .lede-block p em {
+    font-style: italic;
+    color: hsl(var(--primary));
+  }
+
+  /* numbers strip */
+  .numbers {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid hsl(var(--foreground));
+    border-bottom: 1px solid hsl(var(--foreground));
+    background: hsl(var(--card));
+  }
+  .numbers .n {
+    padding: var(--s5) var(--s4);
+    border-right: 1px solid hsl(var(--border));
+  }
+  .numbers .n:last-child { border-right: 0; }
+  .numbers .n .val {
+    font-family: var(--font-sora);
+    font-size: clamp(52px, 6.5vw, 100px);
+    line-height: 1;
+    letter-spacing: -.02em;
+  }
+  .numbers .n .val sup {
+    font-size: .38em;
+    font-style: italic;
+    color: hsl(var(--primary));
+    margin-left: 4px;
+    vertical-align: top;
+  }
+  .numbers .n .label {
+    margin-top: var(--s2);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* install module */
+  .install-mod {
+    background: hsl(var(--foreground));
+    color: hsl(var(--card));
+    padding: var(--s6) var(--s5);
+    display: grid;
+    grid-template-columns: 1fr 1.4fr;
+    gap: var(--s6);
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .install-mod::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 80% 0%, rgba(229,90,43,.18), transparent 50%);
+    pointer-events: none;
+  }
+  .install-mod h3 {
+    font-family: var(--font-sora);
+    font-size: clamp(36px, 4.5vw, 64px);
+    font-weight: 400;
+    line-height: 1;
+    letter-spacing: -.015em;
+  }
+  .install-mod h3 .h { color: hsl(var(--primary)); }
+  .install-mod p {
+    margin-top: var(--s3);
+    color: rgba(255,255,255,.7);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .install-cmd {
+    font-family: var(--font-mono);
+    font-size: clamp(13px, 1.2vw, 16px);
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.12);
+    padding: var(--s4);
+    border-radius: var(--r-md);
+    position: relative;
+    color: hsl(var(--card));
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease-out);
+    margin-top: var(--s3);
+  }
+  .install-cmd:first-of-type { margin-top: 0; }
+  .install-cmd:hover { border-color: hsl(var(--primary)); }
+  .install-cmd::before { content: "$ "; color: hsl(var(--primary)); }
+  .install-cmd .copy-hint {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    font-size: 10px;
+    color: rgba(255,255,255,.4);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  .install-cmd .os {
+    position: absolute;
+    top: 8px;
+    left: 12px;
+    font-size: 10px;
+    color: rgba(255,255,255,.55);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  .install-cmd.with-os { padding-top: var(--s5); }
+
+  /* quickstart strip */
+  .qs {
+    margin-top: var(--s7);
+    display: grid;
+    grid-template-columns: 1fr 1.6fr;
+    gap: var(--s6);
+    align-items: start;
+  }
+  .qs .left { position: sticky; top: 96px; }
+  .qs .left h2 {
+    font-family: var(--font-sora);
+    font-size: clamp(44px, 5.6vw, 88px);
+    line-height: .98;
+    letter-spacing: -.015em;
+    font-weight: 400;
+  }
+  .qs .left h2 .ital { font-style: italic; color: hsl(var(--primary)); }
+  .qs .left p {
+    margin-top: var(--s4);
+    color: hsl(var(--foreground));
+    font-size: 16px;
+    line-height: 1.55;
+    max-width: 36ch;
+  }
+  .qs .left .stat {
+    margin-top: var(--s5);
+    padding-top: var(--s4);
+    border-top: 1px solid hsl(var(--border));
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .qs-list { display: grid; gap: var(--s2); }
+  .qs-step {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    padding: var(--s4);
+    display: grid;
+    grid-template-columns: 60px 1fr;
+    gap: var(--s4);
+    transition: all 240ms var(--ease-out);
+  }
+  .qs-step:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 4px 4px 0 hsl(var(--foreground));
+    background: hsl(var(--surface));
+  }
+  .qs-step .num {
+    font-family: var(--font-sora);
+    font-style: italic;
+    font-size: 46px;
+    color: hsl(var(--primary));
+    line-height: 1;
+  }
+  .qs-step h4 {
+    font-family: var(--font-sora);
+    font-size: clamp(22px, 2.4vw, 30px);
+    font-weight: 400;
+    line-height: 1.05;
+  }
+  .qs-step code, .qs-step .cmd {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    background: hsl(var(--background));
+    padding: 2px 8px;
+    border-radius: 2px;
+    border: 1px solid hsl(var(--border));
+    color: hsl(var(--foreground));
+    display: inline-block;
+    margin-top: var(--s2);
+  }
+  .qs-step p {
+    margin-top: var(--s2);
+    color: hsl(var(--foreground));
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .qs-step .cmd .flag { color: hsl(var(--primary)); }
+
+  /* ai assistant module */
+  .ai {
+    margin-top: var(--s7);
+    padding-top: var(--s6);
+    border-top: 1px solid hsl(var(--foreground));
+  }
+  .ai-grid {
+    margin-top: var(--s5);
+    display: grid;
+    grid-template-columns: 1fr 1.4fr;
+    gap: var(--s6);
+    align-items: center;
+  }
+  .ai-grid h2 {
+    font-family: var(--font-sora);
+    font-size: clamp(44px, 5.6vw, 88px);
+    line-height: .98;
+    letter-spacing: -.015em;
+    font-weight: 400;
+  }
+  .ai-grid h2 .ital { font-style: italic; color: hsl(var(--primary)); }
+  .ai-grid p {
+    margin-top: var(--s4);
+    color: hsl(var(--foreground));
+    font-size: 16px;
+    line-height: 1.55;
+    max-width: 36ch;
+  }
+  .ai-bullets {
+    margin-top: var(--s4);
+    display: grid;
+    gap: var(--s2);
+  }
+  .ai-bullets .b {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: .04em;
+    color: hsl(var(--foreground));
+    padding-left: var(--s3);
+    position: relative;
+  }
+  .ai-bullets .b::before {
+    content: "▸";
+    position: absolute;
+    left: 0;
+    color: hsl(var(--primary));
+  }
+  .ai-bullets .b code {
+    background: hsl(var(--surface));
+    padding: 1px 6px;
+    border: 1px solid hsl(var(--border));
+    border-radius: 2px;
+  }
+
+  /* WALK CTA */
+  .walk-cta {
+    margin-top: var(--s7);
+    padding: var(--s6) 0;
+    border-top: 1px solid hsl(var(--foreground));
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--s6);
+    align-items: center;
+  }
+
+  /* slab */
+  .slab {
+    padding: var(--s8) 0 var(--s7);
+    text-align: center;
+  }
+  .slab blockquote {
+    font-family: var(--font-sora);
+    font-style: italic;
+    font-size: clamp(36px, 5.5vw, 88px);
+    line-height: 1.05;
+    letter-spacing: -.01em;
+    color: hsl(var(--foreground));
+    max-width: 22ch;
+    margin: 0 auto;
+  }
+  .slab blockquote::before { content: "“ "; color: hsl(var(--primary)); }
+  .slab blockquote::after  { content: " ”"; color: hsl(var(--primary)); }
+  .slab .attrib {
+    margin-top: var(--s4);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+
+  @media (max-width: 900px) {
+    .hero .lockup, .hero .meta-col { grid-column: 1 / -1; }
+    .hero .meta-col { border-left: 0; padding-left: 0; border-top: 1px solid hsl(var(--border)); padding-top: var(--s3); }
+    .install-mod { grid-template-columns: 1fr; }
+    .hero .lede-block { grid-template-columns: 1fr; }
+    .numbers { grid-template-columns: 1fr 1fr; }
+    .numbers .n { border-bottom: 1px solid hsl(var(--border)); }
+    .qs { grid-template-columns: 1fr; }
+    .qs .left { position: static; }
+    .ai-grid { grid-template-columns: 1fr; }
+    .walk-cta { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="shell nav-inner">
+    <a href="index.html" class="brand">
+      <span class="glyph">p</span>
+      plivo<span class="ver">cli</span>
+    </a>
+    <div class="nav-links">
+      <a href="COMMANDS.md">Commands</a>
+      <a href="https://github.com/plivo/plivo-cli">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="shell">
+
+    <div class="row">
+      <div class="lockup">
+        <div class="eyebrow" data-reveal><span class="dot"></span>the official Plivo CLI</div>
+
+        <h1 data-reveal style="margin-top: var(--s3);">
+          <span class="stack">Drive Plivo</span>
+          <span class="stack"><span class="ital">from your</span></span>
+          <span class="stack">terminal.</span>
+        </h1>
+      </div>
+
+      <div class="meta-col">
+        <div class="meta" data-reveal>
+          single static binary<br>
+          go · cobra · 7 MB<br>
+          macOS · linux · windows<br>
+          Apache-2.0
+        </div>
+      </div>
+    </div>
+
+    <div class="marquee" data-reveal>
+      <div class="marquee-track">
+        <span>login</span><span class="sep">/</span>
+        <span>account</span><span class="sep">/</span>
+        <span>numbers</span><span class="sep">/</span>
+        <span>voice</span><span class="sep">/</span>
+        <span>messaging</span><span class="sep">/</span>
+        <span>verify</span><span class="sep">/</span>
+        <span>lookup</span><span class="sep">/</span>
+        <span>ask</span><span class="sep">·</span>
+        <span>browser oauth</span><span class="sep">·</span>
+        <span>os keychain</span><span class="sep">·</span>
+        <span>json-native</span><span class="sep">·</span>
+        <span>stable exit codes</span><span class="sep">·</span>
+        <!-- duplicate -->
+        <span>login</span><span class="sep">/</span>
+        <span>account</span><span class="sep">/</span>
+        <span>numbers</span><span class="sep">/</span>
+        <span>voice</span><span class="sep">/</span>
+        <span>messaging</span><span class="sep">/</span>
+        <span>verify</span><span class="sep">/</span>
+        <span>lookup</span><span class="sep">/</span>
+        <span>ask</span><span class="sep">·</span>
+        <span>browser oauth</span><span class="sep">·</span>
+        <span>os keychain</span><span class="sep">·</span>
+        <span>json-native</span><span class="sep">·</span>
+        <span>stable exit codes</span><span class="sep">·</span>
+      </div>
+    </div>
+
+    <div class="lede-block">
+      <div class="label" data-reveal>what it is</div>
+      <p data-reveal>
+        A single static Go binary for provisioning numbers, wiring voice-agent
+        applications, inspecting calls, sending messages, and <em>asking Plivo's
+        AI assistant</em> when something looks off — all from the shell.
+        Human-readable on a TTY, JSON-native when piped, with stable exit codes
+        so scripts and AI driver loops can branch on them.
+      </p>
+    </div>
+
+  </div>
+</section>
+
+<!-- NUMBERS -->
+<section class="section" style="padding-top: 0; padding-bottom: var(--s7);">
+  <div class="shell">
+    <div class="numbers" data-reveal-stagger>
+      <div class="n">
+        <div class="val">159<sup>cmd</sup></div>
+        <div class="label">subcommands · 11 top-level groups</div>
+      </div>
+      <div class="n">
+        <div class="val">3<sup>os</sup></div>
+        <div class="label">macOS · linux · windows · arm64 + amd64</div>
+      </div>
+      <div class="n">
+        <div class="val">6<sup>exit</sup></div>
+        <div class="label">stable exit codes for retries</div>
+      </div>
+      <div class="n">
+        <div class="val">0<sup>node</sup></div>
+        <div class="label">no node · no python · no npm install</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- INSTALL -->
+<section class="section" style="padding-top: 0;">
+  <div class="shell">
+    <div class="install-mod" data-reveal>
+      <div>
+        <div class="eyebrow" style="color: rgba(255,255,255,.5);"><span class="dot"></span>install</div>
+        <h3 style="margin-top: var(--s3);">
+          One line.<br>
+          <span class="h">Auto-detects</span> OS &amp; arch.
+        </h3>
+        <p>
+          The installer fetches the right binary from the GitHub release,
+          verifies the checksum, and drops it on your PATH. Override the
+          release tag with <code style="color: hsl(var(--primary)); background: rgba(255,255,255,.04); padding: 2px 6px; border-radius: 2px; font-family: var(--font-mono); font-size: 12px;">PLIVO_CLI_VERSION</code>
+          or the destination with <code style="color: hsl(var(--primary)); background: rgba(255,255,255,.04); padding: 2px 6px; border-radius: 2px; font-family: var(--font-mono); font-size: 12px;">PLIVO_INSTALL_DIR</code>.
+        </p>
+        <div style="margin-top: var(--s4); font-family: var(--font-mono); font-size: 11px; color: rgba(255,255,255,.55); letter-spacing: .04em;">
+          ☝ already have it? &nbsp; <code style="color: hsl(var(--primary));">plivo upgrade</code> &nbsp; replaces the binary atomically.
+        </div>
+      </div>
+
+      <div>
+        <div class="install-cmd with-os copyable" data-copy="curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/beta/install.sh | bash">
+          <span class="os">macOS · linux · wsl · git bash</span>
+          <span class="copy-hint">copy</span>
+          curl -fsSL .../install.sh | bash
+        </div>
+        <div class="install-cmd with-os copyable" data-copy="irm https://raw.githubusercontent.com/plivo/plivo-cli/beta/install.ps1 | iex">
+          <span class="os">windows · powershell</span>
+          <span class="copy-hint">copy</span>
+          irm .../install.ps1 | iex
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- THE QUICKSTART STORY -->
+<section class="section" style="padding-top: 0;">
+  <div class="shell">
+    <div class="qs">
+
+      <div class="left" data-reveal>
+        <div class="eyebrow"><span class="dot"></span>five-minute setup</div>
+        <h2 style="margin-top: var(--s3);">
+          From <span class="ital">install</span><br>
+          to your first<br>
+          working call.
+        </h2>
+        <p>
+          A typical first session: log in with your browser, verify, find and
+          rent a number, point it at your application, place a test call,
+          inspect what happened, and ask the AI for a sanity check.
+        </p>
+        <div class="stat">
+          <div style="margin-top: var(--s2);">total clicks · <b style="color: hsl(var(--foreground)); font-style: italic; font-family: var(--font-sora); font-size: 22px;">one</b></div>
+          <div>total passwords typed by the CLI · <b style="color: hsl(var(--foreground)); font-style: italic; font-family: var(--font-sora); font-size: 22px;">zero</b></div>
+        </div>
+      </div>
+
+      <div class="qs-list" data-reveal-stagger>
+        <div class="qs-step">
+          <div class="num">1</div>
+          <div>
+            <h4>Log in via your browser.</h4>
+            <div class="cmd">plivo login <span class="flag">--browser</span></div>
+            <p>Loopback-OAuth (PKCE). Opens your default browser to Plivo Console; you click <em>authorize</em>; the token lands in your OS keychain. No password ever touches the CLI.</p>
+          </div>
+        </div>
+
+        <div class="qs-step">
+          <div class="num">2</div>
+          <div>
+            <h4>Confirm you're in.</h4>
+            <div class="cmd">plivo auth whoami</div>
+            <p>One round-trip to <code>GET /Account/</code>. Returns name, auth_id, billing mode, and credits. Table on a TTY, JSON when piped.</p>
+          </div>
+        </div>
+
+        <div class="qs-step">
+          <div class="num">3</div>
+          <div>
+            <h4>Find a number to rent.</h4>
+            <div class="cmd">plivo numbers search <span class="flag">--country</span> US <span class="flag">--type</span> local</div>
+            <p>Filters: country (required), type, region, pattern, limit. Read-only — no <code>--yes</code> needed.</p>
+          </div>
+        </div>
+
+        <div class="qs-step">
+          <div class="num">4</div>
+          <div>
+            <h4>Rent it. With <code>--yes</code>.</h4>
+            <div class="cmd">plivo numbers buy +1415… <span class="flag">--yes</span></div>
+            <p>Spend verbs refuse without <code>--yes</code> — typed <em>DESTRUCTIVE_REFUSED</em>, exit code 5. Add <code>--dry-run</code> to preview the request.</p>
+          </div>
+        </div>
+
+        <div class="qs-step">
+          <div class="num">5</div>
+          <div>
+            <h4>Wire your application.</h4>
+            <div class="cmd">plivo account applications create <span class="flag">--app-name</span> "…" <span class="flag">--answer-url</span> https://…</div>
+            <p>Bundle your webhook URLs (answer · hangup · message) into an application. Numbers point at applications.</p>
+          </div>
+        </div>
+
+        <div class="qs-step">
+          <div class="num">6</div>
+          <div>
+            <h4>Attach the number.</h4>
+            <div class="cmd">plivo numbers update +1415… <span class="flag">--app-id</span> &lt;uuid&gt;</div>
+            <p>From this moment, inbound calls to that number hit your answer URL.</p>
+          </div>
+        </div>
+
+        <div class="qs-step">
+          <div class="num">7</div>
+          <div>
+            <h4>Test the wiring.</h4>
+            <div class="cmd">plivo voice calls make <span class="flag">--from</span> +1415… <span class="flag">--to</span> +91… <span class="flag">--yes</span></div>
+            <p>Returns a <code>call_uuid</code> — you'll use it to inspect or diagnose what happens next.</p>
+          </div>
+        </div>
+
+        <div class="qs-step">
+          <div class="num">8</div>
+          <div>
+            <h4>Inspect.</h4>
+            <div class="cmd">plivo voice calls get &lt;call_uuid&gt;</div>
+            <p>Full record — direction, duration, hangup cause, cost. No console roundtrip.</p>
+          </div>
+        </div>
+
+        <div class="qs-step">
+          <div class="num">9</div>
+          <div>
+            <h4>Ask Buddy when something's off.</h4>
+            <div class="cmd">plivo voice calls diagnose &lt;call_uuid&gt;</div>
+            <p>Plivo's AI assistant pulls the SIP and media trace live and explains what happened, streamed token by token to your terminal.</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- AI MODULE -->
+<section class="section" style="padding-top: 0;">
+  <div class="shell">
+    <div class="ai">
+      <div class="eyebrow" data-reveal><span class="dot"></span>plivo · ai assistant in the terminal</div>
+
+      <div class="ai-grid">
+        <div data-reveal>
+          <h2>
+            Ask the<br>
+            <span class="ital">assistant.</span>
+          </h2>
+          <p>
+            Plivo's AI assistant lives in the CLI too. Ask about docs, pricing,
+            or error codes. Pass <code>--call-uuid</code> for live voice-debugger
+            access — it pulls SIP and media traces and explains what happened.
+            Tokens stream as they arrive.
+          </p>
+          <div class="ai-bullets">
+            <div class="b"><code>plivo ask "…"</code> — single-shot question</div>
+            <div class="b"><code>plivo ask --call-uuid &lt;uuid&gt; "…"</code> — debug with live access</div>
+            <div class="b"><code>plivo voice calls diagnose &lt;uuid&gt;</code> — shortcut</div>
+            <div class="b"><code>plivo messaging sms diagnose &lt;uuid&gt;</code> — SMS debug</div>
+            <div class="b"><code>plivo support</code> — past escalations</div>
+            <div class="b"><code>-o json</code> — emits one JSONL event per SSE frame</div>
+          </div>
+        </div>
+
+        <div data-reveal>
+          <div class="term">
+            <div class="term-bar">
+              <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+              <span class="title">~/ · plivo ask</span>
+            </div>
+            <pre class="term-body"><span class="prompt"></span><span class="cmd">plivo ask</span> <span class="flag">--call-uuid</span> <span class="str">9c4e0d3a-…</span> <span class="str">\</span>
+  <span class="str">"why did this call drop after 47 seconds?"</span>
+
+<span class="dim">looking up call 9c4e0d3a-… </span><span class="ok">✓</span>
+<span class="dim">pulling SIP trace …          </span><span class="ok">✓</span>
+<span class="dim">pulling media trace …        </span><span class="ok">✓</span>
+
+<span class="amber">▎</span> The call ran for 47s and was hung up by the callee
+<span class="amber">▎</span> (NORMAL_CLEARING from the callee side, Q.850 cause 16).
+<span class="amber">▎</span> The SIP dialogue completed cleanly — INVITE / 200 OK /
+<span class="amber">▎</span> ACK / BYE from the remote leg. RTP carried 47s of
+<span class="amber">▎</span> two-way audio, no packet-loss or jitter spikes.
+<span class="amber">▎</span>
+<span class="amber">▎</span> Nothing anomalous — this looks like a normal end-of-call.</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SLAB QUOTE -->
+<section class="slab">
+  <div class="shell">
+    <blockquote data-reveal>
+      Human-readable on a TTY.<br>
+      <span style="font-style: normal; color: hsl(var(--primary));">JSON-native</span> when piped.
+    </blockquote>
+    <div class="attrib" data-reveal>output contract · stable across the surface</div>
+  </div>
+</section>
+
+<footer class="foot">
+  <div class="shell">
+    <div class="foot-grid">
+      <div>
+        <h5>start</h5>
+        <ul>
+          <li><a href="https://github.com/plivo/plivo-cli">Install · GitHub ↗</a></li>
+          <li><a href="https://github.com/plivo/plivo-cli/blob/main/docs/COMMANDS.md">Command reference ↗</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>read</h5>
+        <ul>
+          <li><a href="COMMANDS.md">Commands</a></li>
+          <li><a href="https://www.plivo.com/docs">Platform docs ↗</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>get help</h5>
+        <ul>
+          <li><code style="font-family: var(--font-mono);">plivo ask "…"</code></li>
+          <li><code style="font-family: var(--font-mono);">plivo support</code></li>
+          <li><a href="https://github.com/plivo/plivo-cli/issues">GitHub issues ↗</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot-credit">
+      <div>plivo cli · the terminal-native way to drive Plivo</div>
+      <div>Apache-2.0 · © <span data-year></span></div>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>
