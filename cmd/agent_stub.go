@@ -28,8 +28,6 @@ var agentCmd = &cobra.Command{
 	FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(os.Stderr, "AI voice agents from the CLI — coming soon.")
-		fmt.Fprintln(os.Stderr, "Track it in the roadmap:")
-		fmt.Fprintln(os.Stderr, "  https://github.com/plivo/plivo-cli/blob/main/ROADMAP.md")
 		return nil
 	},
 }
