@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 // codecMime maps the human flag to the Plivo <Stream> contentType. Two values
