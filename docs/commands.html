@@ -27,10 +27,19 @@
 <link rel="stylesheet" href="assets/tokens.css">
 
 <style>
+  /* ============================================================
+     plivo cli · command reference
+     · refined to match top-tier CLI docs (gh, stripe, vercel, fly)
+     · single 8/16/24/40/64 spacing scale
+     · sidebar: title-case modules, accent-bar active state
+     · reader: clearer h2/h3 hierarchy, premium tables, polished code
+     · dark mode parity throughout (no hardcoded colors)
+     ============================================================ */
+
   body { background: hsl(var(--background)); color: hsl(var(--foreground)); }
 
-  /* ── Nav (parity with index.html, scoped here in case tokens.css drifts) ── */
-  .nav { position: sticky; top: 0; z-index: 50; background: hsl(var(--background) / .85); backdrop-filter: blur(10px); border-bottom: 1px solid hsl(var(--border)); }
+  /* ── Nav (parity with index.html) ─────────────────────────────── */
+  .nav { position: sticky; top: 0; z-index: 50; background: hsl(var(--background) / .85); backdrop-filter: blur(10px) saturate(140%); -webkit-backdrop-filter: blur(10px) saturate(140%); border-bottom: 1px solid hsl(var(--border)); }
   .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 64px; }
   .nav .brand { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-sora); font-size: 18px; text-decoration: none; color: hsl(var(--foreground)); }
   .nav .brand .glyph { width: 28px; height: 28px; border-radius: 7px; background: hsl(var(--foreground)); color: hsl(var(--primary)); display: inline-flex; align-items: center; justify-content: center; font-weight: 500; }
@@ -47,22 +56,30 @@
   .dark .theme-toggle .sun { display: none; }
   .dark .theme-toggle .moon { display: inline; }
 
-  /* ── Page layout ──────────────────────────────────────────────── */
+  /* ── Page layout — denser, with a slightly wider sidebar ────────── */
   .docs-shell {
     max-width: 1320px;
     margin: 0 auto;
     padding: var(--s5) var(--s5) var(--s7);
     display: grid;
-    grid-template-columns: 280px 1fr;
-    gap: var(--s6);
+    grid-template-columns: 264px minmax(0, 1fr);
+    gap: var(--s7);
     align-items: start;
   }
 
+  /* ── Header strip — minimal, breadcrumb + tight one-liner ───────── */
   .docs-header {
     grid-column: 1 / -1;
-    padding: var(--s5) 0 var(--s4);
+    padding: var(--s4) 0 var(--s5);
+    margin-bottom: var(--s4);
     border-bottom: 1px solid hsl(var(--border));
-    margin-bottom: var(--s5);
+  }
+  .docs-header .row-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s4);
+    flex-wrap: wrap;
   }
   .docs-header .breadcrumbs {
     font-family: var(--font-mono);
@@ -70,59 +87,82 @@
     letter-spacing: .14em;
     text-transform: uppercase;
     color: hsl(var(--muted-foreground));
-    margin-bottom: var(--s2);
   }
-  .docs-header .breadcrumbs a { color: hsl(var(--muted-foreground)); text-decoration: none; }
+  .docs-header .breadcrumbs a { color: hsl(var(--muted-foreground)); text-decoration: none; transition: color var(--dur-fast) var(--ease-out); }
   .docs-header .breadcrumbs a:hover { color: hsl(var(--primary)); }
+  .docs-header .breadcrumbs .sep { margin: 0 var(--s2); opacity: .5; }
   .docs-header h1 {
     font-family: var(--font-sora);
-    font-size: clamp(28px, 3.6vw, 44px);
-    line-height: 1.1;
+    font-size: clamp(24px, 2.6vw, 32px);
+    line-height: 1.15;
     letter-spacing: -.015em;
     font-weight: 400;
-    margin: 0;
+    margin: var(--s2) 0 0;
   }
   .docs-header h1 .ital { font-style: italic; color: hsl(var(--primary)); }
   .docs-header .sub {
     margin-top: var(--s2);
     font-family: var(--font-inter);
-    font-size: 15px;
+    font-size: 14px;
     color: hsl(var(--muted-foreground));
+    max-width: 64ch;
+  }
+  .docs-header .meta-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: var(--r-full);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+    background: hsl(var(--surface));
+    border: 1px solid hsl(var(--border));
+  }
+  .docs-header .meta-pill .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: hsl(var(--success));
   }
 
-  /* ── Sidebar (search + TOC) ───────────────────────────────────── */
+  /* ── Sidebar (search + TOC) ──────────────────────────────────── */
   .sidebar {
     position: sticky;
-    top: 88px;
-    max-height: calc(100vh - 100px);
+    top: 80px;
+    max-height: calc(100vh - 96px);
     display: flex;
     flex-direction: column;
-    gap: var(--s3);
+    gap: var(--s4);
+    min-width: 0;
   }
 
-  .search {
-    position: relative;
-  }
+  /* Search — larger, with shadow + clearer focus state */
+  .search { position: relative; }
   .search input {
     width: 100%;
     box-sizing: border-box;
     font-family: var(--font-inter);
     font-size: 14px;
     line-height: 1;
-    padding: 10px 12px 10px 34px;
+    padding: 12px 44px 12px 38px;
     border: 1px solid hsl(var(--border));
     border-radius: var(--r-md);
     background: hsl(var(--background));
     color: hsl(var(--foreground));
     outline: none;
-    transition: border-color var(--dur-fast) var(--ease-out);
+    transition: border-color var(--dur-fast) var(--ease-out),
+                box-shadow var(--dur-fast) var(--ease-out);
   }
+  .search input::placeholder { color: hsl(var(--muted-foreground)); }
+  .search input:hover { border-color: hsl(var(--border-strong)); }
   .search input:focus {
     border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / .12);
   }
   .search .icon {
     position: absolute;
-    left: 12px;
+    left: 14px;
     top: 50%;
     transform: translateY(-50%);
     width: 14px; height: 14px;
@@ -131,54 +171,50 @@
   }
   .search .kbd {
     position: absolute;
-    right: 8px;
+    right: 10px;
     top: 50%;
     transform: translateY(-50%);
     font-family: var(--font-mono);
-    font-size: 11px;
-    padding: 2px 6px;
+    font-size: 10.5px;
+    padding: 3px 7px;
     border: 1px solid hsl(var(--border));
     border-radius: 4px;
     color: hsl(var(--muted-foreground));
     background: hsl(var(--surface));
     pointer-events: none;
+    line-height: 1;
   }
+  .search input:focus ~ .kbd { opacity: 0; }
 
+  /* TOC — clean, no right border, generous spacing between groups */
   .toc {
     flex: 1 1 auto;
     overflow-y: auto;
+    overflow-x: hidden;
     font-family: var(--font-inter);
-    font-size: 13px;
+    font-size: 13.5px;
     line-height: 1.5;
-    padding-right: var(--s3);
-    border-right: 1px solid hsl(var(--border));
+    padding-right: var(--s2);
+    margin-right: calc(var(--s2) * -1);
     min-height: 0;
   }
-  .toc h4 {
+  /* Thin scrollbar */
+  .toc::-webkit-scrollbar { width: 6px; }
+  .toc::-webkit-scrollbar-track { background: transparent; }
+  .toc::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: var(--r-full); }
+  .toc::-webkit-scrollbar-thumb:hover { background: hsl(var(--border-strong)); }
+
+  .toc-heading {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 10px;
     letter-spacing: .14em;
     text-transform: uppercase;
     color: hsl(var(--muted-foreground));
     margin: 0 0 var(--s3);
     font-weight: 500;
+    padding: 0 var(--s2);
   }
-  .toc ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 1px; }
-  .toc a {
-    color: hsl(var(--foreground));
-    text-decoration: none;
-    display: block;
-    padding: 4px 10px;
-    border-radius: 4px;
-    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
-    border-left: 2px solid transparent;
-  }
-  .toc a:hover { background: hsl(var(--surface)); color: hsl(var(--primary)); }
-  .toc a.active {
-    background: hsl(var(--surface));
-    color: hsl(var(--primary));
-    border-left-color: hsl(var(--primary));
-  }
+  .toc ul { list-style: none; padding: 0; margin: 0; }
   .toc li.hidden { display: none; }
   .toc .empty {
     color: hsl(var(--muted-foreground));
@@ -187,164 +223,330 @@
     font-size: 13px;
   }
 
-  /* Command path inside grouped TOC — monospace, two-tone:
-     muted prefix + foreground last segment so the eye lands on what's new. */
-  .toc a .leaf {
-    font-family: var(--font-mono);
-    font-size: 12.5px;
-  }
-  .toc a .leaf .prefix { color: hsl(var(--muted-foreground)); }
-  .toc a .leaf .name { color: inherit; }
-  .toc a.depth-1 { padding-left: 16px; }
-  .toc a.depth-2 { padding-left: 26px; }
-  .toc a.depth-3 { padding-left: 36px; }
-  .toc a.depth-4 { padding-left: 46px; }
-  .toc a.overview { font-style: italic; color: hsl(var(--muted-foreground)); }
-
-  /* Module groups — <details>/<summary> for native collapse. */
+  /* Module groups — Title-case, lighter weight, generous spacing */
   .toc-group {
-    border-radius: 4px;
-    margin-bottom: 2px;
+    margin-bottom: var(--s3);
   }
   .toc-group > summary {
     list-style: none;
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 10px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: .12em;
-    text-transform: uppercase;
+    gap: var(--s2);
+    padding: 6px var(--s2);
+    font-family: var(--font-inter);
+    font-size: 12.5px;
+    letter-spacing: .02em;
     color: hsl(var(--foreground));
-    font-weight: 500;
-    border-radius: 4px;
-    transition: background var(--dur-fast) var(--ease-out);
+    font-weight: 600;
+    border-radius: var(--r-sm);
+    transition: color var(--dur-fast) var(--ease-out),
+                background var(--dur-fast) var(--ease-out);
     user-select: none;
   }
   .toc-group > summary::-webkit-details-marker { display: none; }
   .toc-group > summary::before {
-    content: "▸";
-    font-size: 10px;
-    color: hsl(var(--muted-foreground));
+    content: "";
+    width: 0; height: 0;
+    border-left: 4px solid hsl(var(--muted-foreground));
+    border-top: 3px solid transparent;
+    border-bottom: 3px solid transparent;
     transition: transform var(--dur-fast) var(--ease-out);
-    width: 10px;
-    display: inline-block;
+    flex-shrink: 0;
   }
   .toc-group[open] > summary::before { transform: rotate(90deg); }
   .toc-group > summary:hover {
-    background: hsl(var(--surface));
     color: hsl(var(--primary));
+  }
+  .toc-group > summary:hover::before {
+    border-left-color: hsl(var(--primary));
   }
   .toc-group.has-active > summary {
     color: hsl(var(--primary));
+  }
+  .toc-group.has-active > summary::before {
+    border-left-color: hsl(var(--primary));
   }
   .toc-group .count {
     margin-left: auto;
     font-family: var(--font-mono);
     font-size: 10px;
     color: hsl(var(--muted-foreground));
+    font-weight: 400;
+    letter-spacing: 0;
+    line-height: 1;
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+  }
+  .toc-group.has-active .count {
+    color: hsl(var(--primary) / .7);
+  }
+  .toc-group > ul { margin: var(--s1) 0 0; padding-left: 14px; position: relative; }
+  /* Vertical guide line for nested items */
+  .toc-group > ul::before {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 4px;
+    bottom: 4px;
+    width: 1px;
+    background: hsl(var(--border));
+  }
+  .toc-group.hidden { display: none; }
+
+  /* Command links — refined, with subtle accent bar on active */
+  .toc a {
+    color: hsl(var(--foreground));
+    text-decoration: none;
+    display: block;
+    padding: 5px var(--s2) 5px 10px;
+    border-radius: var(--r-sm);
+    transition: background var(--dur-fast) var(--ease-out),
+                color var(--dur-fast) var(--ease-out);
+    position: relative;
+    margin-left: 2px;
+  }
+  .toc a:hover {
     background: hsl(var(--surface));
-    padding: 1px 6px;
+    color: hsl(var(--primary));
+  }
+  .toc a.active {
+    background: hsl(var(--primary) / .08);
+    color: hsl(var(--primary));
+    font-weight: 500;
+  }
+  .toc a.active::before {
+    content: "";
+    position: absolute;
+    left: -10px;
+    top: 6px;
+    bottom: 6px;
+    width: 2px;
+    background: hsl(var(--primary));
     border-radius: var(--r-full);
   }
-  .toc-group > ul { margin: 2px 0 8px; }
-  .toc-group.hidden { display: none; }
+
+  /* Command path inside grouped TOC — monospace, two-tone */
+  .toc a .leaf {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.4;
+    display: inline-block;
+    word-break: break-word;
+  }
+  .toc a .leaf .prefix { color: hsl(var(--muted-foreground)); }
+  .toc a .leaf .name { color: inherit; }
+  .toc a.active .leaf .prefix { color: hsl(var(--primary) / .65); }
+  .toc a.depth-1 { padding-left: 10px; }
+  .toc a.depth-2 { padding-left: 18px; }
+  .toc a.depth-3 { padding-left: 26px; }
+  .toc a.depth-4 { padding-left: 34px; }
+  .toc a.overview {
+    font-family: var(--font-inter);
+    font-style: italic;
+    color: hsl(var(--muted-foreground));
+    font-size: 12.5px;
+  }
+  .toc a.overview:hover, .toc a.overview.active { color: hsl(var(--primary)); }
 
   /* ── Main reader (markdown rendered) ─────────────────────────── */
   .reader {
     font-family: var(--font-inter);
     font-size: 15px;
-    line-height: 1.65;
+    line-height: 1.7;
     color: hsl(var(--foreground));
     min-width: 0;
+    max-width: 76ch;
   }
 
-  /* type scale matches index.html — display / heading / subhead / body */
+  /* Type scale — clearer hierarchy between h2 and h3:
+     · h2 = section start (big, with rule + extra space above)
+     · h3 = subsection (medium, accent-prefixed)
+     · h4 = small caps eyebrow */
   .reader h1 {
     font-family: var(--font-sora);
     font-size: clamp(28px, 3.2vw, 40px);
     font-weight: 400;
-    letter-spacing: -.015em;
+    letter-spacing: -.02em;
     line-height: 1.15;
-    margin: var(--s6) 0 var(--s4);
+    margin: 0 0 var(--s4);
   }
-  .reader h1:first-child { margin-top: 0; }
   .reader h2 {
     font-family: var(--font-sora);
-    font-size: clamp(22px, 2.4vw, 30px);
+    font-size: clamp(24px, 2.4vw, 30px);
     font-weight: 400;
-    letter-spacing: -.01em;
+    letter-spacing: -.015em;
     line-height: 1.2;
-    margin: var(--s6) 0 var(--s3);
-    padding-bottom: var(--s2);
-    border-bottom: 1px solid hsl(var(--border));
+    margin: var(--s7) 0 var(--s4);
+    padding-top: var(--s5);
+    border-top: 1px solid hsl(var(--border));
     position: relative;
+    color: hsl(var(--foreground));
+  }
+  .reader h2:first-of-type { border-top: 0; padding-top: 0; margin-top: var(--s5); }
+  /* h2 commands rendered with backticks turn into <code> — restyle */
+  .reader h2 code, .reader h3 code {
+    font-family: var(--font-mono);
+    background: transparent;
+    border: 0;
+    padding: 0;
+    color: inherit;
+    font-size: .82em;
+    letter-spacing: -.01em;
   }
   .reader h3 {
-    font-family: var(--font-sora);
-    font-size: clamp(18px, 1.8vw, 22px);
-    font-weight: 500;
-    margin: var(--s5) 0 var(--s2);
+    font-family: var(--font-inter);
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 1.35;
+    margin: var(--s5) 0 var(--s3);
     color: hsl(var(--foreground));
     position: relative;
+    padding-left: var(--s3);
+  }
+  .reader h3::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 7px;
+    bottom: 7px;
+    width: 3px;
+    background: hsl(var(--primary));
+    border-radius: var(--r-full);
   }
   .reader h4 {
-    font-family: var(--font-inter);
-    font-size: 13px;
-    font-weight: 600;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: .06em;
+    letter-spacing: .14em;
     margin: var(--s4) 0 var(--s2);
     color: hsl(var(--muted-foreground));
   }
 
-  /* anchor on hover for h2/h3 */
+  /* Anchor links on hover for h2/h3 */
   .reader h2 .anchor, .reader h3 .anchor {
     position: absolute;
-    left: -22px;
+    left: -24px;
     top: 50%;
     transform: translateY(-50%);
     opacity: 0;
     color: hsl(var(--muted-foreground));
     text-decoration: none;
     font-weight: 400;
-    transition: opacity var(--dur-fast) var(--ease-out);
+    font-size: 18px;
+    transition: opacity var(--dur-fast) var(--ease-out),
+                color var(--dur-fast) var(--ease-out);
+    font-family: var(--font-mono);
   }
+  .reader h3 .anchor { left: -16px; font-size: 14px; }
   .reader h2:hover .anchor, .reader h3:hover .anchor { opacity: 1; }
   .reader h2 .anchor:hover, .reader h3 .anchor:hover { color: hsl(var(--primary)); }
 
+  /* Paragraphs, lists, links */
   .reader p { margin: 0 0 var(--s3); }
-  .reader a { color: hsl(var(--primary)); text-decoration: underline; text-underline-offset: 3px; }
-  .reader a:hover { text-decoration-thickness: 2px; }
-  .reader code {
-    font-family: var(--font-mono);
-    font-size: .9em;
-    background: hsl(var(--code));
-    color: hsl(var(--code-foreground));
-    padding: 2px 6px;
-    border-radius: 4px;
-    border: 1px solid hsl(var(--border));
+  .reader a:not(.anchor) {
+    color: hsl(var(--primary));
+    text-decoration: none;
+    border-bottom: 1px solid hsl(var(--primary) / .3);
+    transition: border-color var(--dur-fast) var(--ease-out);
+  }
+  .reader a:not(.anchor):hover {
+    border-bottom-color: hsl(var(--primary));
   }
 
-  /* code blocks — terminal-like, with copy button + filename label */
+  /* Inline code — refined: background tinted by surface, no border, snug padding */
+  .reader code {
+    font-family: var(--font-mono);
+    font-size: .88em;
+    background: hsl(var(--surface-2));
+    color: hsl(var(--foreground));
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 0;
+    font-weight: 500;
+    letter-spacing: -.01em;
+  }
+  .reader a code { color: hsl(var(--primary)); background: hsl(var(--primary) / .08); }
+
+  /* ── Code blocks ──────────────────────────────────────────────
+     Theme-aware: dark bar header + light body in light mode,
+     dark body in dark mode. Header carries the lang label + copy. */
   .reader .code-block {
     position: relative;
-    margin: var(--s3) 0;
+    margin: var(--s4) 0 var(--s5);
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--r-md);
+    background: hsl(var(--surface));
+    overflow: hidden;
+  }
+  .reader .code-block .code-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s3);
+    padding: 8px 12px;
+    background: hsl(var(--surface-2));
+    border-bottom: 1px solid hsl(var(--border));
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .04em;
+    color: hsl(var(--muted-foreground));
+    min-height: 32px;
+  }
+  .reader .code-block .code-bar .lang {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    font-size: 10px;
+  }
+  .reader .code-block .code-bar .lang::before {
+    content: "";
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: hsl(var(--primary) / .6);
+    box-shadow: 0 0 0 3px hsl(var(--primary) / .12);
+  }
+  .reader .code-block .copy-btn {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    background: transparent;
+    color: hsl(var(--muted-foreground));
+    border: 1px solid hsl(var(--border));
+    padding: 4px 10px;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    transition: all var(--dur-fast) var(--ease-out);
+    line-height: 1;
+  }
+  .reader .code-block .copy-btn:hover {
+    border-color: hsl(var(--primary));
+    color: hsl(var(--primary));
+    background: hsl(var(--primary) / .06);
+  }
+  .reader .code-block .copy-btn.copied {
+    border-color: hsl(var(--success));
+    color: hsl(var(--success));
+    background: hsl(var(--success) / .08);
   }
   .reader pre {
     font-family: var(--font-mono);
     font-size: 13px;
-    line-height: 1.55;
-    background: #0A0B14;
-    color: #E6E6E9;
-    padding: var(--s4);
-    padding-top: 36px;
-    border-radius: var(--r-md);
+    line-height: 1.65;
+    background: hsl(var(--code));
+    color: hsl(var(--code-foreground));
+    padding: var(--s4) var(--s4) var(--s4) calc(var(--s4) + 18px);
     overflow-x: auto;
-    border: 1px solid #1E2030;
     margin: 0;
+    border: 0;
+    border-radius: 0;
+    position: relative;
   }
   .reader pre code {
     background: transparent;
@@ -352,88 +554,104 @@
     border: 0;
     padding: 0;
     font-size: 13px;
+    font-weight: 400;
   }
-  .reader .code-block::before {
+  /* $ prompt marker — left gutter, mono, primary accent */
+  .reader .code-block.shell pre::before {
     content: "$";
     position: absolute;
-    top: 8px;
-    left: 14px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: #5b6bff;
-    letter-spacing: .04em;
+    top: var(--s4);
+    left: var(--s4);
+    color: hsl(var(--primary));
+    font-weight: 500;
+    user-select: none;
   }
-  .reader .code-block .copy-btn {
-    position: absolute;
-    top: 6px;
-    right: 8px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    background: rgba(255,255,255,.04);
-    color: rgba(230,230,233,.7);
-    border: 1px solid rgba(255,255,255,.12);
-    padding: 4px 10px;
-    border-radius: 4px;
-    cursor: pointer;
-    letter-spacing: .08em;
-    text-transform: uppercase;
-    transition: all var(--dur-fast) var(--ease-out);
-  }
-  .reader .code-block .copy-btn:hover {
-    border-color: #5b6bff;
-    color: #FFFFFF;
-  }
-  .reader .code-block .copy-btn.copied {
-    border-color: hsl(var(--success));
-    color: hsl(var(--success));
+  /* Non-shell code blocks: remove the gutter padding */
+  .reader .code-block:not(.shell) pre {
+    padding-left: var(--s4);
   }
 
-  .reader ul, .reader ol { margin: 0 0 var(--s3); padding-left: var(--s5); }
-  .reader li { margin-bottom: 4px; }
-  .reader blockquote {
-    border-left: 3px solid hsl(var(--primary));
-    margin: var(--s3) 0;
-    padding: var(--s2) var(--s4);
-    background: hsl(var(--surface));
-    color: hsl(var(--muted-foreground));
-    font-style: italic;
-    border-radius: 0 var(--r-md) var(--r-md) 0;
+  /* Lists — better spacing, refined bullets */
+  .reader ul, .reader ol {
+    margin: 0 0 var(--s4);
+    padding-left: var(--s5);
   }
+  .reader li { margin-bottom: var(--s1); }
+  .reader li::marker { color: hsl(var(--muted-foreground)); }
+  .reader ul li { list-style: none; position: relative; }
+  .reader ul li::before {
+    content: "";
+    position: absolute;
+    left: calc(var(--s4) * -1);
+    top: 12px;
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: hsl(var(--muted-foreground));
+  }
+  .reader ul li::marker { content: ""; }
+
+  /* Blockquote — refined, less heavy */
+  .reader blockquote {
+    border-left: 2px solid hsl(var(--primary));
+    margin: var(--s4) 0;
+    padding: var(--s2) 0 var(--s2) var(--s4);
+    background: transparent;
+    color: hsl(var(--muted-foreground));
+    font-style: normal;
+    border-radius: 0;
+    font-size: 14px;
+  }
+  .reader blockquote p:last-child { margin-bottom: 0; }
   .reader hr {
     border: 0;
     border-top: 1px solid hsl(var(--border));
-    margin: var(--s5) 0;
+    margin: var(--s6) 0;
+  }
+
+  /* ── Tables — premium feel, sticky-header-ready ───────────────── */
+  .reader .table-wrap {
+    margin: var(--s4) 0;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--r-md);
+    overflow: auto;
+    background: hsl(var(--background));
   }
   .reader table {
     width: 100%;
     border-collapse: collapse;
-    margin: var(--s3) 0;
-    font-size: 14px;
-    border: 1px solid hsl(var(--border));
-    border-radius: var(--r-md);
-    overflow: hidden;
+    margin: 0;
+    font-size: 13.5px;
+    font-family: var(--font-inter);
   }
   .reader th, .reader td {
     text-align: left;
     padding: 10px 14px;
     border-bottom: 1px solid hsl(var(--border));
+    vertical-align: top;
+    line-height: 1.55;
   }
   .reader th {
     background: hsl(var(--surface));
     font-weight: 600;
-    font-family: var(--font-inter);
-    font-size: 12px;
-    letter-spacing: .04em;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: .12em;
     text-transform: uppercase;
     color: hsl(var(--muted-foreground));
+    border-bottom-color: hsl(var(--border-strong));
   }
   .reader tbody tr:last-child td { border-bottom: 0; }
-  .reader tbody tr:hover { background: hsl(var(--surface)); }
+  .reader tbody tr { transition: background var(--dur-fast) var(--ease-out); }
+  .reader tbody tr:hover { background: hsl(var(--surface) / .5); }
+  .reader td code {
+    font-size: .9em;
+    white-space: nowrap;
+  }
 
-  /* anchor link offset for sticky nav */
+  /* Anchor link offset for sticky nav */
   .reader h1, .reader h2, .reader h3 { scroll-margin-top: 88px; }
 
-  /* loading + error states */
+  /* Loading + error states */
   .doc-state {
     padding: var(--s7) var(--s5);
     text-align: center;
@@ -445,7 +663,7 @@
   .doc-state .err { color: hsl(var(--destructive)); }
   .doc-state a { color: hsl(var(--primary)); text-decoration: underline; }
 
-  /* floating back-to-top */
+  /* Floating back-to-top — subtler */
   .to-top {
     position: fixed;
     bottom: 24px;
@@ -461,18 +679,27 @@
     justify-content: center;
     cursor: pointer;
     box-shadow: 0 6px 20px hsl(var(--foreground) / .25);
-    transition: transform var(--dur-fast) var(--ease-out);
+    transition: transform var(--dur-fast) var(--ease-out),
+                background var(--dur-fast) var(--ease-out);
     z-index: 30;
-    font-size: 18px;
+    font-size: 16px;
     line-height: 1;
   }
   .to-top.visible { display: inline-flex; }
-  .to-top:hover { transform: translateY(-2px); }
+  .to-top:hover { transform: translateY(-2px); background: hsl(var(--primary)); color: #fff; }
 
+  /* ── Responsive ─────────────────────────────────────────────── */
   @media (max-width: 960px) {
-    .docs-shell { grid-template-columns: 1fr; gap: var(--s4); }
+    .docs-shell { grid-template-columns: 1fr; gap: var(--s4); padding: var(--s4) var(--s4) var(--s6); }
     .sidebar { position: static; max-height: none; }
-    .toc { border-right: 0; border-bottom: 1px solid hsl(var(--border)); padding-right: 0; padding-bottom: var(--s4); max-height: 320px; }
+    .toc { max-height: 320px; padding-bottom: var(--s3); border-bottom: 1px solid hsl(var(--border)); padding-right: 0; margin-right: 0; }
+    .reader { max-width: 100%; }
+    .reader h2 .anchor, .reader h3 .anchor { display: none; }
+  }
+
+  @media (max-width: 600px) {
+    .docs-header h1 { font-size: 22px; }
+    .reader { font-size: 14.5px; }
   }
 </style>
 </head>
@@ -486,9 +713,9 @@
     </a>
     <div class="nav-links">
       <a href="index.html">Home</a>
-      <a href="https://github.com/plivo/plivo-cli">GitHub ↗</a>
+      <a href="https://github.com/plivo/plivo-cli">GitHub &#8599;</a>
       <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
-        <span class="sun" aria-hidden="true">☀</span><span class="moon" aria-hidden="true">☾</span>
+        <span class="sun" aria-hidden="true">&#9728;</span><span class="moon" aria-hidden="true">&#9790;</span>
       </button>
     </div>
   </div>
@@ -497,11 +724,16 @@
 <div class="docs-shell">
 
   <header class="docs-header">
-    <div class="breadcrumbs">
-      <a href="index.html">Home</a>&nbsp;/&nbsp;Reference
+    <div class="row-top">
+      <div>
+        <div class="breadcrumbs">
+          <a href="index.html">Home</a><span class="sep">/</span>Reference
+        </div>
+        <h1>Command <span class="ital">reference</span></h1>
+      </div>
+      <span class="meta-pill"><span class="dot"></span>auto-generated</span>
     </div>
-    <h1>Command <span class="ital">reference</span></h1>
-    <div class="sub">Every command, every flag, every exit code — auto-generated from the binary.</div>
+    <div class="sub">Every command, every flag, every exit code &mdash; generated directly from the binary.</div>
   </header>
 
   <aside class="sidebar" aria-label="Page navigation">
@@ -509,21 +741,21 @@
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
       </svg>
-      <input id="search-input" type="search" placeholder="Search commands…" autocomplete="off" spellcheck="false" aria-label="Filter commands">
+      <input id="search-input" type="search" placeholder="Search commands..." autocomplete="off" spellcheck="false" aria-label="Filter commands">
       <span class="kbd">/</span>
     </div>
     <nav class="toc" id="toc">
-      <h4>On this page</h4>
-      <ul id="toc-list"><li class="empty">Loading…</li></ul>
+      <h4 class="toc-heading">On this page</h4>
+      <ul id="toc-list"><li class="empty">Loading...</li></ul>
     </nav>
   </aside>
 
   <main class="reader" id="reader" aria-busy="true">
-    <div class="doc-state">Loading command reference…</div>
+    <div class="doc-state">Loading command reference...</div>
   </main>
 </div>
 
-<button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
+<button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">&uarr;</button>
 
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" defer></script>
 
@@ -547,6 +779,35 @@
 
 <script>
   // ── Render COMMANDS.md + build TOC + wire up search ──────────────
+
+  // Module names → title-case display names. Anything not in the map
+  // falls back to a simple title-case transform.
+  var MODULE_LABELS = {
+    account: 'Account',
+    agent: 'Agent',
+    ask: 'Ask',
+    auth: 'Auth',
+    feedback: 'Feedback',
+    login: 'Login',
+    logout: 'Logout',
+    lookup: 'Lookup',
+    messaging: 'Messaging',
+    numbers: 'Numbers',
+    phlo: 'PHLO',
+    pricing: 'Pricing',
+    profile: 'Profile',
+    sms: 'SMS',
+    upgrade: 'Upgrade',
+    verify: 'Verify',
+    voice: 'Voice'
+  };
+
+  function moduleLabel(name) {
+    if (MODULE_LABELS[name]) return MODULE_LABELS[name];
+    // Default: title-case first letter
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  }
+
   function slug(s) {
     return s.toLowerCase().trim()
       .replace(/[^\w\s\-/]/g, '')
@@ -572,56 +833,78 @@
     return items;
   }
 
+  // Wrap <pre> in a styled card with a header bar (lang label + copy button).
+  // Detects whether the block is shell-flavored (starts with $ or contains plivo)
+  // so we can show the leading prompt marker.
   function wrapCodeBlocks(temp) {
     temp.querySelectorAll('pre').forEach(function (pre) {
+      var codeEl = pre.querySelector('code');
+      var text = (codeEl ? codeEl.textContent : pre.textContent) || '';
+      var firstLine = text.split('\n')[0] || '';
+      var isShell = /^(\$|plivo\b|#)/.test(firstLine.trim()) ||
+                    text.indexOf('plivo ') !== -1;
+
       var wrap = document.createElement('div');
-      wrap.className = 'code-block';
+      wrap.className = 'code-block' + (isShell ? ' shell' : '');
       pre.parentNode.insertBefore(wrap, pre);
-      wrap.appendChild(pre);
+
+      var bar = document.createElement('div');
+      bar.className = 'code-bar';
+      bar.innerHTML = '<span class="lang">' + (isShell ? 'Shell' : 'Code') + '</span>';
 
       var btn = document.createElement('button');
       btn.className = 'copy-btn';
       btn.type = 'button';
       btn.textContent = 'Copy';
+      btn.setAttribute('aria-label', 'Copy code to clipboard');
       btn.addEventListener('click', function () {
-        var code = pre.querySelector('code') || pre;
-        navigator.clipboard.writeText(code.textContent).then(function () {
+        navigator.clipboard.writeText(text).then(function () {
           btn.textContent = 'Copied';
           btn.classList.add('copied');
           setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
         });
       });
-      wrap.appendChild(btn);
+      bar.appendChild(btn);
+
+      wrap.appendChild(bar);
+      wrap.appendChild(pre);
+    });
+  }
+
+  // Wrap tables in an overflow container so they scroll cleanly on narrow viewports.
+  function wrapTables(temp) {
+    temp.querySelectorAll('table').forEach(function (t) {
+      var wrap = document.createElement('div');
+      wrap.className = 'table-wrap';
+      t.parentNode.insertBefore(wrap, t);
+      wrap.appendChild(t);
     });
   }
 
   // Group TOC items by command module.
   //
-  // The doc structure is "## `plivo <module> [subcommand…]`" for every
+  // The doc structure is "## `plivo <module> [subcommand...]`" for every
   // command. We strip the `plivo ` prefix, take segment [0] as the module
   // group, and keep the rest of the path as the visible item text.
   //
   // Non-command headings (the top-level "Commands" heading, the bare
   // "plivo" root) land in a special "Overview" group at the top.
   function groupItems(items) {
-    var overview = { id: '__overview', name: 'Overview', items: [] };
+    var overview = { id: '__overview', name: 'Overview', rawName: '__overview', items: [] };
     var groups = [overview];
     var byKey = { __overview: overview };
 
     items.forEach(function (i) {
       if (i.level === 'h1') return; // skip the doc title
-      // strip backticks if marked rendered them inside the heading
       var raw = i.text.replace(/`/g, '').trim();
-      // not a command heading → overview
       if (!/^plivo(\s|$)/.test(raw)) {
         overview.items.push({
           id: i.id, text: raw, depth: 0, fullPath: raw, isOverview: false
         });
         return;
       }
-      var parts = raw.split(/\s+/); // ["plivo", "voice", "calls", "list"]
+      var parts = raw.split(/\s+/);
       if (parts.length === 1) {
-        // bare "plivo" — root command
         overview.items.push({
           id: i.id, text: 'plivo (root)', depth: 0, fullPath: 'plivo', isOverview: false
         });
@@ -630,10 +913,15 @@
       var moduleName = parts[1];
       var key = moduleName;
       if (!byKey[key]) {
-        byKey[key] = { id: '__g_' + key, name: moduleName, items: [] };
+        byKey[key] = {
+          id: '__g_' + key,
+          name: moduleLabel(moduleName),
+          rawName: moduleName,
+          items: []
+        };
         groups.push(byKey[key]);
       }
-      var rest = parts.slice(2); // segments after the module name
+      var rest = parts.slice(2);
       var isOverview = rest.length === 0;
       var leaf = isOverview ? 'overview' : rest[rest.length - 1];
       var prefix = isOverview ? '' : rest.slice(0, -1).join(' ');
@@ -641,15 +929,13 @@
         id: i.id,
         leaf: leaf,
         prefix: prefix,
-        depth: rest.length,            // 0 = module overview, 1 = direct child, ...
-        fullPath: parts.join(' '),     // for search matching
+        depth: rest.length,
+        fullPath: parts.join(' '),
         isOverview: isOverview
       });
     });
 
-    // drop the Overview group if empty so we don't render a blank header
     if (overview.items.length === 0) groups.shift();
-    // sort each module's items by depth then alphabetically
     groups.forEach(function (g) {
       g.items.sort(function (a, b) {
         if (a.depth !== b.depth) return a.depth - b.depth;
@@ -671,13 +957,13 @@
       var li = document.createElement('li');
       var details = document.createElement('details');
       details.className = 'toc-group';
-      details.dataset.module = g.name.toLowerCase();
+      details.dataset.module = (g.rawName || g.name).toLowerCase();
       // open the first group by default; rest collapsed
       if (idx === 0) details.open = true;
 
       var summary = document.createElement('summary');
       summary.innerHTML =
-        '<span class="label">' + g.name + '</span>' +
+        '<span class="label">' + escapeHTML(g.name) + '</span>' +
         '<span class="count">' + g.items.length + '</span>';
       details.appendChild(summary);
 
@@ -688,11 +974,10 @@
         var a = document.createElement('a');
         a.href = '#' + it.id;
         if (it.leaf !== undefined) {
-          // command — render with mono prefix · name styling
           a.classList.add('depth-' + Math.min(it.depth, 4));
           if (it.isOverview) {
             a.classList.add('overview');
-            a.innerHTML = '<span class="leaf"><span class="name">' + escapeHTML(g.name) + '</span> &nbsp;overview</span>';
+            a.innerHTML = 'Overview';
           } else {
             a.innerHTML =
               '<span class="leaf">' +
@@ -734,7 +1019,6 @@
           li.classList.toggle('hidden', !match);
           if (match) groupHasMatch = true;
         });
-        // also let the module name itself match
         if (q && g.dataset.module && g.dataset.module.indexOf(q) > -1) groupHasMatch = true;
         g.classList.toggle('hidden', !groupHasMatch);
         if (groupHasMatch && q) g.open = true;
@@ -775,16 +1059,13 @@
         var link = byId[entry.target.id];
         if (!link) return;
         if (entry.isIntersecting) {
-          // clear active state across all groups, then highlight current
           links.forEach(function (a) { a.classList.remove('active'); });
           document.querySelectorAll('.toc-group.has-active').forEach(function (g) { g.classList.remove('has-active'); });
           link.classList.add('active');
-          // open + tag the parent group so it's visible in the sidebar
           var group = link.closest('.toc-group');
           if (group) {
             group.open = true;
             group.classList.add('has-active');
-            // bring the active link into view inside the (scrollable) sidebar
             link.scrollIntoView({ block: 'nearest' });
           }
         }
@@ -817,6 +1098,7 @@
           temp.innerHTML = marked.parse(md);
           var items = decorateHeadings(temp);
           wrapCodeBlocks(temp);
+          wrapTables(temp);
           var reader = document.getElementById('reader');
           reader.innerHTML = '';
           while (temp.firstChild) reader.appendChild(temp.firstChild);
@@ -824,7 +1106,6 @@
           renderTOC(items);
           wireSearch();
           wireActiveHighlight(items);
-          // jump-to-hash after render
           if (location.hash) {
             var el = document.getElementById(location.hash.slice(1));
             if (el) el.scrollIntoView({ behavior: 'auto', block: 'start' });
@@ -836,7 +1117,7 @@
         var reader = document.getElementById('reader');
         reader.innerHTML =
           '<div class="doc-state">' +
-          '<div class="err">⚠ couldn\'t load the command reference (' + err.message + ')</div>' +
+          '<div class="err">Could not load the command reference (' + err.message + ')</div>' +
           '<p>You can still read it on <a href="https://github.com/plivo/plivo-cli/blob/main/docs/COMMANDS.md">GitHub</a>.</p>' +
           '</div>';
       });
