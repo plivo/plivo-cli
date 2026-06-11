@@ -54,10 +54,6 @@ linters:
       # belong in their own commits, not in a CI-hardening pass.
       checks:
         - SA*
-        # nhooyr.io/websocket is pinned; coder/websocket migration is a
-        # separate cleanup. Silence the deprecation noise so the rest of
-        # staticcheck stays signal-only.
-        - "-SA1019"
 
   exclusions:
     rules:
@@ -68,10 +64,10 @@ linters:
       - path: tools/gendocs/
         linters:
           - gosec
-      # nhooyr.io/websocket's *Conn.Close takes args so its method set
-      # doesn't match the io.Closer exclusion. These call sites are all
-      # `defer x.Close(StatusNormalClosure, "")` — nothing useful to do
-      # with the returned error during shutdown.
+      # coder/websocket's *Conn.Close takes (code, reason) so its method
+      # set doesn't match the io.Closer exclusion. These call sites are
+      # all `defer x.Close(StatusNormalClosure, "")` — nothing useful to
+      # do with the returned error during shutdown.
       - path: voice_streams
         text: "Error return value of .*Close"
         linters:
