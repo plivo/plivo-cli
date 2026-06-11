@@ -50,6 +50,18 @@ jobs:
           fi
           echo "✓ go.mod tidy"
 
+      - name: docs/COMMANDS.md drift
+        run: |
+          # Regenerate the command reference. If anything changed, the
+          # contributor forgot to run `make docs` after touching help
+          # text — fail so they can rerun and amend.
+          make docs
+          if ! git diff --exit-code docs/COMMANDS.md; then
+            echo "✗ docs/COMMANDS.md is out of date — run 'make docs' locally and commit the result"
+            exit 1
+          fi
+          echo "✓ docs/COMMANDS.md fresh"
+
       - name: go test (race + coverage) — public build
         run: |
           go test -race -coverprofile=coverage.out -covermode=atomic ./...
