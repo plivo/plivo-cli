@@ -177,9 +177,13 @@ func TestFeedback_emptyRatingAndComment_doesNotSubmit(t *testing.T) {
 	}
 }
 
-func TestFeedback_endpointUnset_surfacesFriendlyError(t *testing.T) {
+// PLIVO_FEEDBACK_TELEMETRY=0 makes Submit a silent no-op + surfaces a
+// clear "disabled" message. Replaces the old endpoint-unset fallback —
+// the default endpoint is now hodor's /v1/accounts/cli/feedback (no
+// configuration needed), so the only way to NOT submit is this opt-out.
+func TestFeedback_telemetryDisabled_surfacesFriendlyMessage(t *testing.T) {
 	resetFeedbackFlags(t)
-	t.Setenv(feedback.EndpointEnvVar, "")
+	t.Setenv(feedback.TelemetryOptOutEnvVar, "0")
 	t.Setenv(feedback.MachineIDEnvVar, "test-machine")
 
 	feedbackRating = 3
@@ -189,11 +193,11 @@ func TestFeedback_endpointUnset_surfacesFriendlyError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunE returned err: %v", err)
 	}
-	if !strings.Contains(out, "PLIVO_FEEDBACK_ENDPOINT") {
-		t.Errorf("expected mention of env var in error, got: %s", out)
+	if !strings.Contains(out, "PLIVO_FEEDBACK_TELEMETRY") {
+		t.Errorf("expected mention of opt-out env var in message, got: %s", out)
 	}
-	if !strings.Contains(out, "issue") {
-		t.Errorf("expected GitHub issues fallback, got: %s", out)
+	if !strings.Contains(out, "disabled") && !strings.Contains(out, "Nothing sent") {
+		t.Errorf("expected 'disabled' or 'Nothing sent' in message, got: %s", out)
 	}
 }
 

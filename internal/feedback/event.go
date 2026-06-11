@@ -10,18 +10,23 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/plivo/plivo-cli/internal/version"
 )
 
-// EndpointEnvVar is the env var the CLI consults to find the collector
-// URL. Empty / unset disables network submission — the event is dropped
-// (or, on the explicit channel, surfaced as "feedback endpoint not yet
-// configured"). Lets us land the CLI surface before the backend
-// collector is wired without breaking the user flow.
+// EndpointEnvVar is the env var the CLI consults to find a custom
+// collector URL. Empty / unset → Submit() falls back to the default
+// hodor /v1/accounts/cli/feedback route. Lets self-hosters point at a
+// private collector without code changes.
 const EndpointEnvVar = "PLIVO_FEEDBACK_ENDPOINT"
+
+// TelemetryOptOutEnvVar lets users disable feedback submission entirely
+// (Submit becomes a silent no-op). Symmetric with the install-time
+// PLIVO_INSTALL_TELEMETRY=0 escape hatch.
+const TelemetryOptOutEnvVar = "PLIVO_FEEDBACK_TELEMETRY"
 
 // MachineIDEnvVar overrides the per-machine UUID. Only used by tests
 // to make assertions deterministic.
@@ -117,10 +122,19 @@ func (e *Event) SetComment(raw string) {
 // Times out at 5s — explicit-channel users actively typed this; we
 // can afford a longer budget than the contextual channel's 1s
 // fire-and-forget would allow.
-func (e *Event) Submit(ctx context.Context) error {
+func (e *Event) Submit(ctx context.Context, baseURL string, extraHeaders map[string]string) error {
+	if os.Getenv(TelemetryOptOutEnvVar) == "0" {
+		return ErrTelemetryDisabled
+	}
 	endpoint := os.Getenv(EndpointEnvVar)
 	if endpoint == "" {
-		return ErrEndpointNotConfigured
+		// Default route: hodor's public /v1/accounts/cli/feedback endpoint.
+		// baseURL is whatever the CLI resolves (env-aware via Profile.Env).
+		// Empty baseURL means caller didn't resolve one → unsafe to guess.
+		if baseURL == "" {
+			return ErrEndpointNotConfigured
+		}
+		endpoint = strings.TrimRight(baseURL, "/") + "/v1/accounts/cli/feedback"
 	}
 	body, err := json.Marshal(e)
 	if err != nil {
@@ -135,6 +149,14 @@ func (e *Event) Submit(ctx context.Context) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "Plivo-CLI/"+version.Value+" (feedback)")
+	// Pass through X-Plivo-CLI-* (email, os, arch, version, …) so hodor's
+	// handler can join feedback events to the per-user analytics
+	// dashboards without the CLI re-deriving values.
+	for k, v := range extraHeaders {
+		if v != "" {
+			req.Header.Set(k, v)
+		}
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -148,10 +170,14 @@ func (e *Event) Submit(ctx context.Context) error {
 	return nil
 }
 
-// ErrEndpointNotConfigured is returned by Submit when the collector URL
-// isn't set. The CLI surfaces a clearer message; this sentinel lets the
-// caller distinguish "infra not ready" from "infra returned an error".
-var ErrEndpointNotConfigured = fmt.Errorf("PLIVO_FEEDBACK_ENDPOINT not configured")
+// ErrEndpointNotConfigured signals the caller didn't supply a baseURL
+// AND no custom PLIVO_FEEDBACK_ENDPOINT is set. Should never happen in
+// the wired CLI — getClient resolves a baseURL even for empty profiles.
+var ErrEndpointNotConfigured = fmt.Errorf("no feedback endpoint resolved (set PLIVO_FEEDBACK_ENDPOINT to override)")
+
+// ErrTelemetryDisabled signals PLIVO_FEEDBACK_TELEMETRY=0 — Submit is a
+// silent no-op by user choice. Caller swallows or surfaces as it sees fit.
+var ErrTelemetryDisabled = fmt.Errorf("feedback telemetry disabled via PLIVO_FEEDBACK_TELEMETRY=0")
 
 // hashAuthID returns "sha256:<first-16-hex-chars>" or "" for empty input.
 // The collector can rejoin to identity via an internal salt lookup; the

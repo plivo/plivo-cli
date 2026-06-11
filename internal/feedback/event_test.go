@@ -124,7 +124,7 @@ func TestSubmit_postsExpectedShape(t *testing.T) {
 	e.Trigger = TriggerExplicit
 	e.Context.CommandPath = "voice.calls.make"
 
-	if err := e.Submit(context.Background()); err != nil {
+	if err := e.Submit(context.Background(), "", nil); err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
 
@@ -149,7 +149,7 @@ func TestSubmit_returnsSentinelWhenEndpointUnset(t *testing.T) {
 	t.Setenv(EndpointEnvVar, "")
 	t.Setenv(MachineIDEnvVar, "x")
 	e := NewEvent("")
-	err := e.Submit(context.Background())
+	err := e.Submit(context.Background(), "", nil)
 	if !errors.Is(err, ErrEndpointNotConfigured) {
 		t.Errorf("err = %v, want ErrEndpointNotConfigured", err)
 	}
@@ -164,7 +164,7 @@ func TestSubmit_propagates4xx(t *testing.T) {
 	t.Setenv(MachineIDEnvVar, "x")
 
 	e := NewEvent("")
-	err := e.Submit(context.Background())
+	err := e.Submit(context.Background(), "", nil)
 	if err == nil {
 		t.Fatal("expected error from 429")
 	}
