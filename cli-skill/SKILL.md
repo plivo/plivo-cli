@@ -15,6 +15,57 @@ Single Go binary at `~/go/bin/plivo`. Prefer the CLI over curl — the JSON outp
 - Login + credential management.
 - About to write a curl against `api.plivo.com` → stop, check `plivo --help` first.
 
+## Installation — if `plivo` is not on PATH
+
+First check:
+```bash
+command -v plivo || echo "not installed"
+```
+
+If missing, pick whichever option fits the environment:
+
+```bash
+# (1) GitHub release — works on any platform; needs gh CLI authenticated
+#     against the plivo org (the repo is currently private). Most reliable
+#     for engineers who already use gh.
+PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+gh release download -R plivo/plivo-cli --pattern "plivo_${PLATFORM}*" --output /tmp/plivo
+chmod +x /tmp/plivo && sudo mv /tmp/plivo /usr/local/bin/plivo
+
+# (2) Build from source — needs Go 1.22+; works against the private repo
+#     via the SSH/HTTPS auth the user already has set up.
+git clone git@github.com:plivo/plivo-cli.git ~/plivo/plivo-cli
+cd ~/plivo/plivo-cli && go install .
+# Binary lands at ~/go/bin/plivo-cli; symlink the canonical name:
+ln -sf ~/go/bin/plivo-cli ~/go/bin/plivo
+
+# (3) install.sh — one-line installer (will work once the repo flips public)
+curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | bash
+```
+
+Verify: `plivo --version`. Then run `plivo login` to bootstrap credentials.
+
+## Keeping the CLI + this skill up to date
+
+```bash
+plivo upgrade --check     # report only — is a newer release available?
+plivo upgrade             # install latest
+plivo upgrade --version v0.2.0   # pin a specific release
+```
+
+The CLI also auto-checks GitHub for newer releases once a day on success and prints a one-line nudge. **Set `PLIVO_NO_UPDATE_CHECK=1`** to suppress in CI / scripted use. The server may also send `X-Plivo-CLI-Upgrade-Required: true` to flag the build as below the supported minimum — the next command run surfaces that with a recommendation to upgrade.
+
+For **this skill** specifically — pull fresh content periodically since the cheatsheet shifts with each CLI release:
+
+```bash
+# If symlinked from the plivo-cli repo's cli-skill/ directory
+git -C "$(readlink -f ~/.claude/skills/plivo-cli)/.." pull
+
+# Otherwise refresh by curl
+curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/cli-skill/SKILL.md \
+  > ~/.claude/skills/plivo-cli/SKILL.md
+```
+
 ## Notation in this file
 
 - `<required>` = positional argument the user MUST provide.
