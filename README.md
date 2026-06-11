@@ -117,9 +117,47 @@ Commands follow `plivo <service> <resource> <verb>` — for example `plivo voice
 
 For the full command reference, see [`docs/COMMANDS.md`](docs/COMMANDS.md) (auto-generated from the live command tree).
 
+## For LLM agents
+
+If you're an LLM (Claude, Codex, Cursor, Aider, custom agent) and the user has asked you to do anything Plivo-related — **read [`cli-skill/SKILL.md`](cli-skill/SKILL.md) first**. It's the single-file reference written for agent consumption: every command with its required args, flag table, and "when to use" — plus the universal invariants (`--dry-run`, `--yes` for spend verbs, the stable error-envelope codes, JSON-output rules).
+
+**TL;DR for an agent starting cold:**
+
+```bash
+# 1. Is the CLI installed?
+command -v plivo || echo "Install instructions: cli-skill/SKILL.md → Installation"
+
+# 2. Is there an active credential profile?
+plivo auth whoami    # exit 2 + AUTH_MISSING means no creds — point user at `plivo login`
+
+# 3. Force JSON output for parsing (default on non-TTY, explicit for safety)
+plivo voice calls list -o json | jq '.data[] | {call_uuid, duration}'
+
+# 4. NEVER spend money without --yes — the CLI refuses with exit 5 anyway,
+#    but check with --dry-run first to confirm the request shape.
+plivo voice calls make --from +1... --to +1... --dry-run    # preview
+plivo voice calls make --from +1... --to +1... --yes        # actually call
+```
+
+**Three rules of thumb:**
+
+1. Don't curl `api.plivo.com` directly. The CLI does it 10× cheaper for both you and the user (stable JSON envelope, retry semantics, error mapping).
+2. Branch on `error.code` (e.g. `AUTH_MISSING`, `DESTRUCTIVE_REFUSED`, `RATE_LIMITED`), never on `error.message` — message text drifts; codes are committed.
+3. For scripted use: set `PLIVO_FEEDBACK_PROMPT=0` and `PLIVO_NO_UPDATE_CHECK=1` so the post-success "rate the CLI?" prompt and update-check banner don't surprise stdin/stderr.
+
+**Install the skill once** so future agent sessions auto-load it:
+
+```bash
+ln -s "$(pwd)/cli-skill" ~/.claude/skills/plivo-cli   # Claude Code
+# Other agents: copy cli-skill/SKILL.md into their skill / system-prompt directory.
+```
+
+The skill file lazy-loads on relevance — it only enters your context window when the user mentions Plivo / Contacto / Vibe / PHLO / `auth_id`, etc.
+
 ## Documentation
 
-- [`docs/COMMANDS.md`](docs/COMMANDS.md) — full command reference
+- [`cli-skill/SKILL.md`](cli-skill/SKILL.md) — single-file reference tuned for LLM agents (recommended starting point even for humans)
+- [`docs/COMMANDS.md`](docs/COMMANDS.md) — full command reference (auto-generated)
 - [`examples/`](examples/) — runnable scripts for common tasks
 - [`CHANGELOG.md`](CHANGELOG.md) — release-by-release changes
 - [plivo.com/docs](https://www.plivo.com/docs) — platform docs (XML grammar, webhooks, REST API reference)
