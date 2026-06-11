@@ -26,12 +26,6 @@ func TestNewEvent_fillsMachineFields(t *testing.T) {
 	if e.AnonMachineID != "deterministic-test-machine-id" {
 		t.Errorf("AnonMachineID = %q, want override value", e.AnonMachineID)
 	}
-	if !strings.HasPrefix(e.AuthIDHash, "sha256:") {
-		t.Errorf("AuthIDHash = %q, want sha256: prefix", e.AuthIDHash)
-	}
-	if len(e.AuthIDHash) != len("sha256:")+16 {
-		t.Errorf("AuthIDHash length = %d, want %d", len(e.AuthIDHash), len("sha256:")+16)
-	}
 	if e.Context.OS != runtime.GOOS {
 		t.Errorf("Context.OS = %q, want %q", e.Context.OS, runtime.GOOS)
 	}
@@ -43,24 +37,22 @@ func TestNewEvent_fillsMachineFields(t *testing.T) {
 	}
 }
 
-func TestNewEvent_emptyAuthIDLeavesHashEmpty(t *testing.T) {
+// Identity (raw auth_id) now travels via the X-Plivo-CLI-Auth-ID header,
+// not in the event body — so NewEvent ignores the authID arg. The body
+// has no derivative of auth_id anymore. Lock that contract here so we
+// don't accidentally re-introduce a body-side identity field that splits
+// PostHog Persons.
+func TestNewEvent_bodyCarriesNoAuthIDDerivative(t *testing.T) {
 	t.Setenv(MachineIDEnvVar, "x")
-	e := NewEvent("")
-	if e.AuthIDHash != "" {
-		t.Errorf("AuthIDHash = %q, want empty", e.AuthIDHash)
+	e := NewEvent("MAEXAMPLE_AUTH_ID")
+	encoded, err := json.Marshal(e)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
 	}
-}
-
-func TestNewEvent_sameAuthIDProducesSameHash(t *testing.T) {
-	t.Setenv(MachineIDEnvVar, "x")
-	a := NewEvent("MASAMEID0000000000XX")
-	b := NewEvent("MASAMEID0000000000XX")
-	if a.AuthIDHash != b.AuthIDHash {
-		t.Errorf("hashes differ: %q vs %q", a.AuthIDHash, b.AuthIDHash)
-	}
-	c := NewEvent("MADIFFERENT00000000XX")
-	if a.AuthIDHash == c.AuthIDHash {
-		t.Error("different auth_ids produced same hash")
+	for _, forbidden := range []string{"MAEXAMPLE_AUTH_ID", "auth_id_hash", "sha256:"} {
+		if strings.Contains(string(encoded), forbidden) {
+			t.Errorf("event body should not contain %q — identity goes via header now; got: %s", forbidden, encoded)
+		}
 	}
 }
 

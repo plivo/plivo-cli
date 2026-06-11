@@ -3,8 +3,6 @@ package feedback
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -68,15 +66,15 @@ type Context struct {
 	IsTTY         bool     `json:"is_tty"`
 }
 
-// Event is the JSON shape we ship to the collector. Field ordering
-// matches the design doc's schema verbatim so the wire format stays
-// reviewable from the doc alone.
+// Event is the JSON shape we ship to the collector. The raw auth_id (when
+// the user is logged in) travels as the X-Plivo-CLI-Auth-ID header — not
+// inside the body — so the server can use it as the PostHog distinct_id
+// directly, matching the cli.request scheme so Persons stitch correctly.
 type Event struct {
 	Event         string    `json:"event"` // always "cli.feedback.submitted"
 	Timestamp     time.Time `json:"timestamp"`
 	SessionID     string    `json:"session_id"`
 	AnonMachineID string    `json:"anon_machine_id"`
-	AuthIDHash    string    `json:"auth_id_hash,omitempty"` // sha256:abc... ; empty if user not logged in
 
 	Rating         int    `json:"rating,omitempty"`         // 1-5, or 0 if comment-only
 	Comment        string `json:"comment,omitempty"`        // post-sanitisation
@@ -89,14 +87,17 @@ type Event struct {
 
 // NewEvent builds a fresh event with all the machine-side fields
 // populated. The caller fills in rating/comment/trigger/context-extras.
-// authID may be empty for not-logged-in users.
+// authID may be empty for not-logged-in users. Note: we no longer carry
+// any auth_id derivative in the body — identity goes via the
+// X-Plivo-CLI-Auth-ID header. authID stays as a parameter so callers
+// don't refactor; the value is unused here.
 func NewEvent(authID string) *Event {
+	_ = authID // retained for caller signature compat; identity travels via header now
 	return &Event{
 		Event:         "cli.feedback.submitted",
 		Timestamp:     time.Now().UTC(),
 		SessionID:     uuid.NewString(),
 		AnonMachineID: machineID(),
-		AuthIDHash:    hashAuthID(authID),
 		Context: Context{
 			CLIVersion: version.Value,
 			OS:         runtime.GOOS,
@@ -179,17 +180,6 @@ var ErrEndpointNotConfigured = fmt.Errorf("no feedback endpoint resolved (set PL
 // ErrTelemetryDisabled signals PLIVO_FEEDBACK_TELEMETRY=0 — Submit is a
 // silent no-op by user choice. Caller swallows or surfaces as it sees fit.
 var ErrTelemetryDisabled = fmt.Errorf("feedback telemetry disabled via PLIVO_FEEDBACK_TELEMETRY=0")
-
-// hashAuthID returns "sha256:<first-16-hex-chars>" or "" for empty input.
-// The collector can rejoin to identity via an internal salt lookup; the
-// value as-shipped is one-way for external observers.
-func hashAuthID(authID string) string {
-	if authID == "" {
-		return ""
-	}
-	h := sha256.Sum256([]byte(authID))
-	return "sha256:" + hex.EncodeToString(h[:])[:16]
-}
 
 // machineID returns a per-machine UUID, persisted in ~/.plivo/machine-id
 // (so it survives reinstall in-place, gets regenerated on full wipe).
