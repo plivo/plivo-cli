@@ -42,9 +42,9 @@ jobs:
     name: Tests
     runs-on: ubuntu-latest-m-plivo
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
           go-version-file: go.mod
           cache: true
@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-latest-m-plivo
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
         with:
           # Full history so `git describe --tags` resolves the tag we're
           # building. Shallow clones return short SHAs which would land
@@ -68,7 +68,7 @@ jobs:
           # above is enough for tag creation + release publish.
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
           go-version-file: go.mod
           cache: true
@@ -177,7 +177,7 @@ jobs:
       # since-last-tag changelog. softprops/action-gh-release is the
       # de-facto standard for this and is well-maintained.
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2.6.2
         with:
           tag_name: ${{ steps.ver.outputs.version }}
           name: ${{ steps.ver.outputs.version }}
