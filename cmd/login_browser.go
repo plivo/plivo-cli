@@ -54,7 +54,7 @@ type cliTokenEnvelope struct {
 //     comfortable headroom for login / 2FA / consent click-through.
 //  5. Validate state; POST /v1/accounts/cli/token with the verifier.
 //  6. Persist the bundle to ~/.plivo/config.toml + OS keychain.
-func runLoginBrowser(saveEnv string) error {
+func runLoginBrowser() error {
 	verifier, challenge, err := pkcePair()
 	if err != nil {
 		return fmt.Errorf("generate PKCE pair: %w", err)
@@ -102,7 +102,7 @@ func runLoginBrowser(saveEnv string) error {
 	}
 
 	// Redeem the code for the creds bundle, then persist.
-	return redeemAndPersist(client, state, code, verifier, loginName, saveEnv)
+	return redeemAndPersist(client, state, code, verifier, loginName)
 }
 
 // redeemAndPersist performs the second half of the loopback-OAuth flow: POST
@@ -115,7 +115,7 @@ func runLoginBrowser(saveEnv string) error {
 // empty-bundle guard, keychain fallback, "first profile becomes active"
 // rule, stderr confirmation) matches what runLoginBrowser used to do
 // inline — keep them in sync if you touch one.
-func redeemAndPersist(client *api.Client, state, code, verifier, profileName, saveEnv string) error {
+func redeemAndPersist(client *api.Client, state, code, verifier, profileName string) error {
 	tokenURL := client.BuddyURL("/v1/accounts/cli/token")
 	body := map[string]string{
 		"state":         state,
@@ -147,7 +147,6 @@ func redeemAndPersist(client *api.Client, state, code, verifier, profileName, sa
 		Name:      resp.Data.Name,
 		AomUUID:   resp.Data.AomUUID,
 		Region:    resp.Data.Region,
-		SaveEnv:   saveEnv,
 	})
 }
 

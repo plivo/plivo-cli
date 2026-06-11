@@ -370,7 +370,7 @@ func TestRedeemAndPersist_happyPath(t *testing.T) {
 	}`)
 	client, profileName := setupBrowserLoginTestEnv(t, mock.srv.URL)
 
-	if err := redeemAndPersist(client, state, code, verifier, profileName, ""); err != nil {
+	if err := redeemAndPersist(client, state, code, verifier, profileName); err != nil {
 		t.Fatalf("redeemAndPersist: %v", err)
 	}
 
@@ -451,7 +451,7 @@ func TestRedeemAndPersist_brokenEnvelopeShape_returnsEmptyBundle(t *testing.T) {
 	}`)
 	client, profileName := setupBrowserLoginTestEnv(t, mock.srv.URL)
 
-	err := redeemAndPersist(client, "s", "c", "v", profileName, "")
+	err := redeemAndPersist(client, "s", "c", "v", profileName)
 	if err == nil {
 		t.Fatal("want error on broken envelope shape, got nil (would have silently saved a blank profile)")
 	}
@@ -489,7 +489,7 @@ func TestRedeemAndPersist_4xxWithGlobalError(t *testing.T) {
 	}`)
 	client, profileName := setupBrowserLoginTestEnv(t, mock.srv.URL)
 
-	err := redeemAndPersist(client, "s", "c", "v", profileName, "")
+	err := redeemAndPersist(client, "s", "c", "v", profileName)
 	if err == nil {
 		t.Fatal("want error from auth-server 4xx, got nil")
 	}

@@ -174,15 +174,6 @@ func getClient() (*api.Client, string, error) {
 	c.Email = p.Email
 	c.Region = p.Region
 	c.AomUUID = p.AomUUID
-	// When the profile was created with `plivo login --env <env>` (a non-prod
-	// env that only exists in internal builds), point the REST BaseURL at
-	// that env's gateway too. Mirrors applyBuddyURL. resolveLoginEnv returns
-	// false on public builds even when p.Env="dev" — naturally safe.
-	if p.Env != "" {
-		if u, ok := resolveLoginEnv(p.Env); ok {
-			c.BaseURL = strings.TrimRight(u, "/") + "/v1/cli/api"
-		}
-	}
 	c.DryRun = dryRunFlag
 	if logLevel == "debug" {
 		c.LogRequest = func(method, url string, body []byte) {

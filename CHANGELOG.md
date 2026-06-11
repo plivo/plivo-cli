@@ -81,9 +81,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **Breaking:** `plivo login --email`, `--auth-id`, `--manual`,
+  `--auth-token-stdin`, `--env`, and `--browser` flags. Browser PKCE is
+  the only `plivo login` method on main. For headless / CI usage, set
+  `PLIVO_AUTH_ID` + `PLIVO_AUTH_TOKEN` environment variables instead and
+  skip `plivo login` entirely — every command picks credentials up from
+  the environment.
+
+  Migrating CI scripts:
+
+      # before
+      echo "$TOKEN" | plivo login --auth-id MA... --auth-token-stdin
+      plivo voice calls list
+
+      # after
+      export PLIVO_AUTH_ID=MA...
+      export PLIVO_AUTH_TOKEN=$TOKEN
+      plivo voice calls list
+
 - The two-option login picker introduced earlier this cycle — replaced
-  by direct browser-default + flag-based alternates (`--manual`,
-  `--email`).
+  by browser-default with the env-var fallback above.
 - `auth_id_hash` field from the feedback event body — identity now
   travels via the `X-Plivo-CLI-Auth-ID` header so the server has the raw
   value for use as PostHog `distinct_id` (Persons stitch with

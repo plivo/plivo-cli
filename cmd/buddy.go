@@ -72,35 +72,15 @@ func init() {
 // applyBuddyURL resolves the AI-assistant URL with precedence:
 //
 //	PLIVO_BUDDY_URL env  >  current `--env <X>` (login only)  >
-//	active profile's Env  >  [buddy].url config  >  built-in prod default
-//
-// The "active profile's Env" step lets `plivo login --env dev` once and
-// have every subsequent command (ask, support, login --browser …) hit
-// the right edge without further flags. The `--env <X>` tier above it
-// matters during the login command itself, before the profile is saved.
-// Only recognised envs apply — unknown profile env values fall through.
+//	[buddy].url config  >  built-in prod default
 func applyBuddyURL(c *api.Client) {
 	if u := os.Getenv("PLIVO_BUDDY_URL"); u != "" {
 		c.BuddyBaseURL = u
 		return
 	}
-	if loginEnv != "" {
-		if u, ok := resolveLoginEnv(strings.ToLower(loginEnv)); ok {
-			c.BuddyBaseURL = u
-			return
-		}
-	}
 	cfg, err := config.Load()
 	if err != nil {
 		return
-	}
-	if cfg.Active != "" {
-		if prof, ok := cfg.Profiles[cfg.Active]; ok && prof.Env != "" {
-			if u, ok := resolveLoginEnv(prof.Env); ok {
-				c.BuddyBaseURL = u
-				return
-			}
-		}
 	}
 	if u := cfg.Buddy.EffectiveURL(); u != "" {
 		c.BuddyBaseURL = u

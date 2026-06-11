@@ -176,12 +176,6 @@ func resolveFeedbackTransport(authID string) (string, map[string]string) {
 		if prof.AomUUID != "" {
 			headers["X-Plivo-CLI-AOM-UUID"] = prof.AomUUID
 		}
-		// Env override: matches the same logic getClient uses for /v1/cli/api/*
-		if prof.Env != "" {
-			if u, ok := resolveLoginEnv(prof.Env); ok {
-				base = strings.TrimRight(u, "/")
-			}
-		}
 	}
 	return base, headers
 }
