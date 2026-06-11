@@ -1,0 +1,38 @@
+# Dependabot configuration — weekly updates for Go modules + GitHub Actions.
+#
+# Minor + patch updates are grouped to keep PR volume tractable; majors
+# still ship as standalone PRs so they get individual review.
+
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - deps
+    commit-message:
+      prefix: deps
+    groups:
+      gomod-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - deps
+    commit-message:
+      prefix: ci
+    groups:
+      actions-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
