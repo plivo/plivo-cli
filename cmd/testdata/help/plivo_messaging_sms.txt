@@ -8,7 +8,7 @@ Available Commands:
   diagnose    Diagnose what happened with an SMS (AI-powered)
   list        List SMS messages
   powerpacks  Powerpacks — number pools for high-volume SMS
-  send        Send an SMS (defaults to dry-run; pass --yes to actually send)
+  send        Send an SMS (requires --yes; spends money — use --dry-run to preview)
   tollfree    Toll-free verification (US TFN messaging compliance)
 
 Flags:

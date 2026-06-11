@@ -6,7 +6,7 @@ Usage:
 Available Commands:
   diagnose    Diagnose what happened with an MMS (AI-powered)
   list        List MMS messages
-  send        Send an MMS (defaults to dry-run; pass --yes to actually send)
+  send        Send an MMS (requires --yes; spends money — use --dry-run to preview)
 
 Flags:
   -h, --help   help for mms

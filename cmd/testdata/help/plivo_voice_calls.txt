@@ -12,7 +12,7 @@ Available Commands:
   get         Get a call by UUID
   hangup      Hang up a live call (requires --yes)
   list        List calls
-  make        Make an outbound call (defaults to dry-run; pass --yes to actually dial)
+  make        Make an outbound call (requires --yes; spends money — use --dry-run to preview)
   play        Play audio file(s) into a live call
   record      Start recording a live call
   speak       Speak text into a live call via TTS

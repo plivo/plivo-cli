@@ -45,13 +45,6 @@ Credentials resolve in order:
 }
 
 func Execute() {
-	// Capture the cobra command path early so every HTTP request from this
-	// invocation carries it via X-Plivo-CLI-Command. Server-side analytics
-	// keys off this for per-command funnel analysis.
-	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
-		api.CLICommand = commandPath(cmd)
-	}
-
 	cmdErr := rootCmd.Execute()
 	if cmdErr != nil {
 		handleError(cmdErr)
@@ -140,6 +133,21 @@ var valueFlags = map[string]bool{
 }
 
 func init() {
+	// Single early hook: capture the cobra command path for analytics, and
+	// reject unsupported --output values before any RunE fires. Defined here
+	// (rather than inside Execute()) so tests that drive rootCmd.Execute()
+	// directly see the same gate humans do.
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		api.CLICommand = commandPath(cmd)
+		if reason := output.Validate(outputFormat); reason != "" {
+			err := clierr.BadInput(reason)
+			err.Hint = "Supported formats: " + strings.Join(output.SupportedFormats, ", ") + " (default: table for TTY, json otherwise)."
+			err.Context = map[string]any{"flag": "--output", "value": outputFormat}
+			return err
+		}
+		return nil
+	}
+
 	rootCmd.PersistentFlags().StringVar(&profileFlag, "profile", "", "named profile from ~/.plivo/config.toml")
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "", "output format: table|json (default: table for TTY, json otherwise)")
 	rootCmd.PersistentFlags().BoolVarP(&quietFlag, "quiet", "q", false, "suppress non-data output")

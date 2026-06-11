@@ -51,7 +51,7 @@ var (
 
 var callMakeCmd = &cobra.Command{
 	Use:   "make",
-	Short: "Make an outbound call (defaults to dry-run; pass --yes to actually dial)",
+	Short: "Make an outbound call (requires --yes; spends money — use --dry-run to preview)",
 	RunE:  runCallMake,
 }
 
@@ -447,13 +447,11 @@ func runCallMake(cmd *cobra.Command, args []string) error {
 		body["machine_detection"] = callMakeMachineDetect
 	}
 
-	effectiveDryRun := dryRunFlag || !yesFlag
-	if effectiveDryRun {
-		client.DryRun = true
-		if !dryRunFlag {
-			fmt.Fprintln(os.Stderr, "[dry-run] call make defaults to dry-run; pass --yes to actually dial")
-		}
+	proceed, dryRun, gerr := guardSpend(fmt.Sprintf("make outbound call from %s to %s", callMakeFrom, callMakeTo))
+	if !proceed {
+		return gerr
 	}
+	applyDryRun(client, dryRun)
 
 	if explainFlag {
 		fmt.Fprintf(os.Stderr, "Will POST %s (from=%s to=%s answer_url=%s)\n",
@@ -472,7 +470,7 @@ func runCallMake(cmd *cobra.Command, args []string) error {
 	if apiErr != nil {
 		return apiErr
 	}
-	if effectiveDryRun {
+	if dryRun {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {

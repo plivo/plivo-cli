@@ -185,13 +185,11 @@ func runBrandCreate(cmd *cobra.Command, args []string) error {
 	addIfSet("stock_symbol", brandCreateStockSymbol)
 	addIfSet("stock_exchange", brandCreateStockExch)
 
-	effectiveDryRun := dryRunFlag || !yesFlag
-	if effectiveDryRun {
-		client.DryRun = true
-		if !dryRunFlag {
-			fmt.Fprintln(os.Stderr, "[dry-run] brand registration costs a TCR fee; pass --yes to actually submit")
-		}
+	proceed, dryRun, gerr := guardSpend("register 10DLC brand " + brandCreateAlias)
+	if !proceed {
+		return gerr
 	}
+	applyDryRun(client, dryRun)
 
 	var resp struct {
 		APIID   string `json:"api_id"`
@@ -205,7 +203,7 @@ func runBrandCreate(cmd *cobra.Command, args []string) error {
 	if apiErr != nil {
 		return apiErr
 	}
-	if effectiveDryRun {
+	if dryRun {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {

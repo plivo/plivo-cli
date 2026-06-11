@@ -224,13 +224,11 @@ func runCampaignCreate(cmd *cobra.Command, args []string) error {
 	addIfSet("opt_out_keywords", campCreateOptOutKW)
 	addIfSet("opt_out_message", campCreateOptOutMsg)
 
-	effectiveDryRun := dryRunFlag || !yesFlag
-	if effectiveDryRun {
-		client.DryRun = true
-		if !dryRunFlag {
-			fmt.Fprintln(os.Stderr, "[dry-run] campaign registration costs a TCR fee; pass --yes to actually submit")
-		}
+	proceed, dryRun, gerr := guardSpend("register 10DLC campaign " + campCreateAlias)
+	if !proceed {
+		return gerr
 	}
+	applyDryRun(client, dryRun)
 
 	var resp struct {
 		APIID      string `json:"api_id"`
@@ -244,7 +242,7 @@ func runCampaignCreate(cmd *cobra.Command, args []string) error {
 	if apiErr != nil {
 		return apiErr
 	}
-	if effectiveDryRun {
+	if dryRun {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {

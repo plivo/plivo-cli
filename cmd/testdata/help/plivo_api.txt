@@ -1,0 +1,45 @@
+Make an authenticated request to api.plivo.com without learning auth_id:auth_token.
+
+This is the fallback for endpoints the CLI doesn't yet have a typed command
+for. Anything you'd otherwise reach with curl + Basic auth — this command does,
+plus profile resolution, dry-run, structured error envelopes, and the same exit
+codes as the rest of the CLI.
+
+Paths come in two flavours:
+
+  /v1/Account/MA…/Message/        absolute — used as-is
+  /Message/                       account-scoped — expanded to
+                                  /v1/Account/<active auth_id>/Message/
+
+Mutating verbs (POST, PUT, PATCH, DELETE) require --yes (matches the rest of
+the CLI). Use --dry-run to preview without sending. GET and HEAD pass through.
+
+Examples:
+
+  plivo api GET /Account/
+  plivo api GET /Message/ --query "limit=10"
+  plivo api POST /Message/ --body @msg.json --yes
+  cat msg.json | plivo api --method POST /Message/ --body @- --yes
+  plivo api GET /Application/ --header "X-Debug: 1"
+
+Usage:
+  plivo api <method> <path> [flags]
+
+Flags:
+      --body string          request body: literal JSON, @path/to/file, or @- for stdin
+      --header stringArray   extra header as 'Key: Value' (repeatable; overrides defaults)
+  -h, --help                 help for api
+      --method string        HTTP method (alternative to the positional arg; useful when piping)
+      --query stringArray    query param as key=value (repeatable)
+
+Global Flags:
+      --all                auto-paginate through all pages
+      --dry-run            print the HTTP request without sending
+      --explain            explain what the command will do before executing
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts

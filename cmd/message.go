@@ -74,7 +74,7 @@ var (
 
 var messagingSmsSendCmd = &cobra.Command{
 	Use:   "send",
-	Short: "Send an SMS (defaults to dry-run; pass --yes to actually send)",
+	Short: "Send an SMS (requires --yes; spends money — use --dry-run to preview)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runMessageSendForChannel(cmd, "sms", smsSendSrc, smsSendDst, smsSendText, smsSendURL, smsSendMethod)
 	},
@@ -82,7 +82,7 @@ var messagingSmsSendCmd = &cobra.Command{
 
 var messagingWhatsappSendCmd = &cobra.Command{
 	Use:   "send",
-	Short: "Send a WhatsApp message (defaults to dry-run; pass --yes to actually send)",
+	Short: "Send a WhatsApp message (requires --yes; spends money — use --dry-run to preview)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runMessageSendForChannel(cmd, "whatsapp", whatsappSendSrc, whatsappSendDst, whatsappSendText, whatsappSendURL, whatsappSendMethod)
 	},
@@ -90,7 +90,7 @@ var messagingWhatsappSendCmd = &cobra.Command{
 
 var messagingMmsSendCmd = &cobra.Command{
 	Use:   "send",
-	Short: "Send an MMS (defaults to dry-run; pass --yes to actually send)",
+	Short: "Send an MMS (requires --yes; spends money — use --dry-run to preview)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runMessageSendForChannel(cmd, "mms", mmsSendSrc, mmsSendDst, mmsSendText, mmsSendURL, mmsSendMethod)
 	},
@@ -199,14 +199,13 @@ func runMessageSendForChannel(cmd *cobra.Command, channel, src, dst, text, urlFl
 		body["method"] = method
 	}
 
-	// message send costs money — default to dry-run unless --yes
-	effectiveDryRun := dryRunFlag || !yesFlag
-	if effectiveDryRun {
-		client.DryRun = true
-		if !dryRunFlag {
-			fmt.Fprintf(os.Stderr, "[dry-run] %s send defaults to dry-run; pass --yes to actually send\n", channel)
-		}
+	// Spend-verb gate: refuse without --yes (DESTRUCTIVE_REFUSED, exit 5);
+	// --dry-run alone is still allowed and prints the would-be request.
+	proceed, dryRun, gerr := guardSpend(fmt.Sprintf("send %s message from %s to %s", channel, src, dst))
+	if !proceed {
+		return gerr
 	}
+	applyDryRun(client, dryRun)
 
 	if explainFlag {
 		fmt.Fprintf(os.Stderr, "Will POST %s (type=%s src=%s dst=%s)\n", client.AccountURL("Message"), channel, src, dst)
@@ -220,7 +219,7 @@ func runMessageSendForChannel(cmd *cobra.Command, channel, src, dst, text, urlFl
 	if apiErr != nil {
 		return apiErr
 	}
-	if effectiveDryRun {
+	if dryRun {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {

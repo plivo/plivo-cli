@@ -1,4 +1,4 @@
-Send an SMS (defaults to dry-run; pass --yes to actually send)
+Send an SMS (requires --yes; spends money — use --dry-run to preview)
 
 Usage:
   plivo messaging sms send [flags]

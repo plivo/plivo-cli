@@ -11,6 +11,7 @@ Usage:
 Available Commands:
   account     Inspect and update the active Plivo account
   agent       AI voice agents (coming soon)
+  api         Generic REST escape hatch — hit any Plivo API path that isn't yet wrapped
   ask         Ask Plivo's AI assistant (streams the answer as it comes)
   auth        Manage credential profiles (list / use / remove / whoami)
   completion  Generate the autocompletion script for the specified shell

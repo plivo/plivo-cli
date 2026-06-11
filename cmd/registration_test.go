@@ -46,7 +46,7 @@ func TestRootCmd_allTopLevelGroupsRegistered(t *testing.T) {
 	// coming-soon stub; commands not registered in this build are verified
 	// separately in internal_registration_test.go.
 	groups := []string{
-		"account", "agent", "ask", "auth", "feedback", "login", "logout", "lookup", "messaging", "numbers", "support", "upgrade", "verify", "voice",
+		"account", "agent", "api", "ask", "auth", "feedback", "login", "logout", "lookup", "messaging", "numbers", "support", "upgrade", "verify", "voice",
 	}
 	for _, g := range groups {
 		t.Run(g, func(t *testing.T) {

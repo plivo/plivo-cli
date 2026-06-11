@@ -19,15 +19,50 @@ func TestResolve_explicitFormat(t *testing.T) {
 		{"json", FormatJSON},
 		{"JSON", FormatJSON},
 		{"Table", FormatTable},
-		{"yaml", FormatJSON}, // yaml/tsv aliases route to JSON per current implementation
+		// Unsupported formats fall through to JSON so the error renderer
+		// in cmd/root.go can still emit a structured envelope after
+		// Validate() rejects the value. See TestValidate_* below for the
+		// user-facing rejection.
+		{"yaml", FormatJSON},
 		{"tsv", FormatJSON},
-		{"unknown", FormatTable},
+		{"unknown", FormatJSON},
 	}
 	for _, tc := range cases {
 		t.Run(tc.in, func(t *testing.T) {
 			got := Resolve(tc.in, nil)
 			if got != tc.want {
 				t.Errorf("Resolve(%q) = %s, want %s", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// ─── Validate ────────────────────────────────────────────────────────────────
+
+func TestValidate_acceptsEmptyAndSupported(t *testing.T) {
+	// Empty input is always valid — the resolver picks table-vs-json off TTY.
+	for _, in := range []string{"", "json", "JSON", "table", "Table"} {
+		t.Run("ok_"+in, func(t *testing.T) {
+			if got := Validate(in); got != "" {
+				t.Errorf("Validate(%q) = %q, want empty", in, got)
+			}
+		})
+	}
+}
+
+func TestValidate_rejectsUnsupportedFormats(t *testing.T) {
+	cases := []string{"yaml", "tsv", "csv", "xml", "garbage", "YAML"}
+	for _, in := range cases {
+		t.Run("bad_"+in, func(t *testing.T) {
+			got := Validate(in)
+			if got == "" {
+				t.Fatalf("Validate(%q) should reject, got empty", in)
+			}
+			if !strings.Contains(got, in) {
+				t.Errorf("Validate(%q) reason should echo the bad value, got: %q", in, got)
+			}
+			if !strings.Contains(got, "supported") {
+				t.Errorf("Validate(%q) reason should list supported formats, got: %q", in, got)
 			}
 		})
 	}

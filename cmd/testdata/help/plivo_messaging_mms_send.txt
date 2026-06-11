@@ -1,4 +1,4 @@
-Send an MMS (defaults to dry-run; pass --yes to actually send)
+Send an MMS (requires --yes; spends money — use --dry-run to preview)
 
 Usage:
   plivo messaging mms send [flags]

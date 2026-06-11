@@ -19,6 +19,9 @@ func init() {
 	numberCmd.AddCommand(cnamCmd)
 }
 
+// runCnam is gated by the unified spend-verb contract — CNAM lookups
+// are billed per request, so the command refuses without --yes
+// (DESTRUCTIVE_REFUSED, exit 5) and accepts --dry-run for preview.
 func runCnam(cmd *cobra.Command, args []string) error {
 	number := args[0]
 	client, _, err := getClient()
@@ -26,13 +29,11 @@ func runCnam(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	effectiveDryRun := dryRunFlag || !yesFlag
-	if effectiveDryRun {
-		client.DryRun = true
-		if !dryRunFlag {
-			_, _ = os.Stderr.WriteString("[dry-run] cnam lookup defaults to dry-run; pass --yes to actually charge\n")
-		}
+	proceed, dryRun, gerr := guardSpend("cnam lookup for " + number)
+	if !proceed {
+		return gerr
 	}
+	applyDryRun(client, dryRun)
 
 	var c api.CnamLookup
 	apiErr, err := client.Do("GET", client.AccountURL("CnamLookup", number), nil, nil, &c)
@@ -42,7 +43,7 @@ func runCnam(cmd *cobra.Command, args []string) error {
 	if apiErr != nil {
 		return apiErr
 	}
-	if effectiveDryRun {
+	if dryRun {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
