@@ -5,7 +5,35 @@ description: Use the `plivo` CLI binary instead of raw curl for any Plivo task �
 
 # plivo-cli skill
 
-Single Go binary at `~/go/bin/plivo`. Prefer the CLI over curl — the JSON output is ~10x cheaper to consume than raw REST and the error envelope is stable across commands.
+Single Go binary on PATH (installed as `plivo`). Prefer the CLI over curl — the JSON output is ~10x cheaper to consume than raw REST and the error envelope is stable across commands.
+
+> Compatible with plivo-cli v0.1.0. Run `plivo --version` to detect mismatch; reinstall the CLI to refresh this skill.
+
+## If you are an AI agent
+
+- `export PLIVO_FEEDBACK_PROMPT=0` and `CI=1` before any command (suppresses the 24h feedback prompt and any TTY-only interactives).
+- Auth headlessly: `export PLIVO_AUTH_ID` + `PLIVO_AUTH_TOKEN` — browser `plivo login` will not work in an agent / CI context.
+- Always pass `-o json`. Success: `{"data": <payload>}` on stdout, exit 0. Error: `{"error": {"code", "hint", "retryable", "request_id", ...}}` on stderr, non-zero exit.
+- Never invoke interactive commands: `plivo login` (browser flow), `plivo support` (interactive picker), bare `plivo feedback` (prompts).
+- Quote multi-recipient args literally: `--dst "+14155551111,+14155552222"` (commas, quoted). The older `<dst1<dst2>` notation breaks shells — ignore it.
+- Preview any mutating command with `--dry-run` first.
+
+## 60-second quickstart
+
+1. Install: `curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | bash`
+2. Log in: `plivo login` (opens browser) OR set `PLIVO_AUTH_ID` + `PLIVO_AUTH_TOKEN`.
+3. Verify: `plivo auth whoami`.
+4. First command: `plivo voice calls list --limit 5`.
+5. Anything destructive: add `--dry-run` first, then `--yes` to confirm.
+
+## Headless authentication (agents/CI)
+
+- `plivo login` requires a browser — DO NOT call it from an agent or CI.
+- Set credentials via environment instead:
+  - `export PLIVO_AUTH_ID=MA...`
+  - `export PLIVO_AUTH_TOKEN=<token>`
+- Resolution precedence: `--profile <name>` flag → active profile in `~/.plivo/config.toml` → environment variables.
+- The CLI does not prompt or read stdin when env credentials are present.
 
 ## When to invoke
 
@@ -24,27 +52,25 @@ command -v plivo || echo "not installed"
 If missing, pick whichever option fits the environment:
 
 ```bash
-# (1) GitHub release — works on any platform; needs gh CLI authenticated
-#     against the plivo org (the repo is currently private). Most reliable
-#     for engineers who already use gh.
-PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
-gh release download -R plivo/plivo-cli --pattern "plivo_${PLATFORM}*" --output /tmp/plivo
-chmod +x /tmp/plivo && sudo mv /tmp/plivo /usr/local/bin/plivo
+# (1) install.sh — one-line installer (preferred). Drops the binary in
+#     the first user-owned dir on PATH (e.g. ~/.local/bin); no sudo.
+curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | bash
 
-# (2) Build from source — needs Go 1.22+; works against the private repo
-#     via the SSH/HTTPS auth the user already has set up.
-git clone git@github.com:plivo/plivo-cli.git ~/plivo/plivo-cli
+# (2) Build from source
+git clone https://github.com/plivo/plivo-cli.git ~/plivo/plivo-cli
 cd ~/plivo/plivo-cli && go install .
 # Binary lands at ~/go/bin/plivo-cli; symlink the canonical name:
 ln -sf ~/go/bin/plivo-cli ~/go/bin/plivo
 
-# (3) install.sh — one-line installer (will work once the repo flips public)
-curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | bash
+# (3) GitHub release — direct download
+PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+curl -fL -o /tmp/plivo "https://github.com/plivo/plivo-cli/releases/latest/download/plivo_${PLATFORM}"
+chmod +x /tmp/plivo && mv /tmp/plivo ~/.local/bin/plivo
 ```
 
-Verify: `plivo --version`. Then run `plivo login` to bootstrap credentials.
+Verify: `plivo --version`. Then run `plivo login` to bootstrap credentials (or set `PLIVO_AUTH_ID` + `PLIVO_AUTH_TOKEN` — see Headless authentication above).
 
-## Keeping the CLI + this skill up to date
+## Keeping the CLI up to date
 
 ```bash
 plivo upgrade --check     # report only — is a newer release available?
@@ -54,16 +80,7 @@ plivo upgrade --version v0.2.0   # pin a specific release
 
 The CLI also auto-checks GitHub for newer releases once a day on success and prints a one-line nudge. **Set `PLIVO_NO_UPDATE_CHECK=1`** to suppress in CI / scripted use. The server may also send `X-Plivo-CLI-Upgrade-Required: true` to flag the build as below the supported minimum — the next command run surfaces that with a recommendation to upgrade.
 
-For **this skill** specifically — pull fresh content periodically since the cheatsheet shifts with each CLI release:
-
-```bash
-# If symlinked from the plivo-cli repo's cli-skill/ directory
-git -C "$(readlink -f ~/.claude/skills/plivo-cli)/.." pull
-
-# Otherwise refresh by curl
-curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/cli-skill/SKILL.md \
-  > ~/.claude/skills/plivo-cli/SKILL.md
-```
+This skill ships with each plivo-cli release; reinstall the CLI to update.
 
 ## Notation in this file
 
@@ -78,8 +95,8 @@ curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/cli-skill/SKIL
 |---|---|---|---|
 | `--profile <name>` | string | active profile | invoke against a non-active profile for this call only |
 | `-o, --output <fmt>` | `table\|json` | `table` on TTY, `json` when piped | force JSON for scripts |
-| `--dry-run` | bool | false | print the HTTP request and exit 0 — preview without spending |
-| `--explain` | bool | false | narrate in plain English before executing |
+| `--dry-run` | bool | false | (API-backed commands) print the HTTP request and exit 0 — preview without spending |
+| `--explain` | bool | false | (API-backed commands) narrate in plain English before executing |
 | `-y, --yes` | bool | false | confirm spend / destructive verbs (refused otherwise) |
 | `-q, --quiet` | bool | false | suppress non-data output (banners, hints) |
 | `--no-color` | bool | false | strip ANSI from output |
@@ -87,11 +104,13 @@ curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/cli-skill/SKIL
 | `--timeout <sec>` | int | 30 | per-request timeout |
 | `--all` | bool | false | auto-paginate list ops |
 
-# Authentication
+`--dry-run` and `--explain` apply to API-backed commands — they're no-ops for `login`, `ask`, `upgrade`, `voice streams test`, and similar non-REST flows.
 
-## `plivo login`
+## Authentication
 
-Browser PKCE OAuth — opens default browser, captures callback on `127.0.0.1:0`, persists creds. **Recommended** for all sessions.
+### `plivo login`
+
+Browser PKCE OAuth — opens default browser, captures callback on `127.0.0.1:0`, persists creds. **Recommended** for interactive sessions; for agents/CI use `PLIVO_AUTH_ID` + `PLIVO_AUTH_TOKEN` (see Headless authentication above).
 
 | Flag | Type | Default | When |
 |---|---|---|---|
@@ -106,7 +125,7 @@ plivo login --name staging      # alternate profile
 
 After login: auth_id + email in `~/.plivo/config.toml`; auth_token in OS keychain (inline fallback for headless Linux).
 
-## `plivo auth whoami`
+### `plivo auth whoami`
 
 Verify creds + show the account.
 
@@ -114,28 +133,32 @@ Verify creds + show the account.
 plivo auth whoami
 ```
 
-## `plivo auth list`
+### `plivo auth list`
 
 List all configured profiles + show which is active.
 
-## `plivo auth use <name>`
+### `plivo auth use <name>`
 
 Switch the active profile. Used after `plivo login --name X` to flip default.
 
-## `plivo logout [name]`
+### `plivo logout [name]`
 
 Delete a profile + remove its token from the keychain. With no arg → active profile.
 
-# Core invariants (read once)
+## Core invariants (read once)
 
 - **Output**: TTY → table, pipe → JSON. Force JSON anywhere with `-o json`.
 - **Spend verbs require `--yes`** or refuse with exit 5 + `code: DESTRUCTIVE_REFUSED`. List: `messaging * send`, `voice calls make`, `voice calls speak`, `voice calls record`, `voice calls play`, `numbers buy`, `numbers release`, `account applications delete`.
 - **Stable error envelope** on stderr: `{"error":{"code":..., "hint":..., "retryable":..., "status_code":...}}`. Switch on `code`, never message text.
 - **Verify before inventing**: `plivo <cmd> --help` is the source of truth. The CLI evolves; don't assume from memory.
-- **`--dry-run`** previews the exact HTTP request without sending. Works on every command.
+- **`--dry-run`** previews the exact HTTP request without sending. Works on every API-backed command.
 - **`--explain`** narrates the action in plain English before running.
 
-# Scripted / non-interactive use
+## JSON output envelopes
+
+All commands with `-o json` emit a success envelope `{"data": <payload>}` (with an optional `"meta": {...}` for paginated lists) on stdout and exit 0. The shape of `payload` matches the command's underlying API resource. Failures emit `{"error": {"code", "message", "hint", "retryable", "status_code", "request_id", "docs_url", "context"}}` on stderr with a non-zero exit — see the [error-envelope cheatsheet](#error-envelope-cheatsheet) below.
+
+## Scripted / non-interactive use
 
 ```bash
 export PLIVO_FEEDBACK_PROMPT=0    # silence the post-success "rate the CLI?" prompt
@@ -145,7 +168,7 @@ plivo voice calls list -o json | jq ...
 
 The post-success auto-prompt is already TTY-gated so most scripted runs are fine, but `PLIVO_FEEDBACK_PROMPT=0` is the bulletproof escape hatch when the wrapper detects a pseudo-TTY.
 
-# Feedback
+## Feedback
 
 - **Manual:** `plivo feedback` → interactive rating (1-5) + optional comment.
 - **Auto-prompt:** after a successful command on an interactive TTY, the CLI asks once per 24h: `💡 Got 30s to rate the CLI? [y/N]`. Snoozed 24h on `n` / Enter.
@@ -161,9 +184,48 @@ Env opt-outs:
 - `PLIVO_FEEDBACK_PROMPT=0` — silence auto-prompt, manual still works.
 - `PLIVO_FEEDBACK_TELEMETRY=0` — disable all submission (manual becomes no-op).
 
-# Numbers
+## Common workflows
 
-## `plivo numbers list`
+**Provision a phone number end-to-end**
+```bash
+plivo numbers search --country US --type local --limit 5 -o json
+plivo numbers buy +1415... --dry-run                       # preview spend
+plivo numbers buy +1415... --yes                           # rent it
+plivo account applications create --app-name "my-app" --answer-url https://my.app/answer -o json
+plivo numbers update +1415... --app-id <APP_UUID>          # attach the app
+```
+
+**Test an inbound webhook locally**
+```bash
+plivo voice streams test --to ws://localhost:7860/ws --duration 5 --bidirectional
+# If the bot replies correctly, bridge a real call:
+plivo voice streams forward --number +1415... --app <APP_UUID> --to ws://localhost:7860/ws
+```
+
+**Send your first SMS**
+```bash
+plivo numbers list --type local -o json | jq '.data[].number'  # pick a src
+plivo messaging sms send --src +1415... --dst +1415... --text "hi" --dry-run
+plivo messaging sms send --src +1415... --dst +1415... --text "hi" --yes
+```
+
+**Debug a failed call**
+```bash
+plivo voice calls get <call-uuid> -o json | jq '.data | {state, hangup_cause, end_time}'
+plivo voice calls diagnose <call-uuid>          # lifecycle walk-through
+plivo ask "why did call <call-uuid> fail?" --call-uuid <call-uuid>
+```
+
+**Switch between accounts/profiles**
+```bash
+plivo auth list                                  # see all profiles, marked active
+plivo auth use staging                           # flip default
+plivo numbers list --profile prod                # one-shot override
+```
+
+## Numbers
+
+### `plivo numbers list`
 
 List rented numbers on the account.
 
@@ -174,11 +236,11 @@ List rented numbers on the account.
 | `--limit <n>` | int | page size (default 20) |
 | `--offset <n>` | int | pagination offset |
 
-## `plivo numbers get <e164>`
+### `plivo numbers get <e164>`
 
 Get one rented number.
 
-## `plivo numbers search`
+### `plivo numbers search`
 
 Search marketplace for buyable numbers.
 
@@ -189,7 +251,7 @@ Search marketplace for buyable numbers.
 | `--pattern <regex>` | string | digit pattern in the number |
 | `--limit <n>` | int | default 20 |
 
-## `plivo numbers buy <e164>` (spend)
+### `plivo numbers buy <e164>` (spend)
 
 Rent a number from the marketplace.
 
@@ -200,7 +262,7 @@ Rent a number from the marketplace.
 | `--app-id <id>` | string | bind to an application at buy time |
 | `--alias "..."` | string | set the human-readable label |
 
-## `plivo numbers update <e164>`
+### `plivo numbers update <e164>`
 
 Update metadata on a rented number.
 
@@ -210,34 +272,34 @@ Update metadata on a rented number.
 | `--app-id <id>` | bind/rebind to an Application |
 | `--subaccount <auth_id>` | move to a subaccount |
 
-## `plivo numbers release <e164>` (spend-adjacent)
+### `plivo numbers release <e164>` (spend)
 
 Release a rented number. **Requires `--yes`**.
 
-## `plivo numbers cnam <e164>`
+### `plivo numbers cnam <e164>`
 
 CNAM (caller-name) lookup for a US number.
 
-## `plivo numbers compliance ...`
+### `plivo numbers compliance ...`
 
 Phone-number compliance bundle CRUD (KYC docs, address proof, etc.). Sub-verbs: `requirements`, `create`, `get`, `list`, `update`, `delete`, `link`. Use `plivo numbers compliance --help` for full surface.
 
-## `plivo numbers masking sessions ...`
+### `plivo numbers masking sessions ...`
 
 Phone-number masking session CRUD.
 
-# Messaging
+## Messaging
 
 Channel-split CLI: SMS / WhatsApp / MMS each have their own subgroup. Universal `plivo messaging get <uuid>` works across channels.
 
-## `plivo messaging sms send` (spend)
+### `plivo messaging sms send` (spend)
 
 Send an SMS. **Requires `--yes`**.
 
 | Flag | Type | When |
 |---|---|---|
 | `--src <e164>` | string | **required**; sender (E.164, shortcode, or sender ID) |
-| `--dst <e164[<e164]>` | string | **required**; one recipient or `<`-delimited multi |
+| `--dst <e164>` | string | **required**; recipient. Multi-recipient: pass a comma-separated list, **quoted**: `--dst "+14155551111,+14155552222"` |
 | `--text "..."` | string | **required**; message body |
 | `--url <url>` | string | delivery webhook |
 | `--method <GET\|POST>` | string | webhook method (default POST) |
@@ -247,7 +309,7 @@ Send an SMS. **Requires `--yes`**.
 | `--log <true\|false>` | bool | server-side message-body logging |
 | `--dry-run` | bool | preview without spending |
 
-## `plivo messaging sms list`
+### `plivo messaging sms list`
 
 List sent/received SMS.
 
@@ -259,40 +321,40 @@ List sent/received SMS.
 | `--from-date <YYYY-MM-DD>` / `--to-date` | time window |
 | `--limit <n>` / `--offset <n>` | pagination |
 
-## `plivo messaging get <uuid>`
+### `plivo messaging get <uuid>`
 
 Get one message (any channel). Universal across SMS/WhatsApp/MMS.
 
-## `plivo messaging sms diagnose <uuid>`
+### `plivo messaging sms diagnose <uuid>`
 
 Walks a message lifecycle and explains failures in plain English.
 
-## `plivo messaging sms 10dlc ...`
+### `plivo messaging sms 10dlc ...`
 
 10DLC compliance: `brands`, `campaigns`, `links`. Sub-verbs: `list`, `get`, `create`, `update`.
 
-## `plivo messaging sms powerpacks ...`
+### `plivo messaging sms powerpacks ...`
 
 Powerpack (sender-pool) CRUD: `list`, `get`, `create`, `update`, `delete`, `numbers`.
 
-## `plivo messaging sms tollfree ...`
+### `plivo messaging sms tollfree ...`
 
 Toll-free verification: `list`, `get`, `submit`.
 
-## `plivo messaging whatsapp send` / `plivo messaging mms send`
+### `plivo messaging whatsapp send` / `plivo messaging mms send`
 
-Same shape as `messaging sms send`. WhatsApp adds template flags (`--template`, `--template-vars`). MMS adds `--urls`.
+Same shape as `messaging sms send` — including the same `--dst "+1...,+1..."` multi-recipient form. WhatsApp adds template flags (`--template`, `--template-vars`). MMS adds `--urls`.
 
-# Voice — calls
+## Voice — calls
 
-## `plivo voice calls make` (spend)
+### `plivo voice calls make` (spend)
 
 Place an outbound call. **Requires `--yes`**.
 
 | Flag | Type | When |
 |---|---|---|
 | `--from <e164>` | string | **required**; caller |
-| `--to <e164[<e164]>` | string | **required**; one or `<`-delimited multi recipients |
+| `--to <e164>` | string | **required**; recipient. Multi-recipient: pass a comma-separated list, **quoted**: `--to "+14155551111,+14155552222"` |
 | `--answer-url <url>` | string | PlivoXML URL on answer |
 | `--answer-method <GET\|POST>` | string | default POST |
 | `--hangup-url <url>` | string | webhook on hangup |
@@ -302,15 +364,15 @@ Place an outbound call. **Requires `--yes`**.
 | `--machine-detection <true\|hangup\|none>` | string | answering-machine handling |
 | `--record-call` | bool | record A-leg by default |
 
-## `plivo voice calls list` / `get <uuid>`
+### `plivo voice calls list` / `get <uuid>`
 
 List/get calls. List flags: `--status`, `--direction`, `--from-number`, `--to-number`, `--from-date`, `--to-date`, `--limit`, `--offset`.
 
-## `plivo voice calls hangup <uuid>`
+### `plivo voice calls hangup <uuid>`
 
 End an in-progress call.
 
-## `plivo voice calls transfer <uuid>`
+### `plivo voice calls transfer <uuid>`
 
 Transfer an active call.
 
@@ -319,7 +381,7 @@ Transfer an active call.
 | `--leg <aleg\|bleg\|both>` | which leg to transfer |
 | `--aleg-url <url>` / `--bleg-url <url>` | PlivoXML for the new leg |
 
-## `plivo voice calls play <uuid>` (spend) / `stop-play <uuid>`
+### `plivo voice calls play <uuid>` (spend) / `stop-play <uuid>`
 
 Stream audio into a call. **Requires `--yes`**.
 
@@ -330,7 +392,7 @@ Stream audio into a call. **Requires `--yes`**.
 | `--loop` | bool; replay until hangup |
 | `--mix <true\|false>` | mix vs replace current stream |
 
-## `plivo voice calls speak <uuid>` (spend) / `stop-speak <uuid>`
+### `plivo voice calls speak <uuid>` (spend) / `stop-speak <uuid>`
 
 TTS into a call. **Requires `--yes`**.
 
@@ -340,7 +402,7 @@ TTS into a call. **Requires `--yes`**.
 | `--voice <name>` | TTS voice (e.g. `WOMAN`, `MAN`, AWS Polly voices) |
 | `--language <code>` | e.g. `en-US`, `hi-IN` |
 
-## `plivo voice calls dtmf <uuid>`
+### `plivo voice calls dtmf <uuid>`
 
 Send DTMF digits into a call.
 
@@ -349,7 +411,7 @@ Send DTMF digits into a call.
 | `--digits <0-9*#>` | **required** |
 | `--leg <aleg\|bleg\|both>` | which leg |
 
-## `plivo voice calls record <uuid>` (spend) / `stop-record <uuid>`
+### `plivo voice calls record <uuid>` (spend) / `stop-record <uuid>`
 
 Record a call. **Requires `--yes`**.
 
@@ -360,11 +422,11 @@ Record a call. **Requires `--yes`**.
 | `--transcription-url <url>` | webhook for transcript |
 | `--transcription-method <GET\|POST>` | |
 
-## `plivo voice calls diagnose <uuid>`
+### `plivo voice calls diagnose <uuid>`
 
 Lifecycle walkthrough + plain-English failure explanation.
 
-## `plivo voice calls streams <verb>` — per-call AudioStream CRUD
+### `plivo voice calls streams <verb>` — per-call AudioStream CRUD
 
 Distinct from `voice streams` (the dev-loop group). Sub-verbs:
 
@@ -375,11 +437,11 @@ Distinct from `voice streams` (the dev-loop group). Sub-verbs:
 | `start <call_uuid>` | open a new stream — flags: `--url <wss>`, `--track <inbound\|outbound\|both>`, `--bidirectional`, `--audio-track`, `--content-type`, `--sample-rate` |
 | `stop <call_uuid> [<stream_id>]` | close one or all streams on the call |
 
-# Voice — streaming dev loop
+## Voice — streaming dev loop
 
 Use these for local development of WebSocket-based audio streaming **without** a real call. Distinct from `voice calls streams` (which is REST CRUD on an existing call's stream).
 
-## `plivo voice streams test`
+### `plivo voice streams test`
 
 Open a WebSocket to a URL, send Plivo-format start/media/stop frames with synthetic audio, report results. No call placed, no spend.
 
@@ -397,7 +459,7 @@ plivo voice streams test --to wss://my-bot.example.com/ws
 plivo voice streams test --to ws://localhost:7860/ws --duration 5 --bidirectional
 ```
 
-## `plivo voice streams forward`
+### `plivo voice streams forward`
 
 Temporarily redirect an app's `answer_url` to a local tunnel so a real call's audio bridges into your local WebSocket handler. Restores the original `answer_url` on Ctrl+C.
 
@@ -415,7 +477,7 @@ Temporarily redirect an app's `answer_url` to a local tunnel so a real call's au
 
 Requires ngrok in PATH or at `~/.plivo/bin/ngrok`. Saves the app's current `answer_url`, starts an ngrok tunnel + local HTTP/WS server, points the app at the tunnel, bridges incoming call audio. Restores `answer_url` on SIGINT unless `--keep`.
 
-# Voice — conferences / multiparty / endpoints / recordings
+## Voice — conferences / multiparty / endpoints / recordings
 
 ```bash
 plivo voice conferences list / get / hangup / record / stop-record / member ...
@@ -426,17 +488,17 @@ plivo voice recordings       list / get / delete
 
 `plivo voice multiparty create` requires `--name`. `plivo voice multiparty participant add` requires `--from` + `--to`. `plivo voice conferences member play` / `speak` require `--urls` / `--text`. Run `plivo voice <group> --help` for the rest.
 
-# Account + applications
+## Account + applications
 
-## `plivo account get` / `plivo account update`
+### `plivo account get` / `plivo account update`
 
 Get/update account info.
 
-## `plivo account subaccounts`
+### `plivo account subaccounts`
 
 Subaccount CRUD: `list`, `get`, `create`, `update`, `delete`.
 
-## `plivo account applications`
+### `plivo account applications`
 
 | Verb | Required flags | Notes |
 |---|---|---|
@@ -444,24 +506,24 @@ Subaccount CRUD: `list`, `get`, `create`, `update`, `delete`.
 | `get <uuid>` | — | |
 | `create` | `--app-name` | optional: `--answer-url`, `--answer-method`, `--hangup-url`, `--message-url`, `--public-uri`, `--default-number-app` |
 | `update <uuid>` | — | same flags as create; only supplied ones get patched |
-| `delete <uuid>` | `--yes` | spend-adjacent; refuses without confirmation |
+| `delete <uuid>` | `--yes` | spend verb; refuses without confirmation |
 
-# Verify
+## Verify
 
 ```bash
 plivo verify sessions create --recipient +1... --channel sms
 plivo verify sessions get <uuid>
 ```
 
-# Lookup
+## Lookup
 
 ```bash
 plivo lookup <e164>          # carrier + line-type
 ```
 
-# Conversational / debug
+## Conversational / debug
 
-## `plivo ask "<message>"`
+### `plivo ask "<message>"`
 
 Ask Plivo's AI assistant — streams answer via SSE.
 
@@ -472,19 +534,19 @@ Ask Plivo's AI assistant — streams answer via SSE.
 | `--debug-stream` | dump raw SSE frames to stderr |
 | `--history @file.json` | seed prior conversation history |
 
-## `plivo support`
+### `plivo support`
 
 Open a support chat session (interactive SSE).
 
-## `plivo upgrade`
+### `plivo upgrade`
 
 Self-update the CLI binary to the latest release.
 
-# Error-envelope cheatsheet
+## Error-envelope cheatsheet
 
 | Code | Exit | Likely cause |
 |---|---|---|
-| `AUTH_MISSING` | 2 | no profile / env var creds — run `plivo login` |
+| `AUTH_MISSING` | 2 | no profile / env var creds — run `plivo login` or set `PLIVO_AUTH_ID`/`PLIVO_AUTH_TOKEN` |
 | `AUTH_INVALID` | 2 | wrong auth_id/token — re-login |
 | `BAD_INPUT` | 3 | flag value / shape problem |
 | `DESTRUCTIVE_REFUSED` | 5 | spend verb without `--yes` |
@@ -496,7 +558,7 @@ Self-update the CLI binary to the latest release.
 
 All envelopes have `hint` + `retryable` fields. Switch on `code`, never message text.
 
-# JSON consumption patterns
+## JSON consumption patterns
 
 ```bash
 # One field
@@ -510,10 +572,8 @@ APP_ID=$(plivo account applications list -o json | jq -r '.data[0].app_id')
 plivo numbers update +1... --app-id "$APP_ID" -o json
 ```
 
-# Sanity check
+## Sanity check
 
 ```bash
 plivo --help && plivo auth whoami
 ```
-
-License: MIT.
