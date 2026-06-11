@@ -17,7 +17,11 @@
 # Env overrides:
 #   PLIVO_CLI_VERSION   tag to install (default: latest)
 #   PLIVO_INSTALL_DIR   where to drop the binary
-#                       (default: /usr/local/bin on unix, ~/bin on windows)
+#                       (default: first user-owned dir on PATH —
+#                        ~/.local/bin / ~/bin / /opt/homebrew/bin —
+#                        falling back to ~/.local/bin. ~/bin on windows.
+#                        No sudo unless you explicitly point at /usr/local/bin
+#                        or similar root-owned location.)
 set -euo pipefail
 
 REPO="plivo/plivo-cli"
@@ -50,10 +54,23 @@ else
 fi
 
 # ─── Resolve install dir (per-platform default) ──────────────────────────────
+# Prefer a user-owned directory so the install doesn't need sudo. Fall
+# back to /usr/local/bin only when no user-owned target is already on
+# PATH — that's the long-standing default and the right answer when the
+# user actually wants a system-wide install.
+pick_user_dir() {
+  for d in "${HOME}/.local/bin" "${HOME}/bin" "/opt/homebrew/bin"; do
+    [ -d "$d" ] && case ":${PATH}:" in *":${d}:"*) printf '%s' "$d"; return ;; esac
+  done
+  # No existing user-owned dir on PATH — fall back to ~/.local/bin, which
+  # we'll create + hint the user about adding to PATH (existing path-hint
+  # logic later in the script handles that).
+  printf '%s' "${HOME}/.local/bin"
+}
 if [ "$OS" = "windows" ]; then
   DEFAULT_DIR="${HOME}/bin"
 else
-  DEFAULT_DIR="/usr/local/bin"
+  DEFAULT_DIR="$(pick_user_dir)"
 fi
 INSTALL_DIR="${PLIVO_INSTALL_DIR:-$DEFAULT_DIR}"
 TARGET="${INSTALL_DIR}/plivo${EXT}"
