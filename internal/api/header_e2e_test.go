@@ -35,6 +35,9 @@ type capturedRequest struct {
 	cliOS         string
 	cliArch       string
 	cliEmail      string
+	cliAuthID     string
+	cliRegion     string
+	cliAomUUID    string
 	userAgent     string
 	body          []byte
 }
@@ -50,6 +53,9 @@ func newFakeServer(t *testing.T, status int, respBody string, respHeaders map[st
 		captured.cliOS = r.Header.Get("X-Plivo-CLI-OS")
 		captured.cliArch = r.Header.Get("X-Plivo-CLI-Arch")
 		captured.cliEmail = r.Header.Get("X-Plivo-CLI-Email")
+		captured.cliAuthID = r.Header.Get("X-Plivo-CLI-Auth-ID")
+		captured.cliRegion = r.Header.Get("X-Plivo-CLI-Region")
+		captured.cliAomUUID = r.Header.Get("X-Plivo-CLI-AOM-UUID")
 		captured.userAgent = r.Header.Get("User-Agent")
 		b, _ := io.ReadAll(r.Body)
 		captured.body = b
@@ -333,5 +339,48 @@ func TestE2E_EmailHeader_omittedWhenProfileHasNoEmail(t *testing.T) {
 	}
 	if captured.cliEmail != "" {
 		t.Errorf("X-Plivo-CLI-Email = %q, want empty (no email on profile)", captured.cliEmail)
+	}
+}
+
+// TestE2E_IdentityHeaders — every authed request ships X-Plivo-CLI-Auth-ID
+// + X-Plivo-CLI-Region + X-Plivo-CLI-AOM-UUID when those fields are
+// populated on the Client. Lets unauthenticated routes (feedback) tag
+// their PostHog events with the same identity dimensions the chokepoint
+// captures from its auth-middleware context.
+func TestE2E_IdentityHeaders(t *testing.T) {
+	srv, captured := newFakeServer(t, 200, `{}`, nil)
+	c := newTestClient(srv.URL)
+	c.Region = "us-east-1"
+	c.AomUUID = "aom-fixture-uuid"
+
+	if _, err := c.Do("GET", c.AccountURL("Number"), nil, nil, nil); err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if captured.cliAuthID == "" {
+		t.Error("X-Plivo-CLI-Auth-ID should be set when Client.AuthID populated")
+	}
+	if captured.cliRegion != "us-east-1" {
+		t.Errorf("X-Plivo-CLI-Region = %q, want us-east-1", captured.cliRegion)
+	}
+	if captured.cliAomUUID != "aom-fixture-uuid" {
+		t.Errorf("X-Plivo-CLI-AOM-UUID = %q, want aom-fixture-uuid", captured.cliAomUUID)
+	}
+}
+
+// Identity headers stay absent when the fields are empty — same "no
+// silent shadowing" rule as the email header.
+func TestE2E_IdentityHeaders_absentWhenEmpty(t *testing.T) {
+	srv, captured := newFakeServer(t, 200, `{}`, nil)
+	c := newTestClient(srv.URL)
+	c.AuthID = "" // override the test default
+	c.Region = ""
+	c.AomUUID = ""
+
+	if _, err := c.Do("GET", c.BaseURL+"/anywhere", nil, nil, nil); err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if captured.cliAuthID != "" || captured.cliRegion != "" || captured.cliAomUUID != "" {
+		t.Errorf("identity headers should be absent when Client fields empty; got auth=%q region=%q aom=%q",
+			captured.cliAuthID, captured.cliRegion, captured.cliAomUUID)
 	}
 }

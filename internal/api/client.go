@@ -37,8 +37,20 @@ func (c *Client) addCLIHeaders(req *http.Request) {
 	if CLICommand != "" {
 		req.Header.Set(headerCLICommand, CLICommand)
 	}
-	if c != nil && c.Email != "" {
+	if c == nil {
+		return
+	}
+	if c.Email != "" {
 		req.Header.Set(headerCLIEmail, c.Email)
+	}
+	if c.AuthID != "" {
+		req.Header.Set(headerCLIAuthID, c.AuthID)
+	}
+	if c.Region != "" {
+		req.Header.Set(headerCLIRegion, c.Region)
+	}
+	if c.AomUUID != "" {
+		req.Header.Set(headerCLIAomUUID, c.AomUUID)
 	}
 }
 
@@ -66,12 +78,18 @@ const (
 	// (Plivo's customer AI assistant). Plivo Basic auth.
 	DefaultBuddyBase = "https://hodor.plivo.com"
 
-	// Headers sent on every CLI request.
+	// Headers sent on every CLI request. Auth-ID + Region + AOM-UUID are
+	// redundant for the authenticated chokepoint (which derives auth_id
+	// from Basic auth) but are how the public feedback route gets the
+	// same identity for unified PostHog Person stitching.
 	headerCLIVersion = "X-Plivo-CLI-Version"
 	headerCLICommand = "X-Plivo-CLI-Command"
 	headerCLIOS      = "X-Plivo-CLI-OS"
 	headerCLIArch    = "X-Plivo-CLI-Arch"
 	headerCLIEmail   = "X-Plivo-CLI-Email"
+	headerCLIAuthID  = "X-Plivo-CLI-Auth-ID"
+	headerCLIRegion  = "X-Plivo-CLI-Region"
+	headerCLIAomUUID = "X-Plivo-CLI-AOM-UUID"
 	// Headers the server may return — version gate signals.
 	headerUpgradeRequired = "X-Plivo-CLI-Upgrade-Required"
 	headerMinVersion      = "X-Plivo-CLI-Min-Version"
@@ -84,6 +102,8 @@ type Client struct {
 	AuthID       string
 	AuthToken    string
 	Email        string // optional human email from the profile; sent as X-Plivo-CLI-Email for per-user analytics
+	Region       string // optional resolved region from the profile; sent as X-Plivo-CLI-Region so unauthenticated analytics routes (feedback) can tag events
+	AomUUID      string // optional per-user identity row UUID from the profile; sent as X-Plivo-CLI-AOM-UUID for per-human analytics
 	HTTP         *http.Client
 	DryRun       bool
 	LogRequest   func(method, url string, body []byte)

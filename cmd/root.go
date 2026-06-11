@@ -162,6 +162,8 @@ func getClient() (*api.Client, string, error) {
 	c := api.New(p.AuthID, p.AuthToken, time.Duration(timeoutSec)*time.Second)
 	c.AdminBaseURL = adminServer
 	c.Email = p.Email
+	c.Region = p.Region
+	c.AomUUID = p.AomUUID
 	// When the profile was created with `plivo login --env <env>` (a non-prod
 	// env that only exists in internal builds), point the REST BaseURL at
 	// that env's gateway too. Mirrors applyBuddyURL. resolveLoginEnv returns

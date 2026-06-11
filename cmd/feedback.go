@@ -158,11 +158,22 @@ func resolveFeedbackTransport(authID string) (string, map[string]string) {
 		"X-Plivo-CLI-OS":      runtimeOS(),
 		"X-Plivo-CLI-Arch":    runtimeArch(),
 	}
-	// If we can resolve a profile (logged in), include email + env routing.
+	if authID != "" {
+		headers["X-Plivo-CLI-Auth-ID"] = authID
+	}
+	// If we can resolve a profile (logged in), include email + region + AOM
+	// + env routing so feedback events stitch with cli.request events for
+	// the same user in PostHog.
 	prof, _, err := config.Resolve("")
 	if err == nil && prof.AuthID == authID {
 		if prof.Email != "" {
 			headers["X-Plivo-CLI-Email"] = prof.Email
+		}
+		if prof.Region != "" {
+			headers["X-Plivo-CLI-Region"] = prof.Region
+		}
+		if prof.AomUUID != "" {
+			headers["X-Plivo-CLI-AOM-UUID"] = prof.AomUUID
 		}
 		// Env override: matches the same logic getClient uses for /v1/cli/api/*
 		if prof.Env != "" {
