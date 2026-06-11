@@ -231,6 +231,47 @@ func TestFeedback_messageTooLong_errors(t *testing.T) {
 	}
 }
 
+// isMetadataInvocation is the single gate that stops `plivo --version`,
+// `plivo --help`, `plivo` (bare), `plivo completion bash`, and friends
+// from triggering the post-success auto-prompt. Keep this matrix in
+// sync with skipPromptCommands + metadataFlags.
+func TestIsMetadataInvocation(t *testing.T) {
+	cases := []struct {
+		name     string
+		firstCmd string
+		args     []string
+		want     bool
+	}{
+		{"bare plivo (auto-help)", "", []string{}, true},
+		{"--version", "", []string{"--version"}, true},
+		{"-v", "", []string{"-v"}, true},
+		{"--help", "", []string{"--help"}, true},
+		{"-h", "", []string{"-h"}, true},
+		{"subcommand --help", "voice", []string{"voice", "calls", "--help"}, true},
+		{"subcommand -h", "messaging", []string{"messaging", "-h"}, true},
+		{"normal subcommand", "voice", []string{"voice", "calls", "list"}, false},
+		{"subcommand with unrelated flag", "voice", []string{"voice", "calls", "list", "--limit", "5"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isMetadataInvocation(tc.firstCmd, tc.args); got != tc.want {
+				t.Errorf("isMetadataInvocation(%q, %v) = %v, want %v", tc.firstCmd, tc.args, got, tc.want)
+			}
+		})
+	}
+}
+
+// Skip-list audit: the commands the user expects to be quiet should all
+// resolve to a skip. Regression guard against someone adding the
+// `completion` subcommand back to the prompt path (or removing it).
+func TestSkipPromptCommands_quietCommands(t *testing.T) {
+	for _, name := range []string{"feedback", "login", "logout", "upgrade", "completion", "help", "version"} {
+		if !skipPromptCommands[name] {
+			t.Errorf("%q must be in skipPromptCommands", name)
+		}
+	}
+}
+
 func TestFeedback_redactsPIIBeforeSubmit(t *testing.T) {
 	resetFeedbackFlags(t)
 	t.Setenv(feedback.MachineIDEnvVar, "test-machine")

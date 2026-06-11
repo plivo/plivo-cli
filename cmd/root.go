@@ -69,10 +69,12 @@ func Execute() {
 	// TTY), or when invoked as `plivo upgrade …` itself.
 	maybePrintUpdateHint(firstWord)
 	// Auto-prompt for feedback once per PromptInterval (24h) on TTY
-	// sessions only. Silent no-op for failed commands, scripts, CI, and
-	// skip-listed commands (feedback/login/logout/upgrade/help/version).
+	// sessions only. Silent no-op for failed commands, scripts, CI,
+	// metadata-only invocations (--help/--version/bare plivo),
+	// skip-listed commands (feedback/login/logout/upgrade/completion/
+	// help/version), and users who haven't yet hit the activity floor.
 	if cmdErr == nil {
-		maybePromptFeedback(firstWord)
+		maybePromptFeedback(firstWord, os.Args[1:])
 	}
 }
 

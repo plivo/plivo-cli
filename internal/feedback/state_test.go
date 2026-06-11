@@ -72,6 +72,10 @@ func TestLoadState_corruptFileIsEmpty(t *testing.T) {
 
 func TestShouldPrompt(t *testing.T) {
 	now := time.Date(2026, 6, 10, 15, 0, 0, 0, time.UTC)
+	// "Activity-met" is the convenience baseline for cases that aren't
+	// exercising the first-prompt floor: SuccessCount past the minimum
+	// means the floor is satisfied, so the other gates dominate.
+	activityMet := MinSuccessfulBeforeFirstPrompt
 	cases := []struct {
 		name string
 		s    State
@@ -79,33 +83,48 @@ func TestShouldPrompt(t *testing.T) {
 		want bool
 	}{
 		{
-			name: "never prompted → yes",
+			name: "fresh state, no activity → no (first-prompt floor blocks)",
 			s:    State{},
+			want: false,
+		},
+		{
+			name: "fresh state, activity met → yes",
+			s:    State{SuccessCount: activityMet},
 			want: true,
 		},
 		{
+			name: "fresh state, low activity but installed >24h ago → yes",
+			s:    State{FirstRunAt: now.Add(-25 * time.Hour), SuccessCount: 1},
+			want: true,
+		},
+		{
+			name: "fresh state, low activity and installed <24h ago → no",
+			s:    State{FirstRunAt: now.Add(-1 * time.Hour), SuccessCount: 1},
+			want: false,
+		},
+		{
 			name: "prompted 1 hour ago → no",
-			s:    State{LastPromptedAt: now.Add(-1 * time.Hour)},
+			s:    State{LastPromptedAt: now.Add(-1 * time.Hour), SuccessCount: activityMet},
 			want: false,
 		},
 		{
 			name: "prompted 25 hours ago → yes (past PromptInterval)",
-			s:    State{LastPromptedAt: now.Add(-25 * time.Hour)},
+			s:    State{LastPromptedAt: now.Add(-25 * time.Hour), SuccessCount: activityMet},
 			want: true,
 		},
 		{
 			name: "submitted 12 hours ago → no (don't re-ask same day)",
-			s:    State{LastSubmittedAt: now.Add(-12 * time.Hour)},
+			s:    State{LastSubmittedAt: now.Add(-12 * time.Hour), SuccessCount: activityMet},
 			want: false,
 		},
 		{
 			name: "submitted 30 hours ago → yes",
-			s:    State{LastSubmittedAt: now.Add(-30 * time.Hour)},
+			s:    State{LastSubmittedAt: now.Add(-30 * time.Hour), SuccessCount: activityMet},
 			want: true,
 		},
 		{
 			name: "opted out → never, regardless of times",
-			s:    State{},
+			s:    State{SuccessCount: activityMet},
 			env:  "0",
 			want: false,
 		},
