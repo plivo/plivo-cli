@@ -1,0 +1,34 @@
+name: Lint
+
+# golangci-lint covers the analysis floor: bug-finders + a security audit
+# (gosec). Linter set + exclusions live in .golangci.yml — tweak there.
+#
+# Runs on every push (any branch) plus PRs targeting main/beta. PR runs
+# catch issues before they land; push runs keep feature branches honest.
+
+on:
+  push:
+  pull_request:
+    branches:
+      - main
+      - beta
+
+permissions:
+  contents: read
+
+jobs:
+  golangci-lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest-m-plivo
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee  # v9.2.1
+        with:
+          version: v2.12.2
+          args: --timeout=5m

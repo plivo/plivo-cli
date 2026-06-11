@@ -248,7 +248,9 @@ func TestKV_keysAlignedWithColons(t *testing.T) {
 
 func TestKV_emptyValueRendersBlank(t *testing.T) {
 	var buf bytes.Buffer
-	KV(&buf, [][2]string{{"missing", ""}})
+	if err := KV(&buf, [][2]string{{"missing", ""}}); err != nil {
+		t.Fatalf("KV: %v", err)
+	}
 	out := buf.String()
 	if !strings.Contains(out, "missing:") {
 		t.Errorf("empty value key should still render: %q", out)
