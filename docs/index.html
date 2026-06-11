@@ -4,8 +4,93 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#F4EFE6">
-<title>plivo cli · the terminal-native way to drive Plivo</title>
-<meta name="description" content="The official Plivo developer CLI — a single static Go binary for provisioning numbers, wiring voice agents, sending messages, and running everything in the Plivo platform from a terminal.">
+
+<!-- ── Primary SEO ────────────────────────────────────────────────── -->
+<title>Plivo CLI — drive Plivo from your terminal (voice, messaging, AI debug)</title>
+<meta name="description" content="The official Plivo developer CLI. One static Go binary for provisioning numbers, wiring voice agents, sending SMS/MMS, running verify/lookup, and asking Plivo's AI assistant to debug calls — all from your shell. Human-readable on a TTY, JSON-native when piped, stable exit codes for scripts.">
+<meta name="keywords" content="plivo cli, plivo command line, plivo developer tools, plivo go binary, voice ai agent cli, sms cli, twilio cli alternative, plivo automation, plivo terminal, plivo install, plivo ask, plivo voice debug">
+<meta name="author" content="Plivo">
+<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
+<link rel="canonical" href="https://plivo.github.io/plivo-cli/">
+
+<!-- ── Open Graph (Facebook / LinkedIn / Slack / Discord / iMessage) ─ -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Plivo CLI">
+<meta property="og:title" content="Plivo CLI — drive Plivo from your terminal">
+<meta property="og:description" content="One static Go binary for voice agents, messaging, verify/lookup, and an AI debugger that pulls live SIP + media traces. Browser OAuth, OS keychain, JSON-native, stable exit codes.">
+<meta property="og:url" content="https://plivo.github.io/plivo-cli/">
+<meta property="og:image" content="https://plivo.github.io/plivo-cli/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Plivo CLI — drive Plivo from your terminal. One static binary. macOS · Linux · Windows. Apache-2.0.">
+<meta property="og:locale" content="en_US">
+
+<!-- ── Twitter / X ─────────────────────────────────────────────────── -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@plivo">
+<meta name="twitter:title" content="Plivo CLI — drive Plivo from your terminal">
+<meta name="twitter:description" content="One static binary. Voice, messaging, verify, lookup, and an AI debugger — all in your shell. macOS · Linux · Windows. Apache-2.0.">
+<meta name="twitter:image" content="https://plivo.github.io/plivo-cli/assets/og-image.png">
+<meta name="twitter:image:alt" content="Plivo CLI — drive Plivo from your terminal.">
+
+<!-- ── Icons ───────────────────────────────────────────────────────── -->
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<link rel="apple-touch-icon" href="assets/favicon.svg">
+<link rel="mask-icon" href="assets/favicon.svg" color="#E55A2B">
+
+<!-- ── Performance: preconnect to font CDN ─────────────────────────── -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+<!-- ── JSON-LD structured data ─────────────────────────────────────── -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://plivo.github.io/plivo-cli/#cli",
+      "name": "Plivo CLI",
+      "alternateName": "plivo-cli",
+      "description": "The official Plivo developer CLI — a single static Go binary that drives the Plivo platform from the shell, including voice agents, messaging, verify/lookup, and an AI debugger for live SIP and media traces.",
+      "applicationCategory": "DeveloperApplication",
+      "applicationSubCategory": "CommandLineInterface",
+      "operatingSystem": "macOS, Linux, Windows",
+      "url": "https://plivo.github.io/plivo-cli/",
+      "downloadUrl": "https://github.com/plivo/plivo-cli/releases",
+      "softwareVersion": "0.1.0",
+      "license": "https://www.apache.org/licenses/LICENSE-2.0",
+      "programmingLanguage": "Go",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "publisher": { "@id": "https://plivo.com/#org" }
+    },
+    {
+      "@type": "Organization",
+      "@id": "https://plivo.com/#org",
+      "name": "Plivo",
+      "url": "https://plivo.com",
+      "logo": "https://plivo.github.io/plivo-cli/assets/favicon.svg",
+      "sameAs": [
+        "https://github.com/plivo",
+        "https://twitter.com/plivo",
+        "https://www.linkedin.com/company/plivo"
+      ]
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://plivo.github.io/plivo-cli/#site",
+      "url": "https://plivo.github.io/plivo-cli/",
+      "name": "Plivo CLI",
+      "publisher": { "@id": "https://plivo.com/#org" }
+    }
+  ]
+}
+</script>
+
 <link rel="stylesheet" href="assets/tokens.css">
 <style>
   /* ============================================================
@@ -13,29 +98,275 @@
      ============================================================ */
 
   .hero {
-    padding: clamp(80px, 14vw, 200px) 0 var(--s7);
+    padding: clamp(40px, 5vw, 72px) 0 var(--s6);
     position: relative;
   }
 
-  .hero .row { row-gap: var(--s5); align-items: end; }
-
-  .hero .lockup { grid-column: 1 / span 9; }
-  .hero .meta-col {
-    grid-column: 10 / span 3;
-    align-self: end;
-    border-left: 1px solid hsl(var(--border));
-    padding-left: var(--s4);
+  /* Two-column above-fold: left = lockup + lede, right = install card.
+     Both visible without scroll on a typical 1080p laptop viewport. */
+  .hero .row {
+    display: grid;
+    grid-template-columns: 1.35fr 1fr;
+    gap: var(--s6);
+    align-items: start;
   }
+  /* Install card sits one h1-line below the eyebrow so its top edge
+     aligns with the heading instead of the eyebrow. */
+  .hero .row .hero-install { margin-top: 54px; }
 
+  /* ── Type scale (4 tiers — keep consistent across all sections) ──
+     display:  h1 hero                clamp(40, 5vw, 64)
+     heading:  section h2 (qs/ai/...) clamp(28, 3.6vw, 48)
+     subhead:  h3 / install card title clamp(20, 2vw, 26)
+     body:     16px (lede 18px)
+     meta:     11–12px mono uppercase
+  */
   .hero h1 {
     font-family: var(--font-sora);
-    font-size: clamp(64px, 11.5vw, 200px);
-    line-height: .92;
+    font-size: clamp(40px, 5vw, 64px);
+    line-height: 1.06;
     letter-spacing: -.02em;
     font-weight: 400;
+    margin-top: var(--s3);
   }
   .hero h1 .stack { display: block; }
   .hero h1 .ital  { font-style: italic; color: hsl(var(--primary)); letter-spacing: -.025em; }
+
+  .hero .lede {
+    margin-top: var(--s4);
+    font-family: var(--font-sora);
+    font-size: 18px;
+    line-height: 1.55;
+    color: hsl(var(--foreground));
+    max-width: 56ch;
+  }
+  .hero .lede em { font-style: italic; color: hsl(var(--primary)); }
+
+  .hero .meta-row {
+    margin-top: var(--s4);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s3);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+  .hero .meta-row .pill {
+    padding: 4px 10px;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--r-full);
+  }
+  .hero .meta-row .pill.primary {
+    border-color: hsl(var(--primary));
+    color: hsl(var(--primary));
+  }
+  .hero .meta-row .pill .accent { color: hsl(var(--primary)); }
+
+  /* ============================================================
+     agent-native strip — distinctly markets the CLI as something
+     AI agents are supposed to drive, not just humans
+     ============================================================ */
+  .agent-strip {
+    margin-top: var(--s5);
+    padding: var(--s4) var(--s5);
+    background: hsl(var(--surface));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--r-lg);
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: var(--s4);
+    align-items: center;
+  }
+  .agent-strip .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s2);
+    padding: 6px 12px;
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
+    border-radius: var(--r-full);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .agent-strip .badge .pulse {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: hsl(var(--primary));
+    box-shadow: 0 0 0 0 hsl(var(--primary) / .6);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 hsl(var(--primary) / .55); }
+    70%  { box-shadow: 0 0 0 10px hsl(var(--primary) / 0); }
+    100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0); }
+  }
+  .agent-strip .copy {
+    font-family: var(--font-sora);
+    font-size: 15px;
+    line-height: 1.4;
+    color: hsl(var(--foreground));
+  }
+  .agent-strip .copy em {
+    font-style: italic;
+    color: hsl(var(--primary));
+  }
+  .agent-strip .skill-link {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: .04em;
+    color: hsl(var(--foreground));
+    text-decoration: none;
+    padding: 6px 12px;
+    border: 1px solid hsl(var(--foreground));
+    border-radius: var(--r-full);
+    white-space: nowrap;
+    transition: background var(--dur-fast) var(--ease-out);
+  }
+  .agent-strip .skill-link:hover {
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
+  }
+  @media (max-width: 760px) {
+    .agent-strip { grid-template-columns: 1fr; text-align: left; }
+  }
+
+  /* ============================================================
+     dark-mode toggle button in nav
+     ============================================================ */
+  .theme-toggle {
+    background: transparent;
+    border: 1px solid hsl(var(--border));
+    color: hsl(var(--foreground));
+    width: 36px;
+    height: 36px;
+    border-radius: var(--r-full);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    margin-left: var(--s3);
+    transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1;
+    padding: 0;
+  }
+  .theme-toggle:hover {
+    border-color: hsl(var(--foreground));
+    background: hsl(var(--surface));
+  }
+  .theme-toggle .sun { display: inline; }
+  .theme-toggle .moon { display: none; }
+  .dark .theme-toggle .sun { display: none; }
+  .dark .theme-toggle .moon { display: inline; }
+
+  /* Install card sits next to the lockup so it's above-fold. Compact
+     dark panel — colours are EXPLICITLY dark (not token-derived) so
+     the card stays a "dark accent panel" in both light and dark
+     themes instead of flipping to a white card with white text. */
+  .hero-install {
+    background: #0A0B14;
+    color: #E6E6E9;
+    padding: var(--s5);
+    border-radius: var(--r-lg);
+    position: relative;
+    overflow: hidden;
+    border: 1px solid #1E2030;
+  }
+  .hero-install::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 100% 0%, rgba(50,61,254,.22), transparent 55%),
+      radial-gradient(circle at 0% 100%, rgba(205,62,249,.12), transparent 55%);
+    pointer-events: none;
+  }
+  .hero-install > * { position: relative; }
+  .hero-install .hi-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: rgba(230,230,233,.6);
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+  }
+  .hero-install .hi-eyebrow .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #5b6bff;
+    display: inline-block;
+  }
+  .hero-install h3 {
+    font-family: var(--font-sora);
+    font-size: clamp(20px, 2vw, 26px);
+    font-weight: 400;
+    line-height: 1.2;
+    letter-spacing: -.01em;
+    margin-top: var(--s3);
+    color: #FFFFFF;
+  }
+  .hero-install h3 .h { color: #5b6bff; font-style: italic; }
+  /* OS label now sits INSIDE the command block (top-left, with padding)
+     so it can't be clipped by the parent card's border-radius. Command
+     padding-top is increased to make room. */
+  .hero-install .install-cmd {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.12);
+    padding: 30px 12px 12px;
+    border-radius: var(--r-md);
+    position: relative;
+    color: #E6E6E9;
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease-out);
+    margin-top: var(--s4);
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .hero-install .install-cmd:hover { border-color: #5b6bff; }
+  .hero-install .install-cmd::before { content: "$ "; color: #5b6bff; }
+  .hero-install .install-cmd .os {
+    position: absolute;
+    top: 8px;
+    left: 12px;
+    font-size: 10px;
+    color: rgba(230,230,233,.55);
+    padding: 0;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    border: 0;
+    background: transparent;
+    border-radius: 0;
+  }
+  .hero-install .install-cmd .copy-hint {
+    position: absolute;
+    top: 8px; right: 12px;
+    font-size: 10px;
+    color: rgba(255,255,255,.4);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  .hero-install .hi-hint {
+    margin-top: var(--s4);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: rgba(230,230,233,.6);
+    letter-spacing: .04em;
+    line-height: 1.6;
+  }
+  .hero-install .hi-hint code {
+    color: #5b6bff;
+    background: rgba(255,255,255,.04);
+    padding: 1px 6px;
+    border-radius: 2px;
+  }
 
   .hero .marquee {
     margin-top: var(--s5);
@@ -109,7 +440,7 @@
   .numbers .n:last-child { border-right: 0; }
   .numbers .n .val {
     font-family: var(--font-sora);
-    font-size: clamp(52px, 6.5vw, 100px);
+    font-size: clamp(40px, 5vw, 64px);
     line-height: 1;
     letter-spacing: -.02em;
   }
@@ -209,8 +540,8 @@
   .qs .left { position: sticky; top: 96px; }
   .qs .left h2 {
     font-family: var(--font-sora);
-    font-size: clamp(44px, 5.6vw, 88px);
-    line-height: .98;
+    font-size: clamp(28px, 3.6vw, 48px);
+    line-height: 1.1;
     letter-spacing: -.015em;
     font-weight: 400;
   }
@@ -251,15 +582,15 @@
   .qs-step .num {
     font-family: var(--font-sora);
     font-style: italic;
-    font-size: 46px;
+    font-size: 36px;
     color: hsl(var(--primary));
     line-height: 1;
   }
   .qs-step h4 {
     font-family: var(--font-sora);
-    font-size: clamp(22px, 2.4vw, 30px);
+    font-size: clamp(18px, 1.8vw, 22px);
     font-weight: 400;
-    line-height: 1.05;
+    line-height: 1.2;
   }
   .qs-step code, .qs-step .cmd {
     font-family: var(--font-mono);
@@ -295,8 +626,8 @@
   }
   .ai-grid h2 {
     font-family: var(--font-sora);
-    font-size: clamp(44px, 5.6vw, 88px);
-    line-height: .98;
+    font-size: clamp(28px, 3.6vw, 48px);
+    line-height: 1.1;
     letter-spacing: -.015em;
     font-weight: 400;
   }
@@ -353,8 +684,8 @@
   .slab blockquote {
     font-family: var(--font-sora);
     font-style: italic;
-    font-size: clamp(36px, 5.5vw, 88px);
-    line-height: 1.05;
+    font-size: clamp(28px, 4vw, 52px);
+    line-height: 1.15;
     letter-spacing: -.01em;
     color: hsl(var(--foreground));
     max-width: 22ch;
@@ -371,11 +702,9 @@
     color: hsl(var(--muted-foreground));
   }
 
-  @media (max-width: 900px) {
-    .hero .lockup, .hero .meta-col { grid-column: 1 / -1; }
-    .hero .meta-col { border-left: 0; padding-left: 0; border-top: 1px solid hsl(var(--border)); padding-top: var(--s3); }
+  @media (max-width: 960px) {
+    .hero .row { grid-template-columns: 1fr; }
     .install-mod { grid-template-columns: 1fr; }
-    .hero .lede-block { grid-template-columns: 1fr; }
     .numbers { grid-template-columns: 1fr 1fr; }
     .numbers .n { border-bottom: 1px solid hsl(var(--border)); }
     .qs { grid-template-columns: 1fr; }
@@ -394,8 +723,11 @@
       plivo<span class="ver">cli</span>
     </a>
     <div class="nav-links">
-      <a href="COMMANDS.md">Commands</a>
+      <a href="commands.html">Commands</a>
       <a href="https://github.com/plivo/plivo-cli">GitHub ↗</a>
+      <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+        <span class="sun" aria-hidden="true">☀</span><span class="moon" aria-hidden="true">☾</span>
+      </button>
     </div>
   </div>
 </nav>
@@ -406,21 +738,48 @@
 
     <div class="row">
       <div class="lockup">
-        <div class="eyebrow" data-reveal><span class="dot"></span>the official Plivo CLI</div>
+        <div class="eyebrow" data-reveal>
+          <span class="dot"></span>the official, agent-native Plivo CLI
+        </div>
 
-        <h1 data-reveal style="margin-top: var(--s3);">
-          <span class="stack">Drive Plivo</span>
-          <span class="stack"><span class="ital">from your</span></span>
-          <span class="stack">terminal.</span>
+        <h1 data-reveal>
+          <span class="stack">Drive Plivo from your</span>
+          <span class="stack ital">terminal.</span>
         </h1>
+
+        <p class="lede" data-reveal>
+          A single static Go binary that drives the entire Plivo platform —
+          numbers, voice agents, messaging, verify, lookup — and an
+          <em>AI debugger</em> that pulls live SIP and media traces. Built
+          for humans on a TTY <em>and</em> for the AI agents driving them.
+        </p>
+
+        <div class="meta-row" data-reveal>
+          <span class="pill primary"><span class="accent">●</span> agent-native</span>
+          <span class="pill">single binary</span>
+          <span class="pill">macOS · linux · windows</span>
+          <span class="pill">JSON-native · stable exit codes</span>
+        </div>
       </div>
 
-      <div class="meta-col">
-        <div class="meta" data-reveal>
-          single static binary<br>
-          go · cobra · 7 MB<br>
-          macOS · linux · windows<br>
-          Apache-2.0
+      <div class="hero-install" data-reveal>
+        <div class="hi-eyebrow"><span class="dot"></span>install · 60 seconds to first call</div>
+        <h3>One <span class="h">curl</span>.<br>Zero dependencies.</h3>
+
+        <div class="install-cmd copyable" data-copy="curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | bash">
+          <span class="os">macOS · linux · wsl · git bash</span>
+          <span class="copy-hint">copy</span>
+          curl -fsSL .../install.sh | bash
+        </div>
+
+        <div class="install-cmd copyable" data-copy="irm https://raw.githubusercontent.com/plivo/plivo-cli/main/install.ps1 | iex">
+          <span class="os">windows · powershell</span>
+          <span class="copy-hint">copy</span>
+          irm .../install.ps1 | iex
+        </div>
+
+        <div class="hi-hint">
+          installs to your home dir · <code>plivo upgrade</code> for in-place updates · no sudo, no node, no python.
         </div>
       </div>
     </div>
@@ -455,15 +814,15 @@
       </div>
     </div>
 
-    <div class="lede-block">
-      <div class="label" data-reveal>what it is</div>
-      <p data-reveal>
-        A single static Go binary for provisioning numbers, wiring voice-agent
-        applications, inspecting calls, sending messages, and <em>asking Plivo's
-        AI assistant</em> when something looks off — all from the shell.
-        Human-readable on a TTY, JSON-native when piped, with stable exit codes
-        so scripts and AI driver loops can branch on them.
-      </p>
+    <!-- agent-native strip: positions the CLI as something AI agents can drive -->
+    <div class="agent-strip" data-reveal>
+      <span class="badge"><span class="pulse"></span>agent-native</span>
+      <div class="copy">
+        Designed to be driven by both humans <em>and</em> the AI agents working
+        for them. Stable JSON output, deterministic exit codes, and a shippable
+        <em>SKILL.md</em> so your LLM knows every flag.
+      </div>
+      <a class="skill-link" href="https://github.com/plivo/plivo-cli/blob/main/cli-skill/SKILL.md">SKILL.md ↗</a>
     </div>
 
   </div>
@@ -488,43 +847,6 @@
       <div class="n">
         <div class="val">0<sup>node</sup></div>
         <div class="label">no node · no python · no npm install</div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- INSTALL -->
-<section class="section" style="padding-top: 0;">
-  <div class="shell">
-    <div class="install-mod" data-reveal>
-      <div>
-        <div class="eyebrow" style="color: rgba(255,255,255,.5);"><span class="dot"></span>install</div>
-        <h3 style="margin-top: var(--s3);">
-          One line.<br>
-          <span class="h">Auto-detects</span> OS &amp; arch.
-        </h3>
-        <p>
-          The installer fetches the right binary from the GitHub release,
-          verifies the checksum, and drops it on your PATH. Override the
-          release tag with <code style="color: hsl(var(--primary)); background: rgba(255,255,255,.04); padding: 2px 6px; border-radius: 2px; font-family: var(--font-mono); font-size: 12px;">PLIVO_CLI_VERSION</code>
-          or the destination with <code style="color: hsl(var(--primary)); background: rgba(255,255,255,.04); padding: 2px 6px; border-radius: 2px; font-family: var(--font-mono); font-size: 12px;">PLIVO_INSTALL_DIR</code>.
-        </p>
-        <div style="margin-top: var(--s4); font-family: var(--font-mono); font-size: 11px; color: rgba(255,255,255,.55); letter-spacing: .04em;">
-          ☝ already have it? &nbsp; <code style="color: hsl(var(--primary));">plivo upgrade</code> &nbsp; replaces the binary atomically.
-        </div>
-      </div>
-
-      <div>
-        <div class="install-cmd with-os copyable" data-copy="curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/beta/install.sh | bash">
-          <span class="os">macOS · linux · wsl · git bash</span>
-          <span class="copy-hint">copy</span>
-          curl -fsSL .../install.sh | bash
-        </div>
-        <div class="install-cmd with-os copyable" data-copy="irm https://raw.githubusercontent.com/plivo/plivo-cli/beta/install.ps1 | iex">
-          <span class="os">windows · powershell</span>
-          <span class="copy-hint">copy</span>
-          irm .../install.ps1 | iex
-        </div>
       </div>
     </div>
   </div>
@@ -739,6 +1061,24 @@
   </div>
 </footer>
 
+<script>
+  // Theme: light by default; respect saved choice or OS preference.
+  // Stored on <html> so CSS scoped to .dark applies to everything.
+  (function () {
+    var root = document.documentElement;
+    var saved = localStorage.getItem('plivo-cli-theme');
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (saved === 'dark' || (saved == null && prefersDark)) root.classList.add('dark');
+    document.addEventListener('DOMContentLoaded', function () {
+      var btn = document.getElementById('theme-toggle');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        var isDark = root.classList.toggle('dark');
+        localStorage.setItem('plivo-cli-theme', isDark ? 'dark' : 'light');
+      });
+    });
+  })();
+</script>
 <script src="assets/site.js"></script>
 </body>
 </html>
