@@ -130,12 +130,12 @@ func validateFeedbackFlags() error {
 	return nil
 }
 
-// resolveAuthIDForFeedback returns the active profile's auth_id if the
-// user is logged in, else "". Never errors — feedback works without
-// login (often the user is trying the CLI for the first time and
+// resolveAuthIDForFeedback returns the auth_id of the resolved profile
+// (honoring --profile if passed), else "". Never errors — feedback works
+// without login (often the user is trying the CLI for the first time and
 // bounces off, which is exactly the feedback we most want to capture).
 func resolveAuthIDForFeedback() string {
-	prof, _, err := config.Resolve("")
+	prof, _, err := config.Resolve(profileFlag)
 	if err != nil {
 		return ""
 	}
@@ -143,13 +143,14 @@ func resolveAuthIDForFeedback() string {
 }
 
 // resolveFeedbackTransport derives the hodor base URL feedback should
-// hit + the headers (email, os, arch, version) hodor's handler reads to
-// stitch feedback into the per-user PostHog dashboards.
+// hit + the headers (email, region, aom_uuid, os, arch, version, auth-id)
+// hodor's handler reads to stitch feedback into the per-user PostHog
+// dashboards.
 //
-// Pre-login users get DefaultBaseURL (prod hodor) — feedback works
-// without auth, so the public route /v1/accounts/cli/feedback responds
-// regardless. Logged-in users get whatever Profile.Env resolves to,
-// keeping dev/staging feedback off prod posthog.
+// Pre-login users get DefaultBaseURL — feedback works without auth, so
+// the public route /v1/accounts/cli/feedback responds regardless.
+// Logged-in users get whatever Profile.Env resolves to. Honors --profile
+// so `plivo --profile X feedback` reads X's identity instead of active.
 func resolveFeedbackTransport(authID string) (string, map[string]string) {
 	// Default: hodor prod (anonymous-but-public route).
 	base := strings.TrimSuffix(api.DefaultBaseURL, "/v1/cli/api")
@@ -161,10 +162,10 @@ func resolveFeedbackTransport(authID string) (string, map[string]string) {
 	if authID != "" {
 		headers["X-Plivo-CLI-Auth-ID"] = authID
 	}
-	// If we can resolve a profile (logged in), include email + region + AOM
-	// + env routing so feedback events stitch with cli.request events for
-	// the same user in PostHog.
-	prof, _, err := config.Resolve("")
+	// Honor --profile (matches what resolveAuthIDForFeedback resolved).
+	// Without this, a bare 'config.Resolve("")' would pull the active
+	// profile even when the user explicitly asked for a different one.
+	prof, _, err := config.Resolve(profileFlag)
 	if err == nil && prof.AuthID == authID {
 		if prof.Email != "" {
 			headers["X-Plivo-CLI-Email"] = prof.Email
