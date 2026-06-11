@@ -1,0 +1,61 @@
+# Build + publish the docs/ folder to GitHub Pages.
+#
+# docs/index.html is self-contained (assets + inline styles + plain HTML);
+# we still run jekyll-build-pages so the included Markdown files
+# (COMMANDS.md, errors.md) render to HTML using the docs/_config.yml.
+#
+# Trigger: any push to main that touches docs/ or this workflow.
+# Manual: workflow_dispatch.
+#
+# Permissions follow the GitHub-recommended Pages-deploy contract: read
+# code + write the Pages artifact + sign the deployment via OIDC.
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one Pages deployment in flight at a time — newer pushes cancel
+# in-progress runs so we always end up on the latest commit's site.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Build with Jekyll
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./docs
+          destination: ./_site
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
