@@ -40,6 +40,7 @@ type Trigger string
 
 const (
 	TriggerExplicit           Trigger = "explicit_command"
+	TriggerDailyPrompt        Trigger = "daily_prompt" // post-success once-per-PromptInterval auto-ask
 	TriggerFirstImpression    Trigger = "first_impression"
 	TriggerAnniversary7d      Trigger = "anniversary_7d"
 	TriggerAnniversary30d     Trigger = "anniversary_30d"

@@ -52,9 +52,11 @@ func Execute() {
 		api.CLICommand = commandPath(cmd)
 	}
 
-	if err := rootCmd.Execute(); err != nil {
-		handleError(err)
+	cmdErr := rootCmd.Execute()
+	if cmdErr != nil {
+		handleError(cmdErr)
 	}
+	firstWord := firstCmdWord(os.Args[1:])
 	// Server-driven upgrade nudge (from server warn response headers) wins
 	// over the GitHub-cache nudge — when the server has spoken, we trust it
 	// and skip the local check.
@@ -65,7 +67,13 @@ func Execute() {
 	// the upgrade cache has seen a fresher release tag. No-op on errors
 	// (don't drown a real failure under nudge noise), in scripts/CI (not a
 	// TTY), or when invoked as `plivo upgrade …` itself.
-	maybePrintUpdateHint(firstCmdWord(os.Args[1:]))
+	maybePrintUpdateHint(firstWord)
+	// Auto-prompt for feedback once per PromptInterval (24h) on TTY
+	// sessions only. Silent no-op for failed commands, scripts, CI, and
+	// skip-listed commands (feedback/login/logout/upgrade/help/version).
+	if cmdErr == nil {
+		maybePromptFeedback(firstWord)
+	}
 }
 
 // commandPath flattens cmd.CommandPath() to a dotted form
