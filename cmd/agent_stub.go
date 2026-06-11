@@ -1,5 +1,3 @@
-//go:build !internal
-
 package cmd
 
 import (
@@ -9,9 +7,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// agentCmd is a placeholder in the public build. Public build only ships
-// the coming-soon stub; the full agent surface is gated behind a build
-// tag for now.
+// agentCmd is a coming-soon stub. The full agent surface lives on the
+// `beta` branch behind the `internal` build tag and isn't shipped from
+// `main`.
 //
 // This stub keeps `plivo agent` discoverable and tells users it's coming,
 // rather than the command simply not existing.

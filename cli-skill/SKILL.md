@@ -1,6 +1,6 @@
 ---
 name: plivo-cli
-description: Use the `plivo` CLI binary instead of raw curl for any Plivo or Contacto / Vibe AI agent task — sending SMS, making calls, managing numbers/applications, logging in, and especially creating + running Vibe AI agents. Trigger whenever the user mentions Plivo, Contacto, Vibe agent, PHLO, plivo auth_id/auth_token, or asks for a Plivo HTTP call.
+description: Use the `plivo` CLI binary instead of raw curl for any Plivo task — sending SMS, making calls, managing numbers/applications, logging in. Trigger whenever the user mentions Plivo, plivo auth_id/auth_token, or asks for a Plivo HTTP call.
 ---
 
 # plivo-cli skill
@@ -10,7 +10,6 @@ Single Go binary at `~/go/bin/plivo`. Prefer the CLI over curl — the JSON outp
 ## When to invoke
 
 - Any Plivo REST op (numbers, messages, calls, applications, lookup).
-- Anything Vibe AI agent (`agent create`, `agent run`, `agent publish`, `agent attach`).
 - Voice streaming developer-loop (`voice streams test`, `voice streams forward`).
 - Login + credential management.
 - About to write a curl against `api.plivo.com` → stop, check `plivo --help` first.
@@ -130,7 +129,7 @@ Delete a profile + remove its token from the keychain. With no arg → active pr
 # Core invariants (read once)
 
 - **Output**: TTY → table, pipe → JSON. Force JSON anywhere with `-o json`.
-- **Spend verbs require `--yes`** or refuse with exit 5 + `code: DESTRUCTIVE_REFUSED`. List: `messaging * send`, `voice calls make`, `voice calls speak`, `voice calls record`, `voice calls play`, `numbers buy`, `numbers release`, `account applications delete`, `agent run`.
+- **Spend verbs require `--yes`** or refuse with exit 5 + `code: DESTRUCTIVE_REFUSED`. List: `messaging * send`, `voice calls make`, `voice calls speak`, `voice calls record`, `voice calls play`, `numbers buy`, `numbers release`, `account applications delete`.
 - **Stable error envelope** on stderr: `{"error":{"code":..., "hint":..., "retryable":..., "status_code":...}}`. Switch on `code`, never message text.
 - **Verify before inventing**: `plivo <cmd> --help` is the source of truth. The CLI evolves; don't assume from memory.
 - **`--dry-run`** previews the exact HTTP request without sending. Works on every command.
@@ -459,22 +458,6 @@ plivo verify sessions get <uuid>
 ```bash
 plivo lookup <e164>          # carrier + line-type
 ```
-
-# Vibe AI agents
-
-| Verb | Required | Notes |
-|---|---|---|
-| `agent list` | — | `--limit`, `--offset` |
-| `agent get <uuid>` | — | |
-| `agent create` | `--name` | optional: `--template <id>` |
-| `agent update <uuid>` | — | patch metadata |
-| `agent copy <uuid>` | — | duplicate from a template / existing agent |
-| `agent generate` | `--prompt "..."` | Vibe SSE generation — streams reasoning + final spec |
-| `agent publish <uuid>` | — | promote draft → live |
-| `agent run <uuid>` (spend) | `--phone-number <e164>` + `--yes` | dials a test call to that number |
-| `agent attach <uuid>` | `--number <e164>` | wire a real inbound number to this agent |
-| `agent delete <uuid>` | `--yes` | |
-| `agent token list / mint / revoke` | — | scoped tokens for embedding the agent in external apps |
 
 # Conversational / debug
 

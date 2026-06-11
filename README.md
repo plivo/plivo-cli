@@ -152,7 +152,7 @@ ln -s "$(pwd)/cli-skill" ~/.claude/skills/plivo-cli   # Claude Code
 # Other agents: copy cli-skill/SKILL.md into their skill / system-prompt directory.
 ```
 
-The skill file lazy-loads on relevance — it only enters your context window when the user mentions Plivo / Contacto / Vibe / PHLO / `auth_id`, etc.
+The skill file lazy-loads on relevance — it only enters your context window when the user mentions Plivo / `auth_id`, etc.
 
 ## Documentation
 
