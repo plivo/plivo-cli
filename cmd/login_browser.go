@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -71,7 +72,6 @@ func runLoginBrowser() error {
 	}
 	defer listener.Close()
 	port := listener.Addr().(*net.TCPAddr).Port
-	cb := fmt.Sprintf("http://127.0.0.1:%d/", port)
 
 	// Auth-server URL: resolve the same way `ask` / `support` do — flag,
 	// env, config, default. The CLI's --buddy-url override applies here too
@@ -79,7 +79,8 @@ func runLoginBrowser() error {
 	client := api.New("", "", 30*time.Second) // creds-less; auth happens in /token
 	applyBuddyURL(client)
 
-	authURL := buildAuthorizeURL(client.BuddyBaseURL, cb, state, challenge, deviceHint())
+	// Send only the loopback port (see buildAuthorizeURL — dodges the WAF SSRF block).
+	authURL := buildAuthorizeURL(client.BuddyBaseURL, port, state, challenge, deviceHint())
 	fmt.Fprintln(os.Stderr, "Opening your browser to:")
 	fmt.Fprintln(os.Stderr, "  "+authURL)
 	fmt.Fprintln(os.Stderr)
@@ -173,16 +174,13 @@ func randomURLToken(n int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// buildAuthorizeURL composes the GET URL the browser opens. We URL-encode
-// every dynamic part — state and cb can contain reserved chars, the
-// challenge is base64url so it's already safe. `device` is the optional
-// human-readable label (e.g. "Mac MacBook-Pro") shown on the Console
-// consent screen — omitted from the query when empty so the URL stays
-// short for users without a resolvable hostname.
-func buildAuthorizeURL(buddyBase, cb, state, challenge, device string) string {
+// buildAuthorizeURL composes the GET URL the browser opens. It sends cb_port
+// (not a full cb URL) so hodor pins http://127.0.0.1:<port> server-side and the
+// AWS WAF won't 403 the loopback URL as SSRF. device is optional (consent label).
+func buildAuthorizeURL(buddyBase string, port int, state, challenge, device string) string {
 	base := strings.TrimRight(buddyBase, "/")
 	q := url.Values{}
-	q.Set("cb", cb)
+	q.Set("cb_port", strconv.Itoa(port))
 	q.Set("state", state)
 	q.Set("code_challenge", challenge)
 	q.Set("code_challenge_method", "S256")
