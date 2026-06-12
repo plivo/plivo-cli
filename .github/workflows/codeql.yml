@@ -28,7 +28,7 @@ permissions:
 jobs:
   analyze:
     name: analyze (go)
-    runs-on: ubuntu-latest-m-plivo
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
