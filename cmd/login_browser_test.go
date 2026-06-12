@@ -111,7 +111,7 @@ func TestRandomURLToken_uniqueAndLength(t *testing.T) {
 func TestBuildAuthorizeURL_hasRequiredParams(t *testing.T) {
 	got := buildAuthorizeURL(
 		"https://api.example.com/",
-		"http://127.0.0.1:54321/",
+		54321,
 		"my-state",
 		"my-challenge",
 		"Mac MacBook-Pro",
@@ -127,7 +127,7 @@ func TestBuildAuthorizeURL_hasRequiredParams(t *testing.T) {
 		t.Errorf("path = %q", u.Path)
 	}
 	q := u.Query()
-	for _, k := range []string{"cb", "state", "code_challenge", "code_challenge_method", "device"} {
+	for _, k := range []string{"cb_port", "state", "code_challenge", "code_challenge_method", "device"} {
 		if q.Get(k) == "" {
 			t.Errorf("missing query param: %s", k)
 		}
@@ -138,9 +138,16 @@ func TestBuildAuthorizeURL_hasRequiredParams(t *testing.T) {
 	if got := q.Get("device"); got != "Mac MacBook-Pro" {
 		t.Errorf("device = %q, want %q", got, "Mac MacBook-Pro")
 	}
-	// cb should be the exact loopback URL passed in.
-	if q.Get("cb") != "http://127.0.0.1:54321/" {
-		t.Errorf("cb = %q", q.Get("cb"))
+	// We send the raw loopback port, not a full cb URL — hodor reconstructs
+	// "http://127.0.0.1:<port>" server-side (AWS WAF blocks 127.0.0.1 in the
+	// query string as SSRF).
+	if q.Get("cb_port") != "54321" {
+		t.Errorf("cb_port = %q, want 54321", q.Get("cb_port"))
+	}
+	// The old full-URL cb param must be gone — its presence is exactly what
+	// trips the WAF.
+	if _, ok := q["cb"]; ok {
+		t.Errorf("cb key must be absent, got %q", q.Get("cb"))
 	}
 }
 
@@ -150,7 +157,7 @@ func TestBuildAuthorizeURL_hasRequiredParams(t *testing.T) {
 func TestBuildAuthorizeURL_omitsEmptyDevice(t *testing.T) {
 	got := buildAuthorizeURL(
 		"https://api.example.com/",
-		"http://127.0.0.1:54321/",
+		54321,
 		"my-state",
 		"my-challenge",
 		"",
