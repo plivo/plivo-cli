@@ -266,7 +266,7 @@ func awaitLoopbackCallback(ctx context.Context, listener net.Listener, expectedS
 	case r := <-done:
 		return r.code, r.err
 	case <-ctx.Done():
-		return "", fmt.Errorf("timed out waiting for browser callback (5m); retry or use `plivo login --auth-id …`")
+		return "", fmt.Errorf("timed out waiting for browser callback (5m); finish signing in and approving access in the browser, then run `plivo login` again")
 	}
 }
 
