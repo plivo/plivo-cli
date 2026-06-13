@@ -10,6 +10,8 @@ package release
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -114,13 +116,17 @@ func (r *Release) AssetFor(goos, goarch string) (*Asset, error) {
 	if goos == "windows" {
 		ext = ".exe"
 	}
-	want := fmt.Sprintf("plivo_%s_%s%s", goos, goarch, ext)
+	return r.AssetByName(fmt.Sprintf("plivo_%s_%s%s", goos, goarch, ext))
+}
+
+// AssetByName returns the release asset with the given name (e.g. "SHA256SUMS").
+func (r *Release) AssetByName(name string) (*Asset, error) {
 	for i := range r.Assets {
-		if r.Assets[i].Name == want {
+		if r.Assets[i].Name == name {
 			return &r.Assets[i], nil
 		}
 	}
-	return nil, fmt.Errorf("no asset named %q in release %s", want, r.TagName)
+	return nil, fmt.Errorf("no asset named %q in release %s", name, r.TagName)
 }
 
 // DownloadAsset streams the asset at url into w, returning bytes written.
@@ -140,6 +146,36 @@ func DownloadAsset(ctx context.Context, url string, w io.Writer) (int64, error) 
 		return 0, fmt.Errorf("download HTTP %d for %s", resp.StatusCode, url)
 	}
 	return io.Copy(w, resp.Body)
+}
+
+// VerifyChecksum hashes data with SHA-256 and checks it against the entry for
+// assetName in a SHA256SUMS manifest. Errors if the manifest has no line for
+// the asset or the digest doesn't match. Comparison is case-insensitive.
+func VerifyChecksum(manifest, assetName string, data io.Reader) error {
+	expected := sha256ForAsset(manifest, assetName)
+	if expected == "" {
+		return fmt.Errorf("SHA256SUMS has no entry for %s", assetName)
+	}
+	h := sha256.New()
+	if _, err := io.Copy(h, data); err != nil {
+		return err
+	}
+	if actual := hex.EncodeToString(h.Sum(nil)); !strings.EqualFold(actual, expected) {
+		return fmt.Errorf("SHA-256 mismatch for %s (expected %s, got %s)", assetName, expected, actual)
+	}
+	return nil
+}
+
+// sha256ForAsset returns the hex digest for name from a SHA256SUMS manifest.
+// Lines are "<hash>  <filename>"; the filename may carry a '*' binary-mode prefix.
+func sha256ForAsset(manifest, name string) string {
+	for _, line := range strings.Split(manifest, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && strings.TrimPrefix(fields[1], "*") == name {
+			return fields[0]
+		}
+	}
+	return ""
 }
 
 // IsNewer returns true if releaseTag is a newer version than the
