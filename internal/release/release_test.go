@@ -3,12 +3,15 @@ package release
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -112,6 +115,49 @@ func TestAssetFor(t *testing.T) {
 			}
 			if a.Name != tc.wantName {
 				t.Errorf("name = %q, want %q", a.Name, tc.wantName)
+			}
+		})
+	}
+}
+
+func TestAssetByName(t *testing.T) {
+	r := &Release{TagName: "v0.2.0", Assets: []Asset{{Name: "SHA256SUMS"}, {Name: "plivo_linux_amd64"}}}
+	if a, err := r.AssetByName("SHA256SUMS"); err != nil || a.Name != "SHA256SUMS" {
+		t.Errorf("AssetByName(SHA256SUMS) = %v, %v", a, err)
+	}
+	if _, err := r.AssetByName("nope"); err == nil {
+		t.Error("AssetByName(nope) should error")
+	}
+}
+
+func TestVerifyChecksum(t *testing.T) {
+	data := []byte("plivo-cli test binary contents\n")
+	sum := sha256.Sum256(data)
+	hexsum := hex.EncodeToString(sum[:])
+	const asset = "plivo_linux_amd64"
+	manifest := hexsum + "  " + asset + "\nffff  plivo_darwin_arm64\n"
+
+	cases := []struct {
+		name     string
+		manifest string
+		assetN   string
+		data     []byte
+		wantErr  bool
+	}{
+		{"match", manifest, asset, data, false},
+		{"case-insensitive", strings.ToUpper(hexsum) + "  " + asset, asset, data, false},
+		{"binary-mode star prefix", hexsum + " *" + asset, asset, data, false},
+		{"hash mismatch", manifest, asset, []byte("tampered"), true},
+		{"no entry for asset", manifest, "plivo_windows_amd64.exe", data, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := VerifyChecksum(tc.manifest, tc.assetN, bytes.NewReader(tc.data))
+			if tc.wantErr && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("expected nil, got %v", err)
 			}
 		})
 	}
