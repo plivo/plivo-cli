@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -125,6 +126,13 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("download truncated (%d bytes, expected %d)", n, asset.Size)
 	}
 
+	// Integrity: verify against the release-published SHA256SUMS before
+	// swapping the binary in. A size match is not an integrity check.
+	if err := verifyDownload(ctx, rel, asset, tmpPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+
 	if err := atomicReplace(exePath, tmpPath); err != nil {
 		_ = os.Remove(tmpPath)
 		return permissionHint(err, exePath)
@@ -137,6 +145,27 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(os.Stderr, "✓ Upgraded plivo to %s\n", target)
 	fmt.Fprintf(os.Stderr, "  Binary: %s\n", exePath)
 	return nil
+}
+
+// verifyDownload fetches the release's SHA256SUMS manifest and verifies the
+// file at path against the entry for asset.Name. Returns an error (and installs
+// nothing) if the manifest is missing, lacks the asset, or the hash mismatches.
+func verifyDownload(ctx context.Context, rel *release.Release, asset *release.Asset, path string) error {
+	fmt.Fprintln(os.Stderr, "→ Verifying SHA-256…")
+	sums, err := rel.AssetByName("SHA256SUMS")
+	if err != nil {
+		return fmt.Errorf("release %s publishes no SHA256SUMS; refusing to install an unverified binary", rel.TagName)
+	}
+	var buf bytes.Buffer
+	if _, err := release.DownloadAsset(ctx, sums.BrowserDownloadURL, &buf); err != nil {
+		return fmt.Errorf("download SHA256SUMS: %w", err)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return release.VerifyChecksum(buf.String(), asset.Name, f)
 }
 
 // resolveExePath returns the fully symlink-resolved path of the running
