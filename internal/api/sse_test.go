@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -49,6 +50,29 @@ func TestStreamSSE_singleEvent(t *testing.T) {
 	}
 	if got[0].Event != "hello" || got[0].Data != "world" {
 		t.Errorf("event = %+v", got[0])
+	}
+}
+
+// A non-2xx response must surface as a typed *SSEHTTPError (carrying status +
+// body) so callers can classify it by status, not as a transport/network error.
+func TestStreamSSE_httpErrorReturnsTypedError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"message":"Not Found"}`))
+	}))
+	t.Cleanup(srv.Close)
+	c := New("MAabc", "tok", time.Second)
+
+	err := c.StreamSSE(context.Background(), "GET", srv.URL, nil, func(SSEEvent) bool { return true })
+	var httpErr *SSEHTTPError
+	if !errors.As(err, &httpErr) {
+		t.Fatalf("error = %T (%v), want *SSEHTTPError", err, err)
+	}
+	if httpErr.StatusCode != http.StatusNotFound {
+		t.Errorf("StatusCode = %d, want 404", httpErr.StatusCode)
+	}
+	if !strings.Contains(string(httpErr.Body), "Not Found") {
+		t.Errorf("Body = %q, want it to include the server message", httpErr.Body)
 	}
 }
 

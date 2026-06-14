@@ -7,6 +7,27 @@ import (
 	"testing"
 )
 
+// ─── Constructors ────────────────────────────────────────────────────────────
+
+func TestUpstream(t *testing.T) {
+	e := Upstream("upstream failure")
+	if e.Code != CodeUpstreamError {
+		t.Errorf("Code = %q, want %q", e.Code, CodeUpstreamError)
+	}
+	if !e.Retryable {
+		t.Error("Upstream errors should be retryable")
+	}
+	if strings.Contains(strings.ToLower(e.Hint), "--help") {
+		t.Errorf("Upstream hint must not suggest --help: %q", e.Hint)
+	}
+	if e.Message != "upstream failure" {
+		t.Errorf("Message = %q", e.Message)
+	}
+	if Upstream("").Message == "" {
+		t.Error("empty message should fall back to a default")
+	}
+}
+
 // ─── Error.Error() ───────────────────────────────────────────────────────────
 
 func TestError_String_withStatusCode(t *testing.T) {

@@ -154,6 +154,21 @@ func NetworkError(target string, err error) *Error {
 	}
 }
 
+// Upstream reports an error returned by an upstream service (e.g. a streamed
+// error event) — distinct from a transport failure or bad user input, so it
+// isn't mislabeled as a connectivity problem or a usage mistake.
+func Upstream(message string) *Error {
+	if strings.TrimSpace(message) == "" {
+		message = "The service returned an error"
+	}
+	return &Error{
+		Code:      CodeUpstreamError,
+		Message:   message,
+		Hint:      "This is a server-side error, not a problem with your command. Try again shortly.",
+		Retryable: true,
+	}
+}
+
 // FromHTTP classifies an upstream HTTP response into an Error. It looks at both
 // the status code and the body text to pick a specific Code where possible
 // (e.g. distinguishing GEO_PERMISSION_DENIED from a generic 403).

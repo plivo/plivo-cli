@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -173,10 +174,17 @@ func runAsk(cmd *cobra.Command, args []string) error {
 	}
 
 	if sseErr != nil {
+		// An HTTP error status from the server is not a connectivity problem —
+		// classify by status; only genuine transport failures are network errors.
+		var httpErr *api.SSEHTTPError
+		if errors.As(sseErr, &httpErr) {
+			return clierr.FromHTTP(httpErr.StatusCode, "", httpErr.Body)
+		}
 		return clierr.NetworkError("buddy", sseErr)
 	}
 	if r.errorSeen {
-		return clierr.BadInput("buddy returned an error event")
+		// A server-emitted error event is a service-side error, not bad user input.
+		return clierr.Upstream(r.errorMsg)
 	}
 	return nil
 }
@@ -198,6 +206,7 @@ type buddyRenderer struct {
 	answerBuf    strings.Builder
 	hadNarration bool
 	errorSeen    bool
+	errorMsg     string
 }
 
 func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
@@ -330,6 +339,7 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		r.clearNarrationLine()
 		fmt.Fprintf(r.err, "\nbuddy error: %s\n", d.Error)
 		r.errorSeen = true
+		r.errorMsg = d.Error
 		return false
 	}
 	return true
