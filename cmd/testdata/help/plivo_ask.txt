@@ -1,4 +1,4 @@
-Send a single message to Plivo's AI assistant and stream the response.
+Send a message to Plivo's AI assistant and stream the response.
 
 The assistant uses Server-Sent Events: token text streams to stdout as it
 arrives, live status appears on stderr and is overwritten in place, and the
@@ -6,15 +6,22 @@ final summary lands on stdout. Long flows (voice-debug can run 2–5 minutes)
 work fine — there is no overall HTTP timeout. Ctrl-C cancels and exits 130;
 no auto-retry (debugger runs are not idempotent).
 
+Use -i for an interactive chat that keeps context across follow-ups: each
+turn replays the recent conversation as history (a one-shot ask sends none,
+so the assistant can't see your previous questions). In -i, /reset starts a
+fresh conversation, /help lists commands, and /exit or Ctrl-D leaves.
+
 Pass --call-uuid for voice-debug context; --verbose to show the assistant's
 tool calls; -o json to emit each SSE event as one JSONL line (handy for
 scripts and AI agents).
 
 Usage:
-  plivo ask <message> [flags]
+  plivo ask [message] [flags]
 
 Examples:
   plivo ask "What does Plivo SMS error code 30007 mean?"
+  plivo ask -i
+  plivo ask -i "Debug what happened on this call"
   plivo ask --call-uuid 21e68d29-... "Debug what happened on this call"
   plivo ask -o json "What's the rate for outbound voice to Brazil?"
 
@@ -22,6 +29,7 @@ Flags:
       --call-uuid string   voice-debug context: the call UUID the assistant should analyse
       --debug-stream       log every raw SSE frame to stderr (for debugging this CLI)
   -h, --help               help for ask
+  -i, --interactive        interactive chat — keep a conversation with follow-ups (history sent each turn)
       --verbose            show the assistant's tool_call / tool_output events on stderr
 
 Global Flags:
