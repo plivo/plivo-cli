@@ -125,3 +125,50 @@ func TestBuddyRenderer_toolEvents_hiddenByDefault_visibleWithVerbose(t *testing.
 		})
 	}
 }
+
+// When tokens stream live, a `final` event that also carries the full answer
+// must NOT re-print it — the answer should appear on stdout exactly once.
+func TestBuddyRenderer_streamedTokens_finalDoesNotReprint(t *testing.T) {
+	var out, err bytes.Buffer
+	r := &buddyRenderer{out: &out, err: &err, startedAt: time.Now()}
+	events := []api.SSEEvent{
+		{Event: "token", Data: `{"text":"SMS "}`},
+		{Event: "token", Data: `{"text":"error 30007"}`},
+		{Event: "final", Data: `{"answer":"SMS error 30007","latency_ms":50}`},
+	}
+	for _, ev := range events {
+		if !r.handle(ev) {
+			break
+		}
+	}
+	o := out.String()
+	if n := strings.Count(o, "SMS error 30007"); n != 1 {
+		t.Errorf("streamed answer should appear once (final must not re-print), got %d:\n%s", n, o)
+	}
+	if !r.streamed {
+		t.Error("streamed flag should be set after token events")
+	}
+	if !strings.Contains(err.String(), "(done in") {
+		t.Errorf("done footer missing on stderr, got: %q", err.String())
+	}
+}
+
+// A `message` event carries a non-streamed answer (debugger-final / no-stream
+// shape). It is printed as one block on `final`, replacing any buffered text,
+// and `final.answer` is ignored when a message was buffered.
+func TestBuddyRenderer_messageEvent_printedOnceAsBlock(t *testing.T) {
+	var out, err bytes.Buffer
+	r := &buddyRenderer{out: &out, err: &err, startedAt: time.Now()}
+	r.handle(api.SSEEvent{Event: "message", Data: `{"text":"Here is the debug summary."}`})
+	r.handle(api.SSEEvent{Event: "final", Data: `{"answer":"ignored when message present","latency_ms":10}`})
+	o := out.String()
+	if n := strings.Count(o, "Here is the debug summary."); n != 1 {
+		t.Errorf("message answer should appear once, got %d:\n%s", n, o)
+	}
+	if strings.Contains(o, "ignored when message present") {
+		t.Errorf("final.answer must be ignored when a message was buffered, got:\n%s", o)
+	}
+	if r.streamed {
+		t.Error("streamed should be false for a non-streamed message answer")
+	}
+}

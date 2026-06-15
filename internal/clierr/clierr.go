@@ -191,7 +191,7 @@ func FromHTTP(statusCode int, requestID string, body []byte) *Error {
 		e.Hint = "Account-level outbound calling is off. Ask Plivo support to enable it, or use a different account."
 	case strings.Contains(lower, "recaptcha"):
 		e.Code = CodeRecaptchaRequired
-		e.Hint = "Use the browser-based login (`plivo login --browser`) — the password-login endpoint requires browser reCAPTCHA."
+		e.Hint = "Use the browser-based login (`plivo login`) — this endpoint requires browser reCAPTCHA."
 	case strings.Contains(lower, "2fa") || strings.Contains(lower, "two_fa") || strings.Contains(lower, "two-factor"):
 		e.Code = Code2FARequired
 		e.Hint = "Account has 2FA enabled. Disable for the CLI account, or use a non-2FA path."

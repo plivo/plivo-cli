@@ -1,0 +1,34 @@
+Install the plivo-cli agent skill.
+
+The skill is a single-file reference (SKILL.md) written for LLM coding agents.
+It is bundled in the binary, so this writes it out without a network call.
+
+By default it lands at ~/.claude/skills/plivo-cli/SKILL.md (Claude Code).
+Use --dir to target another agent's skills directory, or --print to write the
+content to stdout so any other tool can capture it.
+
+Usage:
+  plivo skill install [flags]
+
+Examples:
+  plivo skill install                    # install to ~/.claude/skills/plivo-cli/SKILL.md
+  plivo skill install --dir ~/.config/agent/skills/plivo-cli
+  plivo skill install --print > plivo-cli.md   # capture for any agent
+  plivo skill install --dry-run          # show the destination, write nothing
+
+Flags:
+      --dir string   destination directory (default: ~/.claude/skills/plivo-cli)
+  -h, --help         help for install
+      --print        write the skill content to stdout instead of installing
+
+Global Flags:
+      --all                auto-paginate through all pages
+      --dry-run            print the HTTP request without sending
+      --explain            explain what the command will do before executing
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts

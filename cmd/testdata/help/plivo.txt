@@ -22,6 +22,7 @@ Available Commands:
   lookup      Carrier + format lookup for an E.164 number (lookup.plivo.com)
   messaging   Send messages (SMS / MMS / WhatsApp) — channel-split surface
   numbers     Manage account phone numbers
+  skill       Manage the plivo-cli agent skill
   support     List your past support escalations (filed via `plivo ask`)
   upgrade     Upgrade plivo to the latest release
   verify      Plivo Verify — OTP / phone-number verification sessions

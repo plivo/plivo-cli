@@ -171,8 +171,12 @@ func runAsk(cmd *cobra.Command, args []string) error {
 	// Ctrl-C: print whatever we've accumulated so the user sees a partial
 	// answer, then exit 130.
 	if streamCtx.Err() == context.Canceled {
-		if !r.jsonMode && r.answerBuf.Len() > 0 {
-			fmt.Fprintln(os.Stdout, strings.TrimRight(r.answerBuf.String(), "\n"))
+		if !r.jsonMode {
+			if r.streamed {
+				fmt.Fprintln(os.Stdout) // close the streamed line
+			} else if r.answerBuf.Len() > 0 {
+				fmt.Fprintln(os.Stdout, strings.TrimRight(r.answerBuf.String(), "\n"))
+			}
 		}
 		fmt.Fprintln(os.Stderr, "(cancelled)")
 		os.Exit(130)
@@ -283,7 +287,9 @@ func (s *buddySession) sendTurn(message string) (answer string, ok bool) {
 
 	switch {
 	case turnCtx.Err() == context.Canceled:
-		if r.answerBuf.Len() > 0 {
+		if r.streamed {
+			fmt.Fprintln(os.Stdout) // tokens already streamed; just close the line
+		} else if r.answerBuf.Len() > 0 {
 			fmt.Fprintln(os.Stdout, strings.TrimRight(r.answerBuf.String(), "\n"))
 		}
 		fmt.Fprintln(os.Stderr, "(cancelled)")
@@ -418,13 +424,9 @@ func runInteractiveAsk(client *api.Client, url, firstMsg string) error {
 	return nil
 }
 
-// buddyRenderer turns SSE events into terminal output. In json mode it emits
-// one JSONL line per event; otherwise it buffers tokens/message into a single
-// answer block printed once on `final` (more reliable against prompt themes
-// that re-render and clobber per-token streaming), while narration still goes
-// to stderr live (overwritten in place when ANSI is available) so long flows
-// show progress. `out` and `err` are injected (defaults: os.Stdout /
-// os.Stderr) so tests can capture output.
+// buddyRenderer turns SSE events into terminal output: JSONL per event in json
+// mode, otherwise streamed answer tokens (or a one-block final). answerBuf keeps
+// the full text for the cancel / -i paths; out/err are injected for tests.
 type buddyRenderer struct {
 	out          io.Writer
 	err          io.Writer
@@ -433,6 +435,7 @@ type buddyRenderer struct {
 	verbose      bool
 	startedAt    time.Time
 	answerBuf    strings.Builder
+	streamed     bool
 	hadNarration bool
 	errorSeen    bool
 	errorMsg     string
@@ -461,20 +464,22 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 			Text string `json:"text"`
 		}
 		_ = json.Unmarshal(buddyInner(ev.Data), &d)
-		// Buffer tokens; we print the assembled answer in one block on
-		// `final`. Streaming per-token interacts badly with prompt themes
-		// that re-render after a command exits (Starship, P10k), which can
-		// clobber the streamed bytes visually. One clean block at the end
-		// is always visible.
+		if d.Text == "" {
+			return true
+		}
+		// Stream to stdout, clearing any live narration line first so it
+		// doesn't interleave. answerBuf keeps the text; final won't re-print.
+		r.clearNarrationLine()
+		fmt.Fprint(r.out, d.Text)
 		r.answerBuf.WriteString(d.Text)
+		r.streamed = true
 
 	case "message":
 		var d struct {
 			Text string `json:"text"`
 		}
 		_ = json.Unmarshal(buddyInner(ev.Data), &d)
-		// `message` is the no-stream / debugger-final shape; it REPLACES
-		// any accumulated answer rather than appending.
+		// no-stream / debugger-final shape; replaces the accumulated answer.
 		r.answerBuf.Reset()
 		r.answerBuf.WriteString(d.Text)
 
@@ -544,14 +549,20 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		}
 		_ = json.Unmarshal(buddyInner(ev.Data), &d)
 		r.clearNarrationLine()
-		// Print the assembled answer in one block. Prefer the buffered
-		// tokens/message; fall back to `final.answer` if neither streamed.
-		answer := r.answerBuf.String()
-		if answer == "" {
-			answer = d.Answer
-		}
-		if answer != "" {
-			fmt.Fprintln(r.out, strings.TrimRight(answer, "\n"))
+		if r.streamed {
+			// Tokens already streamed live to stdout — just close the line.
+			fmt.Fprintln(r.out)
+		} else {
+			// Nothing streamed (a `message`/debugger-final or non-streaming
+			// answer) — print the assembled answer as one block; fall back to
+			// `final.answer` if neither streamed nor buffered.
+			answer := r.answerBuf.String()
+			if answer == "" {
+				answer = d.Answer
+			}
+			if answer != "" {
+				fmt.Fprintln(r.out, strings.TrimRight(answer, "\n"))
+			}
 		}
 		latency := time.Since(r.startedAt)
 		if d.LatencyMs > 0 {

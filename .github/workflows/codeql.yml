@@ -3,7 +3,7 @@ name: CodeQL
 # Static security analysis via GitHub's CodeQL.
 #
 # Runs on:
-#   - every push to main + PRs targeting main (gates merges)
+#   - PRs targeting main (gates merges)
 #   - weekly schedule (catches new CodeQL rules against unchanged code)
 #
 # Findings surface in Security → Code scanning. The default Go query
@@ -11,8 +11,6 @@ name: CodeQL
 # the run time predictable.
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
   schedule:

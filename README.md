@@ -145,12 +145,17 @@ plivo voice calls make --from +1... --to +1... --yes        # actually call
 2. Branch on `error.code` (e.g. `AUTH_MISSING`, `DESTRUCTIVE_REFUSED`, `RATE_LIMITED`), never on `error.message` — message text drifts; codes are committed.
 3. For scripted use: set `PLIVO_FEEDBACK_PROMPT=0` and `PLIVO_NO_UPDATE_CHECK=1` so the post-success "rate the CLI?" prompt and update-check banner don't surprise stdin/stderr.
 
-**Install the skill once** so future agent sessions auto-load it:
+**Install the skill once** so future agent sessions auto-load it. Two easy ways:
 
 ```bash
-ln -s "$(pwd)/cli-skill" ~/.claude/skills/plivo-cli   # Claude Code
-# Other agents: copy cli-skill/SKILL.md into their skill / system-prompt directory.
+# With the CLI installed — writes the bundled skill, no network needed:
+plivo skill install                 # → ~/.claude/skills/plivo-cli/SKILL.md
+
+# Without the binary — one-line installer fetches SKILL.md from GitHub:
+curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/skills.sh | sh
 ```
+
+Both default to the Claude Code skills directory (`~/.claude/skills/plivo-cli`). For another agent, point it elsewhere — `plivo skill install --dir <path>` or `PLIVO_SKILL_DIR=<path>` for the installer. To capture the skill for an agent that loads it differently, `plivo skill install --print` writes it to stdout.
 
 The skill file lazy-loads on relevance — it only enters your context window when the user mentions Plivo / `auth_id`, etc.
 
