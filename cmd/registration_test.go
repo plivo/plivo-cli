@@ -271,21 +271,29 @@ func TestArgsValidators(t *testing.T) {
 	cases := []struct {
 		path   []string
 		desc   string
-		validN int // expected number of positional args
+		validN int // a positional-arg count the validator must accept
+		// rejectBelow: validN-1 args must be rejected (exact-arg commands).
+		// When false, fewer args are allowed too (e.g. `ask` takes an optional
+		// message, so 0 args is valid; the message-required check is a runtime
+		// concern, not an Args validator one).
+		rejectBelow bool
+		// rejectAbove: validN+1 args must be rejected (the validator has an
+		// upper bound even when fewer args are allowed).
+		rejectAbove bool
 	}{
-		{[]string{"numbers", "get"}, "numbers get <number>", 1},
-		{[]string{"numbers", "buy"}, "numbers buy <number>", 1},
-		{[]string{"numbers", "release"}, "numbers release <number>", 1},
-		{[]string{"ask"}, "ask <msg>", 1},
-		{[]string{"numbers", "compliance", "get"}, "compliance get <id>", 1},
-		{[]string{"numbers", "compliance", "update"}, "compliance update <id>", 1},
-		{[]string{"numbers", "compliance", "delete"}, "compliance delete <id>", 1},
-		{[]string{"account", "applications", "delete"}, "applications delete <app_id>", 1},
-		{[]string{"voice", "calls", "hangup"}, "calls hangup <uuid>", 1},
-		{[]string{"voice", "calls", "dtmf"}, "calls dtmf <uuid>", 1},
-		{[]string{"voice", "calls", "streams", "get"}, "streams get <call_uuid> <stream_id>", 2},
-		{[]string{"voice", "conferences", "member", "kick"}, "kick <conf> <member>", 2},
-		{[]string{"voice", "multiparty", "participant", "kick"}, "participant kick <mpc> <part>", 2},
+		{[]string{"numbers", "get"}, "numbers get <number>", 1, true, false},
+		{[]string{"numbers", "buy"}, "numbers buy <number>", 1, true, false},
+		{[]string{"numbers", "release"}, "numbers release <number>", 1, true, false},
+		{[]string{"ask"}, "ask [msg]", 1, false, true},
+		{[]string{"numbers", "compliance", "get"}, "compliance get <id>", 1, true, false},
+		{[]string{"numbers", "compliance", "update"}, "compliance update <id>", 1, true, false},
+		{[]string{"numbers", "compliance", "delete"}, "compliance delete <id>", 1, true, false},
+		{[]string{"account", "applications", "delete"}, "applications delete <app_id>", 1, true, false},
+		{[]string{"voice", "calls", "hangup"}, "calls hangup <uuid>", 1, true, false},
+		{[]string{"voice", "calls", "dtmf"}, "calls dtmf <uuid>", 1, true, false},
+		{[]string{"voice", "calls", "streams", "get"}, "streams get <call_uuid> <stream_id>", 2, true, false},
+		{[]string{"voice", "conferences", "member", "kick"}, "kick <conf> <member>", 2, true, false},
+		{[]string{"voice", "multiparty", "participant", "kick"}, "participant kick <mpc> <part>", 2, true, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -294,17 +302,24 @@ func TestArgsValidators(t *testing.T) {
 				t.Errorf("plivo %s — Args validator is nil; should be ExactArgs(%d) or similar", strings.Join(tc.path, " "), tc.validN)
 				return
 			}
-			// Probe: call validator with right + wrong arg counts.
-			args := make([]string, tc.validN)
-			for i := range args {
-				args[i] = "x"
+			mkArgs := func(n int) []string {
+				args := make([]string, n)
+				for i := range args {
+					args[i] = "x"
+				}
+				return args
 			}
-			if err := cmd.Args(cmd, args); err != nil {
+			if err := cmd.Args(cmd, mkArgs(tc.validN)); err != nil {
 				t.Errorf("Args validator rejected the correct count (%d) for plivo %s: %v", tc.validN, strings.Join(tc.path, " "), err)
 			}
-			if tc.validN > 0 {
-				if err := cmd.Args(cmd, args[:tc.validN-1]); err == nil {
+			if tc.rejectBelow && tc.validN > 0 {
+				if err := cmd.Args(cmd, mkArgs(tc.validN-1)); err == nil {
 					t.Errorf("Args validator accepted %d args for plivo %s (wants %d)", tc.validN-1, strings.Join(tc.path, " "), tc.validN)
+				}
+			}
+			if tc.rejectAbove {
+				if err := cmd.Args(cmd, mkArgs(tc.validN+1)); err == nil {
+					t.Errorf("Args validator accepted %d args for plivo %s (max %d)", tc.validN+1, strings.Join(tc.path, " "), tc.validN)
 				}
 			}
 		})
