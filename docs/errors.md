@@ -45,7 +45,7 @@ Stable strings — switch on these, not on the message text.
 | `AUTH_FORBIDDEN` | Upstream returned 403 (role/scope) | Account lacks permission |
 | `AUTH_EXPIRED` | Cached session token TTL elapsed | Re-login |
 | `AUTH_2FA_REQUIRED` | Account has 2FA enabled | Disable for CLI account or use non-2FA path |
-| `AUTH_RECAPTCHA_REQUIRED` | Endpoint requires browser reCAPTCHA | Use `plivo login --browser` (CLI-friendly path) |
+| `AUTH_RECAPTCHA_REQUIRED` | Endpoint requires browser reCAPTCHA | Use `plivo login` (the browser-based flow) |
 
 ### Input / state
 
@@ -101,7 +101,7 @@ out=$(plivo agent list -o json 2>&1)
 exit_code=$?
 case "$exit_code" in
   0) echo "$out" | jq '.data[] | .name' ;;
-  2) plivo login --browser && retry ;;
+  2) plivo login && retry ;;
   4) sleep 6 && retry ;;
   *)
      code=$(echo "$out" | jq -r '.error.code')
