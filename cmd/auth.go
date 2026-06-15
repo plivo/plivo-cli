@@ -144,11 +144,9 @@ func runAuthWhoami(cmd *cobra.Command, args []string) error {
 		return output.JSONSuccess(os.Stdout, acct, map[string]string{"source": source})
 	}
 	return output.KV(os.Stdout, [][2]string{
-		{"profile", source},
-		{"auth_id", acct.AuthID},
 		{"name", acct.Name},
-		{"account_type", acct.AccountType},
-		{"billing_mode", acct.BillingMode},
-		{"cash_credits", acct.CashCredits},
+		{"auth id", acct.AuthID},
+		{"credits", acct.CashCredits},
+		{"plan", acct.AccountType},
 	})
 }
