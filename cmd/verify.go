@@ -113,13 +113,11 @@ func runVerifySessionCreate(cmd *cobra.Command, args []string) error {
 		body["url"] = vsCreateURL
 	}
 
-	effectiveDryRun := dryRunFlag || !yesFlag
-	if effectiveDryRun {
-		client.DryRun = true
-		if !dryRunFlag {
-			fmt.Fprintln(os.Stderr, "[dry-run] verify session create defaults to dry-run; pass --yes to actually send")
-		}
+	proceed, dryRun, gerr := guardSpend("create verify session for " + vsCreateRecipient)
+	if !proceed {
+		return gerr
 	}
+	applyDryRun(client, dryRun)
 
 	if explainFlag {
 		fmt.Fprintf(os.Stderr, "Will POST %s (recipient=%s channel=%s)\n", client.AccountURL("Verify", "Session"), vsCreateRecipient, vsCreateChannel)
@@ -138,7 +136,7 @@ func runVerifySessionCreate(cmd *cobra.Command, args []string) error {
 	if apiErr != nil {
 		return apiErr
 	}
-	if effectiveDryRun {
+	if dryRun {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {

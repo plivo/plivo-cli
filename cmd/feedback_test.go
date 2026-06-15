@@ -177,9 +177,13 @@ func TestFeedback_emptyRatingAndComment_doesNotSubmit(t *testing.T) {
 	}
 }
 
-func TestFeedback_endpointUnset_surfacesFriendlyError(t *testing.T) {
+// PLIVO_FEEDBACK_TELEMETRY=0 makes Submit a silent no-op + surfaces a
+// clear "disabled" message. Replaces the old endpoint-unset fallback —
+// the default endpoint is now hodor's /v1/accounts/cli/feedback (no
+// configuration needed), so the only way to NOT submit is this opt-out.
+func TestFeedback_telemetryDisabled_surfacesFriendlyMessage(t *testing.T) {
 	resetFeedbackFlags(t)
-	t.Setenv(feedback.EndpointEnvVar, "")
+	t.Setenv(feedback.TelemetryOptOutEnvVar, "0")
 	t.Setenv(feedback.MachineIDEnvVar, "test-machine")
 
 	feedbackRating = 3
@@ -189,11 +193,11 @@ func TestFeedback_endpointUnset_surfacesFriendlyError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunE returned err: %v", err)
 	}
-	if !strings.Contains(out, "PLIVO_FEEDBACK_ENDPOINT") {
-		t.Errorf("expected mention of env var in error, got: %s", out)
+	if !strings.Contains(out, "PLIVO_FEEDBACK_TELEMETRY") {
+		t.Errorf("expected mention of opt-out env var in message, got: %s", out)
 	}
-	if !strings.Contains(out, "issue") {
-		t.Errorf("expected GitHub issues fallback, got: %s", out)
+	if !strings.Contains(out, "disabled") && !strings.Contains(out, "Nothing sent") {
+		t.Errorf("expected 'disabled' or 'Nothing sent' in message, got: %s", out)
 	}
 }
 
@@ -224,6 +228,47 @@ func TestFeedback_messageTooLong_errors(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "≤") {
 		t.Errorf("err should mention max length, got: %v", err)
+	}
+}
+
+// isMetadataInvocation is the single gate that stops `plivo --version`,
+// `plivo --help`, `plivo` (bare), `plivo completion bash`, and friends
+// from triggering the post-success auto-prompt. Keep this matrix in
+// sync with skipPromptCommands + metadataFlags.
+func TestIsMetadataInvocation(t *testing.T) {
+	cases := []struct {
+		name     string
+		firstCmd string
+		args     []string
+		want     bool
+	}{
+		{"bare plivo (auto-help)", "", []string{}, true},
+		{"--version", "", []string{"--version"}, true},
+		{"-v", "", []string{"-v"}, true},
+		{"--help", "", []string{"--help"}, true},
+		{"-h", "", []string{"-h"}, true},
+		{"subcommand --help", "voice", []string{"voice", "calls", "--help"}, true},
+		{"subcommand -h", "messaging", []string{"messaging", "-h"}, true},
+		{"normal subcommand", "voice", []string{"voice", "calls", "list"}, false},
+		{"subcommand with unrelated flag", "voice", []string{"voice", "calls", "list", "--limit", "5"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isMetadataInvocation(tc.firstCmd, tc.args); got != tc.want {
+				t.Errorf("isMetadataInvocation(%q, %v) = %v, want %v", tc.firstCmd, tc.args, got, tc.want)
+			}
+		})
+	}
+}
+
+// Skip-list audit: the commands the user expects to be quiet should all
+// resolve to a skip. Regression guard against someone adding the
+// `completion` subcommand back to the prompt path (or removing it).
+func TestSkipPromptCommands_quietCommands(t *testing.T) {
+	for _, name := range []string{"feedback", "login", "logout", "upgrade", "completion", "help", "version"} {
+		if !skipPromptCommands[name] {
+			t.Errorf("%q must be in skipPromptCommands", name)
+		}
 	}
 }
 

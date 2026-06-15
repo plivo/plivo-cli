@@ -257,13 +257,15 @@ func runNumberUpdate(cmd *cobra.Command, args []string) error {
 
 func runNumberBuy(cmd *cobra.Command, args []string) error {
 	number := args[0]
-	if !yesFlag && !dryRunFlag {
-		return fmt.Errorf("buying a number costs money: pass --yes to confirm, or --dry-run to preview")
+	proceed, dryRun, gerr := guardSpend("buy number " + number)
+	if !proceed {
+		return gerr
 	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
 	}
+	applyDryRun(client, dryRun)
 	body := map[string]any{}
 	if numberBuyAppID != "" {
 		body["app_id"] = numberBuyAppID
@@ -288,7 +290,7 @@ func runNumberBuy(cmd *cobra.Command, args []string) error {
 	if apiErr != nil {
 		return apiErr
 	}
-	if dryRunFlag {
+	if dryRun {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {

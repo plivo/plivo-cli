@@ -1,0 +1,18 @@
+# GitHub Pages config for plivo.github.io/plivo-cli/.
+#
+# index.html is a fully self-contained landing page with its own styling
+# (assets/tokens.css + site.js); Jekyll passes it through unchanged.
+# COMMANDS.md and errors.md get rendered to HTML by Jekyll's default
+# Kramdown so the in-page COMMANDS link resolves nicely.
+title: Plivo CLI
+description: Single-binary CLI for the Plivo REST API + Vibe AI agents
+plugins:
+  - jekyll-relative-links
+relative_links:
+  enabled: true
+  collections: false
+include:
+  - COMMANDS.md
+  - errors.md
+exclude:
+  - cli/

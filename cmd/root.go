@@ -45,16 +45,11 @@ Credentials resolve in order:
 }
 
 func Execute() {
-	// Capture the cobra command path early so every HTTP request from this
-	// invocation carries it via X-Plivo-CLI-Command. Server-side analytics
-	// keys off this for per-command funnel analysis.
-	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
-		api.CLICommand = commandPath(cmd)
+	cmdErr := rootCmd.Execute()
+	if cmdErr != nil {
+		handleError(cmdErr)
 	}
-
-	if err := rootCmd.Execute(); err != nil {
-		handleError(err)
-	}
+	firstWord := firstCmdWord(os.Args[1:])
 	// Server-driven upgrade nudge (from server warn response headers) wins
 	// over the GitHub-cache nudge — when the server has spoken, we trust it
 	// and skip the local check.
@@ -65,7 +60,15 @@ func Execute() {
 	// the upgrade cache has seen a fresher release tag. No-op on errors
 	// (don't drown a real failure under nudge noise), in scripts/CI (not a
 	// TTY), or when invoked as `plivo upgrade …` itself.
-	maybePrintUpdateHint(firstCmdWord(os.Args[1:]))
+	maybePrintUpdateHint(firstWord)
+	// Auto-prompt for feedback once per PromptInterval (24h) on TTY
+	// sessions only. Silent no-op for failed commands, scripts, CI,
+	// metadata-only invocations (--help/--version/bare plivo),
+	// skip-listed commands (feedback/login/logout/upgrade/completion/
+	// help/version), and users who haven't yet hit the activity floor.
+	if cmdErr == nil {
+		maybePromptFeedback(firstWord, os.Args[1:])
+	}
 }
 
 // commandPath flattens cmd.CommandPath() to a dotted form
@@ -130,6 +133,21 @@ var valueFlags = map[string]bool{
 }
 
 func init() {
+	// Single early hook: capture the cobra command path for analytics, and
+	// reject unsupported --output values before any RunE fires. Defined here
+	// (rather than inside Execute()) so tests that drive rootCmd.Execute()
+	// directly see the same gate humans do.
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		api.CLICommand = commandPath(cmd)
+		if reason := output.Validate(outputFormat); reason != "" {
+			err := clierr.BadInput(reason)
+			err.Hint = "Supported formats: " + strings.Join(output.SupportedFormats, ", ") + " (default: table for TTY, json otherwise)."
+			err.Context = map[string]any{"flag": "--output", "value": outputFormat}
+			return err
+		}
+		return nil
+	}
+
 	rootCmd.PersistentFlags().StringVar(&profileFlag, "profile", "", "named profile from ~/.plivo/config.toml")
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "", "output format: table|json (default: table for TTY, json otherwise)")
 	rootCmd.PersistentFlags().BoolVarP(&quietFlag, "quiet", "q", false, "suppress non-data output")
@@ -154,15 +172,8 @@ func getClient() (*api.Client, string, error) {
 	c := api.New(p.AuthID, p.AuthToken, time.Duration(timeoutSec)*time.Second)
 	c.AdminBaseURL = adminServer
 	c.Email = p.Email
-	// When the profile was created with `plivo login --env <env>` (a non-prod
-	// env that only exists in internal builds), point the REST BaseURL at
-	// that env's gateway too. Mirrors applyBuddyURL. resolveLoginEnv returns
-	// false on public builds even when p.Env="dev" — naturally safe.
-	if p.Env != "" {
-		if u, ok := resolveLoginEnv(p.Env); ok {
-			c.BaseURL = strings.TrimRight(u, "/") + "/v1/cli/api"
-		}
-	}
+	c.Region = p.Region
+	c.AomUUID = p.AomUUID
 	c.DryRun = dryRunFlag
 	if logLevel == "debug" {
 		c.LogRequest = func(method, url string, body []byte) {

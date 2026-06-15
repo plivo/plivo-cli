@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"sync"
 
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 // Bridge copies messages between a and b in both directions. Returns when

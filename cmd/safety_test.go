@@ -185,6 +185,12 @@ func TestDestructiveVerbs_refuseWithoutYes(t *testing.T) {
 		{"messaging sms powerpacks delete", []string{"messaging", "sms", "powerpacks", "delete", "PP-UUID"}},
 		{"messaging sms powerpacks numbers remove", []string{"messaging", "sms", "powerpacks", "numbers", "remove", "PP-UUID", "+14155551234"}},
 		{"messaging sms 10dlc links delete", []string{"messaging", "sms", "10dlc", "links", "delete", "LINK-ID"}},
+		// `plivo api` escape hatch: mutating methods share the spend-verb gate
+		// so an agent can't accidentally POST/PUT/PATCH/DELETE without --yes.
+		{"api POST", []string{"api", "POST", "/Message/", "--body", `{"src":"+1","dst":"+1","text":"hi"}`}},
+		{"api PUT", []string{"api", "PUT", "/Application/APP-1/"}},
+		{"api PATCH", []string{"api", "PATCH", "/Application/APP-1/"}},
+		{"api DELETE", []string{"api", "DELETE", "/Number/+14155551234/"}},
 	}
 
 	for _, tc := range cases {
@@ -244,43 +250,32 @@ func TestDestructiveVerbs_acceptWithYes(t *testing.T) {
 	}
 }
 
-// ─── Spend verbs default to dry-run when --yes is absent ────────────────────
+// ─── Spend verbs refuse without --yes (unified contract) ────────────────────
 
-func TestSpendVerbs_defaultToDryRun(t *testing.T) {
-	// Spend verbs (messaging send, call make, verify session create, cnam,
-	// masking session create, mpc create, mpc participant add, brand create,
-	// campaign create) should NEVER hit the network when --yes is missing.
-	//
-	// We point the api client at an httptest server (via custom transport)
-	// and confirm the server never gets a request — proving the dry-run
-	// kicked in before any HTTP call.
-	setFakeCreds(t)
-
-	srv, hits := startCapturingHTTPServer(t, 200, `{}`)
-	// (t.Cleanup is already wired inside startCapturingHTTPServer)
-	_ = srv
-
-	// Override api.Client.HTTP for every new client created during this test
-	// by intercepting api.New via a small hack: we patch the http.DefaultTransport
-	// indirectly by replacing the api client's BaseURL with our test server
-	// and providing a custom transport. Simpler: patch the http.DefaultTransport.
-	origTransport := http.DefaultTransport
-	defer func() { http.DefaultTransport = origTransport }()
-	http.DefaultTransport = &http.Transport{
-		// Forward everything to our test server.
-		Proxy: func(*http.Request) (*url.URL, error) {
-			return url.Parse(srv.URL)
-		},
-	}
-
-	cases := []struct {
+// spendVerbCases enumerates every server-state-mutating command that should
+// honour the unified spend-verb contract:
+//
+//	--yes              → proceed; HTTP call goes through
+//	--dry-run          → proceed; client.DryRun=true, no HTTP
+//	neither            → DESTRUCTIVE_REFUSED (exit 5)
+//
+// Same list drives two sibling tests (refusal + dry-run preview), so adding
+// a new spend verb only requires editing this table once.
+func spendVerbCases() []struct {
+	name string
+	args []string
+} {
+	return []struct {
 		name string
 		args []string
 	}{
 		{"messaging sms send", []string{"messaging", "sms", "send", "--src", "+1", "--dst", "+1", "--text", "hi"}},
+		{"messaging mms send", []string{"messaging", "mms", "send", "--src", "+1", "--dst", "+1", "--text", "hi"}},
+		{"messaging whatsapp send", []string{"messaging", "whatsapp", "send", "--src", "+1", "--dst", "+1", "--text", "hi"}},
 		{"voice calls make", []string{"voice", "calls", "make", "--from", "+1", "--to", "+1"}},
 		{"verify sessions create", []string{"verify", "sessions", "create", "--recipient", "+1", "--app-uuid", "abc"}},
 		{"numbers cnam", []string{"numbers", "cnam", "+14155551234"}},
+		{"numbers buy", []string{"numbers", "buy", "+14155551234"}},
 		{"numbers masking sessions create", []string{"numbers", "masking", "sessions", "create", "--first-party", "+1", "--second-party", "+2"}},
 		{"voice multiparty create", []string{"voice", "multiparty", "create", "--name", "ci-test"}},
 		{"messaging sms 10dlc brands create", []string{"messaging", "sms", "10dlc", "brands", "create", "--alias", "ci", "--legal-name", "ACME Inc"}},
@@ -294,22 +289,114 @@ func TestSpendVerbs_defaultToDryRun(t *testing.T) {
 			"--sample-message-1", "x",
 		}},
 	}
+}
 
-	for _, tc := range cases {
+// TestSpendVerbs_refuseWithoutYes pins the post-unification contract:
+// every spend verb invoked without --yes must return DESTRUCTIVE_REFUSED
+// (exit 5) and must NOT touch the network. The previous behaviour
+// (silently downgrading to dry-run with a stderr banner) was misleading
+// for agents reading exit 0 from an un-confirmed `messaging sms send`.
+func TestSpendVerbs_refuseWithoutYes(t *testing.T) {
+	setFakeCreds(t)
+
+	srv, hits := startCapturingHTTPServer(t, 200, `{}`)
+	_ = srv
+	origTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = origTransport }()
+	http.DefaultTransport = &http.Transport{
+		Proxy: func(*http.Request) (*url.URL, error) { return url.Parse(srv.URL) },
+	}
+
+	for _, tc := range spendVerbCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			before := len(hits())
-			err, _, stderr := execCmd(t, tc.args...)
+			err, _, _ := execCmd(t, tc.args...)
+			after := len(hits())
+			if err == nil {
+				t.Fatalf("plivo %s — expected DESTRUCTIVE_REFUSED, got nil err", strings.Join(tc.args, " "))
+			}
+			if !strings.Contains(err.Error(), "DESTRUCTIVE_REFUSED") {
+				t.Errorf("plivo %s — expected DESTRUCTIVE_REFUSED, got: %v", strings.Join(tc.args, " "), err)
+			}
+			if after != before {
+				t.Errorf("plivo %s — refused command still hit the network (hits delta = %d)", strings.Join(tc.args, " "), after-before)
+			}
+		})
+	}
+}
+
+// TestSpendVerbs_dryRunAlonePreviews confirms --dry-run alone (no --yes) is
+// the documented preview path: the command proceeds without error and
+// without hitting the network.
+func TestSpendVerbs_dryRunAlonePreviews(t *testing.T) {
+	setFakeCreds(t)
+
+	srv, hits := startCapturingHTTPServer(t, 200, `{}`)
+	_ = srv
+	origTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = origTransport }()
+	http.DefaultTransport = &http.Transport{
+		Proxy: func(*http.Request) (*url.URL, error) { return url.Parse(srv.URL) },
+	}
+
+	for _, tc := range spendVerbCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			args := append([]string(nil), tc.args...)
+			args = append(args, "--dry-run")
+			before := len(hits())
+			err, _, stderr := execCmd(t, args...)
 			after := len(hits())
 			if err != nil {
-				t.Errorf("plivo %s — expected nil err on default dry-run path, got: %v", strings.Join(tc.args, " "), err)
+				t.Errorf("plivo %s --dry-run — expected nil err, got: %v", strings.Join(tc.args, " "), err)
 			}
-			// Must NOT have called the server (dry-run skips HTTP).
 			if after != before {
-				t.Errorf("plivo %s — spend verb hit the network without --yes (hits delta = %d)", strings.Join(tc.args, " "), after-before)
+				t.Errorf("plivo %s --dry-run — dry-run still hit the network (hits delta = %d)", strings.Join(tc.args, " "), after-before)
 			}
-			// Should have printed the dry-run banner to stderr.
 			if !strings.Contains(stderr, "[dry-run]") && !strings.Contains(stderr, "dry-run") {
-				t.Errorf("plivo %s — stderr should mention dry-run, got: %q", strings.Join(tc.args, " "), stderr)
+				t.Errorf("plivo %s --dry-run — stderr should mention dry-run, got: %q", strings.Join(tc.args, " "), stderr)
+			}
+		})
+	}
+}
+
+// ─── -o yaml / -o tsv → BAD_INPUT (PersistentPreRunE rejection) ─────────────
+
+// TestOutputFormat_rejectsUnsupportedValues confirms `-o yaml`, `-o tsv`, etc.
+// are hard errors (BAD_INPUT, exit 2) instead of the previous silent fall-
+// through to JSON rendering. Wired via root.go's PersistentPreRunE so every
+// command — even read-only ones like `numbers list` — sees the rejection
+// before its RunE fires.
+func TestOutputFormat_rejectsUnsupportedValues(t *testing.T) {
+	setFakeCreds(t)
+
+	cases := []string{"yaml", "tsv", "csv", "xml", "garbage"}
+	for _, bad := range cases {
+		t.Run("o_"+bad, func(t *testing.T) {
+			err, _, _ := execCmd(t, "-o", bad, "numbers", "list")
+			if err == nil {
+				t.Fatalf("-o %s — expected BAD_INPUT, got nil", bad)
+			}
+			if !strings.Contains(err.Error(), "BAD_INPUT") {
+				t.Errorf("-o %s — expected BAD_INPUT, got: %v", bad, err)
+			}
+			if !strings.Contains(err.Error(), bad) {
+				t.Errorf("-o %s — error should echo the bad value, got: %v", bad, err)
+			}
+		})
+	}
+}
+
+func TestOutputFormat_acceptsSupportedValues(t *testing.T) {
+	setFakeCreds(t)
+	for _, ok := range []string{"json", "table", "JSON", "Table"} {
+		t.Run("o_"+ok, func(t *testing.T) {
+			// --dry-run keeps us off the network. The Validate step runs in
+			// PersistentPreRunE before the spend-verb gate, so a failing -o
+			// aborts before --dry-run does. We only need to confirm valid
+			// formats DON'T abort with BAD_INPUT.
+			err, _, _ := execCmd(t, "-o", ok, "--dry-run", "numbers", "list")
+			if err != nil && strings.Contains(err.Error(), "BAD_INPUT") {
+				t.Errorf("-o %s — should be accepted, got BAD_INPUT: %v", ok, err)
 			}
 		})
 	}

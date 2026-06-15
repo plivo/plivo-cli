@@ -7,12 +7,15 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 
+	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/config"
 	"github.com/plivo/plivo-cli/internal/feedback"
+	"github.com/plivo/plivo-cli/internal/version"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -95,14 +98,16 @@ func runFeedback(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if err := event.Submit(context.Background()); err != nil {
+	baseURL, headers := resolveFeedbackTransport(authID)
+	if err := event.Submit(context.Background(), baseURL, headers); err != nil {
+		if errors.Is(err, feedback.ErrTelemetryDisabled) {
+			fmt.Fprintln(cmd.OutOrStderr(), "Feedback telemetry disabled (PLIVO_FEEDBACK_TELEMETRY=0). Nothing sent.")
+			return nil
+		}
 		if errors.Is(err, feedback.ErrEndpointNotConfigured) {
 			fmt.Fprintln(cmd.OutOrStderr(),
-				"⚠ Feedback collector endpoint not configured yet (PLIVO_FEEDBACK_ENDPOINT unset).")
-			fmt.Fprintln(cmd.OutOrStderr(),
-				"  Your feedback was prepared but not sent. The CLI team is wiring this up;")
-			fmt.Fprintln(cmd.OutOrStderr(),
-				"  for now, please open an issue at https://github.com/plivo/plivo-cli/issues.")
+				"⚠ Could not resolve a feedback endpoint. Set PLIVO_FEEDBACK_ENDPOINT or open an issue at",
+				"https://github.com/plivo/plivo-cli/issues.")
 			return nil
 		}
 		return clierr.NetworkError("submitting feedback", err)
@@ -125,17 +130,64 @@ func validateFeedbackFlags() error {
 	return nil
 }
 
-// resolveAuthIDForFeedback returns the active profile's auth_id if the
-// user is logged in, else "". Never errors — feedback works without
-// login (often the user is trying the CLI for the first time and
+// resolveAuthIDForFeedback returns the auth_id of the resolved profile
+// (honoring --profile if passed), else "". Never errors — feedback works
+// without login (often the user is trying the CLI for the first time and
 // bounces off, which is exactly the feedback we most want to capture).
 func resolveAuthIDForFeedback() string {
-	prof, _, err := config.Resolve("")
+	prof, _, err := config.Resolve(profileFlag)
 	if err != nil {
 		return ""
 	}
 	return prof.AuthID
 }
+
+// resolveFeedbackTransport derives the hodor base URL feedback should
+// hit + the headers (email, region, aom_uuid, os, arch, version, auth-id)
+// hodor's handler reads to stitch feedback into the per-user PostHog
+// dashboards.
+//
+// Pre-login users get DefaultBaseURL — feedback works without auth, so
+// the public route /v1/accounts/cli/feedback responds regardless.
+// Logged-in users get whatever Profile.Env resolves to. Honors --profile
+// so `plivo --profile X feedback` reads X's identity instead of active.
+func resolveFeedbackTransport(authID string) (string, map[string]string) {
+	// Default: hodor prod (anonymous-but-public route).
+	base := strings.TrimSuffix(api.DefaultBaseURL, "/v1/cli/api")
+	headers := map[string]string{
+		"X-Plivo-CLI-Version": versionValue(),
+		"X-Plivo-CLI-OS":      runtimeOS(),
+		"X-Plivo-CLI-Arch":    runtimeArch(),
+	}
+	if authID != "" {
+		headers["X-Plivo-CLI-Auth-ID"] = authID
+	}
+	// Honor --profile (matches what resolveAuthIDForFeedback resolved).
+	// Without this, a bare 'config.Resolve("")' would pull the active
+	// profile even when the user explicitly asked for a different one.
+	prof, _, err := config.Resolve(profileFlag)
+	if err == nil && prof.AuthID == authID {
+		if prof.Email != "" {
+			headers["X-Plivo-CLI-Email"] = prof.Email
+		}
+		if prof.Region != "" {
+			headers["X-Plivo-CLI-Region"] = prof.Region
+		}
+		if prof.AomUUID != "" {
+			headers["X-Plivo-CLI-AOM-UUID"] = prof.AomUUID
+		}
+	}
+	return base, headers
+}
+
+// versionValue / runtimeOS / runtimeArch wrap the things addCLIHeaders
+// reaches for. Kept as named helpers so the test in feedback_test.go can
+// monkey-patch them if it ever needs to assert exact header values.
+var (
+	versionValue = func() string { return version.Value }
+	runtimeOS    = func() string { return runtime.GOOS }
+	runtimeArch  = func() string { return runtime.GOARCH }
+)
 
 // stripContextToMinimum drops the optional context fields when the user
 // passes --no-context. CLI version, OS, arch always stay (they're tiny

@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -72,35 +73,15 @@ func init() {
 // applyBuddyURL resolves the AI-assistant URL with precedence:
 //
 //	PLIVO_BUDDY_URL env  >  current `--env <X>` (login only)  >
-//	active profile's Env  >  [buddy].url config  >  built-in prod default
-//
-// The "active profile's Env" step lets `plivo login --env dev` once and
-// have every subsequent command (ask, support, login --browser …) hit
-// the right edge without further flags. The `--env <X>` tier above it
-// matters during the login command itself, before the profile is saved.
-// Only recognised envs apply — unknown profile env values fall through.
+//	[buddy].url config  >  built-in prod default
 func applyBuddyURL(c *api.Client) {
 	if u := os.Getenv("PLIVO_BUDDY_URL"); u != "" {
 		c.BuddyBaseURL = u
 		return
 	}
-	if loginEnv != "" {
-		if u, ok := resolveLoginEnv(strings.ToLower(loginEnv)); ok {
-			c.BuddyBaseURL = u
-			return
-		}
-	}
 	cfg, err := config.Load()
 	if err != nil {
 		return
-	}
-	if cfg.Active != "" {
-		if prof, ok := cfg.Profiles[cfg.Active]; ok && prof.Env != "" {
-			if u, ok := resolveLoginEnv(prof.Env); ok {
-				c.BuddyBaseURL = u
-				return
-			}
-		}
 	}
 	if u := cfg.Buddy.EffectiveURL(); u != "" {
 		c.BuddyBaseURL = u
@@ -193,10 +174,17 @@ func runAsk(cmd *cobra.Command, args []string) error {
 	}
 
 	if sseErr != nil {
+		// An HTTP error status from the server is not a connectivity problem —
+		// classify by status; only genuine transport failures are network errors.
+		var httpErr *api.SSEHTTPError
+		if errors.As(sseErr, &httpErr) {
+			return clierr.FromHTTP(httpErr.StatusCode, "", httpErr.Body)
+		}
 		return clierr.NetworkError("buddy", sseErr)
 	}
 	if r.errorSeen {
-		return clierr.BadInput("buddy returned an error event")
+		// A server-emitted error event is a service-side error, not bad user input.
+		return clierr.Upstream(r.errorMsg)
 	}
 	return nil
 }
@@ -218,6 +206,7 @@ type buddyRenderer struct {
 	answerBuf    strings.Builder
 	hadNarration bool
 	errorSeen    bool
+	errorMsg     string
 }
 
 func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
@@ -350,6 +339,7 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		r.clearNarrationLine()
 		fmt.Fprintf(r.err, "\nbuddy error: %s\n", d.Error)
 		r.errorSeen = true
+		r.errorMsg = d.Error
 		return false
 	}
 	return true

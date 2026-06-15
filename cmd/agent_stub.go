@@ -1,5 +1,3 @@
-//go:build !internal
-
 package cmd
 
 import (
@@ -9,9 +7,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// agentCmd is a placeholder in the public build. Public build only ships
-// the coming-soon stub; the full agent surface is gated behind a build
-// tag for now.
+// agentCmd is a coming-soon stub. The full agent surface lives on the
+// `beta` branch behind the `internal` build tag and isn't shipped from
+// `main`.
 //
 // This stub keeps `plivo agent` discoverable and tells users it's coming,
 // rather than the command simply not existing.
@@ -28,8 +26,6 @@ var agentCmd = &cobra.Command{
 	FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(os.Stderr, "AI voice agents from the CLI — coming soon.")
-		fmt.Fprintln(os.Stderr, "Track it in the roadmap:")
-		fmt.Fprintln(os.Stderr, "  https://github.com/plivo/plivo-cli/blob/main/ROADMAP.md")
 		return nil
 	},
 }

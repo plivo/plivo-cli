@@ -40,7 +40,7 @@ Stable strings — switch on these, not on the message text.
 
 | Code | Meaning | Hint shape |
 |---|---|---|
-| `AUTH_MISSING` | No Plivo creds configured | Run `plivo auth login` or set `PLIVO_AUTH_ID/TOKEN` |
+| `AUTH_MISSING` | No Plivo creds configured | Run `plivo login` or set `PLIVO_AUTH_ID/TOKEN` |
 | `AUTH_INVALID` | Upstream returned 401 | Re-check creds, run `plivo auth whoami` |
 | `AUTH_FORBIDDEN` | Upstream returned 403 (role/scope) | Account lacks permission |
 | `AUTH_EXPIRED` | Cached session token TTL elapsed | Re-login |

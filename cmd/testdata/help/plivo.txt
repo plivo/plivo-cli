@@ -11,12 +11,13 @@ Usage:
 Available Commands:
   account     Inspect and update the active Plivo account
   agent       AI voice agents (coming soon)
+  api         Generic REST escape hatch — hit any Plivo API path that isn't yet wrapped
   ask         Ask Plivo's AI assistant (streams the answer as it comes)
   auth        Manage credential profiles (list / use / remove / whoami)
   completion  Generate the autocompletion script for the specified shell
   feedback    Share feedback about the Plivo CLI (rating + optional comment)
   help        Help about any command
-  login       Log in to Plivo (saves credentials securely to the OS keychain)
+  login       Log in to Plivo (browser-based; saves credentials securely to the OS keychain)
   logout      Log out a profile (deletes its entry + removes the auth_token from the OS keychain)
   lookup      Carrier + format lookup for an E.164 number (lookup.plivo.com)
   messaging   Send messages (SMS / MMS / WhatsApp) — channel-split surface

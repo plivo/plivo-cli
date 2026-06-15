@@ -24,6 +24,18 @@ type SSEEvent struct {
 // SSEHandler receives decoded events. Return false to stop streaming early.
 type SSEHandler func(SSEEvent) bool
 
+// SSEHTTPError is returned by StreamSSE when the endpoint responds with an HTTP
+// error status (>=400) instead of an event stream — distinct from a transport
+// failure. Carries the status + body so callers can classify it accurately.
+type SSEHTTPError struct {
+	StatusCode int
+	Body       []byte
+}
+
+func (e *SSEHTTPError) Error() string {
+	return fmt.Sprintf("HTTP %d: %s", e.StatusCode, strings.TrimSpace(string(e.Body)))
+}
+
 // StreamSSE opens an SSE connection to fullURL with the given method/body
 // and dispatches each decoded event to onEvent. The connection uses the
 // client's normal auth path (Bearer for scoped tokens, Basic otherwise).
@@ -73,7 +85,7 @@ func (c *Client) StreamSSE(ctx context.Context, method, fullURL string, body any
 
 	if resp.StatusCode >= 400 {
 		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("SSE HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+		return &SSEHTTPError{StatusCode: resp.StatusCode, Body: b}
 	}
 
 	// 1 MiB read buffer — Buddy narration frames can be a few KB; default 4 KiB

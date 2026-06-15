@@ -1,0 +1,686 @@
+/* ============================================================
+   plivo cli · design tokens
+   · Plivo brand (STYLE.md) — blue #323dfe / purple #cd3ef9
+   · Sora display · Inter body · JetBrains Mono code
+   · custom touches: paper grain · italic-accent gradient · brutalist card lift
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:ital@0;1&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* ---- LIGHT mode (default) ---- */
+:root {
+  /* surface */
+  --background:           0 0% 100%;        /* #ffffff */
+  --foreground:           240 10% 4%;       /* near-black */
+  --surface:              240 5% 98%;       /* #f8f8fa */
+  --surface-2:            240 6% 96%;       /* #f1f2f5 */
+  --card:                 0 0% 100%;
+  --card-foreground:      240 10% 4%;
+
+  /* brand */
+  --primary:              235 99% 59%;      /* Plivo blue  #323dfe */
+  --primary-foreground:   0 0% 100%;
+  --secondary:            240 5% 96%;
+  --secondary-foreground: 240 10% 4%;
+  --accent:               235 99% 59%;
+  --accent-foreground:    0 0% 100%;
+
+  /* muted */
+  --muted:                240 5% 96%;
+  --muted-foreground:     240 4% 42%;
+
+  /* states */
+  --destructive:          0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --success:              142 71% 38%;
+  --warning:              33 95% 44%;
+
+  /* borders */
+  --border:               240 6% 90%;       /* #e3e4e8 */
+  --border-strong:        240 6% 80%;       /* #c8cace */
+  --input:                0 0% 100%;
+  --ring:                 235 99% 59%;
+
+  /* code surface */
+  --code:                 240 5% 96%;
+  --code-foreground:      240 10% 12%;
+
+  /* brand literals */
+  --plivo-blue:           #323dfe;
+  --plivo-purple:         #cd3ef9;
+  --plivo-blue-dark:      #2830cc;
+  --plivo-purple-dark:    #a835cc;
+  --plivo-blue-soft:      #5b6bff;
+  --brand-gradient:       linear-gradient(90deg, var(--plivo-purple), var(--plivo-blue));
+  --brand-gradient-vert:  linear-gradient(180deg, var(--plivo-purple), var(--plivo-blue));
+
+  /* terminal palette (kept dark for embedded screenshots) */
+  --term-bg:    #0a0b10;
+  --term-fg:    #e6e6e9;
+  --term-dim:   #8a8478;
+
+  color-scheme: light;
+}
+
+/* ---- DARK mode ---- */
+.dark {
+  --background:           225 18% 5%;       /* #0a0b10 */
+  --foreground:           240 5% 96%;
+  --surface:              225 15% 8%;       /* #10121a */
+  --surface-2:            225 14% 11%;      /* #171a24 */
+  --card:                 225 15% 8%;
+  --card-foreground:      240 5% 96%;
+
+  --primary:              230 100% 70%;     /* brighter for dark */
+  --primary-foreground:   225 30% 12%;
+  --secondary:            225 14% 13%;
+  --secondary-foreground: 240 5% 96%;
+  --accent:               230 100% 70%;
+  --accent-foreground:    225 30% 12%;
+
+  --muted:                225 14% 13%;
+  --muted-foreground:     240 4% 64%;
+
+  --destructive:          0 75% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --success:              142 60% 55%;
+  --warning:              33 95% 60%;
+
+  --border:               225 12% 18%;
+  --border-strong:        225 10% 28%;
+  --input:                225 14% 11%;
+  --ring:                 230 100% 70%;
+
+  --code:                 225 14% 11%;
+  --code-foreground:      240 5% 90%;
+
+  color-scheme: dark;
+}
+
+:root {
+  /* fonts (Plivo brand) */
+  --font-sora:  'Sora', 'Noto Sans Devanagari', 'Hind', sans-serif;
+  --font-inter: 'Inter', 'Noto Sans Devanagari', 'Hind', sans-serif;
+  --font-mono:  'JetBrains Mono', 'Noto Sans Devanagari', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* legacy aliases — for the old editorial inline styles still in pages */
+  --serif: var(--font-sora);
+  --sans:  var(--font-inter);
+  --mono:  var(--font-mono);
+
+  /* radii (per STYLE.md) */
+  --r-sm: 0.375rem;
+  --r-md: 0.5rem;      /* default · buttons */
+  --r-lg: 0.75rem;     /* default · cards */
+  --r-full: 9999px;
+
+  /* spacing */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 40px;
+  --s7: 64px;
+  --s8: 96px;
+
+  /* motion (per STYLE.md) */
+  --ease-out:    cubic-bezier(.25,.46,.45,.94);
+  --ease-soft:   cubic-bezier(.22,1,.36,1);
+  --bounce-soft: cubic-bezier(.34,1.56,.64,1);
+  --spring:      cubic-bezier(.34,1.56,.64,1);
+  --ease-snap:   cubic-bezier(.5,0,.1,1);
+  --dur-fast:    150ms;
+  --dur-med:     200ms;
+  --dur-slow:    300ms;
+  --dur-xslow:   500ms;
+
+  /* shadows (per STYLE.md) */
+  --shadow-card:       0 4px 6px -1px rgba(0,0,0,.10), 0 2px 4px -2px rgba(0,0,0,.10);
+  --shadow-card-hover: 0 20px 25px -5px rgba(0,0,0,.10), 0 8px 10px -6px rgba(0,0,0,.10);
+  --shadow-glow:       0 0 40px rgba(205, 62, 249, .30);
+  --shadow-glow-blue:  0 0 40px rgba(50, 61, 254, .30);
+
+  /* legacy color aliases — these *exist* so any old-style references
+     (--paper / --ink / --vermillion / etc) in unedited HTML still compile.
+     They resolve to the closest brand equivalents. */
+  --paper:        hsl(var(--background));
+  --paper-2:      hsl(var(--surface));
+  --paper-3:      hsl(var(--surface-2));
+  --bone:         hsl(var(--card));
+  --ink:          hsl(var(--foreground));
+  --ink-2:        hsl(var(--foreground));
+  --ink-3:        hsl(var(--muted-foreground));
+  --rule:         hsl(var(--border));
+  --vermillion:   var(--plivo-purple);
+  --vermillion-2: var(--plivo-purple-dark);
+  --forest:       var(--plivo-blue);
+  --forest-2:     var(--plivo-blue-dark);
+  --amber:        #FFB454;
+}
+
+/* ============================================================
+   reset
+   ============================================================ */
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+body { margin: 0; }
+h1, h2, h3, h4, h5, p, ul, ol, figure, blockquote { margin: 0; padding: 0; }
+ul, ol { list-style: none; }
+img, svg { display: block; max-width: 100%; }
+button { font: inherit; cursor: pointer; background: none; border: 0; padding: 0; color: inherit; }
+a { color: inherit; text-decoration: none; }
+
+::selection { background: hsl(var(--primary) / .25); color: hsl(var(--foreground)); }
+
+/* ============================================================
+   base
+   ============================================================ */
+
+body {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-inter);
+  font-size: 16px;
+  line-height: 1.55;
+  font-feature-settings: "kern";
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* custom touch: very subtle paper-grain texture (kept from editorial design,
+   lowered opacity so it doesn't fight Plivo's clean brand). */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 200;
+  opacity: .035;
+  mix-blend-mode: multiply;
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .9 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+/* heading defaults — Sora on H1/H2, Inter on H3+ */
+h1, h2 {
+  font-family: var(--font-sora);
+  font-weight: 400;
+  letter-spacing: -.02em;
+  line-height: 1.1;
+}
+h3, h4, h5, h6 {
+  font-family: var(--font-inter);
+  font-weight: 600;
+}
+
+/* ============================================================
+   typography utilities
+   ============================================================ */
+
+.font-sora { font-family: var(--font-sora); }
+.font-inter { font-family: var(--font-inter); }
+.font-mono-ui {
+  font-family: var(--font-mono);
+  font-feature-settings: "ss01", "cv01";
+  letter-spacing: -.01em;
+}
+
+.display { font-family: var(--font-sora); font-weight: 400; letter-spacing: -.02em; line-height: 1.05; }
+.display-xl { font-family: var(--font-sora); font-size: clamp(3rem, 9vw, 6rem);    line-height: 1.05; letter-spacing: -.02em; font-weight: 400; }
+.display-lg { font-family: var(--font-sora); font-size: clamp(2.5rem, 7vw, 4.5rem); line-height: 1.1; letter-spacing: -.02em; font-weight: 400; }
+.display-md { font-family: var(--font-sora); font-size: clamp(2rem, 5vw, 3rem);     line-height: 1.15; letter-spacing: -.01em; font-weight: 400; }
+.display-sm { font-family: var(--font-sora); font-size: clamp(1.5rem, 3vw, 2.25rem);line-height: 1.2; letter-spacing: -.01em; font-weight: 400; }
+
+/* custom touch: italic words in headings get the brand gradient via background-clip.
+   Use as `<span class="ital">terminal</span>`. */
+.ital, .italic {
+  font-family: var(--font-sora);
+  font-style: italic;
+  background: var(--brand-gradient);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+/* fall back to solid purple for browsers that drop bg-clip */
+@supports not (background-clip: text) {
+  .ital, .italic { color: var(--plivo-purple); background: none; }
+}
+
+.text-gradient {
+  background: var(--brand-gradient);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.text-muted { color: hsl(var(--muted-foreground)); }
+
+p.lede {
+  font-family: var(--font-sora);
+  font-size: clamp(22px, 2.4vw, 32px);
+  line-height: 1.32;
+  color: hsl(var(--foreground));
+  max-width: 36ch;
+}
+
+.meta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+  letter-spacing: .02em;
+}
+
+/* ============================================================
+   pills / eyebrow
+   ============================================================ */
+
+.pill, .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--r-full);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: hsl(var(--surface));
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+}
+.pill-mono {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.pill-accent, .chip.vermillion {
+  background: hsl(var(--primary) / .08);
+  border-color: hsl(var(--primary) / .20);
+  color: hsl(var(--primary));
+}
+.pill-active { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); border-color: hsl(var(--primary)); }
+.pill-success { background: hsl(var(--success) / .12); color: hsl(var(--success)); border-color: hsl(var(--success) / .30); }
+.pill-danger  { background: hsl(var(--destructive) / .12); color: hsl(var(--destructive)); border-color: hsl(var(--destructive) / .30); }
+.chip.forest  { background: hsl(var(--primary) / .08); color: hsl(var(--primary)); border-color: hsl(var(--primary) / .20); }
+.chip.outline { background: transparent; }
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--r-full);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  background: hsl(var(--surface));
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+}
+.eyebrow .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--plivo-purple);
+  animation: pulse 2.4s var(--ease-soft) infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: .4; transform: scale(.7); }
+}
+
+/* ============================================================
+   buttons
+   ============================================================ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font-family: var(--font-inter);
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  border-radius: var(--r-md);
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+  border: 1px solid hsl(var(--foreground));
+  transition: background var(--dur-med) ease, color var(--dur-med) ease, border-color var(--dur-med) ease;
+}
+.btn:hover {
+  background: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+  color: #fff;
+}
+.btn-ghost {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border));
+}
+.btn-ghost:hover {
+  background: hsl(var(--surface));
+  border-color: hsl(var(--border-strong));
+}
+
+/* ============================================================
+   cards (with custom brutalist-lift hover — Plivo brand allows it)
+   ============================================================ */
+
+.card {
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--r-lg);
+  padding: 24px;
+  transition: transform var(--dur-med) var(--ease-out),
+              box-shadow var(--dur-med) var(--ease-out),
+              border-color var(--dur-med) var(--ease-out);
+}
+.card:hover {
+  transform: translate(-2px, -2px);
+  border-color: hsl(var(--border-strong));
+  box-shadow: 4px 4px 0 hsl(var(--foreground));
+}
+
+.hover-lift { transition: transform var(--dur-med) ease-out; }
+.hover-lift:hover { transform: translateY(-.5rem); }
+
+/* ============================================================
+   layout primitives
+   ============================================================ */
+
+.shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+@media (min-width: 640px) { .shell { padding: 0 32px; } }
+@media (min-width: 1024px) { .shell { padding: 0 40px; } }
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 16px;
+}
+
+.section { padding: 48px 0; }
+@media (min-width: 1024px) { .section { padding: 64px 0; } }
+
+.rule        { height: 1px; background: hsl(var(--border)); width: 100%; }
+.rule-strong { height: 1px; background: hsl(var(--border-strong)); width: 100%; }
+
+/* ============================================================
+   nav
+   ============================================================ */
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: hsl(var(--background) / .85);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  border-bottom: 1px solid hsl(var(--border));
+}
+.nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  gap: 24px;
+}
+.brand {
+  font-family: var(--font-sora);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: hsl(var(--foreground));
+}
+.brand .glyph {
+  font-family: var(--font-sora);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--brand-gradient);
+  color: #fff;
+  border-radius: var(--r-sm);
+}
+.brand .ver {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  padding: 2px 6px;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--r-sm);
+  margin-left: 4px;
+  letter-spacing: .04em;
+  text-transform: lowercase;
+}
+
+.nav-links {
+  display: flex;
+  gap: 28px;
+  font-size: 13.5px;
+  font-weight: 500;
+  align-items: center;
+}
+.nav-links a {
+  color: hsl(var(--muted-foreground));
+  transition: color var(--dur-med) ease;
+  position: relative;
+}
+.nav-links a:hover, .nav-links a.is-active { color: hsl(var(--foreground)); }
+.nav-links a.is-active::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -18px 0;
+  height: 2px;
+  background: var(--brand-gradient);
+}
+
+/* ============================================================
+   terminal block — for embedded real screenshots
+   ============================================================ */
+
+.term {
+  background: var(--term-bg);
+  color: var(--term-fg);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.65;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  border: 1px solid #1c1f2b;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.04) inset,
+    var(--shadow-card);
+  position: relative;
+}
+.term-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,.03);
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.term-bar .dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: #444;
+}
+.term-bar .dot.r { background: #ff5f57; }
+.term-bar .dot.y { background: #febc2e; }
+.term-bar .dot.g { background: #28c840; }
+.term-bar .title {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--term-dim);
+  letter-spacing: .04em;
+}
+
+/* legacy text-terminal body (rarely used now — most slides are text-only or image-embedded) */
+.term-body {
+  padding: 16px;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+.term-body .prompt::before { content: "$ "; color: var(--plivo-purple); }
+.term-body .ok       { color: #87C77A; }
+.term-body .err      { color: #E76F51; }
+.term-body .dim      { color: var(--term-dim); }
+.term-body .amber    { color: #FFB454; }
+.term-body .cmd      { color: var(--term-fg); font-weight: 500; }
+.term-body .arg      { color: #C9B5FF; }
+.term-body .flag     { color: #84a3ff; }
+.term-body .str      { color: #FFB454; }
+.term-body .comment  { color: var(--term-dim); font-style: italic; }
+
+/* image inside terminal frame — for real user screenshots */
+.term-shot, .term img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--term-bg);
+  object-fit: contain;
+  object-position: center;
+}
+
+/* ============================================================
+   marquee
+   ============================================================ */
+
+.marquee {
+  overflow: hidden;
+  position: relative;
+}
+.marquee-track {
+  display: flex;
+  gap: 32px;
+  white-space: nowrap;
+  animation: marquee var(--duration, 40s) linear infinite;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.marquee-track .sep {
+  color: var(--plivo-purple);
+}
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(calc(-100% - var(--gap, 32px))); }
+}
+
+/* ============================================================
+   reveal animations
+   ============================================================ */
+
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity .5s var(--ease-out), transform .5s var(--ease-out);
+}
+[data-reveal].is-in { opacity: 1; transform: translateY(0); }
+
+[data-reveal-stagger] > * {
+  opacity: 0;
+  transform: translateY(16px);
+}
+[data-reveal-stagger].is-in > * {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity .4s var(--ease-out), transform .4s var(--ease-out);
+}
+[data-reveal-stagger].is-in > *:nth-child(1)  { transition-delay: 0ms; }
+[data-reveal-stagger].is-in > *:nth-child(2)  { transition-delay: 60ms; }
+[data-reveal-stagger].is-in > *:nth-child(3)  { transition-delay: 120ms; }
+[data-reveal-stagger].is-in > *:nth-child(4)  { transition-delay: 180ms; }
+[data-reveal-stagger].is-in > *:nth-child(5)  { transition-delay: 240ms; }
+[data-reveal-stagger].is-in > *:nth-child(6)  { transition-delay: 300ms; }
+[data-reveal-stagger].is-in > *:nth-child(7)  { transition-delay: 360ms; }
+[data-reveal-stagger].is-in > *:nth-child(8)  { transition-delay: 420ms; }
+[data-reveal-stagger].is-in > *:nth-child(9)  { transition-delay: 480ms; }
+[data-reveal-stagger].is-in > *:nth-child(n+10) { transition-delay: 540ms; }
+
+/* ============================================================
+   footer
+   ============================================================ */
+
+footer.foot {
+  padding: 48px 0 24px;
+  border-top: 1px solid hsl(var(--border));
+  margin-top: 64px;
+}
+.foot-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 32px;
+  margin-bottom: 32px;
+}
+.foot h5 {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 12px;
+}
+.foot ul li {
+  font-size: 14px;
+  padding: 4px 0;
+  color: hsl(var(--foreground));
+}
+.foot ul li a:hover { color: hsl(var(--primary)); }
+.foot-credit {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  display: flex;
+  justify-content: space-between;
+  padding-top: 16px;
+  border-top: 1px solid hsl(var(--border));
+}
+.foot-credit a { color: hsl(var(--primary)); }
+
+/* ============================================================
+   helpers
+   ============================================================ */
+
+code {
+  font-family: var(--font-mono);
+  font-feature-settings: "ss01", "cv01";
+}
+
+.center { text-align: center; }
+.right  { text-align: right; }
+
+@media (max-width: 720px) {
+  .row { grid-template-columns: 1fr; }
+  .foot-grid { grid-template-columns: 1fr 1fr; }
+  .nav-links { gap: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}

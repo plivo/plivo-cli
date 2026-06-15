@@ -18,7 +18,7 @@ import (
 	"github.com/plivo/plivo-cli/internal/wsproxy"
 
 	"github.com/spf13/cobra"
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 var (

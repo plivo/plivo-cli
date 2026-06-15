@@ -21,6 +21,12 @@ const (
 )
 
 // Resolve picks the effective format. Empty input → table for TTY, json otherwise.
+//
+// Anything Validate() would reject still resolves to JSON here so the error
+// renderer in cmd/root.go can produce a structured envelope even when the
+// user passed -o yaml or some other unsupported format. The user-visible
+// rejection happens earlier in the lifecycle (cmd's PersistentPreRunE),
+// before any command body runs.
 func Resolve(format string, f *os.File) Format {
 	if format == "" {
 		if f != nil && term.IsTerminal(int(f.Fd())) {
@@ -31,10 +37,37 @@ func Resolve(format string, f *os.File) Format {
 	switch strings.ToLower(format) {
 	case "table":
 		return FormatTable
-	case "json", "yaml", "tsv":
+	case "json":
 		return FormatJSON
 	}
-	return FormatTable
+	// Unsupported format — fall through to JSON so an error envelope still
+	// renders (the input was already rejected by Validate before reaching
+	// any RunE).
+	return FormatJSON
+}
+
+// SupportedFormats lists the formats accepted by --output. Kept tiny on
+// purpose — the AI / scripts contract is JSON, the human contract is TABLE.
+// Anything else (yaml, tsv, csv, xml, garbage) should be a hard BAD_INPUT
+// instead of silently rendering JSON.
+var SupportedFormats = []string{"json", "table"}
+
+// Validate returns a non-empty reason string when `format` is set to a value
+// that isn't in SupportedFormats. Empty input is always valid (resolves to
+// the default per TTY detection). Case-insensitive.
+//
+// Callers (root.go's PersistentPreRunE) wrap the reason into clierr.BadInput
+// so the rejection arrives as the same structured envelope every other
+// flag error does.
+func Validate(format string) string {
+	if format == "" {
+		return ""
+	}
+	switch strings.ToLower(format) {
+	case "json", "table":
+		return ""
+	}
+	return "unsupported output format '" + format + "'; supported: " + strings.Join(SupportedFormats, ", ")
 }
 
 // JSONSuccess writes {"data": data, "meta": meta?} pretty-printed to w.

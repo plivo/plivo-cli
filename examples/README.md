@@ -8,7 +8,7 @@ Authenticate first — either:
 ```bash
 export PLIVO_AUTH_ID=MAxxxxxxxxxxxxxxxxxxxx
 export PLIVO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-# or: plivo auth login
+# or: plivo login
 ```
 
 Then run a script (override the defaults with env vars):

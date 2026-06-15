@@ -1,0 +1,1128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#FFFFFF">
+
+<title>Plivo CLI · Command reference</title>
+<meta name="description" content="Complete reference for every Plivo CLI command — flags, examples, exit codes. Auto-generated from the binary.">
+<link rel="canonical" href="https://plivo.github.io/plivo-cli/commands.html">
+
+<meta property="og:type" content="article">
+<meta property="og:title" content="Plivo CLI · Command reference">
+<meta property="og:description" content="Every command, every flag, every exit code — the complete reference for the Plivo CLI.">
+<meta property="og:url" content="https://plivo.github.io/plivo-cli/commands.html">
+<meta property="og:image" content="https://plivo.github.io/plivo-cli/assets/og-image.png">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Plivo CLI · Command reference">
+<meta name="twitter:image" content="https://plivo.github.io/plivo-cli/assets/og-image.png">
+
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<link rel="apple-touch-icon" href="assets/favicon.svg">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="assets/tokens.css">
+
+<style>
+  /* ============================================================
+     plivo cli · command reference
+     · refined to match top-tier CLI docs (gh, stripe, vercel, fly)
+     · single 8/16/24/40/64 spacing scale
+     · sidebar: title-case modules, accent-bar active state
+     · reader: clearer h2/h3 hierarchy, premium tables, polished code
+     · dark mode parity throughout (no hardcoded colors)
+     ============================================================ */
+
+  body { background: hsl(var(--background)); color: hsl(var(--foreground)); }
+
+  /* ── Nav (parity with index.html) ─────────────────────────────── */
+  .nav { position: sticky; top: 0; z-index: 50; background: hsl(var(--background) / .85); backdrop-filter: blur(10px) saturate(140%); -webkit-backdrop-filter: blur(10px) saturate(140%); border-bottom: 1px solid hsl(var(--border)); }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .nav .brand { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-sora); font-size: 18px; text-decoration: none; color: hsl(var(--foreground)); }
+  .nav .brand .glyph { width: 28px; height: 28px; border-radius: 7px; background: hsl(var(--foreground)); color: hsl(var(--primary)); display: inline-flex; align-items: center; justify-content: center; font-weight: 500; }
+  .nav .brand .ver { font-family: var(--font-mono); font-size: 11px; padding: 2px 8px; border: 1px solid hsl(var(--border)); border-radius: var(--r-full); margin-left: 6px; letter-spacing: .14em; text-transform: uppercase; color: hsl(var(--muted-foreground)); }
+  .nav-links { display: inline-flex; align-items: center; gap: var(--s4); font-family: var(--font-inter); font-size: 14px; }
+  .nav-links a { color: hsl(var(--foreground)); text-decoration: none; }
+  .nav-links a:hover { color: hsl(var(--primary)); }
+  .shell { max-width: 1320px; margin: 0 auto; padding: 0 var(--s5); }
+
+  .theme-toggle { background: transparent; border: 1px solid hsl(var(--border)); color: hsl(var(--foreground)); width: 36px; height: 36px; border-radius: var(--r-full); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-family: var(--font-mono); font-size: 14px; line-height: 1; padding: 0; }
+  .theme-toggle:hover { border-color: hsl(var(--foreground)); background: hsl(var(--surface)); }
+  .theme-toggle .sun { display: inline; }
+  .theme-toggle .moon { display: none; }
+  .dark .theme-toggle .sun { display: none; }
+  .dark .theme-toggle .moon { display: inline; }
+
+  /* ── Page layout — denser, with a slightly wider sidebar ────────── */
+  .docs-shell {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: var(--s5) var(--s5) var(--s7);
+    display: grid;
+    grid-template-columns: 264px minmax(0, 1fr);
+    gap: var(--s7);
+    align-items: start;
+  }
+
+  /* ── Header strip — minimal, breadcrumb + tight one-liner ───────── */
+  .docs-header {
+    grid-column: 1 / -1;
+    padding: var(--s4) 0 var(--s5);
+    margin-bottom: var(--s4);
+    border-bottom: 1px solid hsl(var(--border));
+  }
+  .docs-header .row-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s4);
+    flex-wrap: wrap;
+  }
+  .docs-header .breadcrumbs {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+  .docs-header .breadcrumbs a { color: hsl(var(--muted-foreground)); text-decoration: none; transition: color var(--dur-fast) var(--ease-out); }
+  .docs-header .breadcrumbs a:hover { color: hsl(var(--primary)); }
+  .docs-header .breadcrumbs .sep { margin: 0 var(--s2); opacity: .5; }
+  .docs-header h1 {
+    font-family: var(--font-sora);
+    font-size: clamp(24px, 2.6vw, 32px);
+    line-height: 1.15;
+    letter-spacing: -.015em;
+    font-weight: 400;
+    margin: var(--s2) 0 0;
+  }
+  .docs-header h1 .ital { font-style: italic; color: hsl(var(--primary)); }
+  .docs-header .sub {
+    margin-top: var(--s2);
+    font-family: var(--font-inter);
+    font-size: 14px;
+    color: hsl(var(--muted-foreground));
+    max-width: 64ch;
+  }
+  .docs-header .meta-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: var(--r-full);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+    background: hsl(var(--surface));
+    border: 1px solid hsl(var(--border));
+  }
+  .docs-header .meta-pill .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: hsl(var(--success));
+  }
+
+  /* ── Sidebar (search + TOC) ──────────────────────────────────── */
+  .sidebar {
+    position: sticky;
+    top: 80px;
+    max-height: calc(100vh - 96px);
+    display: flex;
+    flex-direction: column;
+    gap: var(--s4);
+    min-width: 0;
+  }
+
+  /* Search — larger, with shadow + clearer focus state */
+  .search { position: relative; }
+  .search input {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: var(--font-inter);
+    font-size: 14px;
+    line-height: 1;
+    padding: 12px 44px 12px 38px;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--r-md);
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    outline: none;
+    transition: border-color var(--dur-fast) var(--ease-out),
+                box-shadow var(--dur-fast) var(--ease-out);
+  }
+  .search input::placeholder { color: hsl(var(--muted-foreground)); }
+  .search input:hover { border-color: hsl(var(--border-strong)); }
+  .search input:focus {
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / .12);
+  }
+  .search .icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 14px; height: 14px;
+    color: hsl(var(--muted-foreground));
+    pointer-events: none;
+  }
+  .search .kbd {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    padding: 3px 7px;
+    border: 1px solid hsl(var(--border));
+    border-radius: 4px;
+    color: hsl(var(--muted-foreground));
+    background: hsl(var(--surface));
+    pointer-events: none;
+    line-height: 1;
+  }
+  .search input:focus ~ .kbd { opacity: 0; }
+
+  /* TOC — clean, no right border, generous spacing between groups */
+  .toc {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    font-family: var(--font-inter);
+    font-size: 13.5px;
+    line-height: 1.5;
+    padding-right: var(--s2);
+    margin-right: calc(var(--s2) * -1);
+    min-height: 0;
+  }
+  /* Thin scrollbar */
+  .toc::-webkit-scrollbar { width: 6px; }
+  .toc::-webkit-scrollbar-track { background: transparent; }
+  .toc::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: var(--r-full); }
+  .toc::-webkit-scrollbar-thumb:hover { background: hsl(var(--border-strong)); }
+
+  .toc-heading {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+    margin: 0 0 var(--s3);
+    font-weight: 500;
+    padding: 0 var(--s2);
+  }
+  .toc ul { list-style: none; padding: 0; margin: 0; }
+  .toc li.hidden { display: none; }
+  .toc .empty {
+    color: hsl(var(--muted-foreground));
+    font-style: italic;
+    padding: var(--s4) var(--s2);
+    font-size: 13px;
+  }
+
+  /* Module groups — Title-case, lighter weight, generous spacing */
+  .toc-group {
+    margin-bottom: var(--s3);
+  }
+  .toc-group > summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    padding: 6px var(--s2);
+    font-family: var(--font-inter);
+    font-size: 12.5px;
+    letter-spacing: .02em;
+    color: hsl(var(--foreground));
+    font-weight: 600;
+    border-radius: var(--r-sm);
+    transition: color var(--dur-fast) var(--ease-out),
+                background var(--dur-fast) var(--ease-out);
+    user-select: none;
+  }
+  .toc-group > summary::-webkit-details-marker { display: none; }
+  .toc-group > summary::before {
+    content: "";
+    width: 0; height: 0;
+    border-left: 4px solid hsl(var(--muted-foreground));
+    border-top: 3px solid transparent;
+    border-bottom: 3px solid transparent;
+    transition: transform var(--dur-fast) var(--ease-out);
+    flex-shrink: 0;
+  }
+  .toc-group[open] > summary::before { transform: rotate(90deg); }
+  .toc-group > summary:hover {
+    color: hsl(var(--primary));
+  }
+  .toc-group > summary:hover::before {
+    border-left-color: hsl(var(--primary));
+  }
+  .toc-group.has-active > summary {
+    color: hsl(var(--primary));
+  }
+  .toc-group.has-active > summary::before {
+    border-left-color: hsl(var(--primary));
+  }
+  .toc-group .count {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: hsl(var(--muted-foreground));
+    font-weight: 400;
+    letter-spacing: 0;
+    line-height: 1;
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+  }
+  .toc-group.has-active .count {
+    color: hsl(var(--primary) / .7);
+  }
+  .toc-group > ul { margin: var(--s1) 0 0; padding-left: 14px; position: relative; }
+  /* Vertical guide line for nested items */
+  .toc-group > ul::before {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 4px;
+    bottom: 4px;
+    width: 1px;
+    background: hsl(var(--border));
+  }
+  .toc-group.hidden { display: none; }
+
+  /* Command links — refined, with subtle accent bar on active */
+  .toc a {
+    color: hsl(var(--foreground));
+    text-decoration: none;
+    display: block;
+    padding: 5px var(--s2) 5px 10px;
+    border-radius: var(--r-sm);
+    transition: background var(--dur-fast) var(--ease-out),
+                color var(--dur-fast) var(--ease-out);
+    position: relative;
+    margin-left: 2px;
+  }
+  .toc a:hover {
+    background: hsl(var(--surface));
+    color: hsl(var(--primary));
+  }
+  .toc a.active {
+    background: hsl(var(--primary) / .08);
+    color: hsl(var(--primary));
+    font-weight: 500;
+  }
+  .toc a.active::before {
+    content: "";
+    position: absolute;
+    left: -10px;
+    top: 6px;
+    bottom: 6px;
+    width: 2px;
+    background: hsl(var(--primary));
+    border-radius: var(--r-full);
+  }
+
+  /* Command path inside grouped TOC — monospace, two-tone */
+  .toc a .leaf {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.4;
+    display: inline-block;
+    word-break: break-word;
+  }
+  .toc a .leaf .prefix { color: hsl(var(--muted-foreground)); }
+  .toc a .leaf .name { color: inherit; }
+  .toc a.active .leaf .prefix { color: hsl(var(--primary) / .65); }
+  .toc a.depth-1 { padding-left: 10px; }
+  .toc a.depth-2 { padding-left: 18px; }
+  .toc a.depth-3 { padding-left: 26px; }
+  .toc a.depth-4 { padding-left: 34px; }
+  .toc a.overview {
+    font-family: var(--font-inter);
+    font-style: italic;
+    color: hsl(var(--muted-foreground));
+    font-size: 12.5px;
+  }
+  .toc a.overview:hover, .toc a.overview.active { color: hsl(var(--primary)); }
+
+  /* ── Main reader (markdown rendered) ─────────────────────────── */
+  .reader {
+    font-family: var(--font-inter);
+    font-size: 15px;
+    line-height: 1.7;
+    color: hsl(var(--foreground));
+    min-width: 0;
+    max-width: 76ch;
+  }
+
+  /* Type scale — clearer hierarchy between h2 and h3:
+     · h2 = section start (big, with rule + extra space above)
+     · h3 = subsection (medium, accent-prefixed)
+     · h4 = small caps eyebrow */
+  .reader h1 {
+    font-family: var(--font-sora);
+    font-size: clamp(28px, 3.2vw, 40px);
+    font-weight: 400;
+    letter-spacing: -.02em;
+    line-height: 1.15;
+    margin: 0 0 var(--s4);
+  }
+  .reader h2 {
+    font-family: var(--font-sora);
+    font-size: clamp(24px, 2.4vw, 30px);
+    font-weight: 400;
+    letter-spacing: -.015em;
+    line-height: 1.2;
+    margin: var(--s7) 0 var(--s4);
+    padding-top: var(--s5);
+    border-top: 1px solid hsl(var(--border));
+    position: relative;
+    color: hsl(var(--foreground));
+  }
+  .reader h2:first-of-type { border-top: 0; padding-top: 0; margin-top: var(--s5); }
+  /* h2 commands rendered with backticks turn into <code> — restyle */
+  .reader h2 code, .reader h3 code {
+    font-family: var(--font-mono);
+    background: transparent;
+    border: 0;
+    padding: 0;
+    color: inherit;
+    font-size: .82em;
+    letter-spacing: -.01em;
+  }
+  .reader h3 {
+    font-family: var(--font-inter);
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 1.35;
+    margin: var(--s5) 0 var(--s3);
+    color: hsl(var(--foreground));
+    position: relative;
+    padding-left: var(--s3);
+  }
+  .reader h3::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 7px;
+    bottom: 7px;
+    width: 3px;
+    background: hsl(var(--primary));
+    border-radius: var(--r-full);
+  }
+  .reader h4 {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: .14em;
+    margin: var(--s4) 0 var(--s2);
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* Anchor links on hover for h2/h3 */
+  .reader h2 .anchor, .reader h3 .anchor {
+    position: absolute;
+    left: -24px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0;
+    color: hsl(var(--muted-foreground));
+    text-decoration: none;
+    font-weight: 400;
+    font-size: 18px;
+    transition: opacity var(--dur-fast) var(--ease-out),
+                color var(--dur-fast) var(--ease-out);
+    font-family: var(--font-mono);
+  }
+  .reader h3 .anchor { left: -16px; font-size: 14px; }
+  .reader h2:hover .anchor, .reader h3:hover .anchor { opacity: 1; }
+  .reader h2 .anchor:hover, .reader h3 .anchor:hover { color: hsl(var(--primary)); }
+
+  /* Paragraphs, lists, links */
+  .reader p { margin: 0 0 var(--s3); }
+  .reader a:not(.anchor) {
+    color: hsl(var(--primary));
+    text-decoration: none;
+    border-bottom: 1px solid hsl(var(--primary) / .3);
+    transition: border-color var(--dur-fast) var(--ease-out);
+  }
+  .reader a:not(.anchor):hover {
+    border-bottom-color: hsl(var(--primary));
+  }
+
+  /* Inline code — refined: background tinted by surface, no border, snug padding */
+  .reader code {
+    font-family: var(--font-mono);
+    font-size: .88em;
+    background: hsl(var(--surface-2));
+    color: hsl(var(--foreground));
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 0;
+    font-weight: 500;
+    letter-spacing: -.01em;
+  }
+  .reader a code { color: hsl(var(--primary)); background: hsl(var(--primary) / .08); }
+
+  /* ── Code blocks ──────────────────────────────────────────────
+     Theme-aware: dark bar header + light body in light mode,
+     dark body in dark mode. Header carries the lang label + copy. */
+  .reader .code-block {
+    position: relative;
+    margin: var(--s4) 0 var(--s5);
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--r-md);
+    background: hsl(var(--surface));
+    overflow: hidden;
+  }
+  .reader .code-block .code-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s3);
+    padding: 8px 12px;
+    background: hsl(var(--surface-2));
+    border-bottom: 1px solid hsl(var(--border));
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .04em;
+    color: hsl(var(--muted-foreground));
+    min-height: 32px;
+  }
+  .reader .code-block .code-bar .lang {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    font-size: 10px;
+  }
+  .reader .code-block .code-bar .lang::before {
+    content: "";
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: hsl(var(--primary) / .6);
+    box-shadow: 0 0 0 3px hsl(var(--primary) / .12);
+  }
+  .reader .code-block .copy-btn {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    background: transparent;
+    color: hsl(var(--muted-foreground));
+    border: 1px solid hsl(var(--border));
+    padding: 4px 10px;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    transition: all var(--dur-fast) var(--ease-out);
+    line-height: 1;
+  }
+  .reader .code-block .copy-btn:hover {
+    border-color: hsl(var(--primary));
+    color: hsl(var(--primary));
+    background: hsl(var(--primary) / .06);
+  }
+  .reader .code-block .copy-btn.copied {
+    border-color: hsl(var(--success));
+    color: hsl(var(--success));
+    background: hsl(var(--success) / .08);
+  }
+  .reader pre {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.65;
+    background: hsl(var(--code));
+    color: hsl(var(--code-foreground));
+    padding: var(--s4) var(--s4) var(--s4) calc(var(--s4) + 18px);
+    overflow-x: auto;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    position: relative;
+  }
+  .reader pre code {
+    background: transparent;
+    color: inherit;
+    border: 0;
+    padding: 0;
+    font-size: 13px;
+    font-weight: 400;
+  }
+  /* $ prompt marker — left gutter, mono, primary accent */
+  .reader .code-block.shell pre::before {
+    content: "$";
+    position: absolute;
+    top: var(--s4);
+    left: var(--s4);
+    color: hsl(var(--primary));
+    font-weight: 500;
+    user-select: none;
+  }
+  /* Non-shell code blocks: remove the gutter padding */
+  .reader .code-block:not(.shell) pre {
+    padding-left: var(--s4);
+  }
+
+  /* Lists — better spacing, refined bullets */
+  .reader ul, .reader ol {
+    margin: 0 0 var(--s4);
+    padding-left: var(--s5);
+  }
+  .reader li { margin-bottom: var(--s1); }
+  .reader li::marker { color: hsl(var(--muted-foreground)); }
+  .reader ul li { list-style: none; position: relative; }
+  .reader ul li::before {
+    content: "";
+    position: absolute;
+    left: calc(var(--s4) * -1);
+    top: 12px;
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: hsl(var(--muted-foreground));
+  }
+  .reader ul li::marker { content: ""; }
+
+  /* Blockquote — refined, less heavy */
+  .reader blockquote {
+    border-left: 2px solid hsl(var(--primary));
+    margin: var(--s4) 0;
+    padding: var(--s2) 0 var(--s2) var(--s4);
+    background: transparent;
+    color: hsl(var(--muted-foreground));
+    font-style: normal;
+    border-radius: 0;
+    font-size: 14px;
+  }
+  .reader blockquote p:last-child { margin-bottom: 0; }
+  .reader hr {
+    border: 0;
+    border-top: 1px solid hsl(var(--border));
+    margin: var(--s6) 0;
+  }
+
+  /* ── Tables — premium feel, sticky-header-ready ───────────────── */
+  .reader .table-wrap {
+    margin: var(--s4) 0;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--r-md);
+    overflow: auto;
+    background: hsl(var(--background));
+  }
+  .reader table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0;
+    font-size: 13.5px;
+    font-family: var(--font-inter);
+  }
+  .reader th, .reader td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid hsl(var(--border));
+    vertical-align: top;
+    line-height: 1.55;
+  }
+  .reader th {
+    background: hsl(var(--surface));
+    font-weight: 600;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+    border-bottom-color: hsl(var(--border-strong));
+  }
+  .reader tbody tr:last-child td { border-bottom: 0; }
+  .reader tbody tr { transition: background var(--dur-fast) var(--ease-out); }
+  .reader tbody tr:hover { background: hsl(var(--surface) / .5); }
+  .reader td code {
+    font-size: .9em;
+    white-space: nowrap;
+  }
+
+  /* Anchor link offset for sticky nav */
+  .reader h1, .reader h2, .reader h3 { scroll-margin-top: 88px; }
+
+  /* Loading + error states */
+  .doc-state {
+    padding: var(--s7) var(--s5);
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: .04em;
+    color: hsl(var(--muted-foreground));
+  }
+  .doc-state .err { color: hsl(var(--destructive)); }
+  .doc-state a { color: hsl(var(--primary)); text-decoration: underline; }
+
+  /* Floating back-to-top — subtler */
+  .to-top {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--r-full);
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
+    border: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 6px 20px hsl(var(--foreground) / .25);
+    transition: transform var(--dur-fast) var(--ease-out),
+                background var(--dur-fast) var(--ease-out);
+    z-index: 30;
+    font-size: 16px;
+    line-height: 1;
+  }
+  .to-top.visible { display: inline-flex; }
+  .to-top:hover { transform: translateY(-2px); background: hsl(var(--primary)); color: #fff; }
+
+  /* ── Responsive ─────────────────────────────────────────────── */
+  @media (max-width: 960px) {
+    .docs-shell { grid-template-columns: 1fr; gap: var(--s4); padding: var(--s4) var(--s4) var(--s6); }
+    .sidebar { position: static; max-height: none; }
+    .toc { max-height: 320px; padding-bottom: var(--s3); border-bottom: 1px solid hsl(var(--border)); padding-right: 0; margin-right: 0; }
+    .reader { max-width: 100%; }
+    .reader h2 .anchor, .reader h3 .anchor { display: none; }
+  }
+
+  @media (max-width: 600px) {
+    .docs-header h1 { font-size: 22px; }
+    .reader { font-size: 14.5px; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="shell nav-inner">
+    <a href="index.html" class="brand">
+      <span class="glyph">p</span>
+      plivo<span class="ver">cli</span>
+    </a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="https://github.com/plivo/plivo-cli">GitHub &#8599;</a>
+      <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+        <span class="sun" aria-hidden="true">&#9728;</span><span class="moon" aria-hidden="true">&#9790;</span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<div class="docs-shell">
+
+  <header class="docs-header">
+    <div class="row-top">
+      <div>
+        <div class="breadcrumbs">
+          <a href="index.html">Home</a><span class="sep">/</span>Reference
+        </div>
+        <h1>Command <span class="ital">reference</span></h1>
+      </div>
+      <span class="meta-pill"><span class="dot"></span>auto-generated</span>
+    </div>
+    <div class="sub">Every command, every flag, every exit code &mdash; generated directly from the binary.</div>
+  </header>
+
+  <aside class="sidebar" aria-label="Page navigation">
+    <div class="search">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input id="search-input" type="search" placeholder="Search commands..." autocomplete="off" spellcheck="false" aria-label="Filter commands">
+      <span class="kbd">/</span>
+    </div>
+    <nav class="toc" id="toc">
+      <h4 class="toc-heading">On this page</h4>
+      <ul id="toc-list"><li class="empty">Loading...</li></ul>
+    </nav>
+  </aside>
+
+  <main class="reader" id="reader" aria-busy="true">
+    <div class="doc-state">Loading command reference...</div>
+  </main>
+</div>
+
+<button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">&uarr;</button>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" defer></script>
+
+<script>
+  // ── Theme toggle (parity with index.html) ─────────────────────────
+  (function () {
+    var root = document.documentElement;
+    var saved = localStorage.getItem('plivo-cli-theme');
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (saved === 'dark' || (saved == null && prefersDark)) root.classList.add('dark');
+    document.addEventListener('DOMContentLoaded', function () {
+      var btn = document.getElementById('theme-toggle');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        var isDark = root.classList.toggle('dark');
+        localStorage.setItem('plivo-cli-theme', isDark ? 'dark' : 'light');
+      });
+    });
+  })();
+</script>
+
+<script>
+  // ── Render COMMANDS.md + build TOC + wire up search ──────────────
+
+  // Module names → title-case display names. Anything not in the map
+  // falls back to a simple title-case transform.
+  var MODULE_LABELS = {
+    account: 'Account',
+    agent: 'Agent',
+    ask: 'Ask',
+    auth: 'Auth',
+    feedback: 'Feedback',
+    login: 'Login',
+    logout: 'Logout',
+    lookup: 'Lookup',
+    messaging: 'Messaging',
+    numbers: 'Numbers',
+    phlo: 'PHLO',
+    pricing: 'Pricing',
+    profile: 'Profile',
+    sms: 'SMS',
+    upgrade: 'Upgrade',
+    verify: 'Verify',
+    voice: 'Voice'
+  };
+
+  function moduleLabel(name) {
+    if (MODULE_LABELS[name]) return MODULE_LABELS[name];
+    // Default: title-case first letter
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  }
+
+  function slug(s) {
+    return s.toLowerCase().trim()
+      .replace(/[^\w\s\-/]/g, '')
+      .replace(/[\s/]+/g, '-')
+      .replace(/-+/g, '-');
+  }
+
+  function decorateHeadings(temp) {
+    var items = [];
+    temp.querySelectorAll('h1, h2, h3').forEach(function (h) {
+      var id = slug(h.textContent);
+      h.id = id;
+      if (h.tagName === 'H2' || h.tagName === 'H3') {
+        var anchor = document.createElement('a');
+        anchor.href = '#' + id;
+        anchor.className = 'anchor';
+        anchor.setAttribute('aria-label', 'Anchor link');
+        anchor.textContent = '#';
+        h.prepend(anchor);
+      }
+      items.push({ level: h.tagName.toLowerCase(), text: h.textContent.replace(/^#/, '').trim(), id: id });
+    });
+    return items;
+  }
+
+  // Wrap <pre> in a styled card with a header bar (lang label + copy button).
+  // Detects whether the block is shell-flavored (starts with $ or contains plivo)
+  // so we can show the leading prompt marker.
+  function wrapCodeBlocks(temp) {
+    temp.querySelectorAll('pre').forEach(function (pre) {
+      var codeEl = pre.querySelector('code');
+      var text = (codeEl ? codeEl.textContent : pre.textContent) || '';
+      var firstLine = text.split('\n')[0] || '';
+      var isShell = /^(\$|plivo\b|#)/.test(firstLine.trim()) ||
+                    text.indexOf('plivo ') !== -1;
+
+      var wrap = document.createElement('div');
+      wrap.className = 'code-block' + (isShell ? ' shell' : '');
+      pre.parentNode.insertBefore(wrap, pre);
+
+      var bar = document.createElement('div');
+      bar.className = 'code-bar';
+      bar.innerHTML = '<span class="lang">' + (isShell ? 'Shell' : 'Code') + '</span>';
+
+      var btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.type = 'button';
+      btn.textContent = 'Copy';
+      btn.setAttribute('aria-label', 'Copy code to clipboard');
+      btn.addEventListener('click', function () {
+        navigator.clipboard.writeText(text).then(function () {
+          btn.textContent = 'Copied';
+          btn.classList.add('copied');
+          setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+        });
+      });
+      bar.appendChild(btn);
+
+      wrap.appendChild(bar);
+      wrap.appendChild(pre);
+    });
+  }
+
+  // Wrap tables in an overflow container so they scroll cleanly on narrow viewports.
+  function wrapTables(temp) {
+    temp.querySelectorAll('table').forEach(function (t) {
+      var wrap = document.createElement('div');
+      wrap.className = 'table-wrap';
+      t.parentNode.insertBefore(wrap, t);
+      wrap.appendChild(t);
+    });
+  }
+
+  // Group TOC items by command module.
+  //
+  // The doc structure is "## `plivo <module> [subcommand...]`" for every
+  // command. We strip the `plivo ` prefix, take segment [0] as the module
+  // group, and keep the rest of the path as the visible item text.
+  //
+  // Non-command headings (the top-level "Commands" heading, the bare
+  // "plivo" root) land in a special "Overview" group at the top.
+  function groupItems(items) {
+    var overview = { id: '__overview', name: 'Overview', rawName: '__overview', items: [] };
+    var groups = [overview];
+    var byKey = { __overview: overview };
+
+    items.forEach(function (i) {
+      if (i.level === 'h1') return; // skip the doc title
+      var raw = i.text.replace(/`/g, '').trim();
+      if (!/^plivo(\s|$)/.test(raw)) {
+        overview.items.push({
+          id: i.id, text: raw, depth: 0, fullPath: raw, isOverview: false
+        });
+        return;
+      }
+      var parts = raw.split(/\s+/);
+      if (parts.length === 1) {
+        overview.items.push({
+          id: i.id, text: 'plivo (root)', depth: 0, fullPath: 'plivo', isOverview: false
+        });
+        return;
+      }
+      var moduleName = parts[1];
+      var key = moduleName;
+      if (!byKey[key]) {
+        byKey[key] = {
+          id: '__g_' + key,
+          name: moduleLabel(moduleName),
+          rawName: moduleName,
+          items: []
+        };
+        groups.push(byKey[key]);
+      }
+      var rest = parts.slice(2);
+      var isOverview = rest.length === 0;
+      var leaf = isOverview ? 'overview' : rest[rest.length - 1];
+      var prefix = isOverview ? '' : rest.slice(0, -1).join(' ');
+      byKey[key].items.push({
+        id: i.id,
+        leaf: leaf,
+        prefix: prefix,
+        depth: rest.length,
+        fullPath: parts.join(' '),
+        isOverview: isOverview
+      });
+    });
+
+    if (overview.items.length === 0) groups.shift();
+    groups.forEach(function (g) {
+      g.items.sort(function (a, b) {
+        if (a.depth !== b.depth) return a.depth - b.depth;
+        return a.fullPath.localeCompare(b.fullPath);
+      });
+    });
+    return groups;
+  }
+
+  function renderTOC(items) {
+    var list = document.getElementById('toc-list');
+    list.innerHTML = '';
+    var groups = groupItems(items);
+    if (groups.length === 0) {
+      list.innerHTML = '<li class="empty">No headings found.</li>';
+      return;
+    }
+    groups.forEach(function (g, idx) {
+      var li = document.createElement('li');
+      var details = document.createElement('details');
+      details.className = 'toc-group';
+      details.dataset.module = (g.rawName || g.name).toLowerCase();
+      // open the first group by default; rest collapsed
+      if (idx === 0) details.open = true;
+
+      var summary = document.createElement('summary');
+      summary.innerHTML =
+        '<span class="label">' + escapeHTML(g.name) + '</span>' +
+        '<span class="count">' + g.items.length + '</span>';
+      details.appendChild(summary);
+
+      var inner = document.createElement('ul');
+      g.items.forEach(function (it) {
+        var ili = document.createElement('li');
+        ili.dataset.text = (it.fullPath || it.text || '').toLowerCase();
+        var a = document.createElement('a');
+        a.href = '#' + it.id;
+        if (it.leaf !== undefined) {
+          a.classList.add('depth-' + Math.min(it.depth, 4));
+          if (it.isOverview) {
+            a.classList.add('overview');
+            a.innerHTML = 'Overview';
+          } else {
+            a.innerHTML =
+              '<span class="leaf">' +
+                (it.prefix ? '<span class="prefix">' + escapeHTML(it.prefix) + ' </span>' : '') +
+                '<span class="name">' + escapeHTML(it.leaf) + '</span>' +
+              '</span>';
+          }
+        } else {
+          a.textContent = it.text;
+        }
+        ili.appendChild(a);
+        inner.appendChild(ili);
+      });
+      details.appendChild(inner);
+      li.appendChild(details);
+      list.appendChild(li);
+    });
+  }
+
+  function escapeHTML(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function wireSearch() {
+    var input = document.getElementById('search-input');
+    var list = document.getElementById('toc-list');
+    if (!input || !list) return;
+    input.addEventListener('input', function () {
+      var q = input.value.trim().toLowerCase();
+      var groups = list.querySelectorAll('.toc-group');
+      var anyShown = false;
+      groups.forEach(function (g) {
+        var items = g.querySelectorAll('li');
+        var groupHasMatch = false;
+        items.forEach(function (li) {
+          var match = !q || (li.dataset.text || '').indexOf(q) > -1;
+          li.classList.toggle('hidden', !match);
+          if (match) groupHasMatch = true;
+        });
+        if (q && g.dataset.module && g.dataset.module.indexOf(q) > -1) groupHasMatch = true;
+        g.classList.toggle('hidden', !groupHasMatch);
+        if (groupHasMatch && q) g.open = true;
+        if (groupHasMatch) anyShown = true;
+      });
+      var existing = list.querySelector('.empty');
+      if (!anyShown && !existing) {
+        var li = document.createElement('li');
+        li.className = 'empty';
+        li.textContent = 'No matches for "' + input.value + '".';
+        list.appendChild(li);
+      } else if (anyShown && existing) {
+        existing.remove();
+      }
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        input.focus();
+        input.select();
+      }
+      if (e.key === 'Escape' && document.activeElement === input) {
+        input.value = '';
+        input.dispatchEvent(new Event('input'));
+        input.blur();
+      }
+    });
+  }
+
+  function wireActiveHighlight(items) {
+    var links = Array.prototype.slice.call(document.querySelectorAll('#toc-list a'));
+    var byId = {};
+    links.forEach(function (a) { byId[a.getAttribute('href').slice(1)] = a; });
+    var headings = items.map(function (i) { return document.getElementById(i.id); }).filter(Boolean);
+    if (!('IntersectionObserver' in window)) return;
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        var link = byId[entry.target.id];
+        if (!link) return;
+        if (entry.isIntersecting) {
+          links.forEach(function (a) { a.classList.remove('active'); });
+          document.querySelectorAll('.toc-group.has-active').forEach(function (g) { g.classList.remove('has-active'); });
+          link.classList.add('active');
+          var group = link.closest('.toc-group');
+          if (group) {
+            group.open = true;
+            group.classList.add('has-active');
+            link.scrollIntoView({ block: 'nearest' });
+          }
+        }
+      });
+    }, { rootMargin: '-100px 0px -70% 0px' });
+    headings.forEach(function (h) { observer.observe(h); });
+  }
+
+  function wireToTop() {
+    var btn = document.getElementById('to-top');
+    if (!btn) return;
+    btn.addEventListener('click', function () { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+    window.addEventListener('scroll', function () {
+      btn.classList.toggle('visible', window.scrollY > 400);
+    }, { passive: true });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    wireToTop();
+    fetch('COMMANDS.md')
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      })
+      .then(function (md) {
+        function render() {
+          if (typeof marked === 'undefined') { return setTimeout(render, 30); }
+          marked.setOptions({ gfm: true, breaks: false });
+          var temp = document.createElement('div');
+          temp.innerHTML = marked.parse(md);
+          var items = decorateHeadings(temp);
+          wrapCodeBlocks(temp);
+          wrapTables(temp);
+          var reader = document.getElementById('reader');
+          reader.innerHTML = '';
+          while (temp.firstChild) reader.appendChild(temp.firstChild);
+          reader.setAttribute('aria-busy', 'false');
+          renderTOC(items);
+          wireSearch();
+          wireActiveHighlight(items);
+          if (location.hash) {
+            var el = document.getElementById(location.hash.slice(1));
+            if (el) el.scrollIntoView({ behavior: 'auto', block: 'start' });
+          }
+        }
+        render();
+      })
+      .catch(function (err) {
+        var reader = document.getElementById('reader');
+        reader.innerHTML =
+          '<div class="doc-state">' +
+          '<div class="err">Could not load the command reference (' + err.message + ')</div>' +
+          '<p>You can still read it on <a href="https://github.com/plivo/plivo-cli/blob/main/docs/COMMANDS.md">GitHub</a>.</p>' +
+          '</div>';
+      });
+  });
+</script>
+
+</body>
+</html>

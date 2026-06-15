@@ -1,0 +1,55 @@
+name: CodeQL
+
+# Static security analysis via GitHub's CodeQL.
+#
+# Runs on:
+#   - every push to main + PRs targeting main (gates merges)
+#   - weekly schedule (catches new CodeQL rules against unchanged code)
+#
+# Findings surface in Security → Code scanning. The default Go query
+# pack is enough for a CLI; we don't load the extended pack to keep
+# the run time predictable.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly Sunday 03:17 UTC — off-hours, jittered minute to avoid the
+    # top-of-the-hour stampede on GitHub's scheduling queue.
+    - cron: "17 3 * * 0"
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  analyze:
+    name: analyze (go)
+    runs-on: ubuntu-latest-m-plivo
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [go]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@dd903d2e4f5405488e5ef1422510ee31c8b32357  # v3.36.2
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@dd903d2e4f5405488e5ef1422510ee31c8b32357  # v3.36.2
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@dd903d2e4f5405488e5ef1422510ee31c8b32357  # v3.36.2
+        with:
+          category: "/language:${{ matrix.language }}"

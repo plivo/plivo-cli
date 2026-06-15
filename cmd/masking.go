@@ -105,13 +105,11 @@ func runMaskingCreate(cmd *cobra.Command, args []string) error {
 		body["call_time_limit"] = msCreateTimeLimit
 	}
 
-	effectiveDryRun := dryRunFlag || !yesFlag
-	if effectiveDryRun {
-		client.DryRun = true
-		if !dryRunFlag {
-			fmt.Fprintln(os.Stderr, "[dry-run] masking session create defaults to dry-run; pass --yes to actually create")
-		}
+	proceed, dryRun, gerr := guardSpend("create masking session")
+	if !proceed {
+		return gerr
 	}
+	applyDryRun(client, dryRun)
 
 	var resp struct {
 		APIID         string `json:"api_id"`
@@ -126,7 +124,7 @@ func runMaskingCreate(cmd *cobra.Command, args []string) error {
 	if apiErr != nil {
 		return apiErr
 	}
-	if effectiveDryRun {
+	if dryRun {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {

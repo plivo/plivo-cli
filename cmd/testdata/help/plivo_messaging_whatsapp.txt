@@ -9,7 +9,7 @@ Aliases:
 Available Commands:
   diagnose    Diagnose what happened with a WhatsApp message (AI-powered)
   list        List WhatsApp messages
-  send        Send a WhatsApp message (defaults to dry-run; pass --yes to actually send)
+  send        Send a WhatsApp message (requires --yes; spends money — use --dry-run to preview)
 
 Flags:
   -h, --help   help for whatsapp

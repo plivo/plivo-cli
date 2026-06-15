@@ -1,9 +1,6 @@
 # install plivo cli — Windows PowerShell installer
 #
-# Usage (while the code lives on the beta branch, pre-v1.0):
-#   irm https://raw.githubusercontent.com/plivo/plivo-cli/beta/install.ps1 | iex
-#
-# At the v1.0 cut the canonical install.ps1 moves to the default branch:
+# Usage:
 #   irm https://raw.githubusercontent.com/plivo/plivo-cli/main/install.ps1 | iex
 #
 # On macOS / Linux / WSL / Git Bash, use install.sh instead.

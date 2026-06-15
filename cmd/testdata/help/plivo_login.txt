@@ -1,35 +1,36 @@
-Log in to Plivo and save credentials for subsequent commands.
+Log in to Plivo via the default browser and save credentials for
+subsequent commands.
 
-The auth_token is stored in your OS keychain (macOS Keychain, Windows
-Credential Manager, Linux Secret Service). The CLI falls back to writing
-the token inline in ~/.plivo/config.toml (chmod 0600) only when no
-keychain is available.
+The flow:
+  1. The CLI opens your default browser to the Plivo Console.
+  2. You sign in (the password never touches the CLI).
+  3. The Console hands the CLI a short-lived authorization code which is
+     exchanged for your account's auth_id and auth_token over a local
+     loopback listener (PKCE — the token leaves the browser only over
+     this transient pipe).
+  4. The auth_token is stored in your OS keychain (macOS Keychain,
+     Windows Credential Manager, Linux Secret Service). The CLI falls
+     back to writing it inline in ~/.plivo/config.toml (chmod 0600) only
+     when no keychain is available.
 
-By default, the CLI validates the credentials by calling GET /Account/
-before saving — use --no-verify to skip if you're offline or hitting a
-local mock.
+Headless / CI use:
+  Set PLIVO_AUTH_ID + PLIVO_AUTH_TOKEN environment variables and skip
+  `plivo login` entirely — every command picks creds up from the env.
+
+By default the CLI validates credentials with GET /Account/ before
+saving. Pass --no-verify to skip (offline / mock use only).
 
 Usage:
   plivo login [flags]
 
 Examples:
-  plivo login                                       # opens browser (default)
-  plivo login --manual                              # prompts for auth_id + token + email
-  plivo login --auth-id MAxxxxxxxxxxxxxxxxxxxx      # pre-supplies auth_id, prompts for the rest
-  echo "$TOKEN" | plivo login --auth-id MAxx --auth-token-stdin
-  plivo login --email                               # email + password (internal builds only)
-  plivo login --name staging                        # save under a named profile
+  plivo login
+  plivo login --name staging
 
 Flags:
-      --auth-id string     Plivo auth_id (triggers manual entry; prompts for token + email)
-      --auth-token-stdin   read auth_token from stdin (for CI / scripts); hidden interactive prompt otherwise
-      --browser            no-op (browser is the default); kept for backward compat
-      --email              log in with email + password (internal builds only — dev hodor endpoint)
-      --env string         target environment (default "prod"). Persisted on the profile so subsequent commands inherit it.
-  -h, --help               help for login
-      --manual             trigger manual auth_id + auth_token + email entry (interactive)
-  -n, --name string        profile name to save under (default "default")
-      --no-verify          skip the GET /Account/ validation hit (offline / mock use only)
+  -h, --help          help for login
+  -n, --name string   profile name to save under (default "default")
+      --no-verify     skip the GET /Account/ validation hit (offline / mock use only)
 
 Global Flags:
       --all                auto-paginate through all pages

@@ -8,30 +8,14 @@ import (
 )
 
 // These assertions only hold in the internal build (`-tags internal`), where
-// the agent / auth-token surfaces are compiled in. The public-build
-// counterparts in registration_test.go + safety_test.go deliberately omit
-// them. (`plivo contacto …` was retired in favour of the unified `plivo
-// login` flow — see cmd/login.go.)
-
-func TestInternal_agentGroupRegistered(t *testing.T) {
-	if findCmdNoFail("agent") == nil {
-		t.Errorf("internal build: top-level %q not registered", "agent")
-	}
-}
-
-func TestInternal_agentSubcommands(t *testing.T) {
-	verbs := []string{"list", "get", "create", "update", "publish", "download", "delete", "run", "attach", "session"}
-	for _, v := range verbs {
-		if findCmdNoFail("agent", v) == nil {
-			t.Errorf("internal build: plivo agent %s not registered", v)
-		}
-	}
-}
+// the auth-token surface is compiled in. The public-build counterparts in
+// registration_test.go + safety_test.go deliberately omit it. (`plivo
+// contacto …` was retired in favour of the unified `plivo login` flow — see
+// cmd/login.go.)
 
 func TestInternal_nestedSurfaces(t *testing.T) {
 	nests := map[string][]string{
-		"auth token":    {"mint", "list", "revoke"},
-		"agent session": {"show", "clear"},
+		"auth token": {"mint", "list", "revoke"},
 	}
 	for path, verbs := range nests {
 		parts := strings.Fields(path)
@@ -48,14 +32,6 @@ func TestInternal_authTokenMintRequiresModules(t *testing.T) {
 	cmd := findCmd(t, "auth", "token", "mint")
 	if !isFlagRequired(cmd, "modules") {
 		t.Error("internal build: auth token mint --modules should be required")
-	}
-}
-
-func TestInternal_agentDeleteRefusesWithoutYes(t *testing.T) {
-	setFakeCreds(t)
-	err, _, _ := execCmd(t, "agent", "delete", "AGENT-UUID")
-	if err == nil || !strings.Contains(err.Error(), "DESTRUCTIVE_REFUSED") {
-		t.Errorf("internal build: agent delete should return DESTRUCTIVE_REFUSED without --yes, got: %v", err)
 	}
 }
 

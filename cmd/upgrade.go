@@ -228,7 +228,7 @@ func permissionHint(err error, exePath string) error {
 	if err == nil || !os.IsPermission(err) {
 		return err
 	}
-	return fmt.Errorf("permission denied writing to %s\n  Rerun with sudo, or reinstall to a writable path: PLIVO_INSTALL_DIR=~/bin curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/beta/install.sh | bash",
+	return fmt.Errorf("permission denied writing to %s\n  Rerun with sudo, or reinstall to a writable path: PLIVO_INSTALL_DIR=~/bin curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | bash",
 		filepath.Dir(exePath))
 }
 

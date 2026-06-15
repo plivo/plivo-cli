@@ -2,7 +2,7 @@
 #
 # Send an SMS with the Plivo CLI.
 #
-# Auth: export PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN, or run `plivo auth login` first.
+# Auth: export PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN, or run `plivo login` first.
 # This script runs in --dry-run mode so it prints the request without sending.
 # Remove --dry-run (and keep --yes) to actually send the message — it costs money.
 set -euo pipefail

@@ -1,0 +1,81 @@
+# golangci-lint configuration (v2 schema).
+#
+# Enabled linters are a conservative subset that catches real bugs without
+# drowning the diff in style noise. Tweak the exclusions list below before
+# adding more linters — most repos accumulate noise faster than signal.
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - errcheck      # unchecked error returns
+    - govet         # standard vet checks (suspicious constructs)
+    - ineffassign   # ineffectual assignments
+    - staticcheck   # extensive static analysis (SA / ST / QF / S1 / U1 …)
+    - unused        # unused funcs, vars, consts
+    - gosec         # security audit
+
+  settings:
+    errcheck:
+      # Skip the common cases where ignoring the return is the idiomatic
+      # choice: print-to-stderr helpers and best-effort `defer x.Close()`.
+      exclude-functions:
+        - (io.Closer).Close
+        - (net.Listener).Close
+        - (*os.File).Close
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+    gosec:
+      excludes:
+        # G104 (errcheck) is already covered by errcheck above.
+        - G104
+        # G304 (file inclusion via variable) is unavoidable in a CLI that
+        # reads paths supplied by the user (upgrade temp file, etc).
+        - G304
+        # G306 (file perms 0600 on WriteFile) — fixtures + upgrade tmp file
+        # (binary needs 0o755 to be executable).
+        - G306
+        # G302 (file perms on OpenFile) — same reasoning as G306.
+        - G302
+        # G204 (subprocess launched with variable) — we open browsers etc
+        # with platform-specific binaries; values come from a fixed list.
+        - G204
+        # G402 (TLS InsecureSkipVerify) — intentional in `voice streams
+        # test` local-dev pre-flight against self-signed endpoints.
+        - G402
+        # G301 (dir perms) — test fixtures only.
+        - G301
+        # G704 (taint-flow SSRF) — analytics POSTs to a URL the user
+        # explicitly overrides via env, by design.
+        - G704
+    staticcheck:
+      # Bug-finders only (SA prefix). Style (ST) + quickfix (QF) cleanups
+      # belong in their own commits, not in a CI-hardening pass.
+      checks:
+        - SA*
+
+  exclusions:
+    rules:
+      # Test fixtures use looser perms / shell-out patterns by design.
+      - path: _test\.go
+        linters:
+          - gosec
+      - path: tools/gendocs/
+        linters:
+          - gosec
+      # coder/websocket's *Conn.Close takes (code, reason) so its method
+      # set doesn't match the io.Closer exclusion. These call sites are
+      # all `defer x.Close(StatusNormalClosure, "")` — nothing useful to
+      # do with the returned error during shutdown.
+      - path: voice_streams
+        text: "Error return value of .*Close"
+        linters:
+          - errcheck
+      - path: wsproxy/proxy
+        text: "Error return value of .*Close"
+        linters:
+          - errcheck
+
+run:
+  timeout: 5m

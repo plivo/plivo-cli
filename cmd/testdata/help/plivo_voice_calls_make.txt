@@ -1,4 +1,4 @@
-Make an outbound call (defaults to dry-run; pass --yes to actually dial)
+Make an outbound call (requires --yes; spends money — use --dry-run to preview)
 
 Usage:
   plivo voice calls make [flags]

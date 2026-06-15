@@ -223,13 +223,11 @@ func runMPCCreate(cmd *cobra.Command, args []string) error {
 		body["record"] = true
 	}
 
-	effectiveDryRun := dryRunFlag || !yesFlag
-	if effectiveDryRun {
-		client.DryRun = true
-		if !dryRunFlag {
-			fmt.Fprintln(os.Stderr, "[dry-run] mpc create defaults to dry-run; pass --yes to actually create")
-		}
+	proceed, dryRun, gerr := guardSpend("create multi-party call " + mpcCreateName)
+	if !proceed {
+		return gerr
 	}
+	applyDryRun(client, dryRun)
 
 	var resp struct {
 		APIID   string `json:"api_id"`
@@ -243,7 +241,7 @@ func runMPCCreate(cmd *cobra.Command, args []string) error {
 	if apiErr != nil {
 		return apiErr
 	}
-	if effectiveDryRun {
+	if dryRun {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
@@ -320,13 +318,11 @@ func runMPCPartAdd(cmd *cobra.Command, args []string) error {
 		"role": mpcPartAddRole,
 	}
 
-	effectiveDryRun := dryRunFlag || !yesFlag
-	if effectiveDryRun {
-		client.DryRun = true
-		if !dryRunFlag {
-			fmt.Fprintln(os.Stderr, "[dry-run] mpc participant add defaults to dry-run; pass --yes to actually dial")
-		}
+	proceed, dryRun, gerr := guardSpend(fmt.Sprintf("add participant %s→%s to MPC %s", mpcPartAddFrom, mpcPartAddTo, id))
+	if !proceed {
+		return gerr
 	}
+	applyDryRun(client, dryRun)
 
 	var resp api.GenericResponse
 	apiErr, err := client.Do("POST", mpcResourceURL(client, id)+"Participant/", body, nil, &resp)
@@ -336,7 +332,7 @@ func runMPCPartAdd(cmd *cobra.Command, args []string) error {
 	if apiErr != nil {
 		return apiErr
 	}
-	if effectiveDryRun {
+	if dryRun {
 		return nil
 	}
 	fmt.Fprintf(os.Stderr, "Added participant to %s: %s\n", id, resp.Message)

@@ -1,4 +1,4 @@
-Send a WhatsApp message (defaults to dry-run; pass --yes to actually send)
+Send a WhatsApp message (requires --yes; spends money — use --dry-run to preview)
 
 Usage:
   plivo messaging whatsapp send [flags]
