@@ -19,18 +19,14 @@ var (
 // skillFileName is the on-disk name of the skill file inside the target dir.
 const skillFileName = "SKILL.md"
 
-// skillCmd hosts the skill-management subcommands. Today that's just
-// `install`, which drops the agent skill (bundled in the binary) where a
-// coding agent will auto-load it.
+// skillCmd hosts the skill subcommands (currently just `install`).
 var skillCmd = &cobra.Command{
 	Use:   "skill",
 	Short: "Manage the plivo-cli agent skill",
 }
 
-// skillInstallCmd writes the embedded SKILL.md into the agent skills
-// directory so future agent sessions auto-load the CLI reference. Default
-// target follows the Claude Code layout (~/.claude/skills/plivo-cli); override
-// with --dir for other agents, or --print to capture the content directly.
+// skillInstallCmd writes the embedded SKILL.md into the agent skills directory
+// (default ~/.claude/skills/plivo-cli; override with --dir, or --print to stdout).
 var skillInstallCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Install the agent skill so coding agents auto-load the CLI reference",
@@ -58,8 +54,7 @@ func init() {
 }
 
 func runSkillInstall(cmd *cobra.Command, args []string) error {
-	// --print short-circuits: emit the skill to stdout so any agent/tool can
-	// capture it. Ignores --dir / --dry-run by design.
+	// --print emits the skill to stdout; ignores --dir / --dry-run.
 	if skillPrint {
 		_, err := fmt.Fprint(os.Stdout, cliskill.SkillMD)
 		return err
@@ -88,9 +83,8 @@ func runSkillInstall(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// resolveSkillDir resolves the destination directory for the skill. A non-empty
-// override is expanded (a leading ~ becomes the home dir) and returned as-is;
-// otherwise the default ~/.claude/skills/plivo-cli is used.
+// resolveSkillDir returns the override (with ~ expanded) or the default
+// ~/.claude/skills/plivo-cli.
 func resolveSkillDir(override string) (string, error) {
 	if override != "" {
 		return expandHome(override)
@@ -102,9 +96,7 @@ func resolveSkillDir(override string) (string, error) {
 	return filepath.Join(home, ".claude", "skills", "plivo-cli"), nil
 }
 
-// expandHome rewrites a leading "~" (bare or "~/…") to the user's home
-// directory. Other paths are returned unchanged. The shell normally does this,
-// but a quoted or programmatic --dir value reaches us with the tilde intact.
+// expandHome rewrites a leading "~" or "~/…" to the home dir; other paths unchanged.
 func expandHome(path string) (string, error) {
 	if path != "~" && !startsWithTildeSlash(path) {
 		return path, nil
@@ -119,8 +111,7 @@ func expandHome(path string) (string, error) {
 	return filepath.Join(home, path[2:]), nil
 }
 
-// startsWithTildeSlash reports whether path begins with "~/" (or "~\" on
-// Windows), i.e. a home-relative path the shell would normally expand.
+// startsWithTildeSlash reports whether path begins with "~/" (or "~\" on Windows).
 func startsWithTildeSlash(path string) bool {
 	return len(path) >= 2 && path[0] == '~' && (path[1] == '/' || path[1] == os.PathSeparator)
 }

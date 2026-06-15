@@ -193,14 +193,9 @@ func runAsk(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// buddyRenderer turns SSE events into terminal output. In json mode it emits
-// one JSONL line per event; otherwise it streams answer tokens to stdout as
-// they arrive (clearing the live narration line first so they don't
-// interleave), prints a non-streamed `message`/debugger-final answer as one
-// block on `final`, and shows narration live on stderr (overwritten in place
-// when ANSI is available). It also accumulates the text into answerBuf so the
-// cancel / `-i` paths keep the full answer. `out`/`err` are injected (defaults:
-// os.Stdout / os.Stderr) so tests can capture output.
+// buddyRenderer turns SSE events into terminal output: JSONL per event in json
+// mode, otherwise streamed answer tokens (or a one-block final). answerBuf keeps
+// the full text for the cancel / -i paths; out/err are injected for tests.
 type buddyRenderer struct {
 	out          io.Writer
 	err          io.Writer
@@ -241,10 +236,8 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		if d.Text == "" {
 			return true
 		}
-		// Stream tokens to stdout as they arrive. Clear any live narration
-		// line first so it doesn't interleave with the answer. Accumulate
-		// into answerBuf too so the cancel / `-i` paths keep the full text;
-		// `final` won't re-print once we've streamed.
+		// Stream to stdout, clearing any live narration line first so it
+		// doesn't interleave. answerBuf keeps the text; final won't re-print.
 		r.clearNarrationLine()
 		fmt.Fprint(r.out, d.Text)
 		r.answerBuf.WriteString(d.Text)
@@ -255,8 +248,7 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 			Text string `json:"text"`
 		}
 		_ = json.Unmarshal(buddyInner(ev.Data), &d)
-		// `message` is the no-stream / debugger-final shape; it REPLACES
-		// any accumulated answer rather than appending.
+		// no-stream / debugger-final shape; replaces the accumulated answer.
 		r.answerBuf.Reset()
 		r.answerBuf.WriteString(d.Text)
 
