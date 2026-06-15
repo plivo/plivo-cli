@@ -40,7 +40,7 @@ jobs:
   # against shipping a broken binary even if a hot-fix tag races past CI.
   tests:
     name: Tests
-    runs-on: ubuntu-latest-m-plivo
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
@@ -55,7 +55,7 @@ jobs:
   release:
     name: Build + publish
     needs: tests
-    runs-on: ubuntu-latest-m-plivo
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
