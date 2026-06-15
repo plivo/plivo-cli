@@ -166,8 +166,12 @@ func runAsk(cmd *cobra.Command, args []string) error {
 	// answer, then exit 130 (skip handleError which would print as a generic
 	// error).
 	if streamCtx.Err() == context.Canceled {
-		if !r.jsonMode && r.answerBuf.Len() > 0 {
-			fmt.Fprintln(os.Stdout, strings.TrimRight(r.answerBuf.String(), "\n"))
+		if !r.jsonMode {
+			if r.streamed {
+				fmt.Fprintln(os.Stdout) // close the streamed line
+			} else if r.answerBuf.Len() > 0 {
+				fmt.Fprintln(os.Stdout, strings.TrimRight(r.answerBuf.String(), "\n"))
+			}
 		}
 		fmt.Fprintln(os.Stderr, "(cancelled)")
 		os.Exit(130)
@@ -190,12 +194,13 @@ func runAsk(cmd *cobra.Command, args []string) error {
 }
 
 // buddyRenderer turns SSE events into terminal output. In json mode it emits
-// one JSONL line per event; otherwise it buffers tokens/message into a single
-// answer block printed once on `final` (more reliable against prompt themes
-// that re-render and clobber per-token streaming), while narration still goes
-// to stderr live (overwritten in place when ANSI is available) so long flows
-// show progress. `out` and `err` are injected (defaults: os.Stdout /
-// os.Stderr) so tests can capture output.
+// one JSONL line per event; otherwise it streams answer tokens to stdout as
+// they arrive (clearing the live narration line first so they don't
+// interleave), prints a non-streamed `message`/debugger-final answer as one
+// block on `final`, and shows narration live on stderr (overwritten in place
+// when ANSI is available). It also accumulates the text into answerBuf so the
+// cancel / `-i` paths keep the full answer. `out`/`err` are injected (defaults:
+// os.Stdout / os.Stderr) so tests can capture output.
 type buddyRenderer struct {
 	out          io.Writer
 	err          io.Writer
@@ -204,6 +209,7 @@ type buddyRenderer struct {
 	verbose      bool
 	startedAt    time.Time
 	answerBuf    strings.Builder
+	streamed     bool
 	hadNarration bool
 	errorSeen    bool
 	errorMsg     string
@@ -232,12 +238,17 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 			Text string `json:"text"`
 		}
 		_ = json.Unmarshal(buddyInner(ev.Data), &d)
-		// Buffer tokens; we print the assembled answer in one block on
-		// `final`. Streaming per-token interacts badly with prompt themes
-		// that re-render after a command exits (Starship, P10k), which can
-		// clobber the streamed bytes visually. One clean block at the end
-		// is always visible.
+		if d.Text == "" {
+			return true
+		}
+		// Stream tokens to stdout as they arrive. Clear any live narration
+		// line first so it doesn't interleave with the answer. Accumulate
+		// into answerBuf too so the cancel / `-i` paths keep the full text;
+		// `final` won't re-print once we've streamed.
+		r.clearNarrationLine()
+		fmt.Fprint(r.out, d.Text)
 		r.answerBuf.WriteString(d.Text)
+		r.streamed = true
 
 	case "message":
 		var d struct {
@@ -315,14 +326,20 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		}
 		_ = json.Unmarshal(buddyInner(ev.Data), &d)
 		r.clearNarrationLine()
-		// Print the assembled answer in one block. Prefer the buffered
-		// tokens/message; fall back to `final.answer` if neither streamed.
-		answer := r.answerBuf.String()
-		if answer == "" {
-			answer = d.Answer
-		}
-		if answer != "" {
-			fmt.Fprintln(r.out, strings.TrimRight(answer, "\n"))
+		if r.streamed {
+			// Tokens already streamed live to stdout — just close the line.
+			fmt.Fprintln(r.out)
+		} else {
+			// Nothing streamed (a `message`/debugger-final or non-streaming
+			// answer) — print the assembled answer as one block; fall back to
+			// `final.answer` if neither streamed nor buffered.
+			answer := r.answerBuf.String()
+			if answer == "" {
+				answer = d.Answer
+			}
+			if answer != "" {
+				fmt.Fprintln(r.out, strings.TrimRight(answer, "\n"))
+			}
 		}
 		latency := time.Since(r.startedAt)
 		if d.LatencyMs > 0 {
