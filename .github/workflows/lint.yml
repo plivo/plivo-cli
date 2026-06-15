@@ -3,11 +3,9 @@ name: Lint
 # golangci-lint covers the analysis floor: bug-finders + a security audit
 # (gosec). Linter set + exclusions live in .golangci.yml — tweak there.
 #
-# Runs on every push (any branch) plus PRs targeting main/beta. PR runs
-# catch issues before they land; push runs keep feature branches honest.
+# Runs on PRs targeting main/beta — catches issues before they land.
 
 on:
-  push:
   pull_request:
     branches:
       - main

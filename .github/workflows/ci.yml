@@ -1,12 +1,6 @@
 name: CI
 
 on:
-  push:
-    # main has no Go code yet (governance-only until v1.0 cut), so we only
-    # gate beta and feat/* on push. PRs targeting either are still checked.
-    branches:
-      - beta
-      - 'feat/**'
   pull_request:
     branches:
       - beta
