@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -26,15 +27,25 @@ import (
 
 // ask flags
 var (
-	askCallUUID string
-	askVerbose  bool
-	askDebug    bool
+	askCallUUID    string
+	askVerbose     bool
+	askDebug       bool
+	askInteractive bool
+)
+
+const (
+	// buddyCLIPageURL is a synthetic pageUrl (the server validator requires
+	// http/https) that keeps the escalation idempotency key stable per CLI run.
+	buddyCLIPageURL = "https://cli.plivo.com/cli"
+	// maxHistoryTurns caps how many prior turns we replay per request; the
+	// server enforces the same ceiling.
+	maxHistoryTurns = 20
 )
 
 var askCmd = &cobra.Command{
-	Use:   "ask <message>",
+	Use:   "ask [message]",
 	Short: "Ask Plivo's AI assistant (streams the answer as it comes)",
-	Long: `Send a single message to Plivo's AI assistant and stream the response.
+	Long: `Send a message to Plivo's AI assistant and stream the response.
 
 The assistant uses Server-Sent Events: token text streams to stdout as it
 arrives, live status appears on stderr and is overwritten in place, and the
@@ -42,13 +53,20 @@ final summary lands on stdout. Long flows (voice-debug can run 2–5 minutes)
 work fine — there is no overall HTTP timeout. Ctrl-C cancels and exits 130;
 no auto-retry (debugger runs are not idempotent).
 
+Use -i for an interactive chat that keeps context across follow-ups: each
+turn replays the recent conversation as history (a one-shot ask sends none,
+so the assistant can't see your previous questions). In -i, /reset starts a
+fresh conversation, /help lists commands, and /exit or Ctrl-D leaves.
+
 Pass --call-uuid for voice-debug context; --verbose to show the assistant's
 tool calls; -o json to emit each SSE event as one JSONL line (handy for
 scripts and AI agents).`,
 	Example: `  plivo ask "What does Plivo SMS error code 30007 mean?"
+  plivo ask -i
+  plivo ask -i "Debug what happened on this call"
   plivo ask --call-uuid 21e68d29-... "Debug what happened on this call"
   plivo ask -o json "What's the rate for outbound voice to Brazil?"`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MaximumNArgs(1),
 	RunE: runAsk,
 }
 
@@ -66,6 +84,8 @@ func init() {
 		"show the assistant's tool_call / tool_output events on stderr")
 	askCmd.Flags().BoolVar(&askDebug, "debug-stream", false,
 		"log every raw SSE frame to stderr (for debugging this CLI)")
+	askCmd.Flags().BoolVarP(&askInteractive, "interactive", "i", false,
+		"interactive chat — keep a conversation with follow-ups (history sent each turn)")
 
 	rootCmd.AddCommand(askCmd, supportCmd)
 }
@@ -89,39 +109,35 @@ func applyBuddyURL(c *api.Client) {
 }
 
 func runAsk(cmd *cobra.Command, args []string) error {
-	message := args[0]
-
 	client, _, err := getClient()
 	if err != nil {
 		return err
 	}
 	applyBuddyURL(client)
+	url := client.BuddyURL("/v1/aiassist/buddy-ext/chat")
 
-	// Build userContext. The server's BuddyUserContext is a strict Pydantic
-	// model — `plan` is an enum (free_trial/professional/enterprise) and a
-	// bare account_type like "standard" 400s the request, so we only send
-	// balance (best-effort; failure is non-fatal — empty userContext works).
-	// `callUUID` is silently dropped server-side (extra: ignore), so the
-	// routing signal comes solely from the message-text suffix below.
-	uctx := api.BuddyUserContext{}
+	if askInteractive {
+		first := ""
+		if len(args) == 1 {
+			first = args[0]
+		}
+		return runInteractiveAsk(client, url, first)
+	}
+
+	if len(args) != 1 {
+		return clierr.BadInput("ask needs a message — e.g. `plivo ask \"...\"`, or use -i for an interactive chat")
+	}
+	message := args[0]
+	// `callUUID` is dropped server-side (extra: ignore), so the routing signal
+	// comes from the message-text suffix.
 	if askCallUUID != "" {
 		message = fmt.Sprintf("%s (call_uuid: %s)", message, askCallUUID)
 	}
-	var acct api.Account
-	if apiErr, gerr := client.Do("GET", client.AccountURL(), nil, nil, &acct); gerr == nil && apiErr == nil {
-		uctx.Balance = acct.CashCredits
-	}
-
 	body := api.BuddyChatRequest{
 		Message:     message,
-		UserContext: uctx,
-		// Server validator requires http/https on pageUrl. A synthetic CLI URL
-		// keeps the escalation idempotency key stable per CLI session without
-		// pretending we're a real Console page.
-		PageURL: "https://cli.plivo.com/cli",
+		UserContext: buildBuddyUserContext(client),
+		PageURL:     buddyCLIPageURL,
 	}
-
-	url := client.BuddyURL("/v1/aiassist/buddy-ext/chat")
 
 	// --dry-run: print what would be sent, don't open the SSE stream.
 	if dryRunFlag {
@@ -144,17 +160,7 @@ func runAsk(cmd *cobra.Command, args []string) error {
 		}
 	}()
 
-	jsonMode := effectiveFormat() == output.FormatJSON
-	tty := term.IsTerminal(int(os.Stdout.Fd()))
-	r := &buddyRenderer{
-		out:       os.Stdout,
-		err:       os.Stderr,
-		jsonMode:  jsonMode,
-		useANSI:   tty && !noColorFlag,
-		verbose:   askVerbose,
-		startedAt: time.Now(),
-	}
-
+	r := newBuddyRenderer(effectiveFormat() == output.FormatJSON)
 	sseErr := client.StreamSSE(streamCtx, "POST", url, body, func(ev api.SSEEvent) bool {
 		if askDebug {
 			fmt.Fprintf(os.Stderr, "[sse] event=%q data=%s\n", ev.Event, ev.Data)
@@ -163,8 +169,7 @@ func runAsk(cmd *cobra.Command, args []string) error {
 	})
 
 	// Ctrl-C: print whatever we've accumulated so the user sees a partial
-	// answer, then exit 130 (skip handleError which would print as a generic
-	// error).
+	// answer, then exit 130.
 	if streamCtx.Err() == context.Canceled {
 		if !r.jsonMode {
 			if r.streamed {
@@ -189,6 +194,232 @@ func runAsk(cmd *cobra.Command, args []string) error {
 	if r.errorSeen {
 		// A server-emitted error event is a service-side error, not bad user input.
 		return clierr.Upstream(r.errorMsg)
+	}
+	return nil
+}
+
+// buildBuddyUserContext fetches best-effort account context (balance). Failure
+// is non-fatal — an empty userContext is valid. The server's BuddyUserContext
+// is a strict model (plan is an enum; a bare account_type 400s), so we only
+// send balance.
+func buildBuddyUserContext(client *api.Client) api.BuddyUserContext {
+	uctx := api.BuddyUserContext{}
+	var acct api.Account
+	if apiErr, gerr := client.Do("GET", client.AccountURL(), nil, nil, &acct); gerr == nil && apiErr == nil {
+		uctx.Balance = acct.CashCredits
+	}
+	return uctx
+}
+
+// newBuddyRenderer wires a renderer to stdout/stderr with the current
+// tty/color/verbose settings.
+func newBuddyRenderer(jsonMode bool) *buddyRenderer {
+	tty := term.IsTerminal(int(os.Stdout.Fd()))
+	return &buddyRenderer{
+		out:       os.Stdout,
+		err:       os.Stderr,
+		jsonMode:  jsonMode,
+		useANSI:   tty && !noColorFlag,
+		verbose:   askVerbose,
+		startedAt: time.Now(),
+	}
+}
+
+// buddySession holds an interactive conversation. It accumulates turns and
+// replays the most recent ones as `history` so the assistant keeps context
+// across follow-ups — which is what lets clarifying questions (the server's
+// ask_user flow) work from the CLI. A one-shot `ask` sends no history.
+type buddySession struct {
+	client  *api.Client
+	url     string
+	uctx    api.BuddyUserContext
+	history []api.BuddyTurn
+}
+
+// historyForRequest returns the most recent turns, capped at maxHistoryTurns.
+func (s *buddySession) historyForRequest() []api.BuddyTurn {
+	if len(s.history) <= maxHistoryTurns {
+		return s.history
+	}
+	return s.history[len(s.history)-maxHistoryTurns:]
+}
+
+// record appends one turn to the running history.
+func (s *buddySession) record(role, text string) {
+	s.history = append(s.history, api.BuddyTurn{Role: role, Text: text})
+}
+
+// reset clears the conversation history.
+func (s *buddySession) reset() { s.history = nil }
+
+// sendTurn streams one assistant turn (the renderer prints as it goes) and
+// returns the answer text plus ok. On error or Ctrl-C it prints the reason and
+// returns ok=false so the REPL stays alive — Ctrl-C cancels only the in-flight
+// turn, not the whole session.
+func (s *buddySession) sendTurn(message string) (answer string, ok bool) {
+	body := api.BuddyChatRequest{
+		Message:     message,
+		History:     s.historyForRequest(),
+		UserContext: s.uctx,
+		PageURL:     buddyCLIPageURL,
+	}
+
+	turnCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+	go func() {
+		select {
+		case <-sigCh:
+			cancel()
+		case <-turnCtx.Done():
+		}
+	}()
+
+	r := newBuddyRenderer(false) // interactive mode is human-facing; no JSONL
+	sseErr := s.client.StreamSSE(turnCtx, "POST", s.url, body, func(ev api.SSEEvent) bool {
+		if askDebug {
+			fmt.Fprintf(os.Stderr, "[sse] event=%q data=%s\n", ev.Event, ev.Data)
+		}
+		return r.handle(ev)
+	})
+
+	switch {
+	case turnCtx.Err() == context.Canceled:
+		if r.streamed {
+			fmt.Fprintln(os.Stdout) // tokens already streamed; just close the line
+		} else if r.answerBuf.Len() > 0 {
+			fmt.Fprintln(os.Stdout, strings.TrimRight(r.answerBuf.String(), "\n"))
+		}
+		fmt.Fprintln(os.Stderr, "(cancelled)")
+		return "", false
+	case sseErr != nil:
+		var httpErr *api.SSEHTTPError
+		if errors.As(sseErr, &httpErr) {
+			fmt.Fprintf(os.Stderr, "buddy error: %s\n", clierr.FromHTTP(httpErr.StatusCode, "", httpErr.Body).Error())
+		} else {
+			fmt.Fprintf(os.Stderr, "buddy error: %s\n", clierr.NetworkError("buddy", sseErr).Error())
+		}
+		return "", false
+	case r.errorSeen:
+		// the renderer already printed "buddy error: ..." for the error event.
+		return "", false
+	default:
+		return r.answerBuf.String(), true
+	}
+}
+
+// replAction is the parsed intent of one line of REPL input.
+type replAction int
+
+const (
+	replMessage replAction = iota
+	replEmpty
+	replExit
+	replReset
+	replHelp
+	replUnknown
+)
+
+// classifyREPLInput maps a raw input line to an action. Lines starting with
+// "/" are commands; everything else is a message to send.
+func classifyREPLInput(line string) (replAction, string) {
+	t := strings.TrimSpace(line)
+	if t == "" {
+		return replEmpty, ""
+	}
+	if !strings.HasPrefix(t, "/") {
+		return replMessage, t
+	}
+	switch strings.ToLower(strings.Fields(t)[0]) {
+	case "/exit", "/quit", "/q":
+		return replExit, ""
+	case "/reset", "/new":
+		return replReset, ""
+	case "/help", "/?":
+		return replHelp, ""
+	default:
+		return replUnknown, t
+	}
+}
+
+func printREPLHelp(w io.Writer) {
+	fmt.Fprintln(w, "Commands:")
+	fmt.Fprintln(w, "  /reset, /new    start a fresh conversation (clears history)")
+	fmt.Fprintln(w, "  /help, /?       show this help")
+	fmt.Fprintln(w, "  /exit, /quit    leave (or press Ctrl-D)")
+	fmt.Fprintln(w, "Anything else is sent to the assistant; follow-ups keep context.")
+}
+
+// runInteractiveAsk runs the `ask -i` read-eval loop: each message is sent with
+// the running conversation history so the assistant keeps context. Ctrl-C
+// cancels the in-flight turn; Ctrl-D or /exit leaves. An optional firstMsg
+// seeds the first turn (`plivo ask -i "..."`).
+func runInteractiveAsk(client *api.Client, url, firstMsg string) error {
+	if effectiveFormat() == output.FormatJSON {
+		return clierr.BadInput("interactive mode (-i) can't be combined with -o json")
+	}
+	if dryRunFlag {
+		return clierr.BadInput("--dry-run isn't supported in interactive mode (-i)")
+	}
+
+	sess := &buddySession{client: client, url: url, uctx: buildBuddyUserContext(client)}
+
+	fmt.Fprintln(os.Stderr, "Plivo AI assistant — interactive mode.")
+	fmt.Fprintln(os.Stderr, "Type a message and press Enter. Commands: /reset, /help, /exit (or Ctrl-D).")
+
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024) // tolerate long pastes
+
+	pending := strings.TrimSpace(firstMsg)
+	callUUIDApplied := false
+
+	for {
+		var line string
+		if pending != "" {
+			line, pending = pending, ""
+			fmt.Fprintf(os.Stderr, "buddy> %s\n", line)
+		} else {
+			fmt.Fprint(os.Stderr, "buddy> ")
+			if !scanner.Scan() {
+				fmt.Fprintln(os.Stderr) // newline after ^D
+				break
+			}
+			line = scanner.Text()
+		}
+
+		action, arg := classifyREPLInput(line)
+		switch action {
+		case replEmpty:
+			continue
+		case replExit:
+			return nil
+		case replReset:
+			sess.reset()
+			callUUIDApplied = false
+			fmt.Fprintln(os.Stderr, "(conversation reset)")
+			continue
+		case replHelp:
+			printREPLHelp(os.Stderr)
+			continue
+		case replUnknown:
+			fmt.Fprintf(os.Stderr, "unknown command %q — try /help\n", strings.Fields(arg)[0])
+			continue
+		}
+
+		// replMessage
+		msg := arg
+		if !callUUIDApplied && askCallUUID != "" {
+			msg = fmt.Sprintf("%s (call_uuid: %s)", msg, askCallUUID)
+			callUUIDApplied = true
+		}
+		answer, ok := sess.sendTurn(msg)
+		if !ok {
+			continue // error/cancel already reported; don't pollute history
+		}
+		sess.record("user", msg)
+		sess.record("assistant", answer)
 	}
 	return nil
 }
