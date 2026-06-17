@@ -121,6 +121,14 @@ For the full command reference, see [`docs/COMMANDS.md`](docs/COMMANDS.md) (auto
 
 If you're an LLM (Claude, Codex, Cursor, Aider, custom agent) and the user has asked you to do anything Plivo-related — **read [`cli-skill/SKILL.md`](cli-skill/SKILL.md) first**. It's the single-file reference written for agent consumption: every command with its required args, flag table, and "when to use" — plus the universal invariants (`--dry-run`, `--yes` for spend verbs, the stable error-envelope codes, JSON-output rules).
 
+**Install this skill straight into your agent** — Claude Code, Cursor, Codex, and 60+ others — via the open [skills](https://skills.sh) ecosystem, no Plivo binary required:
+
+```bash
+npx skills add plivo/plivo-cli
+```
+
+(If you already have the CLI installed, `plivo skill install` does the same thing offline.)
+
 **TL;DR for an agent starting cold:**
 
 ```bash
