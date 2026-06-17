@@ -145,9 +145,13 @@ plivo voice calls make --from +1... --to +1... --yes        # actually call
 2. Branch on `error.code` (e.g. `AUTH_MISSING`, `DESTRUCTIVE_REFUSED`, `RATE_LIMITED`), never on `error.message` — message text drifts; codes are committed.
 3. For scripted use: set `PLIVO_FEEDBACK_PROMPT=0` and `PLIVO_NO_UPDATE_CHECK=1` so the post-success "rate the CLI?" prompt and update-check banner don't surprise stdin/stderr.
 
-**Install the skill once** so future agent sessions auto-load it. Two easy ways:
+**Install the skill once** so future agent sessions auto-load it — a few ways:
 
 ```bash
+# Via the open skills ecosystem (skills.sh) — Claude Code, Cursor, Codex, and
+# 60+ agents, no Plivo binary required:
+npx skills add plivo/plivo-cli
+
 # With the CLI installed — writes the bundled skill, no network needed:
 plivo skill install                 # → ~/.claude/skills/plivo-cli/SKILL.md
 
