@@ -7,8 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-17
+
 ### Added
 
+- `plivo ask -i` / `--interactive` — an interactive chat REPL on top of
+  `plivo ask`. Each turn replays recent conversation as history so
+  follow-ups keep context (a one-shot `ask` still sends none). Supports
+  `/reset` to start fresh, `/help`, and `/exit` (or Ctrl-D); Ctrl-C
+  cancels just the in-flight turn, not the REPL. History is capped to the
+  most recent turns, and an optional message seeds the first turn.
+  Single-shot behaviour is unchanged.
 - `plivo voice streams test` and `plivo voice streams forward` — local-dev
   workflow for WebSocket-based call audio. `test` pre-flights a customer
   WS endpoint with synthetic audio frames (no Plivo backend involved);
@@ -111,4 +120,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Legacy `account compliance` (the older `/ComplianceDocument/`
   endpoint), superseded by `numbers compliance`.
 
-[Unreleased]: https://github.com/plivo/plivo-cli/commits/main
+### Security
+
+- `plivo upgrade` now verifies the downloaded binary against the
+  release's `SHA256SUMS` before replacing the running executable. The
+  previous TLS + size check was not an integrity check; the upgrade now
+  fetches `SHA256SUMS`, hashes the temp file, and aborts on mismatch
+  before the atomic replace (adds reusable `release.VerifyChecksum` +
+  `AssetByName`).
+- `install.ps1` (Windows) now verifies the downloaded `.exe` against
+  `SHA256SUMS` before moving it into place, mirroring `install.sh`. It
+  downloads the binary + checksums to a temp dir, compares via
+  `Get-FileHash`, and only installs on a match.
+
+[Unreleased]: https://github.com/plivo/plivo-cli/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/plivo/plivo-cli/releases/tag/v0.2.0
