@@ -5,21 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/plivo/plivo-cli/internal/config"
 )
-
-// loadConfigForTest re-reads the config.toml that the command just wrote so
-// we can assert on it without depending on the runLogin closure's state.
-// Browser-flow tests use this helper too — see login_browser_test.go.
-func loadConfigForTest(t *testing.T) *config.Config {
-	t.Helper()
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("config.Load: %v", err)
-	}
-	return cfg
-}
 
 // stdinTokenFn pipes a string into os.Stdin for the duration of fn — used
 // by api_test (POST body from `--body @-`) and any future test that

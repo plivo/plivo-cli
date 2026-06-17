@@ -1,9 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
 )
@@ -49,16 +46,5 @@ func guardSpend(action string) (proceed, dryRun bool, err *clierr.Error) {
 func applyDryRun(c *api.Client, dryRun bool) {
 	if dryRun {
 		c.DryRun = true
-	}
-}
-
-// explainSpend prints the --explain banner when the user asked for it.
-// Wrapper so individual spend verbs don't sprinkle `if explainFlag` checks.
-func explainSpend(format string, args ...any) {
-	if explainFlag {
-		fmt.Fprintf(os.Stderr, format, args...)
-		if len(format) == 0 || format[len(format)-1] != '\n' {
-			fmt.Fprintln(os.Stderr)
-		}
 	}
 }
