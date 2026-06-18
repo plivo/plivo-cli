@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -167,6 +169,9 @@ func runAsk(cmd *cobra.Command, args []string) error {
 		}
 		return r.handle(ev)
 	})
+	// Reap the spinner on every exit path (cancel, error, or a stream that ends
+	// without a final/error event). Idempotent — a normal final already stopped it.
+	r.stopSpinner()
 
 	// Ctrl-C: print whatever we've accumulated so the user sees a partial
 	// answer, then exit 130.
@@ -284,6 +289,7 @@ func (s *buddySession) sendTurn(message string) (answer string, ok bool) {
 		}
 		return r.handle(ev)
 	})
+	r.stopSpinner() // reap the spinner on every exit path (idempotent)
 
 	switch {
 	case turnCtx.Err() == context.Canceled:
@@ -427,6 +433,11 @@ func runInteractiveAsk(client *api.Client, url, firstMsg string) error {
 // buddyRenderer turns SSE events into terminal output: JSONL per event in json
 // mode, otherwise streamed answer tokens (or a one-block final). answerBuf keeps
 // the full text for the cancel / -i paths; out/err are injected for tests.
+//
+// On a TTY (useANSI) a background spinner goroutine animates a single stderr
+// line so long, silent backend gaps (e.g. a 1–2 min voice-debug run) never look
+// frozen. mu guards every stderr write — the spinner tick and all event-driven
+// writes — so they never garble or data-race (go test -race clean).
 type buddyRenderer struct {
 	out          io.Writer
 	err          io.Writer
@@ -439,6 +450,11 @@ type buddyRenderer struct {
 	hadNarration bool
 	errorSeen    bool
 	errorMsg     string
+
+	// mu serialises all writes to err (and the spinner state it reads).
+	mu sync.Mutex
+	// sp is the live spinner; nil when not running. Guarded by mu.
+	sp *buddySpinner
 }
 
 func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
@@ -457,7 +473,8 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 
 	switch ev.Event {
 	case "start":
-		// nothing visible; the first token will print itself
+		// Begin animating so silence before the first real event still moves.
+		r.startSpinner()
 
 	case "token":
 		var d struct {
@@ -467,8 +484,11 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		if d.Text == "" {
 			return true
 		}
-		// Stream to stdout, clearing any live narration line first so it
-		// doesn't interleave. answerBuf keeps the text; final won't re-print.
+		// First token: the answer is arriving, so stop the spinner (clears the
+		// line) before streaming. Subsequent tokens: spinner already stopped.
+		r.stopSpinner()
+		// Clear any leftover narration line (non-spinner path) so it doesn't
+		// interleave. answerBuf keeps the text; final won't re-print.
 		r.clearNarrationLine()
 		fmt.Fprint(r.out, d.Text)
 		r.answerBuf.WriteString(d.Text)
@@ -479,6 +499,7 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 			Text string `json:"text"`
 		}
 		_ = json.Unmarshal(buddyInner(ev.Data), &d)
+		r.stopSpinner()
 		// no-stream / debugger-final shape; replaces the accumulated answer.
 		r.answerBuf.Reset()
 		r.answerBuf.WriteString(d.Text)
@@ -489,8 +510,9 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		}
 		_ = json.Unmarshal(buddyInner(ev.Data), &d)
 		if r.useANSI {
-			fmt.Fprintf(r.err, "\r\033[2K%s", d.Text)
-			r.hadNarration = true
+			// Feed the live spinner instead of writing the line directly; the
+			// tick redraws it (starting the spinner if "start" never arrived).
+			r.setSpinnerText(d.Text)
 		} else {
 			fmt.Fprintln(r.err, "[buddy] "+d.Text)
 		}
@@ -503,8 +525,11 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 			Name string `json:"name"`
 		}
 		_ = json.Unmarshal(buddyInner(ev.Data), &d)
-		r.clearNarrationLine()
-		fmt.Fprintf(r.err, "🔧 calling %s\n", d.Name)
+		// Clear the spinner/narration line under the lock so this print doesn't
+		// garble; the spinner redraws itself on the next tick.
+		r.withSpinnerCleared(func() {
+			fmt.Fprintf(r.err, "🔧 calling %s\n", d.Name)
+		})
 
 	case "tool_output":
 		if !r.verbose {
@@ -520,7 +545,9 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		if (d.Success != nil && !*d.Success) || d.Error != "" {
 			mark = "✗"
 		}
-		fmt.Fprintf(r.err, "  %s %s\n", mark, d.Name)
+		r.withSpinnerCleared(func() {
+			fmt.Fprintf(r.err, "  %s %s\n", mark, d.Name)
+		})
 
 	case "sources":
 		var d struct {
@@ -532,14 +559,18 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		}
 		_ = json.Unmarshal(buddyInner(ev.Data), &d)
 		if len(d.Sources) > 0 {
-			fmt.Fprintln(r.out, "\n\nSources:")
-			for i, s := range d.Sources {
-				if s.URL != "" {
-					fmt.Fprintf(r.out, "  %d. %s — %s\n", i+1, s.Title, s.URL)
-				} else {
-					fmt.Fprintf(r.out, "  %d. %s\n", i+1, s.Title)
+			// sources prints to stdout, but clear the stderr spinner line first
+			// (under the lock) so the two streams don't visually collide.
+			r.withSpinnerCleared(func() {
+				fmt.Fprintln(r.out, "\n\nSources:")
+				for i, s := range d.Sources {
+					if s.URL != "" {
+						fmt.Fprintf(r.out, "  %d. %s — %s\n", i+1, s.Title, s.URL)
+					} else {
+						fmt.Fprintf(r.out, "  %d. %s\n", i+1, s.Title)
+					}
 				}
-			}
+			})
 		}
 
 	case "final":
@@ -548,6 +579,7 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 			LatencyMs int    `json:"latency_ms"`
 		}
 		_ = json.Unmarshal(buddyInner(ev.Data), &d)
+		r.stopSpinner()
 		r.clearNarrationLine()
 		if r.streamed {
 			// Tokens already streamed live to stdout — just close the line.
@@ -576,6 +608,7 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 			Error string `json:"error"`
 		}
 		_ = json.Unmarshal(buddyInner(ev.Data), &d)
+		r.stopSpinner()
 		r.clearNarrationLine()
 		fmt.Fprintf(r.err, "\nbuddy error: %s\n", d.Error)
 		r.errorSeen = true
@@ -601,13 +634,179 @@ func buddyInner(raw string) []byte {
 	return []byte(raw)
 }
 
-// clearNarrationLine wipes the live narration line on stderr if one is currently
-// shown, so subsequent stdout writes don't appear interleaved with it.
+// clearNarrationLine wipes a leftover live narration line on stderr if one is
+// shown, so subsequent stdout writes don't appear interleaved with it. On a TTY
+// the spinner owns the stderr line (it clears on stop), so hadNarration is only
+// set on the non-spinner path; this stays as a defensive no-op for ANSI.
+// Lock-guarded so it can't race the spinner goroutine's writes.
 func (r *buddyRenderer) clearNarrationLine() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.hadNarration && r.useANSI {
 		fmt.Fprint(r.err, "\r\033[2K")
 		r.hadNarration = false
 	}
+}
+
+// --- working spinner ---------------------------------------------------------
+//
+// On a TTY, ask animates a single stderr line during backend silence so a long,
+// quiet run (e.g. voice-debug) never looks frozen. A goroutine ticks every
+// spinnerInterval and redraws `<frame> <text> <elapsed>`; the renderer's mu
+// guards every stderr write (tick + event-driven) so they never garble.
+
+const (
+	// spinnerInterval is how often the frame/line is redrawn.
+	spinnerInterval = 120 * time.Millisecond
+	// spinnerWordInterval is how long each fallback word shows before the next.
+	spinnerWordInterval = 1500 * time.Millisecond
+)
+
+// spinnerFrames cycles on the LEFT of the line (braille dots).
+var spinnerFrames = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
+
+// spinnerWords are shown (one at a time, advancing ~every spinnerWordInterval)
+// until a real backend narration arrives. The order is shuffled once per run.
+var spinnerWords = []string{
+	"Thinking", "Checking", "Working", "Digging in", "Crunching",
+	"Looking into it", "Untangling", "Connecting the dots", "Pulling threads",
+	"Scanning", "Cross-referencing", "Tracing it", "Piecing it together",
+	"Consulting the docs", "Reasoning it out", "Investigating", "Parsing",
+	"Almost there", "Hold tight", "On it",
+}
+
+// buddySpinner holds the live animation state. All mutable fields are read and
+// written only while the owning buddyRenderer's mu is held.
+type buddySpinner struct {
+	startedAt time.Time
+	words     []string // shuffled copy of spinnerWords, each with "…" appended
+	frame     int      // index into spinnerFrames, advances every tick
+	text      string   // latest backend narration; "" → show a fallback word
+	stop      chan struct{}
+	done      chan struct{}
+}
+
+// startSpinner begins the animation (TTY only). No-op off-TTY, in json mode, or
+// if a spinner is already running.
+func (r *buddyRenderer) startSpinner() {
+	if !r.useANSI || r.jsonMode {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.startSpinnerLocked()
+}
+
+// startSpinnerLocked starts the spinner; caller must hold mu. No-op if running.
+func (r *buddyRenderer) startSpinnerLocked() {
+	if r.sp != nil {
+		return
+	}
+	words := make([]string, len(spinnerWords))
+	for i, w := range spinnerWords {
+		words[i] = w + "…"
+	}
+	rand.Shuffle(len(words), func(i, j int) { words[i], words[j] = words[j], words[i] })
+
+	sp := &buddySpinner{
+		startedAt: time.Now(),
+		words:     words,
+		stop:      make(chan struct{}),
+		done:      make(chan struct{}),
+	}
+	r.sp = sp
+	go r.runSpinner(sp)
+}
+
+// runSpinner drives the animation until sp.stop is closed. It locks mu only to
+// render a frame, never while blocked on the ticker, so stopSpinner can take mu
+// freely.
+func (r *buddyRenderer) runSpinner(sp *buddySpinner) {
+	defer close(sp.done)
+	ticker := time.NewTicker(spinnerInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-sp.stop:
+			return
+		case <-ticker.C:
+			r.mu.Lock()
+			// Guard against a stop that raced in between ticks.
+			if r.sp == sp {
+				r.drawSpinnerLocked(sp)
+			}
+			r.mu.Unlock()
+		}
+	}
+}
+
+// drawSpinnerLocked renders one frame: `<frame> <text> <elapsed>`. Caller holds
+// mu. <text> is the backend narration if set, else the current fallback word.
+func (r *buddyRenderer) drawSpinnerLocked(sp *buddySpinner) {
+	frame := spinnerFrames[sp.frame%len(spinnerFrames)]
+	sp.frame++
+
+	elapsed := time.Since(sp.startedAt)
+	text := sp.text
+	if text == "" && len(sp.words) > 0 {
+		idx := int(elapsed/spinnerWordInterval) % len(sp.words)
+		text = sp.words[idx]
+	}
+
+	secs := int(elapsed.Seconds())
+	clock := fmt.Sprintf("%d:%02d", secs/60, secs%60)
+	if r.useANSI {
+		// dim the elapsed time so it stays subtle.
+		clock = "\033[2m" + clock + "\033[0m"
+	}
+	fmt.Fprintf(r.err, "\r\033[2K%c %s %s", frame, text, clock)
+}
+
+// setSpinnerText sets the line's text to a real backend narration; it takes
+// precedence over the fallback words the instant it arrives. Starts the spinner
+// if one isn't already running (narration can precede the `start` event).
+func (r *buddyRenderer) setSpinnerText(text string) {
+	if !r.useANSI || r.jsonMode {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.sp == nil {
+		r.startSpinnerLocked()
+	}
+	r.sp.text = text
+}
+
+// stopSpinner halts the animation and clears the line. Idempotent and safe to
+// call when no spinner is running; never deadlocks or leaks the goroutine.
+func (r *buddyRenderer) stopSpinner() {
+	r.mu.Lock()
+	sp := r.sp
+	r.sp = nil
+	r.mu.Unlock()
+	if sp == nil {
+		return
+	}
+	// Signal stop and wait for the goroutine to exit before clearing, so no
+	// late frame can re-dirty the line. We don't hold mu while waiting — the
+	// goroutine may need it to finish an in-flight render.
+	close(sp.stop)
+	<-sp.done
+	r.mu.Lock()
+	fmt.Fprint(r.err, "\r\033[2K")
+	r.mu.Unlock()
+}
+
+// withSpinnerCleared runs fn with the spinner line cleared and the mutex held,
+// so an out-of-band print (tool_call/tool_output/sources) doesn't garble the
+// animated line. The spinner stays running and redraws on its next tick.
+func (r *buddyRenderer) withSpinnerCleared(fn func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.sp != nil {
+		fmt.Fprint(r.err, "\r\033[2K")
+	}
+	fn()
 }
 
 func runSupport(cmd *cobra.Command, args []string) error {
