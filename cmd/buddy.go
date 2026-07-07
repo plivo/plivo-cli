@@ -235,10 +235,11 @@ func newBuddyRenderer(jsonMode bool) *buddyRenderer {
 // across follow-ups — which is what lets clarifying questions (the server's
 // ask_user flow) work from the CLI. A one-shot `ask` sends no history.
 type buddySession struct {
-	client  *api.Client
-	url     string
-	uctx    api.BuddyUserContext
-	history []api.BuddyTurn
+	client    *api.Client
+	url       string
+	uctx      api.BuddyUserContext
+	history   []api.BuddyTurn
+	sessionID string // continuation id from the server's `session` event; "" until seen
 }
 
 // historyForRequest returns the most recent turns, capped at maxHistoryTurns.
@@ -254,8 +255,11 @@ func (s *buddySession) record(role, text string) {
 	s.history = append(s.history, api.BuddyTurn{Role: role, Text: text})
 }
 
-// reset clears the conversation history.
-func (s *buddySession) reset() { s.history = nil }
+// reset clears the conversation history and the continuation session id.
+func (s *buddySession) reset() {
+	s.history = nil
+	s.sessionID = ""
+}
 
 // sendTurn streams one assistant turn (the renderer prints as it goes) and
 // returns the answer text plus ok. On error or Ctrl-C it prints the reason and
@@ -267,6 +271,7 @@ func (s *buddySession) sendTurn(message string) (answer string, ok bool) {
 		History:     s.historyForRequest(),
 		UserContext: s.uctx,
 		PageURL:     buddyCLIPageURL,
+		SessionID:   s.sessionID,
 	}
 
 	turnCtx, cancel := context.WithCancel(context.Background())
@@ -290,6 +295,9 @@ func (s *buddySession) sendTurn(message string) (answer string, ok bool) {
 		return r.handle(ev)
 	})
 	r.stopSpinner() // reap the spinner on every exit path (idempotent)
+	if r.sessionID != "" {
+		s.sessionID = r.sessionID // continue this session on the next turn
+	}
 
 	switch {
 	case turnCtx.Err() == context.Canceled:
@@ -450,6 +458,9 @@ type buddyRenderer struct {
 	hadNarration bool
 	errorSeen    bool
 	errorMsg     string
+	// sessionID is captured from the PAI-contract `session` event, for
+	// conversation continuation (replayed by buddySession on the next turn).
+	sessionID string
 
 	// mu serialises all writes to err (and the spinner state it reads).
 	mu sync.Mutex
@@ -468,7 +479,8 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 			"event": ev.Event,
 			"data":  raw,
 		})
-		return ev.Event != "final" && ev.Event != "error"
+		// `final`/`error` end the legacy stream; `done` ends the PAI stream.
+		return ev.Event != "final" && ev.Event != "error" && ev.Event != "done"
 	}
 
 	switch ev.Event {
@@ -613,6 +625,57 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		fmt.Fprintf(r.err, "\nbuddy error: %s\n", d.Error)
 		r.errorSeen = true
 		r.errorMsg = d.Error
+		return false
+
+	// --- PAI stream contract (session / result / cost / done) ------------------
+	// These arrive as raw {"...":...} payloads (no {type,data} wrapper); buddyInner
+	// falls back to the raw bytes, so unmarshalling the flat shape works.
+
+	case "session":
+		// {"session_id": "..."} — capture for conversation continuation (used by -i).
+		var d struct {
+			SessionID string `json:"session_id"`
+		}
+		_ = json.Unmarshal(buddyInner(ev.Data), &d)
+		if d.SessionID != "" {
+			r.sessionID = d.SessionID
+		}
+
+	case "result":
+		// {"text": "..."} — the complete, sanitized answer (no token deltas).
+		// Mirror `message`: replace the accumulated answer; `done` prints it.
+		var d struct {
+			Text string `json:"text"`
+		}
+		_ = json.Unmarshal(buddyInner(ev.Data), &d)
+		r.stopSpinner()
+		r.answerBuf.Reset()
+		r.answerBuf.WriteString(d.Text)
+
+	case "cost":
+		// {"total_cost_usd": ...} — internal metric; show only in --verbose.
+		if !r.verbose {
+			return true
+		}
+		var d struct {
+			TotalCostUSD float64 `json:"total_cost_usd"`
+		}
+		_ = json.Unmarshal(buddyInner(ev.Data), &d)
+		r.withSpinnerCleared(func() {
+			fmt.Fprintf(r.err, "  (cost: $%.4f)\n", d.TotalCostUSD)
+		})
+
+	case "done":
+		// {} — end of the PAI stream. Mirror `final`: flush the answer block (if it
+		// wasn't streamed live token-by-token) and close out.
+		r.stopSpinner()
+		r.clearNarrationLine()
+		if r.streamed {
+			fmt.Fprintln(r.out) // tokens already streamed; just close the line
+		} else if answer := strings.TrimRight(r.answerBuf.String(), "\n"); answer != "" {
+			fmt.Fprintln(r.out, answer)
+		}
+		fmt.Fprintf(r.err, "(done in %.1fs)\n", time.Since(r.startedAt).Seconds())
 		return false
 	}
 	return true

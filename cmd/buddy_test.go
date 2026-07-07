@@ -172,3 +172,65 @@ func TestBuddyRenderer_messageEvent_printedOnceAsBlock(t *testing.T) {
 		t.Error("streamed should be false for a non-streamed message answer")
 	}
 }
+
+// PAI stream contract: session/result/cost/done arrive as raw (unwrapped)
+// payloads. `result` is the complete answer (no token deltas), `done` ends the
+// stream, `session` is captured for continuation, and `cost` is hidden in normal
+// output.
+func TestBuddyRenderer_paiContract_sessionResultCostDone(t *testing.T) {
+	var out, err bytes.Buffer
+	r := &buddyRenderer{out: &out, err: &err, startedAt: time.Now()}
+	events := []api.SSEEvent{
+		{Event: "session", Data: `{"session_id":"sess-123"}`},
+		{Event: "result", Data: `{"text":"Here is the analysis.\n"}`},
+		{Event: "cost", Data: `{"total_cost_usd":0.169562}`},
+		{Event: "done", Data: `{}`},
+	}
+	stopped := false
+	for _, ev := range events {
+		if !r.handle(ev) {
+			stopped = true
+			break
+		}
+	}
+	if !stopped {
+		t.Error("handle should return false on `done` to end the stream")
+	}
+	if r.sessionID != "sess-123" {
+		t.Errorf("session_id not captured, got %q", r.sessionID)
+	}
+	if o := out.String(); !strings.Contains(o, "Here is the analysis.") {
+		t.Errorf("result text missing on stdout, got:\n%s", o)
+	}
+	e := err.String()
+	if strings.Contains(e, "cost") || strings.Contains(e, "0.16") {
+		t.Errorf("cost must be hidden in non-verbose mode, got stderr:\n%s", e)
+	}
+	if !strings.Contains(e, "(done in") {
+		t.Errorf("done footer missing, got stderr:\n%s", e)
+	}
+}
+
+func TestBuddyRenderer_paiCost_visibleWithVerbose(t *testing.T) {
+	var out, err bytes.Buffer
+	r := &buddyRenderer{out: &out, err: &err, verbose: true, startedAt: time.Now()}
+	r.handle(api.SSEEvent{Event: "cost", Data: `{"total_cost_usd":0.169562}`})
+	if e := err.String(); !strings.Contains(e, "0.1696") {
+		t.Errorf("cost should print on stderr in verbose mode, got:\n%s", e)
+	}
+}
+
+func TestBuddyRenderer_jsonMode_terminatesOnDone(t *testing.T) {
+	var out, err bytes.Buffer
+	r := &buddyRenderer{out: &out, err: &err, jsonMode: true, startedAt: time.Now()}
+	if !r.handle(api.SSEEvent{Event: "result", Data: `{"text":"x"}`}) {
+		t.Error("json mode should continue on result")
+	}
+	if r.handle(api.SSEEvent{Event: "done", Data: `{}`}) {
+		t.Error("json mode should stop on done")
+	}
+	o := out.String()
+	if !strings.Contains(o, `"event":"result"`) || !strings.Contains(o, `"event":"done"`) {
+		t.Errorf("json mode should pass through result+done, got:\n%s", o)
+	}
+}
