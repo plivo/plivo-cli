@@ -2,9 +2,14 @@
 
 package api
 
-// Agent mirrors the subset of the workflow-config service's model that the
-// CLI surfaces. The full workflow lives in nested fields not exposed here.
-type Agent struct {
+// PhloAgent mirrors the subset of the (older, PHLO-based) workflow-config
+// service's model that a never-shipped internal build once surfaced. The
+// full workflow lives in nested fields not exposed here.
+//
+// Unrelated to the public, node-graph-based api.Agent (types_agents.go) —
+// renamed from the original "Agent" to free up that name once the public
+// Agents API shipped; this type has no callers in this build.
+type PhloAgent struct {
 	UUID         string `json:"uuid"`
 	Name         string `json:"name"`
 	Description  string `json:"description,omitempty"`
@@ -18,9 +23,9 @@ type Agent struct {
 	CreatedAt    string `json:"created_at,omitempty"`
 }
 
-// AgentListResponse is the shape returned by the workflow-config service's
-// list endpoint. Different routes return slightly different envelopes; we
-// try common keys.
-type AgentListResponse struct {
-	Objects []Agent `json:"objects,omitempty"`
+// PhloAgentListResponse is the shape returned by the workflow-config
+// service's list endpoint. Different routes return slightly different
+// envelopes; we try common keys.
+type PhloAgentListResponse struct {
+	Objects []PhloAgent `json:"objects,omitempty"`
 }

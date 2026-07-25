@@ -65,6 +65,7 @@ func execCmd(t *testing.T, args ...string) (err error, stdout, stderr string) {
 	logLevel = "warn"
 	timeoutSec = 30
 	adminServer = ""
+	apiURLFlag = ""
 
 	// Capture stdout via os.Stdout redirection (cobra writes to os.Stderr/Stdout
 	// directly in several places, so we need real OS-level redirection rather
@@ -185,6 +186,7 @@ func TestDestructiveVerbs_refuseWithoutYes(t *testing.T) {
 		{"messaging sms powerpacks delete", []string{"messaging", "sms", "powerpacks", "delete", "PP-UUID"}},
 		{"messaging sms powerpacks numbers remove", []string{"messaging", "sms", "powerpacks", "numbers", "remove", "PP-UUID", "+14155551234"}},
 		{"messaging sms 10dlc links delete", []string{"messaging", "sms", "10dlc", "links", "delete", "LINK-ID"}},
+		{"agents delete", []string{"agents", "delete", "AGENT-ID"}},
 		// `plivo api` escape hatch: mutating methods share the spend-verb gate
 		// so an agent can't accidentally POST/PUT/PATCH/DELETE without --yes.
 		{"api POST", []string{"api", "POST", "/Message/", "--body", `{"src":"+1","dst":"+1","text":"hi"}`}},

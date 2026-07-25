@@ -10,7 +10,7 @@ Usage:
 
 Available Commands:
   account     Inspect and update the active Plivo account
-  agent       AI voice agents (coming soon)
+  agents      Manage AI agent flows (voice/chat/message agents)
   api         Generic REST escape hatch — hit any Plivo API path that isn't yet wrapped
   ask         Ask Plivo's AI assistant (streams the answer as it comes)
   auth        Manage credential profiles (list / use / remove / whoami)
@@ -30,6 +30,7 @@ Available Commands:
 
 Flags:
       --all                auto-paginate through all pages
+      --api-url string     override the REST API base URL (or set PLIVO_API_URL) — for pointing at a non-production gateway
       --dry-run            print the HTTP request without sending
       --explain            explain what the command will do before executing
   -h, --help               help for plivo

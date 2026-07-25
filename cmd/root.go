@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -28,6 +29,7 @@ var (
 	timeoutSec   int
 	allFlag      bool
 	adminServer  string
+	apiURLFlag   string
 )
 
 var rootCmd = &cobra.Command{
@@ -129,7 +131,7 @@ func Root() *cobra.Command { return rootCmd }
 // invoked subcommand name.
 var valueFlags = map[string]bool{
 	"--profile": true, "--output": true, "-o": true,
-	"--log-level": true, "--timeout": true,
+	"--log-level": true, "--timeout": true, "--api-url": true,
 }
 
 func init() {
@@ -158,9 +160,46 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&explainFlag, "explain", false, "explain what the command will do before executing")
 	rootCmd.PersistentFlags().IntVar(&timeoutSec, "timeout", 30, "request timeout in seconds")
 	rootCmd.PersistentFlags().BoolVar(&allFlag, "all", false, "auto-paginate through all pages")
+	rootCmd.PersistentFlags().StringVar(&apiURLFlag, "api-url", "", "override the REST API base URL (or set PLIVO_API_URL) — for pointing at a non-production gateway")
 	// Additional admin-only flags are registered in build-tag-gated files;
 	// the backing var (adminServer) lives above and stays "" in the public
 	// build.
+}
+
+// applyAPIURL resolves the CLI's REST API base URL with precedence:
+//
+//	--api-url flag  >  PLIVO_API_URL env  >  built-in default (api.DefaultBaseURL)
+//
+// This is the general-purpose escape hatch for pointing the CLI at a
+// non-production gateway (dev/staging) instead of curling it by hand — the
+// same shape as applyBuddyURL in cmd/buddy.go, but for the main REST client
+// rather than the AI-assistant endpoint.
+//
+// A malformed override is a hard error (BAD_INPUT) — it must never silently
+// fall back to production, since that would mask the mistake. When a
+// non-default base URL takes effect, a one-line notice goes to stderr
+// (never stdout, which must stay pipe-clean for jq) so dev/staging traffic
+// is never mistaken for production in scripted output.
+func applyAPIURL(c *api.Client) error {
+	raw := strings.TrimSpace(apiURLFlag)
+	source := "--api-url"
+	if raw == "" {
+		raw = strings.TrimSpace(os.Getenv("PLIVO_API_URL"))
+		source = "PLIVO_API_URL"
+	}
+	if raw == "" {
+		return nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		badErr := clierr.BadInput(fmt.Sprintf("%s %q is not an absolute http/https URL", source, raw))
+		badErr.Hint = "Pass a full URL including scheme, e.g. --api-url https://your-gateway.example.com."
+		badErr.Context = map[string]any{"flag": "api-url", "source": source, "value": raw}
+		return badErr
+	}
+	c.BaseURL = strings.TrimRight(raw, "/")
+	fmt.Fprintf(os.Stderr, "> using non-default API base URL (%s): %s\n", source, c.BaseURL)
+	return nil
 }
 
 // getClient resolves credentials and returns a configured API client.
@@ -170,6 +209,9 @@ func getClient() (*api.Client, string, error) {
 		return nil, "", err
 	}
 	c := api.New(p.AuthID, p.AuthToken, time.Duration(timeoutSec)*time.Second)
+	if err := applyAPIURL(c); err != nil {
+		return nil, "", err
+	}
 	c.AdminBaseURL = adminServer
 	c.Email = p.Email
 	c.Region = p.Region

@@ -88,6 +88,12 @@ export PLIVO_AUTH_ID=MAxxxxxxxxxxxxxxxxxxxx
 export PLIVO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
+To point the CLI at a non-production API gateway, set `PLIVO_API_URL` (or pass `--api-url`, which takes precedence) — the CLI prints a one-line notice to stderr whenever a non-default base URL is in effect, so dev/staging output is never mistaken for production:
+
+```bash
+export PLIVO_API_URL=https://your-dev-gateway.example.com
+```
+
 ## Output
 
 Output is a human table on a TTY and JSON when piped, so you can do:
