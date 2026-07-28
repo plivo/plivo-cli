@@ -250,9 +250,9 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 	if effectiveFormat() == output.FormatJSON {
 		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
 	}
-	rows := [][]string{{"ID", "NAME", "STATE", "VERSION", "UPDATED_AT"}}
+	rows := [][]string{{"AGENT_ID", "NAME", "STATE", "FLOW_TYPE", "VERSION", "UPDATED_AT"}}
 	for _, a := range resp.Objects {
-		rows = append(rows, []string{a.ID, a.Name, a.State, strconv.Itoa(a.Version), a.UpdatedAt})
+		rows = append(rows, []string{a.ID, a.Name, a.State, a.FlowType, strconv.Itoa(a.Version), a.UpdatedAt})
 	}
 	return output.Table(os.Stdout, rows)
 }
@@ -280,10 +280,11 @@ func runAgentGet(cmd *cobra.Command, args []string) error {
 	// The full graph can be huge (deeply nested per-node config) — the table
 	// view shows counts; use -o json for the full nodes/connections detail.
 	return output.KV(os.Stdout, [][2]string{
-		{"id", a.ID},
+		{"agent_id", a.ID},
 		{"name", a.Name},
 		{"description", a.Description},
 		{"state", a.State},
+		{"flow_type", a.FlowType},
 		{"version", strconv.Itoa(a.Version)},
 		{"nodes", strconv.Itoa(len(a.Nodes))},
 		{"connections", strconv.Itoa(len(a.Connections))},

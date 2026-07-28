@@ -94,3 +94,45 @@ func TestAgentDelete_acceptsEmpty204(t *testing.T) {
 		t.Fatalf("204 must not be treated as an error: err=%v apiErr=%v", err, apiErr)
 	}
 }
+
+// The resource key is `agent_id` in every representation -- list rows, detail,
+// and create -- matching Application's `app_id` and Endpoint's `endpoint_id`.
+// It shipped as a bare `id` on list/detail while create already said
+// `agent_id`, so `plivo agents list` printed an empty ID column against a
+// correct server. Nothing caught it: no test decoded a real list payload.
+func TestAgentList_decodesAgentIDFromTheWire(t *testing.T) {
+	c, done := agentsClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"api_id":"a",
+		  "meta":{"limit":20,"offset":0,"total_count":1},
+		  "objects":[{"agent_id":"380848ff-c424-49be-9dc8-8e068dbf3ba4",
+		              "name":"E2E real SMS run","state":"ACTIVE",
+		              "flow_type":"api_request","version":1}]}`))
+	})
+	defer done()
+
+	var out AgentList
+	if apiErr, err := c.Do(http.MethodGet, c.AccountURL("Agent"), nil, nil, &out); err != nil || apiErr != nil {
+		t.Fatalf("list: err=%v apiErr=%v", err, apiErr)
+	}
+	if len(out.Objects) != 1 {
+		t.Fatalf("objects = %d, want 1", len(out.Objects))
+	}
+	if got := out.Objects[0].ID; got != "380848ff-c424-49be-9dc8-8e068dbf3ba4" {
+		t.Errorf("ID = %q -- Agent.ID must map to the agent_id wire key", got)
+	}
+	if got := out.Objects[0].FlowType; got != "api_request" {
+		t.Errorf("FlowType = %q, want api_request -- drives which console route can open the agent", got)
+	}
+}
+
+// A bare `id` must NOT populate Agent.ID: if it did, this fix could regress
+// server-side and the CLI would keep working, hiding the contract break.
+func TestAgent_bareIDKeyIsNotAccepted(t *testing.T) {
+	var a Agent
+	if err := json.Unmarshal([]byte(`{"id":"legacy-key","name":"x"}`), &a); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if a.ID != "" {
+		t.Errorf("ID = %q from a bare `id` key; the contract is agent_id only", a.ID)
+	}
+}

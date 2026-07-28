@@ -10,10 +10,11 @@ import "encoding/json"
 // across ApplicationList and the single-get response.
 type Agent struct {
 	APIID       string                 `json:"api_id,omitempty"`
-	ID          string                 `json:"id"`
+	ID          string                 `json:"agent_id"`
 	Name        string                 `json:"name"`
 	Description string                 `json:"description,omitempty"`
 	State       string                 `json:"state,omitempty"`
+	FlowType    string                 `json:"flow_type,omitempty"`
 	Version     int                    `json:"version,omitempty"`
 	CreatedAt   string                 `json:"created_at,omitempty"`
 	UpdatedAt   string                 `json:"updated_at,omitempty"`
