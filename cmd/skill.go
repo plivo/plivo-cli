@@ -4,11 +4,60 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
+	agentsskill "github.com/plivo/plivo-cli/agents-skill"
 	cliskill "github.com/plivo/plivo-cli/cli-skill"
 	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/spf13/cobra"
 )
+
+// bundledSkill is one skill embedded in the binary. dirName is the directory it
+// installs into under the agent skills root, and doubles as the selector a user
+// types (`plivo skill install agents`).
+type bundledSkill struct {
+	selector string // what the user types
+	dirName  string // ~/.claude/skills/<dirName>/SKILL.md
+	content  string
+	summary  string
+}
+
+// bundledSkills is ordered; the FIRST entry is the default when no selector is
+// given, which keeps bare `plivo skill install` behaving as it always has.
+var bundledSkills = []bundledSkill{
+	{
+		selector: "cli",
+		dirName:  "plivo-cli",
+		content:  cliskill.SkillMD,
+		summary:  "the CLI reference — use `plivo` instead of raw curl",
+	},
+	{
+		selector: "agents",
+		dirName:  "plivo-cx-agents",
+		content:  agentsskill.SkillMD,
+		summary:  "build CX agent flows through the public Agents API",
+	},
+}
+
+// lookupSkill resolves a user-typed selector. An empty selector means the
+// default (first) skill.
+func lookupSkill(selector string) (bundledSkill, error) {
+	if selector == "" {
+		return bundledSkills[0], nil
+	}
+	for _, s := range bundledSkills {
+		if s.selector == selector {
+			return s, nil
+		}
+	}
+	names := make([]string, 0, len(bundledSkills)+1)
+	for _, s := range bundledSkills {
+		names = append(names, s.selector)
+	}
+	names = append(names, "all")
+	return bundledSkill{}, clierr.Wrap(fmt.Errorf(
+		"unknown skill %q; available: %s", selector, strings.Join(names, ", ")))
+}
 
 // skill install flags.
 var (
@@ -28,39 +77,87 @@ var skillCmd = &cobra.Command{
 // skillInstallCmd writes the embedded SKILL.md into the agent skills directory
 // (default ~/.claude/skills/plivo-cli; override with --dir, or --print to stdout).
 var skillInstallCmd = &cobra.Command{
-	Use:   "install",
-	Short: "Install the agent skill so coding agents auto-load the CLI reference",
-	Long: `Install the plivo-cli agent skill.
+	Use:   "install [cli|agents|all]",
+	Short: "Install an agent skill so coding agents auto-load the reference",
+	Long: `Install a Plivo agent skill.
 
-The skill is a single-file reference (SKILL.md) written for LLM coding agents.
-It is bundled in the binary, so this writes it out without a network call.
+A skill is a single-file reference (SKILL.md) written for LLM coding agents.
+Both are bundled in the binary, so this writes them out without a network call.
 
-By default it lands at ~/.claude/skills/plivo-cli/SKILL.md (Claude Code).
-Use --dir to target another agent's skills directory, or --print to write the
-content to stdout so any other tool can capture it.`,
-	Example: `  plivo skill install                    # install to ~/.claude/skills/plivo-cli/SKILL.md
-  plivo skill install --dir ~/.config/agent/skills/plivo-cli
-  plivo skill install --print > plivo-cli.md   # capture for any agent
-  plivo skill install --dry-run          # show the destination, write nothing`,
-	Args: cobra.NoArgs,
-	RunE: runSkillInstall,
+  cli      the CLI reference — use ` + "`plivo`" + ` instead of raw curl
+  agents   build CX agent flows through the public Agents API
+  all      both of the above
+
+With no argument, installs the CLI skill (unchanged from previous releases).
+Each skill lands at ~/.claude/skills/<skill>/SKILL.md by default. Use --dir to
+target another agent's skills directory, or --print to write the content to
+stdout so any other tool can capture it; both act on a single skill.`,
+	Example: `  plivo skill install                    # CLI skill -> ~/.claude/skills/plivo-cli/
+  plivo skill install agents             # Agents skill -> ~/.claude/skills/plivo-cx-agents/
+  plivo skill install all                # both
+  plivo skill install agents --print > plivo-agents.md   # capture for any agent
+  plivo skill install agents --dir ~/.config/agent/skills/plivo-cx-agents
+  plivo skill install all --dry-run      # show destinations, write nothing`,
+	Args:      cobra.MaximumNArgs(1),
+	ValidArgs: []string{"cli", "agents", "all"},
+	RunE:      runSkillInstall,
 }
 
 func init() {
-	skillInstallCmd.Flags().StringVar(&skillDir, "dir", "", "destination directory (default: ~/.claude/skills/plivo-cli)")
+	skillInstallCmd.Flags().StringVar(&skillDir, "dir", "", "destination directory (default: ~/.claude/skills/<skill>)")
 	skillInstallCmd.Flags().BoolVar(&skillPrint, "print", false, "write the skill content to stdout instead of installing")
 	skillCmd.AddCommand(skillInstallCmd)
 	rootCmd.AddCommand(skillCmd)
 }
 
 func runSkillInstall(cmd *cobra.Command, args []string) error {
-	// --print emits the skill to stdout; ignores --dir / --dry-run.
-	if skillPrint {
-		_, err := fmt.Fprint(os.Stdout, cliskill.SkillMD)
+	selector := ""
+	if len(args) == 1 {
+		selector = args[0]
+	}
+
+	// "all" fans out; --dir and --print each name a single destination, so they
+	// are incompatible with it.
+	if selector == "all" {
+		if skillDir != "" || skillPrint {
+			return clierr.Wrap(fmt.Errorf(
+				"--dir and --print act on one skill; name it instead of \"all\""))
+		}
+		for _, s := range bundledSkills {
+			if err := installSkill(s); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	s, err := lookupSkill(selector)
+	if err != nil {
 		return err
 	}
 
-	dir, err := resolveSkillDir(skillDir)
+	// --print emits the skill to stdout; ignores --dir / --dry-run.
+	if skillPrint {
+		_, err := fmt.Fprint(os.Stdout, s.content)
+		return err
+	}
+
+	if err := installSkill(s); err != nil {
+		return err
+	}
+
+	// Only nudge when the user took the default, so an explicit choice stays quiet.
+	if selector == "" && !dryRunFlag {
+		fmt.Fprintf(os.Stderr, "Also available: plivo skill install agents  (%s)\n",
+			bundledSkills[1].summary)
+	}
+	return nil
+}
+
+// installSkill writes one skill to its resolved directory, honouring --dir and
+// --dry-run.
+func installSkill(s bundledSkill) error {
+	dir, err := resolveSkillDir(skillDir, s.dirName)
 	if err != nil {
 		return err
 	}
@@ -75,7 +172,7 @@ func runSkillInstall(cmd *cobra.Command, args []string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return clierr.Wrap(fmt.Errorf("create skill directory %s: %w", dir, err))
 	}
-	if err := os.WriteFile(dest, []byte(cliskill.SkillMD), 0o644); err != nil {
+	if err := os.WriteFile(dest, []byte(s.content), 0o644); err != nil {
 		return clierr.Wrap(fmt.Errorf("write skill to %s: %w", dest, err))
 	}
 
@@ -84,8 +181,8 @@ func runSkillInstall(cmd *cobra.Command, args []string) error {
 }
 
 // resolveSkillDir returns the override (with ~ expanded) or the default
-// ~/.claude/skills/plivo-cli.
-func resolveSkillDir(override string) (string, error) {
+// ~/.claude/skills/<name>.
+func resolveSkillDir(override, name string) (string, error) {
 	if override != "" {
 		return expandHome(override)
 	}
@@ -93,7 +190,7 @@ func resolveSkillDir(override string) (string, error) {
 	if err != nil {
 		return "", clierr.Wrap(fmt.Errorf("resolve home directory: %w", err))
 	}
-	return filepath.Join(home, ".claude", "skills", "plivo-cli"), nil
+	return filepath.Join(home, ".claude", "skills", name), nil
 }
 
 // expandHome rewrites a leading "~" or "~/…" to the home dir; other paths unchanged.

@@ -4,7 +4,7 @@ Usage:
   plivo skill [command]
 
 Available Commands:
-  install     Install the agent skill so coding agents auto-load the CLI reference
+  install     Install an agent skill so coding agents auto-load the reference
 
 Flags:
   -h, --help   help for skill
