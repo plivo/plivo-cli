@@ -20,7 +20,8 @@ func TestSkillMDEmbedded(t *testing.T) {
 		"/AgentNode/",     // the discovery endpoint the skill is built around
 		"output_states",   // where source handles come from
 		"Preflight check", // the validator section
-		"agent_id",        // the resource key
+		"agent_uuid",      // the resource key
+		"send_message_1",  // the server-minted node id rule
 	} {
 		if !strings.Contains(SkillMD, must) {
 			t.Errorf("embedded skill is missing %q", must)

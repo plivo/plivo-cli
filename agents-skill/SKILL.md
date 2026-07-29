@@ -1,6 +1,6 @@
 ---
 name: plivo-cx-agents
-description: Build, update and publish Plivo CX Agents (conversation flows made of nodes) through the public Agents API. Trigger whenever the user wants to create, edit, wire, validate or publish a Plivo CX agent or flow, asks which Plivo nodes to use, or mentions AgentNode / agent_id / the Agents API.
+description: Build, update and publish Plivo CX Agents (conversation flows made of nodes) through the public Agents API. Trigger whenever the user wants to create, edit, wire, validate or publish a Plivo CX agent or flow, asks which Plivo nodes to use, or mentions AgentNode / agent_uuid / the Agents API.
 ---
 
 # Plivo CX Agents skill
@@ -9,28 +9,29 @@ A Plivo CX **Agent** is a directed graph: `nodes` (what happens) plus `connectio
 
 ## If you are an AI agent — the rules that actually break flows
 
-Read these seven. Everything else you can discover from the API.
+Read these eight. Everything else you can discover from the API.
 
 1. **Never invent node config.** `GET /AgentNode/{node_type}/` returns the node's JSON Schema *and a working example*. Read it and copy its shape. Guessing field names is the single most common failure.
-2. **Every node must be reachable by a connection.** Membership in a flow version is derived from the connection graph, not from the `nodes` array. A node no connection points at is **not part of the flow**. The API rejects this with `422` and names the orphans.
-3. **Connections use node `id`. Variables use node `name`.** Different namespaces. Mixing them is the most expensive mistake here because it fails at *runtime*, not on save. See below.
-4. **A connection endpoint is `<node_id>.<handle>`**, never a bare node id. Target handle is `Input`.
-5. **Nothing validates a source handle — not the API, not save time.** A misspelled or invented handle returns `201`, round-trips through `GET` unchanged, publishes happily, and is a permanently dead branch. This is the one mistake with no server-side safety net, which is why the preflight check below verifies handles against the live catalogue. **Do not skip it, especially on a branching flow.**
-6. **Node `id`s are permanent.** Connections address nodes by id, so changing an id on update rewires or orphans the graph. Pick ids once and keep them.
-7. **`config.model` is flat on write, but not always flat on read.** Post it flat. Some node types (e.g. `http_request`) return it *nested under a key named after the node type*, and the server also injects a `name` key you did not send. Posting back exactly what you read still works — that is guaranteed — but do not assume the read shape equals the write shape when diffing.
+2. **You do not supply node `id` or position.** Send `name`, `type` and `config`; the server mints the id and lays out the canvas. Ids are `<type>_<n>`, numbered per type in the order you sent them: `start_1`, `send_message_1`, `send_message_2`. Your `connections` must use those names — so either predict them from that rule, or create the agent first and read the ids back before wiring.
+3. **Every node must be reachable by a connection.** Membership in a flow version is derived from the connection graph, not from the `nodes` array. A node no connection points at is **not part of the flow**. The API rejects this with `422` and names the orphans.
+4. **Connections use node `id`. Variables use node `name`.** Different namespaces. Mixing them is the most expensive mistake here because it fails at *runtime*, not on save. See below.
+5. **A connection endpoint is `<node_id>.<handle>`**, never a bare node id. Target handle is `Input`.
+6. **Nothing validates a source handle — not the API, not save time.** A misspelled or invented handle returns `201`, round-trips through `GET` unchanged, publishes happily, and is a permanently dead branch. This is the one mistake with no server-side safety net, which is why the preflight check below verifies handles against the live catalogue. **Do not skip it, especially on a branching flow.**
+7. **Once minted, an id is permanent.** On update, send every node back with the `id` it came back with. A node sent *without* an id is treated as new and gets the next free number; changing an existing id rewires or orphans the graph.
+8. **`config.model` is flat on write, but not always flat on read.** Post it flat. Some node types (e.g. `http_request`) return it *nested under a key named after the node type*, and the server also injects a `name` key you did not send. Posting back exactly what you read still works — that is guaranteed — but do not assume the read shape equals the write shape when diffing.
 
-Also: send `Content-Type: application/json`, keep the **trailing slash** on collection paths, and never exceed `limit=20` (it is rejected, not clamped).
+Also: send `Content-Type: application/json`, keep the **trailing slash** on collection paths, and note `limit` is capped at 20 — a larger value is silently clamped to 20 rather than rejected, so check `meta.limit` if the page size matters to you.
 
 ## The workflow that works
 
 ```
 1. GET /AgentNode/                     → which node types exist
 2. GET /AgentNode/{type}/              → schema + working example, per node you need
-3. build the graph                     → ids, names, positions, connections
+3. build the graph                     → names, types, config, connections
 4. run the preflight check (below)     → orphans, namespaces, and real handles
-5. POST /Agent/                        → 201, returns agent_id
-6. GET /Agent/{agent_id}/              → confirm nodes + connections came back
-7. POST /Agent/{agent_id}/Publish      → DRAFT → ACTIVE
+5. POST /Agent/                        → 201, returns agent_uuid
+6. GET /Agent/{agent_uuid}/              → confirm nodes + connections came back
+7. POST /Agent/{agent_uuid}/Publish      → DRAFT → ACTIVE
 ```
 
 Do not skip step 4. Steps 5 and 6 will happily report success on a flow with a dead branch or a variable that resolves to nothing — the preflight is the only thing that catches those.
@@ -49,63 +50,79 @@ export B=https://api.plivo.com/v1/Account/$A
 
 | Method | Path | Result |
 |---|---|---|
-| GET | `/Agent/` | list; `?limit=` ≤20, `?offset=`, `?state=DRAFT\|ACTIVE\|PAUSED` |
-| POST | `/Agent/` | `201` → `{api_id, message:"created", agent_id, name}` |
-| GET | `/Agent/{agent_id}/` | detail incl. `nodes` + `connections` |
-| POST | `/Agent/{agent_id}/` | update; `202` → `{api_id, message:"changed"}` |
-| DELETE | `/Agent/{agent_id}/` | `204` |
-| POST | `/Agent/{agent_id}/Publish` | `202` → `{api_id, message:"changed"}`; `DRAFT` → `ACTIVE`. **Empty body.** |
-| POST | `/Agent/{agent_id}/Pause` | `202`; → `PAUSED`. Empty body. |
-| POST | `/Agent/{agent_id}/Resume` | `202`; → `ACTIVE`. Empty body. |
-| GET | `/Agent/{agent_id}/Run/` | run history |
-| GET | `/Agent/{agent_id}/Run/{run_id}/` | one run + execution logs |
-| GET | `/AgentNode/` | all node types |
+| GET | `/Agent/` | list; `?limit=` (clamped to 20), `?offset=`, `?state=DRAFT\|ACTIVE\|PAUSED` |
+| POST | `/Agent/` | `201` → `{api_id, message:"agent created", agent_uuid, name, resource_uri}` |
+| GET | `/Agent/{agent_uuid}/` | detail incl. `nodes` + `connections` |
+| POST | `/Agent/{agent_uuid}/` | update; `202` → `{api_id, message:"changed"}` |
+| DELETE | `/Agent/{agent_uuid}/` | `204` |
+| POST | `/Agent/{agent_uuid}/Publish` | `202` → `{api_id, message:"changed"}`; `DRAFT` → `ACTIVE`. **Empty body.** |
+| POST | `/Agent/{agent_uuid}/Pause` | `202`; → `PAUSED`. Empty body. |
+| POST | `/Agent/{agent_uuid}/Resume` | `202`; → `ACTIVE`. Empty body. |
+| GET | `/Agent/{agent_uuid}/Run/` | run history |
+| GET | `/Agent/{agent_uuid}/Run/{run_uuid}/` | one run + execution logs |
+| GET | `/AgentNode/` | all node types; `?types=a,b,c` fetches several schemas in one call |
 | GET | `/AgentNode/{node_type}/` | schema + examples for one type |
 
-The resource key is **`agent_id`** in every response, including list rows — not a bare `id`.
+The resource key is **`agent_uuid`** in every response, including list rows — not a bare `id`. Run ids are
+`run_uuid`. Every object also carries a `resource_uri`.
+
+Timestamps are `YYYY-MM-DD HH:MM:SS.ffffff+00:00` (space-separated, numeric offset) — the same shape the rest of
+the Plivo API uses, and the shape its datetime filters accept. Not ISO-8601 with `T`/`Z`.
 
 ## Node shape
 
+What you send:
 ```json
 {
-  "id": "reply-1",
   "name": "Send Message",
   "type": "send_message",
-  "left": 440, "top": 200,
   "config": { "model": { "...": "per-node, from GET /AgentNode/{type}/" } }
 }
 ```
+What comes back, with the server's additions:
+```json
+{
+  "id": "send_message_1",
+  "name": "Send Message",
+  "type": "send_message",
+  "left": 440, "top": 200,
+  "config": { "model": { "..." : "..." } }
+}
+```
 
-- `id` — yours to choose, referenced by connections, permanent.
+- `id` — **omit it**; the server mints `<type>_<n>` per type. Supply one only if you are managing ids yourself, and never change one that already exists.
 - `name` — human label, **and the namespace variables use**.
 - `type` — must be an exact `node_type` from the catalogue.
-- `left` / `top` — canvas coordinates. Omit them and every node stacks at the same point, which is technically valid and visually unusable. Space them ~360px apart horizontally.
-- `config.model` — a flat dict of the node's fields **when you write it**. See Rule 7: the read shape can differ.
+- `left` / `top` — canvas coordinates. **Omit them too**; the server lays the flow out left to right. Supply them only to control the layout.
+- `config.model` — a flat dict of the node's fields **when you write it**. See Rule 8: the read shape can differ.
 
-## Rule 3, expanded — the namespace trap
+## Rule 4, expanded — the namespace trap
 
 Connections address nodes by **id**. Template variables address them by **name**.
 
 ```json
 { "nodes": [
-    { "id": "start-1", "name": "Start", "type": "start", ... },
-    { "id": "reply-1", "name": "Send Message", "type": "send_message",
+    { "name": "Start", "type": "start", ... },
+    { "name": "Send Message", "type": "send_message",
       "config": { "model": {
         "to": ["{{Start.message.from}}"]        ← name  ✅
       } } } ],
   "connections": [
-    { "source": "start-1.message", "target": "reply-1.Input" }   ← ids  ✅
+    { "source": "start_1.message", "target": "send_message_1.Input" }   ← ids  ✅
   ] }
 ```
 
+The ids in `connections` are the ones the server will mint from the node types
+above, in order. The names in `{{...}}` are the `name` fields.
+
 ```
-❌ "to": ["{{start-1.message.from}}"]    id in a variable — saves fine, resolves to nothing at runtime
-❌ "source": "Start.message"             name in a connection — 400 or a broken graph
+❌ "to": ["{{send_message_1.message.from}}"]  id in a variable — saves fine, resolves to nothing at runtime
+❌ "source": "Start.message"                  name in a connection — 400 or a broken graph
 ```
 
 If you rename a node, every variable referencing it must change too. This is a good reason to set `name` once and leave it.
 
-**Which trigger fields exist is not published.** The node schemas do not enumerate the trigger payload, so the only variable paths you can rely on are the ones that appear in the served examples — `{{Start.message.from}}`, `{{Start.call.header1}}`, `{{Start.outbound_call.to}}`. If you need a field you have not seen in an example (a message's body text, for instance), **do not invent a path**. Either read it off a real run via `GET /Agent/{agent_id}/Run/{run_id}/`, or ask the user to confirm it from the console's variable picker. An invented path saves cleanly and silently resolves to nothing.
+**Which trigger fields exist is not published.** The node schemas do not enumerate the trigger payload, so the only variable paths you can rely on are the ones that appear in the served examples — `{{Start.message.from}}`, `{{Start.call.header1}}`, `{{Start.outbound_call.to}}`. If you need a field you have not seen in an example (a message's body text, for instance), **do not invent a path**. Either read it off a real run via `GET /Agent/{agent_uuid}/Run/{run_uuid}/`, or ask the user to confirm it from the console's variable picker. An invented path saves cleanly and silently resolves to nothing.
 
 There is also a separate `{{secrets.NAME}}` namespace for stored credentials — use it instead of putting a token in `config`.
 
@@ -171,27 +188,29 @@ There is no `branch_v2` — the type is `branch`.
 
 ## Worked example — SMS auto-reply
 
-Two nodes, one connection. Verified end to end.
+Two nodes, one connection, no ids and no coordinates. Verified end to end.
 
 ```bash
 curl -s -u "$A:$T" -H "Content-Type: application/json" -d '{
   "name": "SMS auto-reply",
   "description": "replies to any inbound SMS",
   "nodes": [
-    { "id": "start-1", "name": "Start", "type": "start",
-      "left": 80, "top": 200,
+    { "name": "Start", "type": "start",
       "config": { "model": { "triggers": ["message"] } } },
-    { "id": "reply-1", "name": "Send Message", "type": "send_message",
-      "left": 440, "top": 200,
+    { "name": "Send Message", "type": "send_message",
       "config": { "model": {
         "from": "YOUR_PLIVO_NUMBER",
         "to": ["{{Start.message.from}}"],
         "text": "Thanks for your message, we will be right with you." } } }
   ],
   "connections": [
-    { "source": "start-1.message", "target": "reply-1.Input" }
+    { "source": "start_1.message", "target": "send_message_1.Input" }
   ] }' "$B/Agent/"
 ```
+
+`start_1` and `send_message_1` are the ids the server mints for those two node
+types, in that order. Read them back with `GET /Agent/{agent_uuid}/` if you would
+rather confirm than predict.
 
 Then publish it:
 
@@ -210,18 +229,40 @@ python3 - flow.json <<'PY'
 import json, os, re, sys, urllib.request, base64
 d = json.load(open(sys.argv[1]))
 nodes, conns = d.get("nodes") or [], d.get("connections") or []
-ids   = [n.get("id") for n in nodes]
-names = {n.get("name") for n in nodes if n.get("name")}
-bytype = {n.get("id"): n.get("type") for n in nodes}
 err, warn, note = [], [], []
+
+# Mint the ids the SERVER will mint, using its rule: <type>_<n>, numbered per
+# type in payload order, and never overriding an id you supplied. Without this
+# the checks below would compare your connections against ids that do not exist
+# yet and call every node an orphan -- which is exactly the bug this mirrors.
+def mint(nodes):
+    taken = {n.get("id") for n in nodes if isinstance(n, dict) and n.get("id")}
+    counters, out = {}, []
+    for n in nodes:
+        if not isinstance(n, dict):
+            out.append(n); continue
+        n = dict(n)
+        if not n.get("id"):
+            base = re.sub(r"[^a-z0-9_]+", "_", str(n.get("type") or "node").strip().lower()).strip("_") or "node"
+            k = counters.get(base, 0) + 1
+            cand = f"{base}_{k}"
+            while cand in taken:
+                k += 1; cand = f"{base}_{k}"
+            counters[base] = k; n["id"] = cand; taken.add(cand)
+        out.append(n)
+    return out
+
+nodes = mint(nodes)
+ids   = [n.get("id") for n in nodes if isinstance(n, dict)]
+names = {n.get("name") for n in nodes if isinstance(n, dict) and n.get("name")}
+bytype = {n.get("id"): n.get("type") for n in nodes if isinstance(n, dict)}
 
 if not nodes: err.append("no nodes")
 for dup in {i for i in ids if ids.count(i) > 1}: err.append(f"duplicate node id: {dup}")
 for n in nodes:
-    for f in ("id", "name", "type"):
+    if not isinstance(n, dict): continue
+    for f in ("name", "type"):
         if not n.get(f): err.append(f"node {n.get('id') or '?'}: missing {f}")
-    if n.get("left") is None or n.get("top") is None:
-        warn.append(f"node {n.get('id')}: no left/top, will stack on the canvas")
 
 starts = [n for n in nodes if n.get("type") == "start"]
 if len(starts) != 1: err.append(f"expected exactly 1 start node, found {len(starts)}")
@@ -333,7 +374,7 @@ curl -s -X POST -u "$A:$T" -H "Content-Type: application/json" \
 If all of these hold, the flow is very likely correct:
 
 - The preflight script exits `0` **and did not print "handle check SKIPPED"**. A skipped handle check means the riskiest mistake went unverified.
-- `GET /Agent/{agent_id}/` returns the same node **and connection** counts you sent.
+- `GET /Agent/{agent_uuid}/` returns the same node **and connection** counts you sent.
 - Every `{{...}}` reference matches a node `name` in the same flow, and every path after that name came from an example or a real run rather than from you.
 - The Start node's `config.model.triggers` contains the handle its outgoing connection uses.
 - Each branching node has one connection per outcome you care about, and every one of those handles appeared in the preflight's "Valid:" list.
