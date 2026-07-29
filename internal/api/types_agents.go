@@ -10,7 +10,8 @@ import "encoding/json"
 // across ApplicationList and the single-get response.
 type Agent struct {
 	APIID       string                 `json:"api_id,omitempty"`
-	ID          string                 `json:"agent_id"`
+	ID          string                 `json:"agent_uuid"`
+	ResourceURI string                 `json:"resource_uri,omitempty"`
 	Name        string                 `json:"name"`
 	Description string                 `json:"description,omitempty"`
 	State       string                 `json:"state,omitempty"`
@@ -59,10 +60,11 @@ type AgentGraphConnection struct {
 // appends " 1", " 2", etc. on a name collision. Always show this back to
 // the user rather than echoing what they typed.
 type AgentCreateResponse struct {
-	APIID   string `json:"api_id"`
-	Message string `json:"message,omitempty"`
-	AgentID string `json:"agent_id"`
-	Name    string `json:"name"`
+	APIID       string `json:"api_id"`
+	Message     string `json:"message,omitempty"`
+	AgentID     string `json:"agent_uuid"`
+	Name        string `json:"name"`
+	ResourceURI string `json:"resource_uri,omitempty"`
 }
 
 // AgentRun — GET Agent/{id}/Run/ (list) and GET Agent/{id}/Run/{run_id}/
@@ -74,8 +76,9 @@ type AgentCreateResponse struct {
 // instead of just not-labeling them.
 type AgentRun struct {
 	APIID        string            `json:"api_id,omitempty"`
-	RunID        string            `json:"run_id"`
-	AgentID      string            `json:"agent_id,omitempty"`
+	RunID        string            `json:"run_uuid"`
+	AgentID      string            `json:"agent_uuid,omitempty"`
+	ResourceURI  string            `json:"resource_uri,omitempty"`
 	Status       string            `json:"status,omitempty"`
 	StartedAt    string            `json:"started_at,omitempty"`
 	EndedAt      string            `json:"ended_at,omitempty"`

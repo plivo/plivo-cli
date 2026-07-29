@@ -1,6 +1,7 @@
 package api
 
 import (
+	_ "embed"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -26,7 +27,7 @@ func agentsClient(t *testing.T, h http.HandlerFunc) (*Client, func()) {
 func TestAgentCreate_responseCarriesStoredName(t *testing.T) {
 	c, done := agentsClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"api_id":"a","message":"created","agent_id":"id-1","name":"Support 1"}`))
+		_, _ = w.Write([]byte(`{"api_id":"a","message":"agent created","agent_uuid":"id-1","name":"Support 1"}`))
 	})
 	defer done()
 
@@ -39,7 +40,7 @@ func TestAgentCreate_responseCarriesStoredName(t *testing.T) {
 		t.Errorf("stored name must be surfaced verbatim, got %q want %q", out.Name, "Support 1")
 	}
 	if out.AgentID != "id-1" {
-		t.Errorf("agent_id = %q, want id-1", out.AgentID)
+		t.Errorf("agent_uuid = %q, want id-1", out.AgentID)
 	}
 }
 
@@ -95,18 +96,26 @@ func TestAgentDelete_acceptsEmpty204(t *testing.T) {
 	}
 }
 
-// The resource key is `agent_id` in every representation -- list rows, detail,
-// and create -- matching Application's `app_id` and Endpoint's `endpoint_id`.
-// It shipped as a bare `id` on list/detail while create already said
-// `agent_id`, so `plivo agents list` printed an empty ID column against a
-// correct server. Nothing caught it: no test decoded a real list payload.
-func TestAgentList_decodesAgentIDFromTheWire(t *testing.T) {
+// The resource key follows Plivo's rule: the suffix tracks the VALUE's shape, so
+// uuid-valued ids get `_uuid` (message_uuid, profile_uuid) and numeric ones get
+// `_id` (app_id, endpoint_id). Ours are uuids.
+//
+// This has now broken twice. First the struct said `id` while the API said
+// `agent_id`; then the API moved to `agent_uuid` while the struct still said
+// `agent_id`. Both times `plivo agents list` printed an empty ID column against a
+// perfectly correct server, and both times the mocked tests passed because they
+// had been updated to assert whatever the struct happened to say.
+//
+// So this fixture is a REAL captured response from the live API, not a
+// hand-written literal. If the wire contract moves again, re-capture it and the
+// mismatch shows up here instead of in a user's terminal.
+//
+//go:embed testdata/agent_list_response.json
+var realAgentListResponse []byte
+
+func TestAgentList_decodesARealCapturedResponse(t *testing.T) {
 	c, done := agentsClient(t, func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"api_id":"a",
-		  "meta":{"limit":20,"offset":0,"total_count":1},
-		  "objects":[{"agent_id":"380848ff-c424-49be-9dc8-8e068dbf3ba4",
-		              "name":"E2E real SMS run","state":"ACTIVE",
-		              "flow_type":"api_request","version":1}]}`))
+		_, _ = w.Write(realAgentListResponse)
 	})
 	defer done()
 
@@ -117,22 +126,37 @@ func TestAgentList_decodesAgentIDFromTheWire(t *testing.T) {
 	if len(out.Objects) != 1 {
 		t.Fatalf("objects = %d, want 1", len(out.Objects))
 	}
-	if got := out.Objects[0].ID; got != "380848ff-c424-49be-9dc8-8e068dbf3ba4" {
-		t.Errorf("ID = %q -- Agent.ID must map to the agent_id wire key", got)
+	a := out.Objects[0]
+	if a.ID == "" {
+		t.Error("ID is empty -- Agent.ID does not map to the wire's id key")
 	}
-	if got := out.Objects[0].FlowType; got != "api_request" {
-		t.Errorf("FlowType = %q, want api_request -- drives which console route can open the agent", got)
+	if a.Name == "" {
+		t.Error("Name is empty")
+	}
+	if a.FlowType == "" {
+		t.Error("FlowType is empty -- it decides which console route can open the agent")
+	}
+	if a.ResourceURI == "" {
+		t.Error("ResourceURI is empty -- Plivo publishes it on every object")
+	}
+	if out.Meta.TotalCount == 0 {
+		t.Error("meta.total_count did not decode")
 	}
 }
 
-// A bare `id` must NOT populate Agent.ID: if it did, this fix could regress
-// server-side and the CLI would keep working, hiding the contract break.
-func TestAgent_bareIDKeyIsNotAccepted(t *testing.T) {
-	var a Agent
-	if err := json.Unmarshal([]byte(`{"id":"legacy-key","name":"x"}`), &a); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if a.ID != "" {
-		t.Errorf("ID = %q from a bare `id` key; the contract is agent_id only", a.ID)
+// Neither a bare `id` nor the old `agent_id` may populate Agent.ID: if either
+// did, a server-side regression could hide behind a CLI that still worked.
+func TestAgent_onlyAgentUUIDPopulatesID(t *testing.T) {
+	for _, body := range []string{
+		`{"id":"legacy","name":"x"}`,
+		`{"agent_id":"older","name":"x"}`,
+	} {
+		var a Agent
+		if err := json.Unmarshal([]byte(body), &a); err != nil {
+			t.Fatalf("unmarshal %s: %v", body, err)
+		}
+		if a.ID != "" {
+			t.Errorf("ID = %q from %s; the contract is agent_uuid only", a.ID, body)
+		}
 	}
 }
