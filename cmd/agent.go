@@ -15,7 +15,7 @@ import (
 
 // agentCmd manages AI agent flows (voice/chat/message agents built from a
 // node graph) — the public Agents API, same shape everywhere: paths are
-// /v1/Account/{auth_id}/Agent/... via client.AccountURL. Subaccount
+// /v1/Account/{auth_id}/AgentFlow/... via client.AccountURL. Subaccount
 // credentials are not supported for this API and get a 403.
 var agentCmd = &cobra.Command{
 	Use:     "agents",
@@ -189,11 +189,11 @@ func runAgentCreate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if explainFlag {
-		fmt.Fprintf(os.Stderr, "Will POST %s\n", client.AccountURL("Agent"))
+		fmt.Fprintf(os.Stderr, "Will POST %s\n", client.AccountURL("AgentFlow"))
 	}
 
 	var resp api.AgentCreateResponse
-	apiErr, err := client.Do("POST", client.AccountURL("Agent"), body, nil, &resp)
+	apiErr, err := client.Do("POST", client.AccountURL("AgentFlow"), body, nil, &resp)
 	if err != nil {
 		return err
 	}
@@ -237,7 +237,7 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 	}
 
 	var resp api.AgentList
-	apiErr, err := client.Do("GET", client.AccountURL("Agent"), nil, q, &resp)
+	apiErr, err := client.Do("GET", client.AccountURL("AgentFlow"), nil, q, &resp)
 	if err != nil {
 		return err
 	}
@@ -264,7 +264,7 @@ func runAgentGet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	var a api.Agent
-	apiErr, err := client.Do("GET", client.AccountURL("Agent", agentID), nil, nil, &a)
+	apiErr, err := client.Do("GET", client.AccountURL("AgentFlow", agentID), nil, nil, &a)
 	if err != nil {
 		return err
 	}
@@ -330,7 +330,7 @@ func runAgentUpdate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	var resp api.GenericResponse
-	apiErr, err := client.Do("POST", client.AccountURL("Agent", agentID), body, nil, &resp)
+	apiErr, err := client.Do("POST", client.AccountURL("AgentFlow", agentID), body, nil, &resp)
 	if err != nil {
 		return err
 	}
@@ -353,7 +353,7 @@ func runAgentDelete(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	apiErr, err := client.Do("DELETE", client.AccountURL("Agent", agentID), nil, nil, nil)
+	apiErr, err := client.Do("DELETE", client.AccountURL("AgentFlow", agentID), nil, nil, nil)
 	if err != nil {
 		return err
 	}

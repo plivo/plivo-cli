@@ -57,7 +57,7 @@ func runAgentRunsList(cmd *cobra.Command, args []string) error {
 	q.Set("offset", strconv.Itoa(agentRunsListOffset))
 
 	var resp api.AgentRunList
-	apiErr, err := client.Do("GET", client.AccountURL("Agent", agentID, "Run"), nil, q, &resp)
+	apiErr, err := client.Do("GET", client.AccountURL("AgentFlow", agentID, "Run"), nil, q, &resp)
 	if err != nil {
 		return err
 	}
@@ -84,7 +84,7 @@ func runAgentRunsGet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	var r api.AgentRun
-	apiErr, err := client.Do("GET", client.AccountURL("Agent", agentID, "Run", runID), nil, nil, &r)
+	apiErr, err := client.Do("GET", client.AccountURL("AgentFlow", agentID, "Run", runID), nil, nil, &r)
 	if err != nil {
 		return err
 	}

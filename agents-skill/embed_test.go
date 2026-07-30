@@ -17,7 +17,7 @@ func TestSkillMDEmbedded(t *testing.T) {
 		t.Error("skill must open with the YAML frontmatter that names it")
 	}
 	for _, must := range []string{
-		"/AgentNode/",     // the discovery endpoint the skill is built around
+		"/AgentFlowNode/", // the discovery endpoint the skill is built around
 		"output_states",   // where source handles come from
 		"Preflight check", // the validator section
 		"agent_uuid",      // the resource key

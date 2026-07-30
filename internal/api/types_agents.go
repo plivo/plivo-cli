@@ -2,7 +2,7 @@ package api
 
 import "encoding/json"
 
-// Agent — /Account/{id}/Agent/ (AI agent flow definitions: voice/chat/message
+// Agent — /Account/{id}/AgentFlow/ (AI agent flow definitions: voice/chat/message
 // agents built from a node graph). The same struct backs both the list
 // envelope's Objects (id, name, description, state, version, created_at,
 // updated_at only) and the single-get response (which additionally carries
@@ -31,7 +31,7 @@ type AgentList struct {
 
 // AgentGraphNode is one node in an agent's flow graph (the `nodes` array on
 // Agent). Config is intentionally raw JSON rather than a typed struct: its
-// shape is entirely node-type dependent (see AgentNode.JSONSchema for the
+// shape is entirely node-type dependent (see AgentFlowNode.JSONSchema for the
 // per-type schema) and re-serialising it through a fixed Go struct would
 // risk dropping or reordering fields the backend expects verbatim on
 // update. Every node must be referenced by at least one AgentGraphConnection
@@ -94,11 +94,11 @@ type AgentRunList struct {
 	Objects []AgentRun `json:"objects"`
 }
 
-// AgentNode — GET AgentNode/ (catalogue list) and GET AgentNode/{node_type}/
+// AgentFlowNode — GET AgentFlowNode/ (catalogue list) and GET AgentFlowNode/{node_type}/
 // (single node's JSON Schema). The same struct backs both; APIID,
 // SchemaVersion, JSONSchema, Examples, and Coverage are populated on the
 // detail response only (the catalogue list omits them for size).
-type AgentNode struct {
+type AgentFlowNode struct {
 	APIID         string             `json:"api_id,omitempty"`
 	SchemaVersion string             `json:"schema_version,omitempty"`
 	NodeType      string             `json:"node_type"`
@@ -108,9 +108,9 @@ type AgentNode struct {
 	Usecase       string             `json:"usecase,omitempty"`
 	OutputStates  []AgentOutputState `json:"output_states,omitempty"`
 	// Detail-only fields.
-	JSONSchema json.RawMessage    `json:"json_schema,omitempty"`
-	Examples   []json.RawMessage  `json:"examples,omitempty"`
-	Coverage   *AgentNodeCoverage `json:"x-plivo-coverage,omitempty"`
+	JSONSchema json.RawMessage        `json:"json_schema,omitempty"`
+	Examples   []json.RawMessage      `json:"examples,omitempty"`
+	Coverage   *AgentFlowNodeCoverage `json:"x-plivo-coverage,omitempty"`
 }
 
 // AgentOutputState is one possible exit branch of a node (e.g. "success" /
@@ -123,22 +123,22 @@ type AgentOutputState struct {
 	Selected bool   `json:"selected,omitempty"`
 }
 
-// AgentNodeCoverage reports how faithfully JSONSchema captures the node's
+// AgentFlowNodeCoverage reports how faithfully JSONSchema captures the node's
 // real server-side validation (some rules — conditional-required fields,
 // secret references — aren't expressible in static JSON Schema and are
 // listed here instead of silently missing).
-type AgentNodeCoverage struct {
+type AgentFlowNodeCoverage struct {
 	DroppedCount  int      `json:"dropped_count,omitempty"`
 	DegradedCount int      `json:"degraded_count,omitempty"`
 	DroppedRules  []string `json:"dropped_rules,omitempty"`
 	DegradedRules []string `json:"degraded_rules,omitempty"`
 }
 
-// AgentNodeList is the GET AgentNode/ catalogue envelope. Unlike the other
+// AgentFlowNodeList is the GET AgentFlowNode/ catalogue envelope. Unlike the other
 // list resources in this package it carries no ListMeta — the catalogue is
 // small and unpaginated.
-type AgentNodeList struct {
-	APIID         string      `json:"api_id"`
-	SchemaVersion string      `json:"schema_version,omitempty"`
-	Objects       []AgentNode `json:"objects"`
+type AgentFlowNodeList struct {
+	APIID         string          `json:"api_id"`
+	SchemaVersion string          `json:"schema_version,omitempty"`
+	Objects       []AgentFlowNode `json:"objects"`
 }

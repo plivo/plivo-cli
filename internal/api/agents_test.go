@@ -32,7 +32,7 @@ func TestAgentCreate_responseCarriesStoredName(t *testing.T) {
 	defer done()
 
 	var out AgentCreateResponse
-	apiErr, err := c.Do(http.MethodPost, c.AccountURL("Agent"), map[string]any{"name": "Support"}, nil, &out)
+	apiErr, err := c.Do(http.MethodPost, c.AccountURL("AgentFlow"), map[string]any{"name": "Support"}, nil, &out)
 	if err != nil || apiErr != nil {
 		t.Fatalf("create: err=%v apiErr=%v", err, apiErr)
 	}
@@ -48,11 +48,11 @@ func TestAgentURLs_matchThePublicContract(t *testing.T) {
 	c := New("MAAUTHID000000000000", "token", time.Second)
 	c.BaseURL = "https://example.test"
 	cases := map[string]string{
-		c.AccountURL("Agent"):                     "https://example.test/v1/Account/MAAUTHID000000000000/Agent/",
-		c.AccountURL("Agent", "id-1"):             "https://example.test/v1/Account/MAAUTHID000000000000/Agent/id-1/",
-		c.AccountURL("Agent", "id-1", "Run"):      "https://example.test/v1/Account/MAAUTHID000000000000/Agent/id-1/Run/",
-		c.AccountURL("AgentNode"):                 "https://example.test/v1/Account/MAAUTHID000000000000/AgentNode/",
-		c.AccountURL("AgentNode", "http_request"): "https://example.test/v1/Account/MAAUTHID000000000000/AgentNode/http_request/",
+		c.AccountURL("AgentFlow"):                     "https://example.test/v1/Account/MAAUTHID000000000000/AgentFlow/",
+		c.AccountURL("AgentFlow", "id-1"):             "https://example.test/v1/Account/MAAUTHID000000000000/AgentFlow/id-1/",
+		c.AccountURL("AgentFlow", "id-1", "Run"):      "https://example.test/v1/Account/MAAUTHID000000000000/AgentFlow/id-1/Run/",
+		c.AccountURL("AgentFlowNode"):                 "https://example.test/v1/Account/MAAUTHID000000000000/AgentFlowNode/",
+		c.AccountURL("AgentFlowNode", "http_request"): "https://example.test/v1/Account/MAAUTHID000000000000/AgentFlowNode/http_request/",
 	}
 	for got, want := range cases {
 		if got != want {
@@ -72,7 +72,7 @@ func TestAgentCreate_surfacesValidationMessageVerbatim(t *testing.T) {
 	})
 	defer done()
 
-	apiErr, err := c.Do(http.MethodPost, c.AccountURL("Agent"), map[string]any{"name": "x"}, nil, nil)
+	apiErr, err := c.Do(http.MethodPost, c.AccountURL("AgentFlow"), map[string]any{"name": "x"}, nil, nil)
 	if err != nil {
 		t.Fatalf("transport error: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestAgentDelete_acceptsEmpty204(t *testing.T) {
 	})
 	defer done()
 
-	apiErr, err := c.Do(http.MethodDelete, c.AccountURL("Agent", "id-1"), nil, nil, nil)
+	apiErr, err := c.Do(http.MethodDelete, c.AccountURL("AgentFlow", "id-1"), nil, nil, nil)
 	if err != nil || apiErr != nil {
 		t.Fatalf("204 must not be treated as an error: err=%v apiErr=%v", err, apiErr)
 	}
@@ -120,7 +120,7 @@ func TestAgentList_decodesARealCapturedResponse(t *testing.T) {
 	defer done()
 
 	var out AgentList
-	if apiErr, err := c.Do(http.MethodGet, c.AccountURL("Agent"), nil, nil, &out); err != nil || apiErr != nil {
+	if apiErr, err := c.Do(http.MethodGet, c.AccountURL("AgentFlow"), nil, nil, &out); err != nil || apiErr != nil {
 		t.Fatalf("list: err=%v apiErr=%v", err, apiErr)
 	}
 	if len(out.Objects) != 1 {

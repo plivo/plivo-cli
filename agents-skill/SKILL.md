@@ -1,6 +1,6 @@
 ---
 name: plivo-cx-agents
-description: Build, update and publish Plivo CX Agents (conversation flows made of nodes) through the public Agents API. Trigger whenever the user wants to create, edit, wire, validate or publish a Plivo CX agent or flow, asks which Plivo nodes to use, or mentions AgentNode / agent_uuid / the Agents API.
+description: Build, update and publish Plivo CX Agents (conversation flows made of nodes) through the public Agents API. Trigger whenever the user wants to create, edit, wire, validate or publish a Plivo CX agent or flow, asks which Plivo nodes to use, or mentions AgentFlowNode / agent_uuid / the Agents API.
 ---
 
 # Plivo CX Agents skill
@@ -11,7 +11,7 @@ A Plivo CX **Agent** is a directed graph: `nodes` (what happens) plus `connectio
 
 Read these eight. Everything else you can discover from the API.
 
-1. **Never invent node config.** `GET /AgentNode/{node_type}/` returns the node's JSON Schema *and a working example*. Read it and copy its shape. Guessing field names is the single most common failure.
+1. **Never invent node config.** `GET /AgentFlowNode/{node_type}/` returns the node's JSON Schema *and a working example*. Read it and copy its shape. Guessing field names is the single most common failure.
 2. **You do not supply node `id` or position.** Send `name`, `type` and `config`; the server mints the id and lays out the canvas. Ids are `<type>_<n>`, numbered per type in the order you sent them: `start_1`, `send_message_1`, `send_message_2`. Your `connections` must use those names — so either predict them from that rule, or create the agent first and read the ids back before wiring.
 3. **Every node must be reachable by a connection.** Membership in a flow version is derived from the connection graph, not from the `nodes` array. A node no connection points at is **not part of the flow**. The API rejects this with `422` and names the orphans.
 4. **Connections use node `id`. Variables use node `name`.** Different namespaces. Mixing them is the most expensive mistake here because it fails at *runtime*, not on save. See below.
@@ -25,13 +25,13 @@ Also: send `Content-Type: application/json`, keep the **trailing slash** on coll
 ## The workflow that works
 
 ```
-1. GET /AgentNode/                     → which node types exist
-2. GET /AgentNode/{type}/              → schema + working example, per node you need
+1. GET /AgentFlowNode/                     → which node types exist
+2. GET /AgentFlowNode/{type}/              → schema + working example, per node you need
 3. build the graph                     → names, types, config, connections
 4. run the preflight check (below)     → orphans, namespaces, and real handles
-5. POST /Agent/                        → 201, returns agent_uuid
-6. GET /Agent/{agent_uuid}/              → confirm nodes + connections came back
-7. POST /Agent/{agent_uuid}/Publish      → DRAFT → ACTIVE
+5. POST /AgentFlow/                        → 201, returns agent_uuid
+6. GET /AgentFlow/{agent_uuid}/              → confirm nodes + connections came back
+7. POST /AgentFlow/{agent_uuid}/Publish      → DRAFT → ACTIVE
 ```
 
 Do not skip step 4. Steps 5 and 6 will happily report success on a flow with a dead branch or a variable that resolves to nothing — the preflight is the only thing that catches those.
@@ -50,18 +50,18 @@ export B=https://api.plivo.com/v1/Account/$A
 
 | Method | Path | Result |
 |---|---|---|
-| GET | `/Agent/` | list; `?limit=` (clamped to 20), `?offset=`, `?state=DRAFT\|ACTIVE\|PAUSED` |
-| POST | `/Agent/` | `201` → `{api_id, message:"agent created", agent_uuid, name, resource_uri}` |
-| GET | `/Agent/{agent_uuid}/` | detail incl. `nodes` + `connections` |
-| POST | `/Agent/{agent_uuid}/` | update; `202` → `{api_id, message:"changed"}` |
-| DELETE | `/Agent/{agent_uuid}/` | `204` |
-| POST | `/Agent/{agent_uuid}/Publish` | `202` → `{api_id, message:"changed"}`; `DRAFT` → `ACTIVE`. **Empty body.** |
-| POST | `/Agent/{agent_uuid}/Pause` | `202`; → `PAUSED`. Empty body. |
-| POST | `/Agent/{agent_uuid}/Resume` | `202`; → `ACTIVE`. Empty body. |
-| GET | `/Agent/{agent_uuid}/Run/` | run history |
-| GET | `/Agent/{agent_uuid}/Run/{run_uuid}/` | one run + execution logs |
-| GET | `/AgentNode/` | all node types; `?types=a,b,c` fetches several schemas in one call |
-| GET | `/AgentNode/{node_type}/` | schema + examples for one type |
+| GET | `/AgentFlow/` | list; `?limit=` (clamped to 20), `?offset=`, `?state=DRAFT\|ACTIVE\|PAUSED` |
+| POST | `/AgentFlow/` | `201` → `{api_id, message:"agent created", agent_uuid, name, resource_uri}` |
+| GET | `/AgentFlow/{agent_uuid}/` | detail incl. `nodes` + `connections` |
+| POST | `/AgentFlow/{agent_uuid}/` | update; `202` → `{api_id, message:"changed"}` |
+| DELETE | `/AgentFlow/{agent_uuid}/` | `204` |
+| POST | `/AgentFlow/{agent_uuid}/Publish` | `202` → `{api_id, message:"changed"}`; `DRAFT` → `ACTIVE`. **Empty body.** |
+| POST | `/AgentFlow/{agent_uuid}/Pause` | `202`; → `PAUSED`. Empty body. |
+| POST | `/AgentFlow/{agent_uuid}/Resume` | `202`; → `ACTIVE`. Empty body. |
+| GET | `/AgentFlow/{agent_uuid}/Run/` | run history |
+| GET | `/AgentFlow/{agent_uuid}/Run/{run_uuid}/` | one run + execution logs |
+| GET | `/AgentFlowNode/` | all node types; `?types=a,b,c` fetches several schemas in one call |
+| GET | `/AgentFlowNode/{node_type}/` | schema + examples for one type |
 
 The resource key is **`agent_uuid`** in every response, including list rows — not a bare `id`. Run ids are
 `run_uuid`. Every object also carries a `resource_uri`.
@@ -76,7 +76,7 @@ What you send:
 {
   "name": "Send Message",
   "type": "send_message",
-  "config": { "model": { "...": "per-node, from GET /AgentNode/{type}/" } }
+  "config": { "model": { "...": "per-node, from GET /AgentFlowNode/{type}/" } }
 }
 ```
 What comes back, with the server's additions:
@@ -122,7 +122,7 @@ above, in order. The names in `{{...}}` are the `name` fields.
 
 If you rename a node, every variable referencing it must change too. This is a good reason to set `name` once and leave it.
 
-**Which trigger fields exist is not published.** The node schemas do not enumerate the trigger payload, so the only variable paths you can rely on are the ones that appear in the served examples — `{{Start.message.from}}`, `{{Start.call.header1}}`, `{{Start.outbound_call.to}}`. If you need a field you have not seen in an example (a message's body text, for instance), **do not invent a path**. Either read it off a real run via `GET /Agent/{agent_uuid}/Run/{run_uuid}/`, or ask the user to confirm it from the console's variable picker. An invented path saves cleanly and silently resolves to nothing.
+**Which trigger fields exist is not published.** The node schemas do not enumerate the trigger payload, so the only variable paths you can rely on are the ones that appear in the served examples — `{{Start.message.from}}`, `{{Start.call.header1}}`, `{{Start.outbound_call.to}}`. If you need a field you have not seen in an example (a message's body text, for instance), **do not invent a path**. Either read it off a real run via `GET /AgentFlow/{agent_uuid}/Run/{run_uuid}/`, or ask the user to confirm it from the console's variable picker. An invented path saves cleanly and silently resolves to nothing.
 
 There is also a separate `{{secrets.NAME}}` namespace for stored credentials — use it instead of putting a token in `config`.
 
@@ -130,7 +130,7 @@ There is also a separate `{{secrets.NAME}}` namespace for stored credentials —
 
 Target handle is always `Input`. A source handle comes from **one of two places**, and missing the second one is the classic branching bug:
 
-1. **Static** — an `id` from the source node's `output_states`, as returned by `GET /AgentNode/{type}/`.
+1. **Static** — an `id` from the source node's `output_states`, as returned by `GET /AgentFlowNode/{type}/`.
 2. **Dynamic — minted by the node's own config.** A `branch` node names one handle per condition, using that condition's `alias`. Those aliases are legal source handles even though they never appear in `output_states`.
 
 ```json
@@ -171,7 +171,7 @@ To branch, give one node two outgoing connections on different handles, and offs
 
 ## Node catalogue at a glance
 
-52 types. Use `GET /AgentNode/` for the live list; this is orientation only.
+52 types. Use `GET /AgentFlowNode/` for the live list; this is orientation only.
 
 | Category | Types |
 |---|---|
@@ -205,17 +205,17 @@ curl -s -u "$A:$T" -H "Content-Type: application/json" -d '{
   ],
   "connections": [
     { "source": "start_1.message", "target": "send_message_1.Input" }
-  ] }' "$B/Agent/"
+  ] }' "$B/AgentFlow/"
 ```
 
 `start_1` and `send_message_1` are the ids the server mints for those two node
-types, in that order. Read them back with `GET /Agent/{agent_uuid}/` if you would
+types, in that order. Read them back with `GET /AgentFlow/{agent_uuid}/` if you would
 rather confirm than predict.
 
 Then publish it:
 
 ```bash
-curl -s -X POST -u "$A:$T" "$B/Agent/AGENT_ID/Publish"
+curl -s -X POST -u "$A:$T" "$B/AgentFlow/AGENT_ID/Publish"
 ```
 
 Note `config.model.triggers` on the Start node matches the handle used in the connection (`message`). Keep those two in agreement.
@@ -302,7 +302,7 @@ if not (A and T):
                 "-- a wrong source handle is not caught anywhere else")
 else:
     try:
-        req = urllib.request.Request(f"{BASE}/v1/Account/{A}/AgentNode/")
+        req = urllib.request.Request(f"{BASE}/v1/Account/{A}/AgentFlowNode/")
         req.add_header("Authorization", "Basic " +
                        base64.b64encode(f"{A}:{T}".encode()).decode())
         cat = json.load(urllib.request.urlopen(req, timeout=20))
@@ -358,13 +358,13 @@ Exit code is non-zero if anything must be fixed. Fix errors before POSTing; warn
 POST the **whole** graph, not a patch. The safe pattern is read-modify-write:
 
 ```bash
-curl -s -u "$A:$T" "$B/Agent/AGENT_ID/" > flow.json
+curl -s -u "$A:$T" "$B/AgentFlow/AGENT_ID/" > flow.json
 # edit flow.json — keep every node id exactly as it came back
 python3 -c "
 import json; d=json.load(open('flow.json'))
 json.dump({'nodes':d['nodes'],'connections':d['connections']}, open('body.json','w'))"
 curl -s -X POST -u "$A:$T" -H "Content-Type: application/json" \
-  --data-binary @body.json "$B/Agent/AGENT_ID/"
+  --data-binary @body.json "$B/AgentFlow/AGENT_ID/"
 ```
 
 `name` and `description` can be sent on their own, but a graph edit must include the full `nodes` + `connections`.
@@ -374,10 +374,10 @@ curl -s -X POST -u "$A:$T" -H "Content-Type: application/json" \
 If all of these hold, the flow is very likely correct:
 
 - The preflight script exits `0` **and did not print "handle check SKIPPED"**. A skipped handle check means the riskiest mistake went unverified.
-- `GET /Agent/{agent_uuid}/` returns the same node **and connection** counts you sent.
+- `GET /AgentFlow/{agent_uuid}/` returns the same node **and connection** counts you sent.
 - Every `{{...}}` reference matches a node `name` in the same flow, and every path after that name came from an example or a real run rather than from you.
 - The Start node's `config.model.triggers` contains the handle its outgoing connection uses.
 - Each branching node has one connection per outcome you care about, and every one of those handles appeared in the preflight's "Valid:" list.
 - After `Publish`, `state` is `ACTIVE`.
 
-Note: `GET /AgentNode/{type}/` also returns `x-plivo-coverage`, listing validation rules that are dropped or degraded for that node type. Worth reading when a node's config is accepted but behaves oddly — it tells you which checks are not being applied.
+Note: `GET /AgentFlowNode/{type}/` also returns `x-plivo-coverage`, listing validation rules that are dropped or degraded for that node type. Worth reading when a node's config is accepted but behaves oddly — it tells you which checks are not being applied.
