@@ -149,6 +149,26 @@ func readAgentFlowFile(path string) (*agentFlowFile, error) {
 	return &f, nil
 }
 
+// mergeAgentFlowFile copies the fields a flow file actually sets onto the request
+// body, leaving absent fields alone so an update never blanks what it omits.
+// Returns the name the file asked for ("" if it set none), which create tracks to
+// warn when the server stores a numbered variant.
+func mergeAgentFlowFile(body map[string]any, f *agentFlowFile) string {
+	if f.Name != "" {
+		body["name"] = f.Name
+	}
+	if f.Description != "" {
+		body["description"] = f.Description
+	}
+	if f.Nodes != nil {
+		body["nodes"] = f.Nodes
+	}
+	if f.Connections != nil {
+		body["connections"] = f.Connections
+	}
+	return f.Name
+}
+
 func runAgentCreate(cmd *cobra.Command, args []string) error {
 	body := map[string]any{}
 	requestedName := ""
@@ -158,19 +178,7 @@ func runAgentCreate(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		if f.Name != "" {
-			body["name"] = f.Name
-			requestedName = f.Name
-		}
-		if f.Description != "" {
-			body["description"] = f.Description
-		}
-		if f.Nodes != nil {
-			body["nodes"] = f.Nodes
-		}
-		if f.Connections != nil {
-			body["connections"] = f.Connections
-		}
+		requestedName = mergeAgentFlowFile(body, f)
 	}
 	// Flags win over the file.
 	if agentCreateName != "" {
@@ -302,18 +310,7 @@ func runAgentUpdate(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		if f.Name != "" {
-			body["name"] = f.Name
-		}
-		if f.Description != "" {
-			body["description"] = f.Description
-		}
-		if f.Nodes != nil {
-			body["nodes"] = f.Nodes
-		}
-		if f.Connections != nil {
-			body["connections"] = f.Connections
-		}
+		mergeAgentFlowFile(body, f)
 	}
 	if agentUpdateName != "" {
 		body["name"] = agentUpdateName

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -136,8 +137,18 @@ func TestAgentList_decodesARealCapturedResponse(t *testing.T) {
 	if a.FlowType == "" {
 		t.Error("FlowType is empty -- it decides which console route can open the agent")
 	}
-	if a.ResourceURI == "" {
-		t.Error("ResourceURI is empty -- Plivo publishes it on every object")
+	// Assert the SHAPE, not just presence. A non-empty check is what let the
+	// Agent -> AgentFlow rename drift past this fixture unnoticed: any string
+	// decodes into ResourceURI, so "not empty" proves nothing about the contract.
+	if !strings.Contains(a.ResourceURI, "/AgentFlow/") {
+		t.Errorf("ResourceURI = %q, want it to contain %q -- the public resource segment moved, "+
+			"so re-capture this fixture", a.ResourceURI, "/AgentFlow/")
+	}
+	if !strings.HasSuffix(a.ResourceURI, "/") {
+		t.Errorf("ResourceURI = %q, want a trailing slash (Plivo publishes them that way)", a.ResourceURI)
+	}
+	if !strings.Contains(out.Meta.Next, "/AgentFlow/") {
+		t.Errorf("meta.next = %q, want it to contain %q", out.Meta.Next, "/AgentFlow/")
 	}
 	if out.Meta.TotalCount == 0 {
 		t.Error("meta.total_count did not decode")

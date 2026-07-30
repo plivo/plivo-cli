@@ -348,7 +348,7 @@ Exit code is non-zero if anything must be fixed. Fix errors before POSTing; warn
 | `400` "Payload is not a valid JSON" | Body is not a JSON **object** | Send an object, not an array or string |
 | `401` | Path `auth_id` ≠ authenticated `auth_id` | Make them the same value |
 | `422` on Publish | Agent is already `ACTIVE` | Check `state` first; `Pause` then `Resume` to cycle |
-| `400` on list | `limit` > 20 | Use ≤20 and page with `offset` |
+| wrong page size | `limit` > 20 | NOT an error — silently clamped to 20. Read `meta.limit`, and page with `offset` |
 | Saves fine, does nothing at runtime | Rule 3 — variable used a node id, or an invented trigger field | Switch it to the node `name`; verify the path against an example or a real run |
 | **One branch never fires; no error anywhere** | Rule 5 — source handle is misspelled or invented. **`201`, `GET` and `Publish` all report success** | Run the preflight with credentials so handles are checked against the catalogue |
 | Update returns `202` but nothing changed | You changed a node `id` | Keep ids stable; post the full graph |

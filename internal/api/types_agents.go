@@ -42,8 +42,8 @@ type AgentGraphNode struct {
 	Name        string          `json:"name,omitempty"`
 	Type        string          `json:"type"`
 	Description string          `json:"description,omitempty"`
-	Left        float64         `json:"left,omitempty"`
-	Top         float64         `json:"top,omitempty"`
+	Left        *float64        `json:"left,omitempty"`
+	Top         *float64        `json:"top,omitempty"`
 	Config      json.RawMessage `json:"config,omitempty"`
 }
 
