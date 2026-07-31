@@ -171,3 +171,36 @@ func TestAgent_onlyAgentUUIDPopulatesID(t *testing.T) {
 		}
 	}
 }
+
+// An explicit left/top of 0 must reach the wire. The server checks `is None`
+// specifically so a deliberate 0 is honoured, and the fields are *float64 for
+// exactly that reason -- a plain float64 with omitempty cannot tell "user wrote 0"
+// from "unset" and silently drops it. Nothing else guards this: the captured
+// fixture covers agent_uuid/resource_uri drift, not marshalling, so a future
+// "simplify these back to float64" would reintroduce the bug invisibly.
+func TestAgentGraphNode_explicitZeroPositionSurvivesMarshalling(t *testing.T) {
+	zero := 0.0
+	body, err := json.Marshal(AgentGraphNode{Type: "send_message", Left: &zero, Top: &zero})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	got := string(body)
+	for _, want := range []string{`"left":0`, `"top":0`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("marshalled node = %s, want it to contain %s", got, want)
+		}
+	}
+}
+
+func TestAgentGraphNode_absentPositionIsOmitted(t *testing.T) {
+	body, err := json.Marshal(AgentGraphNode{Type: "send_message"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	got := string(body)
+	for _, unwanted := range []string{"left", "top"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("marshalled node = %s, must omit %q so the server assigns a lane", got, unwanted)
+		}
+	}
+}

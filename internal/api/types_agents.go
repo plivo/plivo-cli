@@ -67,6 +67,14 @@ type AgentCreateResponse struct {
 	ResourceURI string `json:"resource_uri,omitempty"`
 }
 
+// AgentActionResponse is the response from the lifecycle verbs
+// (POST AgentFlow/{id}/{Publish,Pause,Resume}). They answer 202 with just an
+// api_id and a message -- no agent body -- so there is nothing else to decode.
+type AgentActionResponse struct {
+	APIID   string `json:"api_id"`
+	Message string `json:"message,omitempty"`
+}
+
 // AgentRun — GET Agent/{id}/Run/ (list) and GET Agent/{id}/Run/{run_id}/
 // (detail). The same struct backs both; APIID/Logs/GoalMetrics are populated
 // on the detail response only. Logs and GoalMetrics stay raw JSON: log

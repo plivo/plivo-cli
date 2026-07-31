@@ -107,6 +107,66 @@ var agentDeleteCmd = &cobra.Command{
 	RunE:  runAgentDelete,
 }
 
+// The three lifecycle verbs. hodor exposes Publish/Pause/Resume and the whole
+// DRAFT -> ACTIVE workflow pivots on Publish, so without these `agents create`
+// left you stuck in draft and forced a drop to raw curl -- the exact thing this
+// CLI exists to replace.
+//
+// One shared runner: the three differ only in a path segment and their wording,
+// so three near-identical copies would be pure duplication.
+var (
+	agentPublishCmd = agentLifecycleCmd(
+		"publish", "Publish",
+		"Publish an agent flow, moving it from DRAFT to ACTIVE")
+	agentPauseCmd = agentLifecycleCmd(
+		"pause", "Pause",
+		"Pause an ACTIVE agent flow so it stops handling traffic")
+	agentResumeCmd = agentLifecycleCmd(
+		"resume", "Resume",
+		"Resume a PAUSED agent flow, returning it to ACTIVE")
+)
+
+func agentLifecycleCmd(verb, segment, short string) *cobra.Command {
+	return &cobra.Command{
+		Use:   verb + " <agent_id>",
+		Short: short,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runAgentLifecycle(verb, segment, args[0])
+		},
+	}
+}
+
+func runAgentLifecycle(verb, segment, agentID string) error {
+	client, _, err := getClient()
+	if err != nil {
+		return err
+	}
+	url := client.AccountURL("AgentFlow", agentID, segment)
+	if explainFlag {
+		fmt.Fprintf(os.Stderr, "Will POST %s\n", url)
+	}
+	// Deliberately no body: the action is fixed by the route, and core's handler
+	// opts into ALLOW_EMPTY_BODY precisely so these carry none.
+	var resp api.AgentActionResponse
+	apiErr, err := client.Do("POST", url, nil, nil, &resp)
+	if err != nil {
+		return err
+	}
+	if apiErr != nil {
+		return apiErr
+	}
+	if dryRunFlag {
+		return nil
+	}
+	msg := resp.Message
+	if msg == "" {
+		msg = verb + "d"
+	}
+	fmt.Fprintf(os.Stderr, "Agent %s: %s\n", agentID, msg)
+	return nil
+}
+
 func init() {
 	agentCreateCmd.Flags().StringVar(&agentCreateName, "name", "", "agent name (required unless --file supplies one)")
 	agentCreateCmd.Flags().StringVar(&agentCreateDescription, "description", "", "agent description")
@@ -121,7 +181,8 @@ func init() {
 	agentUpdateCmd.Flags().StringVar(&agentUpdateDescription, "description", "", "new description (must be paired with --file — see above)")
 	agentUpdateCmd.Flags().StringVar(&agentUpdateFile, "file", "", "JSON file with the full flow graph ({name, description, nodes, connections}); flags win over its fields")
 
-	agentCmd.AddCommand(agentCreateCmd, agentListCmd, agentGetCmd, agentUpdateCmd, agentDeleteCmd)
+	agentCmd.AddCommand(agentCreateCmd, agentListCmd, agentGetCmd, agentUpdateCmd, agentDeleteCmd,
+		agentPublishCmd, agentPauseCmd, agentResumeCmd)
 	rootCmd.AddCommand(agentCmd)
 }
 
@@ -244,6 +305,10 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 		q.Set("state", agentListState)
 	}
 
+	if explainFlag {
+		fmt.Fprintf(os.Stderr, "Will GET %s?%s\n", client.AccountURL("AgentFlow"), q.Encode())
+	}
+
 	var resp api.AgentList
 	apiErr, err := client.Do("GET", client.AccountURL("AgentFlow"), nil, q, &resp)
 	if err != nil {
@@ -251,6 +316,35 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 	}
 	if apiErr != nil {
 		return apiErr
+	}
+	// --all was a declared-but-unconsumed root flag, so it advertised
+	// auto-pagination on every command and delivered it nowhere. The server caps
+	// limit at 20 (clamping, not rejecting), so >20 agents is ordinary and a
+	// silently truncated list is the worst outcome. Walk the pages here.
+	if allFlag && !dryRunFlag {
+		offset := agentListOffset + len(resp.Objects)
+		for len(resp.Objects) < resp.Meta.TotalCount {
+			pq := url.Values{}
+			for k, v := range q {
+				pq[k] = v
+			}
+			pq.Set("offset", strconv.Itoa(offset))
+			var page api.AgentList
+			apiErr, err = client.Do("GET", client.AccountURL("AgentFlow"), nil, pq, &page)
+			if err != nil {
+				return err
+			}
+			if apiErr != nil {
+				return apiErr
+			}
+			// Defensive: without this a server that stops returning rows before
+			// total_count is reached would spin forever.
+			if len(page.Objects) == 0 {
+				break
+			}
+			resp.Objects = append(resp.Objects, page.Objects...)
+			offset += len(page.Objects)
+		}
 	}
 	if dryRunFlag {
 		return nil

@@ -26,6 +26,9 @@ Available Commands:
   get         Get an agent flow's full definition (fields, nodes, connections)
   list        List agent flows
   nodes       Browse the AI-agent node catalogue (types available for flow graphs)
+  pause       Pause an ACTIVE agent flow so it stops handling traffic
+  publish     Publish an agent flow, moving it from DRAFT to ACTIVE
+  resume      Resume a PAUSED agent flow, returning it to ACTIVE
   runs        Inspect runs (executions) of an agent flow
   update      Rename an agent flow, or replace its graph
 
