@@ -296,7 +296,15 @@ for m in re.finditer(r"\{\{\s*([A-Za-z0-9_-]+)\s*\.", json.dumps(d)):
 # 201 and becomes a permanently dead branch. Needs the catalogue, so it only
 # runs when credentials are present.
 A, T = os.environ.get("PLIVO_AUTH_ID"), os.environ.get("PLIVO_AUTH_TOKEN")
-BASE = os.environ.get("PLIVO_API_BASE", "https://api.plivo.com")
+# HARDCODED ON PURPOSE -- do not make this configurable. This script sends Basic
+# Auth to whatever host it resolves, and it is designed to be run autonomously by
+# an LLM agent with no human watching the request leave. An env var here means a
+# copy-pasted export line, a poisoned shell profile, or prompt injection can
+# silently redirect live Plivo credentials to a host of someone else's choosing.
+# That is the same reasoning that removed --api-url/PLIVO_API_URL from the CLI
+# itself, and it applies more strongly here, not less. Pointing at a non-prod
+# gateway is local-build territory.
+BASE = "https://api.plivo.com"
 if not (A and T):
     note.append("handle check SKIPPED (set PLIVO_AUTH_ID/PLIVO_AUTH_TOKEN to enable) "
                 "-- a wrong source handle is not caught anywhere else")
