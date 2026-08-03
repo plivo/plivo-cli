@@ -377,6 +377,27 @@ curl -s -X POST -u "$A:$T" -H "Content-Type: application/json" \
 
 `name` and `description` can be sent on their own, but a graph edit must include the full `nodes` + `connections`.
 
+### Secrets in a round trip
+
+Reads **mask** secret-shaped fields (`token`, `password`, `secret`, `api_key`,
+`authorization`, `cookie`) as the literal `***REDACTED***`. On write the server puts
+the stored value back for you, so the read-modify-write pattern above works normally
+and you do **not** need to re-supply a credential you never saw.
+
+Two cases it cannot do that for, where the write is **rejected with 400** rather than
+guessing — and you must re-send the real value explicitly:
+
+| shape | why |
+|---|---|
+| a list of bare secret strings, e.g. `"api_tokens": ["***REDACTED***", "***REDACTED***"]` | nothing distinguishes one element from another, so pairing would be positional and reordering the list would swap your credentials |
+| two entries in the same list sharing an `id`/`uuid`/`key`/`name`/`node_type` | the identity does not pick out one stored entry, so restoring would be a guess |
+
+Be aware of the consequence: a node whose config holds one of those shapes **cannot
+be saved through a full-graph update at all** until you include the real secret values
+in the payload — even if you changed nothing else. The 400 names the exact path it
+found the placeholder at. This is deliberate: handing back the wrong credential
+silently is worse than making you re-send the right one.
+
 ## Sanity check
 
 If all of these hold, the flow is very likely correct:
