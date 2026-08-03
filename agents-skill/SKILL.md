@@ -380,7 +380,9 @@ curl -s -X POST -u "$A:$T" -H "Content-Type: application/json" \
 ### Secrets in a round trip
 
 Reads **mask** secret-shaped fields (`token`, `password`, `secret`, `api_key`,
-`authorization`, `cookie`) as the literal `***REDACTED***`. On write the server puts
+`authorization`, `cookie`) as the literal `***REDACTED***`. Masking covers the
+**whole value** under such a key, so a nested object's inner fields are masked too
+even when their own names look harmless. On write the server puts
 the stored value back for you, so the read-modify-write pattern above works normally
 and you do **not** need to re-supply a credential you never saw.
 
@@ -389,7 +391,7 @@ guessing — and you must re-send the real value explicitly:
 
 | shape | why |
 |---|---|
-| a list of bare secret strings, e.g. `"api_tokens": ["***REDACTED***", "***REDACTED***"]` | nothing distinguishes one element from another, so pairing would be positional and reordering the list would swap your credentials |
+| a list under a secret-named key, whether of bare strings (`"api_tokens": ["***REDACTED***", ...]`) or of objects with no `id`/`uuid`/`key`/`name` | nothing distinguishes one element from another, so pairing would be positional and reordering the list would swap your credentials |
 | two entries in the same list sharing an `id`/`uuid`/`key`/`name`/`node_type` | the identity does not pick out one stored entry, so restoring would be a guess |
 
 Be aware of the consequence: a node whose config holds one of those shapes **cannot
