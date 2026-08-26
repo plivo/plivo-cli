@@ -30,6 +30,9 @@ var CLICommand string
 // (not whatever the analytics pipeline auto-detects). Email (when present
 // on the profile) is forwarded so per-user attribution works inside an
 // org — auth_id alone is org-level.
+//
+// Email/Auth-ID/Region/AOM-UUID are gated on TelemetryEnabled; Version/OS/
+// Arch/Command always go out (the server needs Version for the upgrade nudge).
 func (c *Client) addCLIHeaders(req *http.Request) {
 	req.Header.Set(headerCLIVersion, version.Value)
 	req.Header.Set(headerCLIOS, runtime.GOOS)
@@ -37,7 +40,7 @@ func (c *Client) addCLIHeaders(req *http.Request) {
 	if CLICommand != "" {
 		req.Header.Set(headerCLICommand, CLICommand)
 	}
-	if c == nil {
+	if c == nil || !c.TelemetryEnabled {
 		return
 	}
 	if c.Email != "" {
@@ -104,9 +107,15 @@ type Client struct {
 	Email        string // optional human email from the profile; sent as X-Plivo-CLI-Email for per-user analytics
 	Region       string // optional resolved region from the profile; sent as X-Plivo-CLI-Region so unauthenticated analytics routes (feedback) can tag events
 	AomUUID      string // optional per-user identity row UUID from the profile; sent as X-Plivo-CLI-AOM-UUID for per-human analytics
-	HTTP         *http.Client
-	DryRun       bool
-	LogRequest   func(method, url string, body []byte)
+
+	// TelemetryEnabled gates the Email/AuthID/Region/AomUUID headers.
+	// Defaults true via New(); cmd/root.go overrides it from the user's
+	// config/env telemetry setting.
+	TelemetryEnabled bool
+
+	HTTP       *http.Client
+	DryRun     bool
+	LogRequest func(method, url string, body []byte)
 }
 
 // IsScopedToken reports whether AuthToken is a scoped token (stk_ prefix).
@@ -120,11 +129,12 @@ func New(authID, authToken string, timeout time.Duration) *Client {
 		timeout = 30 * time.Second
 	}
 	return &Client{
-		BaseURL:      DefaultBaseURL,
-		BuddyBaseURL: DefaultBuddyBase,
-		AuthID:       authID,
-		AuthToken:    authToken,
-		HTTP:         &http.Client{Timeout: timeout},
+		BaseURL:          DefaultBaseURL,
+		BuddyBaseURL:     DefaultBuddyBase,
+		AuthID:           authID,
+		AuthToken:        authToken,
+		TelemetryEnabled: true,
+		HTTP:             &http.Client{Timeout: timeout},
 	}
 }
 

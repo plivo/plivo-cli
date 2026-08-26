@@ -384,3 +384,66 @@ func TestE2E_IdentityHeaders_absentWhenEmpty(t *testing.T) {
 			captured.cliAuthID, captured.cliRegion, captured.cliAomUUID)
 	}
 }
+
+// TestE2E_TelemetryDisabled_dropsIdentityHeaders — the telemetry opt-out
+// (TelemetryEnabled=false) strips Email/Auth-ID/Region/AOM-UUID even
+// when all four fields are populated on the Client. Version/OS/Arch/
+// Command must survive regardless — the server needs Version for the
+// upgrade nudge, and these four carry no identity.
+func TestE2E_TelemetryDisabled_dropsIdentityHeaders(t *testing.T) {
+	srv, captured := newFakeServer(t, 200, `{}`, nil)
+	c := newTestClient(srv.URL)
+	c.Email = "user@example.com"
+	c.Region = "us-east-1"
+	c.AomUUID = "aom-fixture-uuid"
+	c.TelemetryEnabled = false
+
+	old := CLICommand
+	t.Cleanup(func() { CLICommand = old })
+	CLICommand = "voice.calls.list"
+
+	if _, err := c.Do("GET", c.AccountURL("Number"), nil, nil, nil); err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if captured.cliEmail != "" || captured.cliAuthID != "" || captured.cliRegion != "" || captured.cliAomUUID != "" {
+		t.Errorf("identity headers should be absent when TelemetryEnabled=false; got email=%q auth=%q region=%q aom=%q",
+			captured.cliEmail, captured.cliAuthID, captured.cliRegion, captured.cliAomUUID)
+	}
+	if captured.cliVersion == "" {
+		t.Error("X-Plivo-CLI-Version should still be sent when telemetry is disabled")
+	}
+	if captured.cliOS == "" || captured.cliArch == "" {
+		t.Error("X-Plivo-CLI-OS/Arch should still be sent when telemetry is disabled")
+	}
+	if captured.cliCommand != "voice.calls.list" {
+		t.Errorf("X-Plivo-CLI-Command should still be sent when telemetry is disabled, got %q", captured.cliCommand)
+	}
+}
+
+// TestE2E_TelemetryEnabled_sendsIdentityHeaders — the flip side of the
+// above: TelemetryEnabled=true (New()'s default) ships all four identity
+// headers as before.
+func TestE2E_TelemetryEnabled_sendsIdentityHeaders(t *testing.T) {
+	srv, captured := newFakeServer(t, 200, `{}`, nil)
+	c := newTestClient(srv.URL)
+	c.Email = "user@example.com"
+	c.Region = "us-east-1"
+	c.AomUUID = "aom-fixture-uuid"
+	c.TelemetryEnabled = true // explicit, though New() already defaults true
+
+	if _, err := c.Do("GET", c.AccountURL("Number"), nil, nil, nil); err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if captured.cliEmail != "user@example.com" {
+		t.Errorf("X-Plivo-CLI-Email = %q, want user@example.com", captured.cliEmail)
+	}
+	if captured.cliAuthID == "" {
+		t.Error("X-Plivo-CLI-Auth-ID should be set when telemetry is enabled")
+	}
+	if captured.cliRegion != "us-east-1" {
+		t.Errorf("X-Plivo-CLI-Region = %q, want us-east-1", captured.cliRegion)
+	}
+	if captured.cliAomUUID != "aom-fixture-uuid" {
+		t.Errorf("X-Plivo-CLI-AOM-UUID = %q, want aom-fixture-uuid", captured.cliAomUUID)
+	}
+}
