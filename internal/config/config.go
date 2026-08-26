@@ -41,9 +41,10 @@ type Profile struct {
 }
 
 type Config struct {
-	Active   string             `toml:"active"`
-	Profiles map[string]Profile `toml:"profiles"`
-	Buddy    BuddyConfig        `toml:"buddy,omitempty"`
+	Active    string             `toml:"active"`
+	Profiles  map[string]Profile `toml:"profiles"`
+	Buddy     BuddyConfig        `toml:"buddy,omitempty"`
+	Telemetry TelemetryConfig    `toml:"telemetry,omitempty"`
 }
 
 // BuddyConfig is the optional [buddy] table in ~/.plivo/config.toml. Tunes
@@ -60,6 +61,33 @@ type BuddyConfig struct {
 // EffectiveURL returns the buddy URL configured in ~/.plivo/config.toml,
 // or "" if unset (caller falls through to env / default).
 func (b BuddyConfig) EffectiveURL() string { return b.URL }
+
+// TelemetryConfig is the optional [telemetry] table in ~/.plivo/config.toml.
+// Controls whether identity fields (email, auth ID, region, AOM UUID) ride
+// on outbound requests. Nil Enabled means "on" — an existing config.toml
+// without this table behaves exactly as before.
+type TelemetryConfig struct {
+	Enabled *bool `toml:"enabled,omitempty"`
+}
+
+// TelemetryEnvVar is the umbrella opt-out for identity telemetry, checked
+// by TelemetryEnabled. See also feedback.TelemetryOptOutEnvVar, a narrower
+// switch that only silences `plivo feedback` submission.
+const TelemetryEnvVar = "PLIVO_CLI_TELEMETRY"
+
+// TelemetryEnabled reports whether identity headers should go out.
+// PLIVO_CLI_TELEMETRY=0 always wins; otherwise it's the config.toml
+// [telemetry] setting, default on.
+func TelemetryEnabled() bool {
+	if os.Getenv(TelemetryEnvVar) == "0" {
+		return false
+	}
+	cfg, err := Load()
+	if err != nil {
+		return true
+	}
+	return cfg.Telemetry.Enabled == nil || *cfg.Telemetry.Enabled
+}
 
 var ErrNoCredentials = errors.New("no credentials: set PLIVO_AUTH_ID/PLIVO_AUTH_TOKEN or run `plivo login`")
 

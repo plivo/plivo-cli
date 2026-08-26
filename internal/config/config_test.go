@@ -316,3 +316,84 @@ func TestResolve_partialEnvVars_doesNotMatch(t *testing.T) {
 		t.Fatal("expected AuthMissing when only AUTH_ID is set")
 	}
 }
+
+// ─── TelemetryEnabled ─────────────────────────────────────────────────────
+
+func TestTelemetryEnabled_defaultOn_noConfigFile(t *testing.T) {
+	withHomeDir(t)
+	t.Setenv(TelemetryEnvVar, "")
+	if !TelemetryEnabled() {
+		t.Error("TelemetryEnabled should default true with no config.toml")
+	}
+}
+
+func TestTelemetryEnabled_defaultOn_configFileWithoutTelemetryTable(t *testing.T) {
+	withHomeDir(t)
+	t.Setenv(TelemetryEnvVar, "")
+	// A config.toml saved before this field existed — Telemetry.Enabled
+	// round-trips as nil, which must still mean "on".
+	_ = Save(&Config{Active: "work", Profiles: map[string]Profile{"work": {AuthID: "MA"}}})
+	if !TelemetryEnabled() {
+		t.Error("TelemetryEnabled should stay true when [telemetry] table is absent")
+	}
+}
+
+func TestTelemetryEnabled_offPersistsAndRoundTrips(t *testing.T) {
+	withHomeDir(t)
+	t.Setenv(TelemetryEnvVar, "")
+	off := false
+	_ = Save(&Config{Profiles: map[string]Profile{}, Telemetry: TelemetryConfig{Enabled: &off}})
+
+	if TelemetryEnabled() {
+		t.Error("TelemetryEnabled should be false after saving Enabled=false")
+	}
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Telemetry.Enabled == nil || *cfg.Telemetry.Enabled != false {
+		t.Errorf("Telemetry.Enabled round-trip = %v, want pointer to false", cfg.Telemetry.Enabled)
+	}
+}
+
+func TestTelemetryEnabled_onPersistsAndRoundTrips(t *testing.T) {
+	withHomeDir(t)
+	t.Setenv(TelemetryEnvVar, "")
+	on := true
+	_ = Save(&Config{Profiles: map[string]Profile{}, Telemetry: TelemetryConfig{Enabled: &on}})
+
+	if !TelemetryEnabled() {
+		t.Error("TelemetryEnabled should be true after saving Enabled=true")
+	}
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Telemetry.Enabled == nil || *cfg.Telemetry.Enabled != true {
+		t.Errorf("Telemetry.Enabled round-trip = %v, want pointer to true", cfg.Telemetry.Enabled)
+	}
+}
+
+// TestTelemetryEnabled_envVarWinsOverConfig — PLIVO_CLI_TELEMETRY=0 is the
+// umbrella off-switch: it disables telemetry even when config.toml says on.
+func TestTelemetryEnabled_envVarWinsOverConfig(t *testing.T) {
+	withHomeDir(t)
+	on := true
+	_ = Save(&Config{Profiles: map[string]Profile{}, Telemetry: TelemetryConfig{Enabled: &on}})
+	t.Setenv(TelemetryEnvVar, "0")
+
+	if TelemetryEnabled() {
+		t.Error("PLIVO_CLI_TELEMETRY=0 should win over config.toml's telemetry=on")
+	}
+}
+
+// TestTelemetryEnabled_envVarOnlyDisablesOnExactZero matches this repo's
+// existing convention (internal/feedback: `== "0"`) — any other value,
+// including "false", is not the off signal and leaves the config in charge.
+func TestTelemetryEnabled_envVarOnlyDisablesOnExactZero(t *testing.T) {
+	withHomeDir(t)
+	t.Setenv(TelemetryEnvVar, "false")
+	if !TelemetryEnabled() {
+		t.Error(`PLIVO_CLI_TELEMETRY="false" should NOT disable telemetry — only exact "0" does`)
+	}
+}
