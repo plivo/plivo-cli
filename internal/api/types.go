@@ -186,7 +186,7 @@ type Recording struct {
 	RecordingType       string `json:"recording_type,omitempty"`
 	RecordingFormat     string `json:"recording_format,omitempty"`
 	RecordingURL        string `json:"recording_url,omitempty"`
-	RecordingDurationMS int    `json:"recording_duration_ms,omitempty"`
+	RecordingDurationMS string `json:"recording_duration_ms,omitempty"`
 	RecordingStartMS    string `json:"recording_start_ms,omitempty"`
 	RecordingEndMS      string `json:"recording_end_ms,omitempty"`
 	AddTime             string `json:"add_time,omitempty"`
@@ -613,7 +613,7 @@ type NumberLink10DLCList struct {
 	Objects []NumberLink10DLC `json:"objects"`
 }
 
-// TollFreeVerification — /Account/{id}/TollFreeVerification/
+// TollFreeVerification — /Account/{id}/TollfreeVerification/
 type TollFreeVerification struct {
 	RawBody
 	APIID                    string   `json:"api_id,omitempty"`
