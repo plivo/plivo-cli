@@ -199,6 +199,32 @@ func TestRunSupport_noAomUUID_refusesWithClearError(t *testing.T) {
 	}
 }
 
+// --dry-run sends nothing, so the identity guard must not suppress the
+// preview. Regression: it did, which broke the smoke suite on any machine
+// without a browser-login profile (i.e. all of CI).
+func TestRunSupport_noAomUUID_dryRunStillPreviews(t *testing.T) {
+	setFakeCreds(t)
+	hit := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hit = true
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	supportClientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", DryRun: true, HTTP: &http.Client{}}
+	defer func() { supportClientForTest = nil }()
+
+	err, _, stderr := execCmd(t, "support", "--dry-run")
+	if err != nil {
+		t.Fatalf("--dry-run should preview, not refuse: %v", err)
+	}
+	if !strings.Contains(stderr, "escalations") {
+		t.Errorf("expected the escalations URL in the dry-run preview, got: %s", stderr)
+	}
+	if hit {
+		t.Error("--dry-run must not send a request")
+	}
+}
+
 // A profile with an AomUUID (browser login) must reach the escalations
 // endpoint normally.
 func TestRunSupport_withAomUUID_reachesEscalationsEndpoint(t *testing.T) {
