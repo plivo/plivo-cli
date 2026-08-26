@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `plivo config telemetry on|off|status` (plus generic `plivo config
+  get/set`) — turn off the identity headers (email, auth ID, region, AOM
+  UUID) sent on CLI requests, persisted in `~/.plivo/config.toml`.
+  `PLIVO_CLI_TELEMETRY=0` does the same for a single shell session or CI
+  job, and wins over the config file. Version/OS/arch metadata is
+  unaffected — the server needs it for the upgrade nudge.
+
 ## [0.2.0] - 2026-06-17
 
 ### Added
