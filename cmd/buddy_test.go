@@ -184,7 +184,7 @@ func TestRunSupport_noAomUUID_refusesWithClearError(t *testing.T) {
 	hit := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hit = true
-		w.Write([]byte(`{}`))
+		_, _ = w.Write([]byte(`{}`))
 	}))
 	defer srv.Close()
 	supportClientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", HTTP: &http.Client{}}
@@ -207,7 +207,7 @@ func TestRunSupport_withAomUUID_reachesEscalationsEndpoint(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"api_id":"x","status":"ok","data":{"escalations":[]}}`))
+		_, _ = w.Write([]byte(`{"api_id":"x","status":"ok","data":{"escalations":[]}}`))
 	}))
 	defer srv.Close()
 	supportClientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", AomUUID: "aom-123", HTTP: &http.Client{}}
