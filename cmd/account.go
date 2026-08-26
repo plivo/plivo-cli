@@ -61,7 +61,7 @@ func runAccountGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, a, nil)
+		return output.JSONRaw(os.Stdout, a.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"auth_id", a.AuthID},

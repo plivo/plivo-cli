@@ -223,7 +223,7 @@ func runMessageSendForChannel(cmd *cobra.Command, channel, src, dst, text, urlFl
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"message", resp.Message},
@@ -270,7 +270,7 @@ func runMessageListForChannel(cmd *cobra.Command, channel string,
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"UUID", "FROM", "TO", "STATE", "TYPE", "TIME"}}
 	for _, m := range resp.Objects {
@@ -297,7 +297,7 @@ func runMessageGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, m, nil)
+		return output.JSONRaw(os.Stdout, m.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"uuid", m.MessageUUID},

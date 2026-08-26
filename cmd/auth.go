@@ -141,7 +141,9 @@ func runAuthWhoami(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, acct, map[string]string{"source": source})
+		// source is local (which profile or env supplied the creds), so it
+		// stays in meta while data carries the upstream body verbatim.
+		return output.JSONSuccess(os.Stdout, acct.Raw(), map[string]string{"source": source})
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"name", acct.Name},

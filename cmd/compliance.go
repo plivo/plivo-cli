@@ -243,7 +243,7 @@ func runComplianceRequirements(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"DOCUMENT_TYPE_ID", "NAME", "PROOF_REQUIRED", "REQUIRED_FIELDS"}}
 	for _, dt := range resp.DocumentTypes {
@@ -277,7 +277,7 @@ func runComplianceCreate(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"compliance_id", resp.ComplianceID},
@@ -307,7 +307,7 @@ func runComplianceGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, app, nil)
+		return output.JSONRaw(os.Stdout, app.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"compliance_id", app.ComplianceID},
@@ -350,7 +350,7 @@ func runComplianceList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"COMPLIANCE_ID", "ALIAS", "STATUS", "COUNTRY", "NUMBER_TYPE", "CREATED"}}
 	for _, a := range resp.Objects {
@@ -385,7 +385,7 @@ func runComplianceUpdate(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, app, nil)
+		return output.JSONRaw(os.Stdout, app.Raw())
 	}
 	fmt.Fprintf(os.Stderr, "Updated compliance application %s\n", id)
 	return nil
@@ -460,7 +460,7 @@ func runComplianceLink(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"NUMBER", "STATUS", "REMARKS"}}
 	for _, r := range resp.Report {

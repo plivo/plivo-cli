@@ -112,6 +112,7 @@ func runMaskingCreate(cmd *cobra.Command, args []string) error {
 	applyDryRun(client, dryRun)
 
 	var resp struct {
+		api.RawBody
 		APIID         string `json:"api_id"`
 		SessionUUID   string `json:"session_uuid"`
 		VirtualNumber string `json:"virtual_number"`
@@ -128,7 +129,7 @@ func runMaskingCreate(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"session_uuid", resp.SessionUUID},
@@ -155,7 +156,7 @@ func runMaskingGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, s, nil)
+		return output.JSONRaw(os.Stdout, s.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"session_uuid", s.SessionUUID},
@@ -189,7 +190,7 @@ func runMaskingList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"SESSION_UUID", "FIRST", "SECOND", "VIRTUAL", "MODE", "STATUS"}}
 	for _, s := range resp.Objects {

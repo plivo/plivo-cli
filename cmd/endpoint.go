@@ -108,7 +108,7 @@ func runEndpointList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"ENDPOINT_ID", "USERNAME", "ALIAS", "SIP_URI", "APP_ID"}}
 	for _, e := range resp.Objects {
@@ -135,7 +135,7 @@ func runEndpointGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, e, nil)
+		return output.JSONRaw(os.Stdout, e.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"endpoint_id", e.EndpointID},
@@ -163,6 +163,7 @@ func runEndpointCreate(cmd *cobra.Command, args []string) error {
 		body["app_id"] = epCreateAppID
 	}
 	var resp struct {
+		api.RawBody
 		APIID      string `json:"api_id"`
 		EndpointID string `json:"endpoint_id"`
 		Username   string `json:"username"`
@@ -180,7 +181,7 @@ func runEndpointCreate(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"endpoint_id", resp.EndpointID},

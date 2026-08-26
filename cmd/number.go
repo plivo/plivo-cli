@@ -275,6 +275,7 @@ func runNumberBuy(cmd *cobra.Command, args []string) error {
 	}
 	// POST /Account/{auth_id}/PhoneNumber/{number}/
 	var resp struct {
+		api.RawBody
 		APIID   string `json:"api_id"`
 		Status  string `json:"status"`
 		Message string `json:"message"`
@@ -294,7 +295,7 @@ func runNumberBuy(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"number", number},

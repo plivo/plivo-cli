@@ -43,7 +43,7 @@ func runLookup(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, n, nil)
+		return output.JSONRaw(os.Stdout, n.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"phone_number", n.PhoneNumber},

@@ -12,6 +12,7 @@ type ListMeta struct {
 }
 
 type Account struct {
+	RawBody
 	APIID        string `json:"api_id,omitempty"`
 	AuthID       string `json:"auth_id"`
 	Name         string `json:"name"`
@@ -68,6 +69,7 @@ func (n *Number) ResolvedAppID() string {
 }
 
 type Application struct {
+	RawBody
 	APIID               string `json:"api_id,omitempty"`
 	AppID               string `json:"app_id"`
 	AppName             string `json:"app_name"`
@@ -90,12 +92,14 @@ type Application struct {
 }
 
 type ApplicationList struct {
+	RawBody
 	APIID   string        `json:"api_id"`
 	Meta    ListMeta      `json:"meta"`
 	Objects []Application `json:"objects"`
 }
 
 type Message struct {
+	RawBody
 	APIID       string `json:"api_id,omitempty"`
 	MessageUUID string `json:"message_uuid"`
 	From        string `json:"from_number"`
@@ -113,6 +117,7 @@ type Message struct {
 }
 
 type MessageList struct {
+	RawBody
 	APIID   string    `json:"api_id"`
 	Meta    ListMeta  `json:"meta"`
 	Objects []Message `json:"objects"`
@@ -120,12 +125,14 @@ type MessageList struct {
 
 // MessageSendResponse is the response from POST /Message/.
 type MessageSendResponse struct {
+	RawBody
 	APIID       string   `json:"api_id"`
 	Message     string   `json:"message"`
 	MessageUUID []string `json:"message_uuid"`
 }
 
 type Call struct {
+	RawBody
 	APIID        string `json:"api_id,omitempty"`
 	CallUUID     string `json:"call_uuid"`
 	From         string `json:"from_number"`
@@ -144,6 +151,7 @@ type Call struct {
 }
 
 type CallList struct {
+	RawBody
 	APIID   string   `json:"api_id"`
 	Meta    ListMeta `json:"meta"`
 	Objects []Call   `json:"objects"`
@@ -151,6 +159,7 @@ type CallList struct {
 
 // GenericResponse covers Plivo's typical "{message, api_id}" mutation response.
 type GenericResponse struct {
+	RawBody
 	APIID   string `json:"api_id"`
 	Message string `json:"message"`
 }
@@ -169,6 +178,7 @@ type ScopedToken struct {
 
 // Recording — /Account/{id}/Recording/
 type Recording struct {
+	RawBody
 	APIID               string `json:"api_id,omitempty"`
 	RecordingID         string `json:"recording_id"`
 	CallUUID            string `json:"call_uuid,omitempty"`
@@ -184,6 +194,7 @@ type Recording struct {
 }
 
 type RecordingList struct {
+	RawBody
 	APIID   string      `json:"api_id"`
 	Meta    ListMeta    `json:"meta"`
 	Objects []Recording `json:"objects"`
@@ -191,6 +202,7 @@ type RecordingList struct {
 
 // VerifySession — /Account/{id}/Verify/Session/
 type VerifySession struct {
+	RawBody
 	APIID                    string `json:"api_id,omitempty"`
 	SessionUUID              string `json:"session_uuid"`
 	AppUUID                  string `json:"app_uuid,omitempty"`
@@ -210,6 +222,7 @@ type VerifySession struct {
 }
 
 type VerifySessionList struct {
+	RawBody
 	APIID   string          `json:"api_id"`
 	Meta    ListMeta        `json:"meta"`
 	Objects []VerifySession `json:"objects"`
@@ -217,6 +230,7 @@ type VerifySessionList struct {
 
 // LookupNumber — https://lookup.plivo.com/v1/Number/{number}?type=carrier
 type LookupNumber struct {
+	RawBody
 	APIID       string `json:"api_id,omitempty"`
 	PhoneNumber string `json:"phone_number"`
 	Country     struct {
@@ -242,6 +256,7 @@ type LookupNumber struct {
 
 // Subaccount — /Account/{id}/Subaccount/
 type Subaccount struct {
+	RawBody
 	APIID       string `json:"api_id,omitempty"`
 	AuthID      string `json:"auth_id"`
 	Name        string `json:"name"`
@@ -254,6 +269,7 @@ type Subaccount struct {
 }
 
 type SubaccountList struct {
+	RawBody
 	APIID   string       `json:"api_id"`
 	Meta    ListMeta     `json:"meta"`
 	Objects []Subaccount `json:"objects"`
@@ -261,6 +277,7 @@ type SubaccountList struct {
 
 // Endpoint — /Account/{id}/Endpoint/ (SIP endpoints)
 type Endpoint struct {
+	RawBody
 	APIID       string `json:"api_id,omitempty"`
 	EndpointID  string `json:"endpoint_id"`
 	Username    string `json:"username"`
@@ -274,6 +291,7 @@ type Endpoint struct {
 }
 
 type EndpointList struct {
+	RawBody
 	APIID   string     `json:"api_id"`
 	Meta    ListMeta   `json:"meta"`
 	Objects []Endpoint `json:"objects"`
@@ -281,6 +299,7 @@ type EndpointList struct {
 
 // CnamLookup — /Account/{id}/CnamLookup/{number}/
 type CnamLookup struct {
+	RawBody
 	APIID      string `json:"api_id,omitempty"`
 	Number     string `json:"number,omitempty"`
 	CallerName string `json:"caller_name,omitempty"`
@@ -291,6 +310,7 @@ type CnamLookup struct {
 
 // MaskingSession — /Account/{id}/MaskingSession/ (number-masking)
 type MaskingSession struct {
+	RawBody
 	APIID         string `json:"api_id,omitempty"`
 	SessionUUID   string `json:"session_uuid"`
 	FirstParty    string `json:"first_party,omitempty"`
@@ -307,6 +327,7 @@ type MaskingSession struct {
 }
 
 type MaskingSessionList struct {
+	RawBody
 	APIID   string           `json:"api_id"`
 	Meta    ListMeta         `json:"meta"`
 	Objects []MaskingSession `json:"objects"`
@@ -336,6 +357,7 @@ type ComplianceDocumentType struct {
 
 // ComplianceRequirements — GET /PhoneNumber/Compliance/Requirements
 type ComplianceRequirements struct {
+	RawBody
 	APIID         string                   `json:"api_id,omitempty"`
 	RequirementID string                   `json:"requirement_id,omitempty"`
 	CountryISO    string                   `json:"country_iso,omitempty"`
@@ -368,6 +390,7 @@ type ComplianceLinkedNumber struct {
 
 // ComplianceApplication — /Account/{id}/PhoneNumber/Compliance/{compliance_id}
 type ComplianceApplication struct {
+	RawBody
 	APIID           string                   `json:"api_id,omitempty"`
 	ComplianceID    string                   `json:"compliance_id,omitempty"`
 	Alias           string                   `json:"alias,omitempty"`
@@ -386,6 +409,7 @@ type ComplianceApplication struct {
 }
 
 type ComplianceApplicationList struct {
+	RawBody
 	APIID   string                  `json:"api_id"`
 	Meta    ListMeta                `json:"meta"`
 	Objects []ComplianceApplication `json:"objects"`
@@ -393,6 +417,7 @@ type ComplianceApplicationList struct {
 
 // ComplianceCreateResp — POST /PhoneNumber/Compliance/ (auto-submits).
 type ComplianceCreateResp struct {
+	RawBody
 	APIID        string `json:"api_id,omitempty"`
 	ComplianceID string `json:"compliance_id,omitempty"`
 	Message      string `json:"message,omitempty"`
@@ -407,6 +432,7 @@ type ComplianceLinkReport struct {
 
 // ComplianceLinkResp — POST /PhoneNumber/Compliance/Link/
 type ComplianceLinkResp struct {
+	RawBody
 	APIID        string                 `json:"api_id,omitempty"`
 	TotalCount   int                    `json:"total_count,omitempty"`
 	UpdatedCount int                    `json:"updated_count,omitempty"`
@@ -427,6 +453,7 @@ type ConferenceMember struct {
 }
 
 type Conference struct {
+	RawBody
 	APIID                 string             `json:"api_id,omitempty"`
 	ConferenceName        string             `json:"conference_name"`
 	ConferenceRunTime     string             `json:"conference_run_time,omitempty"`
@@ -437,12 +464,14 @@ type Conference struct {
 
 // ConferenceList — list returns a flat array of names, not full Conference objects.
 type ConferenceList struct {
+	RawBody
 	APIID       string   `json:"api_id"`
 	Conferences []string `json:"conferences,omitempty"`
 }
 
 // MPC — /Account/{id}/MultiPartyCall/
 type MPC struct {
+	RawBody
 	APIID        string `json:"api_id,omitempty"`
 	MPCUUID      string `json:"mpc_uuid,omitempty"`
 	FriendlyName string `json:"friendly_name,omitempty"`
@@ -454,6 +483,7 @@ type MPC struct {
 }
 
 type MPCList struct {
+	RawBody
 	APIID   string   `json:"api_id"`
 	Meta    ListMeta `json:"meta"`
 	Objects []MPC    `json:"objects"`
@@ -473,6 +503,7 @@ type MPCParticipant struct {
 }
 
 type MPCParticipantList struct {
+	RawBody
 	APIID   string           `json:"api_id"`
 	Meta    ListMeta         `json:"meta"`
 	Objects []MPCParticipant `json:"objects"`
@@ -480,6 +511,7 @@ type MPCParticipantList struct {
 
 // AudioStream — /Account/{id}/Call/{uuid}/Stream/
 type AudioStream struct {
+	RawBody
 	StreamID      string `json:"stream_id,omitempty"`
 	CallUUID      string `json:"call_uuid,omitempty"`
 	StreamURL     string `json:"stream_url,omitempty"`
@@ -492,6 +524,7 @@ type AudioStream struct {
 }
 
 type AudioStreamList struct {
+	RawBody
 	APIID   string        `json:"api_id,omitempty"`
 	Meta    ListMeta      `json:"meta"`
 	Objects []AudioStream `json:"objects,omitempty"`
@@ -499,6 +532,7 @@ type AudioStreamList struct {
 
 // Brand10DLC — /Account/{id}/10dlc/Brand/
 type Brand10DLC struct {
+	RawBody
 	APIID             string `json:"api_id,omitempty"`
 	BrandID           string `json:"brand_id"`
 	BrandAlias        string `json:"brand_alias,omitempty"`
@@ -519,6 +553,7 @@ type Brand10DLC struct {
 }
 
 type Brand10DLCList struct {
+	RawBody
 	APIID  string       `json:"api_id"`
 	Meta   ListMeta     `json:"meta"`
 	Brands []Brand10DLC `json:"brands"`
@@ -526,6 +561,7 @@ type Brand10DLCList struct {
 
 // Campaign10DLC — /Account/{id}/10dlc/Campaign/
 type Campaign10DLC struct {
+	RawBody
 	APIID              string   `json:"api_id,omitempty"`
 	CampaignID         string   `json:"campaign_id"`
 	CampaignAlias      string   `json:"campaign_alias,omitempty"`
@@ -554,6 +590,7 @@ type Campaign10DLC struct {
 }
 
 type Campaign10DLCList struct {
+	RawBody
 	APIID     string          `json:"api_id"`
 	Meta      ListMeta        `json:"meta"`
 	Campaigns []Campaign10DLC `json:"campaigns"`
@@ -570,6 +607,7 @@ type NumberLink10DLC struct {
 }
 
 type NumberLink10DLCList struct {
+	RawBody
 	APIID   string            `json:"api_id"`
 	Meta    ListMeta          `json:"meta"`
 	Objects []NumberLink10DLC `json:"objects"`
@@ -577,6 +615,7 @@ type NumberLink10DLCList struct {
 
 // TollFreeVerification — /Account/{id}/TollFreeVerification/
 type TollFreeVerification struct {
+	RawBody
 	APIID                    string   `json:"api_id,omitempty"`
 	ProfileUUID              string   `json:"profile_uuid"`
 	Status                   string   `json:"status,omitempty"`
@@ -593,6 +632,7 @@ type TollFreeVerification struct {
 }
 
 type TollFreeVerificationList struct {
+	RawBody
 	APIID   string                 `json:"api_id"`
 	Meta    ListMeta               `json:"meta"`
 	Objects []TollFreeVerification `json:"objects"`
@@ -600,6 +640,7 @@ type TollFreeVerificationList struct {
 
 // Powerpack — /Account/{id}/Powerpack/
 type Powerpack struct {
+	RawBody
 	APIID           string `json:"api_id,omitempty"`
 	UUID            string `json:"uuid"`
 	Name            string `json:"name,omitempty"`
@@ -614,6 +655,7 @@ type Powerpack struct {
 }
 
 type PowerpackList struct {
+	RawBody
 	APIID   string      `json:"api_id"`
 	Meta    ListMeta    `json:"meta"`
 	Objects []Powerpack `json:"objects"`
@@ -629,6 +671,7 @@ type PowerpackNumber struct {
 }
 
 type PowerpackNumberList struct {
+	RawBody
 	APIID   string            `json:"api_id"`
 	Meta    ListMeta          `json:"meta"`
 	Objects []PowerpackNumber `json:"objects"`
