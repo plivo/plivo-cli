@@ -375,6 +375,7 @@ func runCallRecord(cmd *cobra.Command, args []string) error {
 		body["callback_method"] = callRecordCallbackMethod
 	}
 	var resp struct {
+		api.RawBody
 		APIID       string `json:"api_id"`
 		Message     string `json:"message"`
 		RecordingID string `json:"recording_id"`
@@ -391,7 +392,7 @@ func runCallRecord(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"recording_id", resp.RecordingID},
@@ -459,6 +460,7 @@ func runCallMake(cmd *cobra.Command, args []string) error {
 	}
 
 	var resp struct {
+		api.RawBody
 		APIID       string `json:"api_id"`
 		Message     string `json:"message"`
 		RequestUUID string `json:"request_uuid"`
@@ -474,7 +476,7 @@ func runCallMake(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"request_uuid", resp.RequestUUID},
@@ -512,7 +514,7 @@ func runCallList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"UUID", "FROM", "TO", "DIR", "DUR", "TIME", "AMOUNT"}}
 	for _, c := range resp.Objects {
@@ -539,7 +541,7 @@ func runCallGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, c, nil)
+		return output.JSONRaw(os.Stdout, c.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"uuid", c.CallUUID},

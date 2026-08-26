@@ -96,7 +96,7 @@ func runTfvList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"PROFILE_UUID", "BUSINESS", "USE_CASE", "VOLUME", "STATUS", "CREATED"}}
 	for _, t := range resp.Objects {
@@ -123,7 +123,7 @@ func runTfvGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, t, nil)
+		return output.JSONRaw(os.Stdout, t.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"profile_uuid", t.ProfileUUID},
@@ -164,6 +164,7 @@ func runTfvSubmit(cmd *cobra.Command, args []string) error {
 	}
 
 	var resp struct {
+		api.RawBody
 		APIID       string `json:"api_id"`
 		ProfileUUID string `json:"profile_uuid"`
 		Message     string `json:"message"`
@@ -179,7 +180,7 @@ func runTfvSubmit(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"profile_uuid", resp.ProfileUUID},

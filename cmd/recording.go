@@ -92,7 +92,7 @@ func runRecordingList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"RECORDING_ID", "CALL_UUID", "TYPE", "FORMAT", "DURATION_MS", "ADDED"}}
 	for _, r := range resp.Objects {
@@ -119,7 +119,7 @@ func runRecordingGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, r, nil)
+		return output.JSONRaw(os.Stdout, r.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"recording_id", r.RecordingID},
