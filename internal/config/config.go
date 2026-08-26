@@ -139,46 +139,68 @@ func Save(c *Config) error {
 }
 
 // Resolve returns the credentials to use.
-// Order: explicit profileName → active profile in config → PLIVO_AUTH_ID/TOKEN env vars.
+// Order: explicit --profile → PLIVO_AUTH_ID/TOKEN env vars → active profile.
 // The second return value is the source label ("profile-name" or "env").
+//
+// Env vars beat the *active* profile so that exporting credentials works even
+// when a profile is already stored — matching the aws, stripe and twilio CLIs.
+// An explicit --profile still beats env: naming a profile is explicit intent.
 func Resolve(profileName string) (Profile, string, error) {
 	cfg, err := Load()
 	if err != nil {
 		return Profile{}, "", err
 	}
-	name := profileName
-	if name == "" {
-		name = cfg.Active
-	}
-	if name != "" {
-		if p, ok := cfg.Profiles[name]; ok && p.AuthID != "" {
-			// Token precedence: a token in config.toml (legacy, or the
-			// fallback used when no OS keychain is available) wins; otherwise
-			// pull it from the OS keychain where `auth login` now stores it.
-			if p.AuthToken == "" {
-				tok, err := GetToken(name)
-				if err != nil {
-					// A real keychain failure (locked / access denied) — not a
-					// plain miss, which GetToken maps to ("", nil). Surface it
-					// instead of falling through to a confusing AUTH_MISSING.
-					return Profile{}, "", fmt.Errorf("reading auth token for profile %q from the OS keychain: %w", name, err)
-				}
-				p.AuthToken = tok
-			}
-			if p.AuthToken != "" {
-				return p, name, nil
-			}
+
+	if profileName != "" {
+		p, ok, err := profileWithToken(cfg, profileName)
+		if err != nil {
+			return Profile{}, "", err
 		}
-		if profileName != "" {
-			return Profile{}, "", fmt.Errorf("profile %q not found or has no stored token in %s", profileName, mustPath())
+		if ok {
+			return p, profileName, nil
 		}
+		return Profile{}, "", fmt.Errorf("profile %q not found or has no stored token in %s", profileName, mustPath())
 	}
-	authID := os.Getenv("PLIVO_AUTH_ID")
-	authToken := os.Getenv("PLIVO_AUTH_TOKEN")
-	if authID != "" && authToken != "" {
+
+	if authID, authToken := os.Getenv("PLIVO_AUTH_ID"), os.Getenv("PLIVO_AUTH_TOKEN"); authID != "" && authToken != "" {
 		return Profile{AuthID: authID, AuthToken: authToken}, "env", nil
 	}
+
+	if cfg.Active != "" {
+		p, ok, err := profileWithToken(cfg, cfg.Active)
+		if err != nil {
+			return Profile{}, "", err
+		}
+		if ok {
+			return p, cfg.Active, nil
+		}
+	}
 	return Profile{}, "", clierr.AuthMissing()
+}
+
+// profileWithToken loads a named profile and fills in its token. Reports
+// ok=false when the profile is absent or has no usable token.
+func profileWithToken(cfg *Config, name string) (Profile, bool, error) {
+	p, exists := cfg.Profiles[name]
+	if !exists || p.AuthID == "" {
+		return Profile{}, false, nil
+	}
+	// A token in config.toml (legacy, or the fallback when no OS keychain is
+	// available) wins; otherwise pull it from the keychain where login stores it.
+	if p.AuthToken == "" {
+		tok, err := GetToken(name)
+		if err != nil {
+			// A real keychain failure (locked / access denied) — not a plain
+			// miss, which GetToken maps to ("", nil). Surface it instead of
+			// falling through to a confusing AUTH_MISSING.
+			return Profile{}, false, fmt.Errorf("reading auth token for profile %q from the OS keychain: %w", name, err)
+		}
+		p.AuthToken = tok
+	}
+	if p.AuthToken == "" {
+		return Profile{}, false, nil
+	}
+	return p, true, nil
 }
 
 func mustPath() string {

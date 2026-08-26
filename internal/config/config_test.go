@@ -238,25 +238,88 @@ func TestResolve_envVarsWhenNoProfile(t *testing.T) {
 	}
 }
 
-func TestResolve_profileBeatsEnvVars(t *testing.T) {
+// Env vars beat the ACTIVE profile. Previously the profile won, so exporting
+// credentials was silently ignored whenever any profile was stored — including
+// one holding a stale or revoked token.
+func TestResolve_envVarsBeatActiveProfile(t *testing.T) {
 	withHomeDir(t)
 	t.Setenv("PLIVO_AUTH_ID", "MAenv")
 	t.Setenv("PLIVO_AUTH_TOKEN", "tokenv")
 	_ = Save(&Config{
 		Active: "work",
 		Profiles: map[string]Profile{
-			"work": {AuthID: "MAprofile", AuthToken: "tokprofile"},
+			"work": {AuthID: "MAprofile", AuthToken: "stale-token"},
 		},
 	})
 	prof, src, err := Resolve("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if prof.AuthID != "MAprofile" {
-		t.Errorf("profile should win over env: AuthID = %q", prof.AuthID)
+	if prof.AuthID != "MAenv" || prof.AuthToken != "tokenv" {
+		t.Errorf("env should win over the active profile, got AuthID=%q", prof.AuthID)
 	}
-	if src != "work" {
-		t.Errorf("src = %q", src)
+	if src != "env" {
+		t.Errorf("src = %q, want env", src)
+	}
+}
+
+// An explicit --profile still beats env vars: naming one is explicit intent.
+func TestResolve_explicitProfileBeatsEnvVars(t *testing.T) {
+	withHomeDir(t)
+	t.Setenv("PLIVO_AUTH_ID", "MAenv")
+	t.Setenv("PLIVO_AUTH_TOKEN", "tokenv")
+	_ = Save(&Config{
+		Active: "work",
+		Profiles: map[string]Profile{
+			"work":  {AuthID: "MAwork", AuthToken: "tokwork"},
+			"other": {AuthID: "MAother", AuthToken: "tokother"},
+		},
+	})
+	prof, src, err := Resolve("other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prof.AuthID != "MAother" {
+		t.Errorf("explicit profile should win, got %q", prof.AuthID)
+	}
+	if src != "other" {
+		t.Errorf("src = %q, want other", src)
+	}
+}
+
+// An active profile is still used when no env vars are set.
+func TestResolve_activeProfileWhenNoEnv(t *testing.T) {
+	withHomeDir(t)
+	t.Setenv("PLIVO_AUTH_ID", "")
+	t.Setenv("PLIVO_AUTH_TOKEN", "")
+	_ = Save(&Config{
+		Active:   "work",
+		Profiles: map[string]Profile{"work": {AuthID: "MAprofile", AuthToken: "tokprofile"}},
+	})
+	prof, src, err := Resolve("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prof.AuthID != "MAprofile" || src != "work" {
+		t.Errorf("got AuthID=%q src=%q", prof.AuthID, src)
+	}
+}
+
+// Only one env var set is not credentials; fall back to the profile.
+func TestResolve_partialEnvFallsBackToProfile(t *testing.T) {
+	withHomeDir(t)
+	t.Setenv("PLIVO_AUTH_ID", "MAenv")
+	t.Setenv("PLIVO_AUTH_TOKEN", "")
+	_ = Save(&Config{
+		Active:   "work",
+		Profiles: map[string]Profile{"work": {AuthID: "MAprofile", AuthToken: "tokprofile"}},
+	})
+	prof, src, err := Resolve("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prof.AuthID != "MAprofile" || src != "work" {
+		t.Errorf("got AuthID=%q src=%q", prof.AuthID, src)
 	}
 }
 

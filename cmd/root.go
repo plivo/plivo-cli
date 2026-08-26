@@ -161,6 +161,10 @@ func init() {
 	// build.
 }
 
+// credSource records which source supplied the credentials ("env" or a profile
+// name), so a rejected-credentials error can point at the right thing.
+var credSource string
+
 // clientForTest is a package-level test hook, mirroring apiClientForTest in
 // api.go. When non-nil every command gets this client, so tests can point a
 // command at an httptest server without real credentials.
@@ -175,6 +179,7 @@ func getClient() (*api.Client, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
+	credSource = name
 	c := api.New(p.AuthID, p.AuthToken, time.Duration(timeoutSec)*time.Second)
 	c.AdminBaseURL = adminServer
 	c.Email = p.Email
@@ -201,6 +206,20 @@ func effectiveFormat() output.Format {
 // handleError is the single place every command error is rendered. It picks
 // JSON (stable schema for AI/scripts when stdout is piped) vs plain (human
 // terminal output), then exits with a category-stable exit code.
+// credentialHint names the source the rejected credentials actually came from.
+// The generic hint used to blame the env vars even when a stored profile was
+// used, sending people to check something the CLI never read.
+func credentialHint() string {
+	switch credSource {
+	case "":
+		return "No credentials resolved. Run `plivo login`, or set PLIVO_AUTH_ID and PLIVO_AUTH_TOKEN."
+	case "env":
+		return "PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN were rejected. Re-check them, or run `plivo login`."
+	default:
+		return fmt.Sprintf("Profile %q was rejected. Run `plivo login --profile %s`, or unset it and use env vars.", credSource, credSource)
+	}
+}
+
 func handleError(err error) {
 	f := output.Resolve(outputFormat, os.Stderr)
 
@@ -209,6 +228,9 @@ func handleError(err error) {
 	apiErr, ok := err.(*api.APIError)
 	if !ok {
 		apiErr = clierr.Wrap(err)
+	}
+	if apiErr.Code == clierr.CodeAuthInvalid {
+		apiErr.Hint = credentialHint()
 	}
 
 	if f == output.FormatJSON {
