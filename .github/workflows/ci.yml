@@ -175,7 +175,8 @@ jobs:
     name: cross-build (${{ matrix.os }}/${{ matrix.arch }})
     runs-on: ubuntu-latest-m-plivo
     needs: smoke
-    if: github.event_name == 'push' && github.ref == 'refs/heads/beta'
+    # Previous `if:` gated on a push event, which this workflow never receives,
+    # so the job never ran. Covers the targets smoke-os cannot run natively.
     strategy:
       fail-fast: false
       matrix:
