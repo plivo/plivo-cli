@@ -182,6 +182,7 @@ func getClient() (*api.Client, string, error) {
 	c.Email = p.Email
 	c.Region = p.Region
 	c.AomUUID = p.AomUUID
+	c.TelemetryEnabled = config.TelemetryEnabled()
 	c.DryRun = dryRunFlag
 	if logLevel == "debug" {
 		c.LogRequest = func(method, url string, body []byte) {

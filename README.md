@@ -171,6 +171,27 @@ The skill file lazy-loads on relevance — it only enters your context window wh
 - [`CHANGELOG.md`](CHANGELOG.md) — release-by-release changes
 - [plivo.com/docs](https://www.plivo.com/docs) — platform docs (XML grammar, webhooks, REST API reference)
 
+## Privacy & telemetry
+
+Every CLI request carries a small set of `X-Plivo-CLI-*` headers: CLI
+version / OS / arch (used for the upgrade nudge and usage stats), plus,
+when you're logged in, identity headers (email, auth ID, region, AOM
+UUID) so Plivo can attribute usage per account. These headers never
+carry flag values, argument values, or free-text bodies — those only
+travel in the actual Plivo API request you asked the CLI to make.
+
+Turn the identity headers off entirely:
+
+```bash
+plivo config telemetry off      # persists in ~/.plivo/config.toml
+export PLIVO_CLI_TELEMETRY=0    # or, for one shell session / CI job
+```
+
+`plivo config telemetry status` shows the current state. Version/OS/arch
+stay on either way — that's how the CLI knows when to nudge an upgrade.
+See [`docs/cli/feedback.md`](docs/cli/feedback.md) for what `plivo
+feedback` collects specifically.
+
 ## Support
 
 Open an issue at [github.com/plivo/plivo-cli/issues](https://github.com/plivo/plivo-cli/issues). For security reports, see [SECURITY.md](SECURITY.md). This repository is read-only for users; please file an issue rather than a pull request — see [CONTRIBUTING.md](CONTRIBUTING.md).

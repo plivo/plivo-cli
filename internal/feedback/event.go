@@ -22,8 +22,9 @@ import (
 const EndpointEnvVar = "PLIVO_FEEDBACK_ENDPOINT"
 
 // TelemetryOptOutEnvVar lets users disable feedback submission entirely
-// (Submit becomes a silent no-op). Symmetric with the install-time
-// PLIVO_INSTALL_TELEMETRY=0 escape hatch.
+// (Submit becomes a silent no-op). Narrower than PLIVO_CLI_TELEMETRY
+// (internal/config), which only gates identity headers and leaves
+// submission itself alone.
 const TelemetryOptOutEnvVar = "PLIVO_FEEDBACK_TELEMETRY"
 
 // MachineIDEnvVar overrides the per-machine UUID. Only used by tests

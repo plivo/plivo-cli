@@ -151,6 +151,10 @@ func resolveAuthIDForFeedback() string {
 // the public route /v1/accounts/cli/feedback responds regardless.
 // Logged-in users get whatever Profile.Env resolves to. Honors --profile
 // so `plivo --profile X feedback` reads X's identity instead of active.
+//
+// This is a separate header set from api.Client.addCLIHeaders (feedback
+// doesn't go through the client) — Auth-ID/Email/Region/AOM-UUID are
+// gated on config.TelemetryEnabled the same way.
 func resolveFeedbackTransport(authID string) (string, map[string]string) {
 	// Default: hodor prod (anonymous-but-public route).
 	base := strings.TrimSuffix(api.DefaultBaseURL, "/v1/cli/api")
@@ -158,6 +162,9 @@ func resolveFeedbackTransport(authID string) (string, map[string]string) {
 		"X-Plivo-CLI-Version": versionValue(),
 		"X-Plivo-CLI-OS":      runtimeOS(),
 		"X-Plivo-CLI-Arch":    runtimeArch(),
+	}
+	if !config.TelemetryEnabled() {
+		return base, headers
 	}
 	if authID != "" {
 		headers["X-Plivo-CLI-Auth-ID"] = authID
