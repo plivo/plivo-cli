@@ -85,7 +85,7 @@ func runTfvList(cmd *cobra.Command, args []string) error {
 		q.Set("status", tfvListStatus)
 	}
 	var resp api.TollFreeVerificationList
-	apiErr, err := client.Do("GET", client.AccountURL("TollFreeVerification"), nil, q, &resp)
+	apiErr, err := client.Do("GET", client.AccountURL("TollfreeVerification"), nil, q, &resp)
 	if err != nil {
 		return err
 	}
@@ -112,7 +112,7 @@ func runTfvGet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	var t api.TollFreeVerification
-	apiErr, err := client.Do("GET", client.AccountURL("TollFreeVerification", id), nil, nil, &t)
+	apiErr, err := client.Do("GET", client.AccountURL("TollfreeVerification", id), nil, nil, &t)
 	if err != nil {
 		return err
 	}
@@ -169,7 +169,7 @@ func runTfvSubmit(cmd *cobra.Command, args []string) error {
 		ProfileUUID string `json:"profile_uuid"`
 		Message     string `json:"message"`
 	}
-	apiErr, err := client.Do("POST", client.AccountURL("TollFreeVerification"), body, nil, &resp)
+	apiErr, err := client.Do("POST", client.AccountURL("TollfreeVerification"), body, nil, &resp)
 	if err != nil {
 		return err
 	}

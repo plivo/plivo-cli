@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/coder/websocket"
+	"github.com/plivo/plivo-cli/internal/api"
 )
 
 // codecMime maps the human flag to the Plivo <Stream> contentType. Two values
@@ -201,5 +203,138 @@ func TestConfirmInteractive_defaultsNo(t *testing.T) {
 	_ = confirmInteractive(&out, "Continue? [y/N] ")
 	if !strings.Contains(out.String(), "Continue?") {
 		t.Errorf("prompt not written: %q", out.String())
+	}
+}
+
+// forwardTestServer mocks the two GETs runVoiceStreamsForward makes before
+// touching ngrok: the app read and the number-count-by-application lookup.
+// numberStatus lets a test simulate the count fetch failing.
+func forwardTestServer(t *testing.T, numberStatus int, totalCount int) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/Application/"):
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"app_id":"APP123","app_name":"my-test-app","answer_url":"https://old.example.com/answer","answer_method":"POST"}`)
+		case strings.Contains(r.URL.Path, "/Number/"):
+			if got := r.URL.Query().Get("application"); got != "APP123" {
+				t.Errorf("Number list not filtered by application, got query %q", r.URL.RawQuery)
+			}
+			if numberStatus != http.StatusOK {
+				w.WriteHeader(numberStatus)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"api_id":"x","meta":{"limit":1,"offset":0,"total_count":%d},"objects":[]}`, totalCount)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+}
+
+// --dry-run must show the app's real name and current answer_url — the read
+// happens even though client.DryRun would otherwise no-op the GET too.
+func TestVoiceStreamsForward_dryRun_showsRealAppInfo(t *testing.T) {
+	setFakeCreds(t)
+	srv := forwardTestServer(t, http.StatusOK, 0)
+	defer srv.Close()
+	streamsFwdClientForTest = &api.Client{BaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", HTTP: &http.Client{}}
+	defer func() { streamsFwdClientForTest = nil }()
+
+	err, stdout, _ := execCmd(t, "voice", "streams", "forward",
+		"--number", "+14155550142", "--app", "APP123", "--to", "ws://localhost:7860/ws", "--dry-run")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout, `"my-test-app"`) {
+		t.Errorf("dry-run output missing real app name, got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "https://old.example.com/answer") {
+		t.Errorf("dry-run output missing real answer_url, got:\n%s", stdout)
+	}
+	if strings.Contains(stdout, `app ""`) || strings.Contains(stdout, "from: \n") {
+		t.Errorf("dry-run output still shows blanks, got:\n%s", stdout)
+	}
+}
+
+// The confirm banner must disclose how many numbers ride on this app's
+// answer_url — the whole point being it's not just --number that moves.
+func TestVoiceStreamsForward_confirm_showsNumberCount(t *testing.T) {
+	setFakeCreds(t)
+	srv := forwardTestServer(t, http.StatusOK, 3)
+	defer srv.Close()
+	streamsFwdClientForTest = &api.Client{BaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", HTTP: &http.Client{}}
+	defer func() { streamsFwdClientForTest = nil }()
+
+	var err error
+	var stdout string
+	stdinTokenFn(t, "n\n", func() {
+		err, stdout, _ = execCmd(t, "voice", "streams", "forward",
+			"--number", "+14155550142", "--app", "APP123", "--to", "ws://localhost:7860/ws")
+	})
+	if err == nil || !strings.Contains(err.Error(), "aborted by user") {
+		t.Fatalf("expected 'aborted by user' (declined prompt), got: %v", err)
+	}
+	if !strings.Contains(stdout, "3 phone numbers attached to this app will forward through the tunnel") {
+		t.Errorf("confirm banner missing the blast-radius line, got:\n%s", stdout)
+	}
+}
+
+// A failed count fetch must degrade to a generic warning, not block the
+// command — the confirm flow should still reach the y/N prompt.
+func TestVoiceStreamsForward_confirm_countFetchFailureDegradesGracefully(t *testing.T) {
+	setFakeCreds(t)
+	srv := forwardTestServer(t, http.StatusInternalServerError, 0)
+	defer srv.Close()
+	streamsFwdClientForTest = &api.Client{BaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", HTTP: &http.Client{}}
+	defer func() { streamsFwdClientForTest = nil }()
+
+	var err error
+	var stdout string
+	stdinTokenFn(t, "n\n", func() {
+		err, stdout, _ = execCmd(t, "voice", "streams", "forward",
+			"--number", "+14155550142", "--app", "APP123", "--to", "ws://localhost:7860/ws")
+	})
+	if err == nil || !strings.Contains(err.Error(), "aborted by user") {
+		t.Fatalf("a count-fetch failure must not block the confirm flow, got: %v", err)
+	}
+	if !strings.Contains(stdout, "could not determine how many phone numbers") {
+		t.Errorf("expected the generic degrade warning, got:\n%s", stdout)
+	}
+}
+
+// numbersAffectedWarning pluralizes correctly and degrades on API failure.
+func TestNumbersAffectedWarning(t *testing.T) {
+	cases := []struct {
+		total int
+		want  string
+	}{
+		{0, "0 phone numbers attached to this app will forward through the tunnel"},
+		{1, "1 phone number attached to this app will forward through the tunnel"},
+		{5, "5 phone numbers attached to this app will forward through the tunnel"},
+	}
+	for _, c := range cases {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"api_id":"x","meta":{"total_count":%d},"objects":[]}`, c.total)
+		}))
+		client := &api.Client{BaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", HTTP: &http.Client{}}
+		got := numbersAffectedWarning(client, "APP123")
+		srv.Close()
+		if got != c.want {
+			t.Errorf("total=%d: got %q, want %q", c.total, got, c.want)
+		}
+	}
+}
+
+func TestNumbersAffectedWarning_fetchFailureDegrades(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	client := &api.Client{BaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", HTTP: &http.Client{}}
+	got := numbersAffectedWarning(client, "APP123")
+	if !strings.Contains(got, "could not determine") {
+		t.Errorf("expected the degrade message, got: %q", got)
 	}
 }

@@ -233,7 +233,7 @@ func TestRequiredFlags(t *testing.T) {
 func TestRootPersistentFlags(t *testing.T) {
 	expected := []string{
 		"profile", "output", "quiet", "no-color", "log-level",
-		"yes", "dry-run", "explain", "timeout", "all",
+		"yes", "dry-run", "explain", "timeout",
 		// Additional admin-only persistent flags are verified in internal_registration_test.go.
 	}
 	for _, name := range expected {

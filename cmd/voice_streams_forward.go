@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -31,6 +32,11 @@ var (
 	streamsFwdRate          int
 	streamsFwdBidirectional bool
 	streamsFwdPrintPayload  bool
+
+	// streamsFwdClientForTest is a package-level test hook, mirroring
+	// apiClientForTest in cmd/api.go — lets tests inject a client pointed at
+	// an httptest server instead of going through getClient().
+	streamsFwdClientForTest *api.Client
 )
 
 var voiceStreamsForwardCmd = &cobra.Command{
@@ -81,16 +87,27 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	}
 
 	out := cmd.OutOrStdout()
-	client, _, err := getClient()
-	if err != nil {
-		return err
+	client := streamsFwdClientForTest
+	if client == nil {
+		c, _, err := getClient()
+		if err != nil {
+			return err
+		}
+		client = c
 	}
 
 	// --- Read current app + save the answer_url ---
+	// Always a real read, even under --dry-run: client.DryRun would otherwise
+	// short-circuit this GET too, leaving the preview below blank.
+	wasDryRun := client.DryRun
+	client.DryRun = false
 	var app api.Application
-	if apiErr, err := client.Do("GET", client.AccountURL("Application", streamsFwdAppID), nil, nil, &app); err != nil {
+	apiErr, err := client.Do("GET", client.AccountURL("Application", streamsFwdAppID), nil, nil, &app)
+	client.DryRun = wasDryRun
+	if err != nil {
 		return clierr.NetworkError(client.AccountURL("Application", streamsFwdAppID), err)
-	} else if apiErr != nil {
+	}
+	if apiErr != nil {
 		return apiErr
 	}
 	originalAnswerURL := app.AnswerURL
@@ -107,6 +124,7 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	if !streamsFwdYes {
 		fmt.Fprintf(out, "⚠  About to modify app %q (%s):\n", app.AppName, streamsFwdAppID)
 		fmt.Fprintf(out, "   - answer_url: %s\n     → https://<ngrok-tunnel>/answer (your local handler)\n", originalAnswerURL)
+		fmt.Fprintf(out, "   - %s\n", numbersAffectedWarning(client, streamsFwdAppID))
 		fmt.Fprintf(out, "   - Restored on Ctrl+C (use --keep to skip restore)\n\n")
 		if !confirmInteractive(out, "Continue? [y/N] ") {
 			return clierr.BadInput("aborted by user")
@@ -285,4 +303,24 @@ func confirmInteractive(out io.Writer, prompt string) bool {
 	}
 	answer = strings.ToLower(strings.TrimSpace(answer))
 	return answer == "y" || answer == "yes"
+}
+
+// numbersAffectedWarning reports how many phone numbers are attached to
+// appID — every one of them starts routing through the tunnel, not just
+// --number, since the redirect is on the app's answer_url. A failure to
+// fetch the count degrades to a generic warning instead of blocking the
+// command.
+func numbersAffectedWarning(client *api.Client, appID string) string {
+	q := url.Values{"application": {appID}, "limit": {"1"}}
+	var resp api.NumberList
+	apiErr, err := client.Do("GET", client.AccountURL("Number"), nil, q, &resp)
+	if err != nil || apiErr != nil {
+		return "could not determine how many phone numbers are attached to this app — ALL of them will forward through the tunnel while it runs"
+	}
+	n := resp.Meta.TotalCount
+	noun := "phone numbers"
+	if n == 1 {
+		noun = "phone number"
+	}
+	return fmt.Sprintf("%d %s attached to this app will forward through the tunnel", n, noun)
 }

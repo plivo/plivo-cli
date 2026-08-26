@@ -215,7 +215,6 @@ Subcommands:
 Flags:
 
 ```
-      --all                auto-paginate through all pages
       --dry-run            print the HTTP request without sending
       --explain            explain what the command will do before executing
       --log-level string   log level: debug|info|warn|error|none (default "warn")
@@ -922,11 +921,12 @@ plivo messaging mms send [flags]
 Flags:
 
 ```
-      --dst <           destination, separate multiple with < (required)
-      --method string   callback method GET|POST (default "POST")
-      --src string      sender (E.164, shortcode, or sender ID) (required)
-      --text string     message body (required)
-      --url string      callback URL for delivery status
+      --dst string              destination, separate multiple with < (required)
+      --media-url stringArray   URL of a hosted image/media file to attach (repeatable, up to 10)
+      --method string           callback method GET|POST (default "POST")
+      --src string              sender (E.164, shortcode, or sender ID) (required)
+      --text string             message body (required)
+      --url string              callback URL for delivery status
 ```
 
 ---
@@ -1440,7 +1440,7 @@ plivo messaging sms send [flags]
 Flags:
 
 ```
-      --dst <           destination, separate multiple with < (required)
+      --dst string      destination, separate multiple with < (required)
       --method string   callback method GET|POST (default "POST")
       --src string      sender (E.164, shortcode, or sender ID) (required)
       --text string     message body (required)
@@ -1595,7 +1595,7 @@ plivo messaging whatsapp send [flags]
 Flags:
 
 ```
-      --dst <           destination, separate multiple with < (required)
+      --dst string      destination, separate multiple with < (required)
       --method string   callback method GET|POST (default "POST")
       --src string      sender (E.164, shortcode, or sender ID) (required)
       --text string     message body (required)
