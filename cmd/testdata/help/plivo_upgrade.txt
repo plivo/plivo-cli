@@ -22,7 +22,6 @@ Flags:
       --version string   install a specific release tag instead of latest (e.g. v0.2.0)
 
 Global Flags:
-      --all                auto-paginate through all pages
       --dry-run            print the HTTP request without sending
       --explain            explain what the command will do before executing
       --log-level string   log level: debug|info|warn|error|none (default "warn")

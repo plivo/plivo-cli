@@ -105,7 +105,6 @@ This skill ships with each plivo-cli release; reinstall the CLI to update.
 | `--no-color` | bool | false | strip ANSI from output |
 | `--log-level <level>` | `debug\|info\|warn\|error\|none` | `warn` | `debug` prints outbound URLs to stderr |
 | `--timeout <sec>` | int | 30 | per-request timeout |
-| `--all` | bool | false | auto-paginate list ops |
 
 `--dry-run` and `--explain` apply to API-backed commands — they're no-ops for `login`, `ask`, `upgrade`, `voice streams test`, and similar non-REST flows.
 
