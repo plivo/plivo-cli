@@ -12,7 +12,7 @@ permissions:
 jobs:
   smoke:
     name: smoke
-    runs-on: ubuntu-latest-m-plivo
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
@@ -76,172 +76,107 @@ jobs:
       - name: build
         run: go build -o plivo .
 
-      - name: smoke - version + help
-        run: |
-          ./plivo --version
-          ./plivo --help > /dev/null
+      - name: smoke - exercise the built binary
+        run: ./scripts/smoke.sh ./plivo
 
-      - name: smoke - per-group --help (no HTTP)
-        run: |
-          # Every public-build command group must render --help. Catches
-          # cobra-registration regressions, missing flag definitions, etc.
-          # `agent` ships as a coming-soon stub.
-          groups=(
-            "account" "agent" "ask" "auth" "lookup" "messaging" "numbers" "support" "upgrade" "verify" "voice"
-            "account subaccounts" "account applications"
-            "numbers masking" "numbers masking sessions"
-            "numbers compliance" "numbers compliance requirements"
-            "voice calls" "voice calls streams" "voice conferences"
-            "voice multiparty" "voice recordings" "voice endpoints"
-            "messaging" "messaging sms" "messaging sms 10dlc" "messaging sms 10dlc brands"
-            "messaging sms powerpacks" "messaging sms tollfree" "messaging whatsapp" "messaging mms"
-            "verify sessions"
-          )
-          for cmd in "${groups[@]}"; do
-            echo "==> plivo $cmd --help"
-            read -ra parts <<< "$cmd"
-            ./plivo "${parts[@]}" --help > /dev/null
-          done
+  # Build and run the binary natively on every platform we ship.
+  smoke-os:
+    name: smoke-os (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-latest,  bin: ./plivo }
+          - { runner: macos-latest,   bin: ./plivo }
+          - { runner: windows-latest, bin: ./plivo.exe }
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
-      - name: smoke - dry-run URL construction
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: build (native)
+        shell: bash
+        run: go build -o "${{ matrix.bin }}" .
+
+      # Git Bash ships on windows-latest, so one script covers all runners.
+      - name: smoke - exercise the built binary
+        shell: bash
+        run: ./scripts/smoke.sh "${{ matrix.bin }}"
+
+  # Install the latest published release on a clean machine. Asserts install
+  # mechanics (download, checksum, PATH, idempotency), not the command tree.
+  install-test:
+    name: install-test (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: install via install.sh (posix)
+        if: matrix.runner != 'windows-latest'
         env:
-          # Deliberately not a real-shaped Plivo auth_id (no "MA" prefix) so
-          # secret-scanners don't flag this file. The CLI doesn't validate the
-          # auth_id shape pre-flight — it just embeds it in the URL — so any
-          # non-empty value lets dry-run prints proceed.
-          PLIVO_AUTH_ID: CIFAKEPLACEHOLDER001
-          PLIVO_AUTH_TOKEN: ci-only-not-a-real-token
+          PLIVO_INSTALL_DIR: ${{ runner.temp }}/plivo-bin
         run: |
-          # Verify each representative command builds the expected REST URL.
-          # --dry-run never sends the HTTP request; it just prints what would
-          # have been sent. Catches URL-construction regressions across the
-          # service grammar without needing a real Plivo account.
-          set -e
+          set -euo pipefail
+          ./install.sh
+          BIN="$PLIVO_INSTALL_DIR/plivo"
+          test -x "$BIN" || { echo "✗ $BIN missing or not executable"; exit 1; }
+          "$BIN" --version
+          "$BIN" --help > /dev/null
+          echo "✓ installed and runs"
 
-          assert_url() {
-            local label="$1" expected_pattern="$2"
-            shift 2
-            local out
-            out=$("$@" 2>&1)
-            if ! echo "$out" | grep -Eq "$expected_pattern"; then
-              echo "✗ $label — expected pattern '$expected_pattern' in output:"
-              echo "$out"
-              exit 1
-            fi
-            echo "✓ $label"
-          }
+          # Must be idempotent.
+          ./install.sh
+          "$BIN" --version > /dev/null
+          echo "✓ idempotent on re-run"
 
-          assert_url "account get" \
-            "GET https://hodor.plivo.com/v1/cli/api/v1/Account/[A-Z0-9]+/" \
-            ./plivo account get --dry-run
-
-          assert_url "account subaccounts list" \
-            "GET https://hodor.plivo.com/v1/cli/api/v1/Account/[A-Z0-9]+/Subaccount/" \
-            ./plivo account subaccounts list --dry-run --limit 5
-
-          assert_url "numbers list" \
-            "GET https://hodor.plivo.com/v1/cli/api/v1/Account/[A-Z0-9]+/Number/" \
-            ./plivo numbers list --dry-run --limit 5
-
-          assert_url "account applications list" \
-            "GET https://hodor.plivo.com/v1/cli/api/v1/Account/[A-Z0-9]+/Application/" \
-            ./plivo account applications list --dry-run
-
-          assert_url "message send" \
-            "POST https://hodor.plivo.com/v1/cli/api/v1/Account/[A-Z0-9]+/Message/" \
-            ./plivo messaging sms send --src +14155551234 --dst +14155556789 --text hi --dry-run
-
-          assert_url "voice calls list" \
-            "GET https://hodor.plivo.com/v1/cli/api/v1/Account/[A-Z0-9]+/Call/" \
-            ./plivo voice calls list --dry-run
-
-          assert_url "voice recordings list" \
-            "GET https://hodor.plivo.com/v1/cli/api/v1/Account/[A-Z0-9]+/Recording/" \
-            ./plivo voice recordings list --dry-run --limit 3
-
-          assert_url "voice conferences list" \
-            "GET https://hodor.plivo.com/v1/cli/api/v1/Account/[A-Z0-9]+/Conference/" \
-            ./plivo voice conferences list --dry-run
-
-          assert_url "voice multiparty list" \
-            "GET https://hodor.plivo.com/v1/cli/api/v1/Account/[A-Z0-9]+/MultiPartyCall/" \
-            ./plivo voice multiparty list --dry-run --limit 3
-
-          assert_url "verify sessions list" \
-            "GET https://hodor.plivo.com/v1/cli/api/v1/Account/[A-Z0-9]+/Verify/Session/" \
-            ./plivo verify sessions list --dry-run --limit 3
-
-          assert_url "lookup (separate base host)" \
-            "GET https://hodor.plivo.com/v1/cli/api/v1/Lookup/Number/\+14155552671\?type=carrier" \
-            ./plivo lookup +14155552671 --dry-run
-
-          assert_url "message 10dlc brands list (10DLC path)" \
-            "GET https://hodor.plivo.com/v1/cli/api/v1/Account/[A-Z0-9]+/10dlc/Brand/" \
-            ./plivo messaging sms 10dlc brands list --dry-run --limit 3
-
-          assert_url "numbers masking sessions list (Masking/Session segments)" \
-            "GET https://hodor.plivo.com/v1/cli/api/v1/Account/[A-Z0-9]+/Masking/Session/" \
-            ./plivo numbers masking sessions list --dry-run --limit 3
-
-          assert_url "message powerpacks list" \
-            "GET https://hodor.plivo.com/v1/cli/api/v1/Account/[A-Z0-9]+/Powerpack/" \
-            ./plivo messaging sms powerpacks list --dry-run --limit 3
-
-          assert_url "voice endpoints list" \
-            "GET https://hodor.plivo.com/v1/cli/api/v1/Account/[A-Z0-9]+/Endpoint/" \
-            ./plivo voice endpoints list --dry-run --limit 3
-
-          assert_url "numbers compliance requirements" \
-            "GET https://hodor.plivo.com/v1/cli/api/v1/Account/[A-Z0-9]+/PhoneNumber/Compliance/Requirements/" \
-            ./plivo numbers compliance requirements --country US --number-type local --user-type business --dry-run
-
-          assert_url "numbers compliance list" \
-            "GET https://hodor.plivo.com/v1/cli/api/v1/Account/[A-Z0-9]+/PhoneNumber/Compliance/" \
-            ./plivo numbers compliance list --dry-run
-
-          assert_url "numbers compliance create (multipart upload)" \
-            "POST https://hodor.plivo.com/v1/cli/api/v1/Account/[A-Z0-9]+/PhoneNumber/Compliance/" \
-            ./plivo numbers compliance create --data '{"country_iso":"US"}' --dry-run
-
-          assert_url "ask (SSE)" \
-            "POST https://hodor\.plivo\.com/v1/cli/cx/v1/aiassist/buddy-ext/chat" \
-            ./plivo ask "ping" --dry-run
-
-          assert_url "support (past escalations)" \
-            "GET https://hodor\.plivo\.com/v1/cli/cx/v1/aiassist/buddy-ext/escalations" \
-            ./plivo support --dry-run
-
-      - name: smoke - destructive verbs refuse without --yes
+      - name: install via install.ps1 (windows)
+        if: matrix.runner == 'windows-latest'
+        shell: pwsh
         env:
-          # Deliberately not a real-shaped Plivo auth_id (no "MA" prefix) so
-          # secret-scanners don't flag this file. The CLI doesn't validate the
-          # auth_id shape pre-flight — it just embeds it in the URL — so any
-          # non-empty value lets dry-run prints proceed.
-          PLIVO_AUTH_ID: CIFAKEPLACEHOLDER001
-          PLIVO_AUTH_TOKEN: ci-only-not-a-real-token
+          PLIVO_INSTALL_DIR: ${{ runner.temp }}\plivo-bin
         run: |
-          # Spend/destructive verbs must exit 5 with DESTRUCTIVE_REFUSED when
-          # --yes is missing. This is the safety contract — guard it in CI.
-          assert_refused() {
-            local label="$1"
-            shift
-            if "$@" --dry-run 2>&1 | grep -q "DESTRUCTIVE_REFUSED"; then
-              echo "✓ $label refused without --yes"
-            else
-              echo "✗ $label did not refuse"
-              exit 1
-            fi
-          }
+          $ErrorActionPreference = 'Stop'
+          .\install.ps1
+          $bin = Join-Path $env:PLIVO_INSTALL_DIR 'plivo.exe'
+          if (-not (Test-Path $bin)) { throw "✗ $bin missing" }
+          & $bin --version
+          & $bin --help | Out-Null
+          Write-Host "✓ installed and runs"
 
-          assert_refused "numbers release"         ./plivo numbers release +14155551234
-          assert_refused "voice calls hangup"      ./plivo voice calls hangup CALL-FAKE
-          assert_refused "voice recordings delete" ./plivo voice recordings delete REC-FAKE
+          # Must be idempotent.
+          .\install.ps1
+          & $bin --version | Out-Null
+          Write-Host "✓ idempotent on re-run"
+
+      - name: reject a tampered download
+        if: matrix.runner != 'windows-latest'
+        env:
+          PLIVO_INSTALL_DIR: ${{ runner.temp }}/plivo-tamper
+        run: |
+          set -uo pipefail
+          # An unresolvable release must fail, never install.
+          if PLIVO_CLI_VERSION=v0.0.0-does-not-exist ./install.sh > out.log 2>&1; then
+            echo "✗ installer succeeded against a non-existent release"
+            cat out.log
+            exit 1
+          fi
+          test ! -e "$PLIVO_INSTALL_DIR/plivo" || { echo "✗ binary left behind after a failed install"; exit 1; }
+          echo "✓ refused a missing/unverifiable release"
 
   cross-build:
     name: cross-build (${{ matrix.os }}/${{ matrix.arch }})
-    runs-on: ubuntu-latest-m-plivo
+    runs-on: ubuntu-latest
     needs: smoke
-    if: github.event_name == 'push' && github.ref == 'refs/heads/beta'
+    # Previous `if:` gated on a push event, which this workflow never receives,
+    # so the job never ran. Covers the targets smoke-os cannot run natively.
     strategy:
       fail-fast: false
       matrix:

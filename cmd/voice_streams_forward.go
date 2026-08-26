@@ -17,8 +17,8 @@ import (
 	"github.com/plivo/plivo-cli/internal/tunnel"
 	"github.com/plivo/plivo-cli/internal/wsproxy"
 
-	"github.com/spf13/cobra"
 	"github.com/coder/websocket"
+	"github.com/spf13/cobra"
 )
 
 var (
