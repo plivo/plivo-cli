@@ -161,7 +161,9 @@ func init() {
 func registerSendFlags(cmd *cobra.Command, src, dst, text, urlFlag, method *string) {
 	cmd.Flags().StringVar(src, "src", "", "sender (E.164, shortcode, or sender ID) (required)")
 	_ = cmd.MarkFlagRequired("src")
-	cmd.Flags().StringVar(dst, "dst", "", "destination, separate multiple with `<` (required)")
+	// No backticks around the < — pflag reads those as a type-name override,
+	// which rendered this flag as "--dst <" in --help.
+	cmd.Flags().StringVar(dst, "dst", "", "destination, separate multiple with < (required)")
 	_ = cmd.MarkFlagRequired("dst")
 	cmd.Flags().StringVar(text, "text", "", "message body (required)")
 	_ = cmd.MarkFlagRequired("text")
