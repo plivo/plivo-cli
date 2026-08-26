@@ -15,6 +15,7 @@ Available Commands:
   ask         Ask Plivo's AI assistant (streams the answer as it comes)
   auth        Manage credential profiles (list / use / remove / whoami)
   completion  Generate the autocompletion script for the specified shell
+  config      Manage CLI settings (telemetry on/off, get/set)
   feedback    Share feedback about the Plivo CLI (rating + optional comment)
   help        Help about any command
   login       Log in to Plivo (browser-based; saves credentials securely to the OS keychain)
