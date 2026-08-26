@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -170,5 +172,56 @@ func TestBuddyRenderer_messageEvent_printedOnceAsBlock(t *testing.T) {
 	}
 	if r.streamed {
 		t.Error("streamed should be false for a non-streamed message answer")
+	}
+}
+
+// `support` lists "your" past escalations — that needs a human identity
+// (AomUUID), which only a browser login populates. Env-var / manually
+// entered creds have none, so the command must refuse with a clear error
+// instead of whatever the backend would otherwise do with an unscoped query.
+func TestRunSupport_noAomUUID_refusesWithClearError(t *testing.T) {
+	setFakeCreds(t)
+	hit := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	supportClientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", HTTP: &http.Client{}}
+	defer func() { supportClientForTest = nil }()
+
+	err, _, _ := execCmd(t, "support")
+	if err == nil || !strings.Contains(err.Error(), "AUTH_FORBIDDEN") {
+		t.Fatalf("expected AUTH_FORBIDDEN, got: %v", err)
+	}
+	if hit {
+		t.Error("support should refuse before ever hitting the network without an AomUUID")
+	}
+}
+
+// A profile with an AomUUID (browser login) must reach the escalations
+// endpoint normally.
+func TestRunSupport_withAomUUID_reachesEscalationsEndpoint(t *testing.T) {
+	setFakeCreds(t)
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"api_id":"x","status":"ok","data":{"escalations":[]}}`))
+	}))
+	defer srv.Close()
+	supportClientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", AomUUID: "aom-123", HTTP: &http.Client{}}
+	defer func() { supportClientForTest = nil }()
+
+	err, stdout, _ := execCmd(t, "support")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(gotPath, "/escalations") {
+		t.Errorf("expected a request to .../escalations, got path %q", gotPath)
+	}
+	// Non-TTY test env resolves to JSON output; empty escalations -> "data":[].
+	if !strings.Contains(stdout, `"data": []`) {
+		t.Errorf("expected an empty data array, got stdout: %q", stdout)
 	}
 }

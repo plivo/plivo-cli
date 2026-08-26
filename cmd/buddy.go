@@ -809,10 +809,28 @@ func (r *buddyRenderer) withSpinnerCleared(fn func()) {
 	fn()
 }
 
+// supportClientForTest is a package-level test hook, mirroring
+// apiClientForTest in cmd/api.go.
+var supportClientForTest *api.Client
+
 func runSupport(cmd *cobra.Command, args []string) error {
-	client, _, err := getClient()
-	if err != nil {
-		return err
+	client := supportClientForTest
+	if client == nil {
+		c, _, err := getClient()
+		if err != nil {
+			return err
+		}
+		client = c
+	}
+	// "Your past escalations" needs a human identity to scope by — only a
+	// browser `plivo login` populates one. PLIVO_AUTH_ID/TOKEN env auth (and
+	// older manually-entered profiles) can't be attributed to a person.
+	if client.AomUUID == "" {
+		return &clierr.Error{
+			Code:    clierr.CodeAuthForbidden,
+			Message: "support needs a browser-login profile to scope escalations to you",
+			Hint:    "Run `plivo login` — env var or manually-entered credentials have no per-user identity to filter by.",
+		}
 	}
 	applyBuddyURL(client)
 
