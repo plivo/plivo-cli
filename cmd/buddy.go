@@ -363,7 +363,9 @@ func printREPLHelp(w io.Writer) {
 // cancels the in-flight turn; Ctrl-D or /exit leaves. An optional firstMsg
 // seeds the first turn (`plivo ask -i "..."`).
 func runInteractiveAsk(client *api.Client, url, firstMsg string) error {
-	if effectiveFormat() == output.FormatJSON {
+	// Only refuse an EXPLICIT -o json — the non-TTY default (e.g. piped
+	// through `tee`) shouldn't block a session that's still human-driven.
+	if strings.EqualFold(outputFormat, "json") {
 		return clierr.BadInput("interactive mode (-i) can't be combined with -o json")
 	}
 	if dryRunFlag {
