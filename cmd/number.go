@@ -178,7 +178,7 @@ func runNumberList(cmd *cobra.Command, args []string) error {
 
 func renderNumberList(resp api.NumberList) error {
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"NUMBER", "TYPE", "COUNTRY", "APP_ID", "ALIAS"}}
 	for _, n := range resp.Objects {
@@ -205,7 +205,7 @@ func runNumberGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, n, nil)
+		return output.JSONRaw(os.Stdout, n.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"number", n.Number},

@@ -81,6 +81,16 @@ func JSONSuccess(w io.Writer, data any, meta any) error {
 	return enc.Encode(env)
 }
 
+// JSONRaw writes the upstream response verbatim under "data". json.RawMessage
+// marshals itself byte for byte, so nothing is dropped. Falls back to an empty
+// object when there was no body.
+func JSONRaw(w io.Writer, raw json.RawMessage) error {
+	if len(raw) == 0 {
+		return JSONSuccess(w, map[string]any{}, nil)
+	}
+	return JSONSuccess(w, raw, nil)
+}
+
 // JSONError writes a structured error envelope. Designed for AI / script
 // consumers: stable code, retryable flag, optional hint + context.
 //

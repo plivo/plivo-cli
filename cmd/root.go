@@ -163,8 +163,16 @@ func init() {
 	// build.
 }
 
+// clientForTest is a package-level test hook, mirroring apiClientForTest in
+// api.go. When non-nil every command gets this client, so tests can point a
+// command at an httptest server without real credentials.
+var clientForTest *api.Client
+
 // getClient resolves credentials and returns a configured API client.
 func getClient() (*api.Client, string, error) {
+	if clientForTest != nil {
+		return clientForTest, "test", nil
+	}
 	p, name, err := config.Resolve(profileFlag)
 	if err != nil {
 		return nil, "", err

@@ -27,6 +27,7 @@ type Account struct {
 }
 
 type Number struct {
+	RawBody
 	Number        string `json:"number"`
 	Type          string `json:"type"`
 	Region        string `json:"region,omitempty"`
@@ -46,6 +47,7 @@ type Number struct {
 }
 
 type NumberList struct {
+	RawBody
 	APIID   string   `json:"api_id"`
 	Meta    ListMeta `json:"meta"`
 	Objects []Number `json:"objects"`
