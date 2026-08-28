@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING: `-o json` now returns the API response as-is.** Previously the
+  typed structs were re-marshalled, which silently dropped every field the CLI
+  did not have a tag for — a `/Number/` row has 32 fields and only 16 survived.
+  For list commands `data` therefore changes from an array to the full response
+  object:
+
+  ```
+  before   {"data": [ {...} ], "meta": {...}}
+  after    {"data": {"api_id": "...", "meta": {...}, "objects": [ {...} ]}}
+  ```
+
+  Scripts reading `data[0]` need `data.objects[0]`. Single-resource commands
+  keep the same shape and simply gain the missing fields. Table output is
+  unchanged.
+- **BREAKING: `--all` removed.** It was accepted on every command and did
+  nothing, while being documented as "auto-paginate through all pages". Real
+  pagination will come back as its own change rather than as a flag that lies.
+- **Credentials: `PLIVO_AUTH_ID` / `PLIVO_AUTH_TOKEN` now beat a stored
+  profile.** Previously the active profile won, so exported credentials were
+  silently ignored whenever any profile existed — including one holding a stale
+  token. An explicit `--profile` still wins over the environment. This matches
+  the aws, stripe and twilio CLIs.
+- `diagnose` now fails fast with `RESOURCE_NOT_FOUND` when the call or message
+  id is not on the account, instead of handing an unknown id to the assistant
+  (which could not tell "does not exist" from "lookup failed", and raised a
+  support ticket either way).
+
 ### Added
 
 - `plivo config telemetry on|off|status` (plus generic `plivo config
@@ -15,6 +44,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `PLIVO_CLI_TELEMETRY=0` does the same for a single shell session or CI
   job, and wins over the config file. Version/OS/arch metadata is
   unaffected — the server needs it for the upgrade nudge.
+- `--media-url` on `messaging mms send`, repeatable, for attaching media.
+- `plivo ask` shows a working spinner so long runs do not look frozen.
+
+### Fixed
+
+- `voice recordings list` crashed on every call: `recording_duration_ms` is a
+  decimal string upstream but was typed as an integer, so the response never
+  decoded. The command had never worked against the live API.
+- `messaging sms tollfree list/get/create` hit `TollFreeVerification`, but the
+  API serves `TollfreeVerification`. Every call 404'd.
+- `voice streams forward` now discloses its blast radius before you confirm: it
+  rewrites the application's answer URL, so every number on that app forwards,
+  not just `--number`. Its `--dry-run` also printed a blank preview.
+- `plivo support` refuses with a clear message when the credentials carry no
+  user identity, instead of sending an unscoped request.
+- `ask -i` no longer refuses when stdout is piped.
+- `--dst` help text rendered as `--dst <` because of a stray backtick.
+- A rejected-credentials error blamed `PLIVO_AUTH_ID` / `PLIVO_AUTH_TOKEN` even
+  when a stored profile supplied them. It now names the source actually used.
+
+### Internal
+
+- CI builds and runs the binary on Ubuntu, macOS and Windows, and exercises
+  `install.sh` / `install.ps1` on each. Previously only the Linux build was
+  ever executed, so the Windows and macOS artefacts shipped unrun.
 
 ## [0.2.0] - 2026-06-17
 

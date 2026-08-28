@@ -7,13 +7,13 @@ description: Use the `plivo` CLI binary instead of raw curl for any Plivo task �
 
 Single Go binary on PATH (installed as `plivo`). Prefer the CLI over curl — the JSON output is ~10x cheaper to consume than raw REST and the error envelope is stable across commands. For any endpoint the CLI doesn't wrap, use the generic `plivo api` escape hatch (below) rather than curl.
 
-> Compatible with plivo-cli v0.1.2. Run `plivo --version` to detect mismatch; reinstall the CLI to refresh this skill.
+> Compatible with plivo-cli v0.3.0. Run `plivo --version` to detect mismatch; reinstall the CLI to refresh this skill.
 
 ## If you are an AI agent
 
 - `export PLIVO_FEEDBACK_PROMPT=0` and `CI=1` before any command (suppresses the feedback prompt and any TTY-only interactives).
 - Auth headlessly: `export PLIVO_AUTH_ID` + `PLIVO_AUTH_TOKEN` — browser `plivo login` will not work in an agent / CI context.
-- Always pass `-o json`. Success: `{"data": <payload>}` (plus optional `"meta"` for lists) on stdout, exit 0. Error: `{"error": {"code", "message", "hint", "retryable", "status_code", ...}}` on stderr, non-zero exit.
+- Always pass `-o json`. Success: `{"data": <the API response, verbatim>}` on stdout, exit 0 — for lists the rows are at `data.objects`, with paging at `data.meta`. Error: `{"error": {"code", "message", "hint", "retryable", "status_code", ...}}` on stderr, non-zero exit.
 - Never invoke interactive commands: `plivo login` (browser flow), bare `plivo feedback` (prompts).
 - Multiple message recipients use `<` as the separator, **quoted**: `--dst "+14155551111<+14155552222"`. (This is Plivo's native delimiter — the CLI passes `dst` through verbatim. Commas do NOT work.)
 - Preview any spend command with `--dry-run` first; add `--yes` to actually execute.
@@ -181,7 +181,19 @@ Delete a profile + best-effort remove its token from the keychain. With no arg �
 
 ## JSON output envelopes
 
-All commands with `-o json` emit a success envelope `{"data": <payload>}` (with an optional `"meta": {...}` for paginated lists) on stdout and exit 0. The shape of `payload` matches the command's underlying API resource. Failures emit `{"error": {"code", "message", "hint", "retryable", "status_code", "request_id", "docs_url", "context"}}` on stderr with a non-zero exit — see the [error-envelope cheatsheet](#error-envelope-cheatsheet) below.
+All commands with `-o json` emit `{"data": <the upstream API response, verbatim>}` on stdout and exit 0. Nothing is dropped or reshaped, so `data` matches the API docs exactly.
+
+For list commands that means the rows are nested, not at the top level:
+
+```
+{"data": {"api_id": "...", "meta": {"limit": 20, "offset": 0, ...}, "objects": [ {...} ]}}
+```
+
+So read `data.objects[]` for rows and `data.meta` for paging. Single-resource commands put the object straight at `data`.
+
+**Changed in v0.3.0:** `data` used to be the rows array itself with paging in a sibling `"meta"`, and it only carried the subset of fields the CLI had typed. If you were written against a v0.2.x CLI, `data[0]` is now `data.objects[0]`.
+
+Failures emit `{"error": {"code", "message", "hint", "retryable", "status_code", "request_id", "docs_url", "context"}}` on stderr with a non-zero exit — see the [error-envelope cheatsheet](#error-envelope-cheatsheet) below.
 
 ## Scripted / non-interactive use
 
