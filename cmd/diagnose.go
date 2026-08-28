@@ -2,7 +2,10 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
 
+	"github.com/plivo/plivo-cli/internal/api"
+	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/spf13/cobra"
 )
 
@@ -100,9 +103,53 @@ func init() {
 // disambiguator when the message text is short).
 func runDiagnoseVoiceCall(cmd *cobra.Command, args []string) error {
 	callUUID := args[0]
+	if err := requireResourceExists(cmd, "Call", callUUID, "call"); err != nil {
+		return err
+	}
 	askCallUUID = callUUID // runAsk auto-appends "(call_uuid: X)" + populates userContext
 	prompt := "Help me debug this call. What happened, and was there anything unusual?"
 	return runAsk(cmd, []string{prompt})
+}
+
+// requireResourceExists confirms the uuid is on this account before handing the
+// turn to the assistant. Without it, a typo'd id reached the assistant, which
+// cannot tell "does not exist" from "lookup failed" and so escalates — turning
+// every mistyped id into a support ticket.
+//
+// The REST lookup is authoritative where the assistant is not: it is scoped to
+// the caller's account and 404s only when the record genuinely is not there.
+// A non-404 failure is deliberately NOT fatal — losing diagnose because a
+// pre-flight read hiccuped would be worse than the ticket it prevents.
+func requireResourceExists(cmd *cobra.Command, segment, uuid, label string) error {
+	if dryRunFlag {
+		return nil // dry-run sends nothing, so there is nothing to pre-check
+	}
+	client, _, err := getClient()
+	if err != nil {
+		return err
+	}
+	var probe api.GenericResponse
+	apiErr, err := client.Do("GET", client.AccountURL(segment, uuid), nil, nil, &probe)
+	if err != nil {
+		return nil // transport trouble: fall through rather than block the diagnose
+	}
+	if apiErr != nil && apiErr.StatusCode == http.StatusNotFound {
+		return &clierr.Error{
+			Code:       clierr.CodeResourceNotFound,
+			Message:    fmt.Sprintf("%s %s not found on this account", label, uuid),
+			Hint:       fmt.Sprintf("Check the %s id. `plivo %s` lists recent ones.", label, listHintFor(segment)),
+			StatusCode: http.StatusNotFound,
+		}
+	}
+	return nil
+}
+
+// listHintFor names the command that lists the resource, for the not-found hint.
+func listHintFor(segment string) string {
+	if segment == "Message" {
+		return "messaging sms list"
+	}
+	return "voice calls list"
 }
 
 // runDiagnoseMessaging returns a cobra RunE that builds a channel-tagged
@@ -113,6 +160,9 @@ func runDiagnoseVoiceCall(cmd *cobra.Command, args []string) error {
 func runDiagnoseMessaging(channelLabel string) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		messageUUID := args[0]
+		if err := requireResourceExists(cmd, "Message", messageUUID, "message"); err != nil {
+			return err
+		}
 		prompt := fmt.Sprintf("Help me debug this %s message: %s. Why did it fail / what's the status?", channelLabel, messageUUID)
 		return runAsk(cmd, []string{prompt})
 	}
