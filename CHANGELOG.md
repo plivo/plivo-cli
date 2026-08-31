@@ -28,6 +28,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in a bare container. The full text is cached under `~/.plivo/cache` for a day;
   `--refresh` re-fetches, and a stale cache is served if the network is down.
 
+### Fixed
+
+- **`voice streams` emitted the wrong audio contract.** The `<Stream>` XML
+  carried `contentType` and `sampleRate` as two attributes; the rate belongs
+  inside `contentType` (`audio/x-mulaw;rate=8000`) and there is no `sampleRate`
+  attribute. The l16 MIME type was also wrong — `audio/x-l16`, not `audio/l16`.
+  Separately, `streams test --codec l16` announced 16-bit PCM but generated
+  mu-law bytes at half the expected frame size, so the pre-flight passed while
+  the endpoint received noise. Both spellings and the audio generator now come
+  from one place, and an unsupported codec/rate pair is rejected up front —
+  there is no mu-law 16kHz stream.
+- **An unknown subcommand exited 0.** `plivo voice streams bogustypo` printed
+  help and reported success; the same hole existed on 35 command groups. Cobra
+  only rejects an unrecognized subcommand for the true root, so every parent
+  command that hosts only subcommands silently short-circuited to help. A bare
+  group invocation still prints help and exits 0.
+- `-o json` is now honoured by `voice streams test`, `voice streams forward`
+  and `upgrade`, which previously always printed prose. Each emits a single
+  machine-readable summary of the run, and progress output is suppressed so
+  stdout stays parseable.
+- `make sign-release` failed outright against cosign 3.x, which defaults to a
+  bundle format requiring `--bundle`. The signing path had never been executed
+  end to end.
+
 ## [0.3.0] - 2026-08-28
 
 ### Changed
