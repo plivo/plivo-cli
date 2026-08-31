@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **localhost.run** over ssh — no install, no account, nothing to sign up for —
   and uses ngrok instead when it is already on PATH. `--tunnel auto | ngrok |
   localhost.run` forces a choice.
+- Release provenance. `SHA256SUMS` is now signed with cosign keyless, and
+  `install.sh`, `install.ps1` and `plivo upgrade` all verify that signature when
+  `cosign` is available — pinning the signer identity and OIDC issuer, without
+  which any Sigstore identity would produce a passing check. Unsigned releases
+  and machines without cosign still install; a signature that is present and
+  fails is fatal.
 
 - `plivo docs` — read the documentation from the terminal. `docs search
   <keywords>` full-text searches every page (a page must contain all the

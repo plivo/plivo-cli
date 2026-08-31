@@ -133,6 +133,43 @@ if [ "$EXPECTED" != "$ACTUAL" ]; then
 fi
 echo "✓ Checksum verified"
 
+# ─── Provenance: verify the signature over SHA256SUMS when we can ────────────
+# The checksum above proves the bytes are intact; this proves they came from us.
+# Best-effort by design — releases predating signing carry no signature, and we
+# will not block an install over a tool the user never installed. But a
+# signature that IS present and fails to verify is fatal.
+TRUSTED_IDENTITY="releases@plivo.com"
+TRUSTED_ISSUERS="https://accounts.google.com https://github.com/login/oauth"
+SIG_URL="${SUMS_URL}.sig"
+CERT_URL="${SUMS_URL%SHA256SUMS}SHA256SUMS.pem"
+
+if curl -fLs -o "${TMPDIR}/SHA256SUMS.sig" "$SIG_URL" 2>/dev/null \
+   && curl -fLs -o "${TMPDIR}/SHA256SUMS.pem" "$CERT_URL" 2>/dev/null; then
+  if command -v cosign >/dev/null 2>&1; then
+    SIG_OK=0
+    for iss in $TRUSTED_ISSUERS; do
+      if cosign verify-blob "$TMP_SUMS" \
+           --signature "${TMPDIR}/SHA256SUMS.sig" \
+           --certificate "${TMPDIR}/SHA256SUMS.pem" \
+           --certificate-identity "$TRUSTED_IDENTITY" \
+           --certificate-oidc-issuer "$iss" >/dev/null 2>&1; then
+        SIG_OK=1
+        break
+      fi
+    done
+    if [ "$SIG_OK" = "1" ]; then
+      echo "✓ Signature verified ($TRUSTED_IDENTITY)"
+    else
+      echo "✗ The SHA256SUMS signature did NOT verify — refusing to install." >&2
+      echo "  Expected signer: $TRUSTED_IDENTITY" >&2
+      exit 1
+    fi
+  else
+    echo "• Signature published but cosign is not installed — provenance not checked."
+    echo "  Install it with: brew install cosign"
+  fi
+fi
+
 chmod +x "$TMP_BIN" 2>/dev/null || true
 
 # ─── Install ─────────────────────────────────────────────────────────────────

@@ -69,6 +69,9 @@ test-tap: ## Check gen-tap.sh still renders the golden output
 check-tap-fresh: ## Warn if the Homebrew tap is behind the latest release
 	scripts/check-tap-fresh.sh
 
+sign-release: ## Sign dist/SHA256SUMS with cosign keyless (opens a browser)
+	scripts/sign-release.sh dist/SHA256SUMS
+
 docs: ## Regenerate the command reference (docs/COMMANDS.md)
 	go run ./tools/gendocs -o docs/COMMANDS.md
 
