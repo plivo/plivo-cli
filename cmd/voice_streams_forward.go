@@ -32,6 +32,7 @@ var (
 	streamsFwdRate          int
 	streamsFwdBidirectional bool
 	streamsFwdPrintPayload  bool
+	streamsFwdTunnel        string
 
 	// streamsFwdClientForTest is a package-level test hook, mirroring
 	// apiClientForTest in cmd/api.go — lets tests inject a client pointed at
@@ -44,13 +45,14 @@ var voiceStreamsForwardCmd = &cobra.Command{
 	Short: "Redirect an app's answer_url to a local tunnel so calls stream into your local handler",
 	Long: `One-command local-dev experience for voice streaming.
 
-Saves the app's current answer_url, starts an ngrok tunnel + a local
+Saves the app's current answer_url, starts a tunnel + a local
 HTTP/WebSocket server, points the app at the tunnel, and forwards
 incoming call audio to your local WebSocket handler. Restores the
 original answer_url on Ctrl+C.
 
-Requires ngrok in PATH (or at ~/.plivo/bin/ngrok). Install from
-https://ngrok.com/download.
+No setup required: defaults to localhost.run over ssh, which needs no
+install and no account. Uses ngrok instead when it is already on PATH
+(or at ~/.plivo/bin/ngrok). Force either with --tunnel.
 
 Nothing is purchased, created, or deleted — the only mutation is one
 field on one app, restored on exit.`,
@@ -74,6 +76,7 @@ func init() {
 	voiceStreamsForwardCmd.Flags().IntVar(&streamsFwdRate, "rate", 8000, "sample rate in Hz")
 	voiceStreamsForwardCmd.Flags().BoolVar(&streamsFwdBidirectional, "bidirectional", true, "allow bot to send audio back to the caller")
 	voiceStreamsForwardCmd.Flags().BoolVar(&streamsFwdPrintPayload, "print-payload", false, "dump full webhook bodies to terminal (verbose)")
+	voiceStreamsForwardCmd.Flags().StringVar(&streamsFwdTunnel, "tunnel", "auto", "tunnel provider: auto | ngrok | localhost.run")
 	_ = voiceStreamsForwardCmd.MarkFlagRequired("number")
 	_ = voiceStreamsForwardCmd.MarkFlagRequired("app")
 	_ = voiceStreamsForwardCmd.MarkFlagRequired("to")
@@ -143,9 +146,9 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	// --- Start ngrok ---
-	fmt.Fprintf(out, "⠋ Starting ngrok tunnel...\n")
-	tn, err := tunnel.StartNgrok(ctx, localPort)
+	// --- Start the tunnel ---
+	fmt.Fprintf(out, "⠋ Starting tunnel via %s...\n", tunnel.Describe(streamsFwdTunnel))
+	tn, err := tunnel.Start(ctx, localPort, streamsFwdTunnel)
 	if err != nil {
 		listener.Close()
 		return clierr.Wrap(err)
