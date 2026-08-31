@@ -16,6 +16,21 @@ A single static Go binary for provisioning numbers, wiring voice-agent applicati
 
 ## Install
 
+**Homebrew (macOS / Linux)** — recommended:
+
+```bash
+brew install plivo/tap/plivo
+```
+
+**Scoop (Windows):**
+
+```powershell
+scoop bucket add plivo https://github.com/plivo/homebrew-tap
+scoop install plivo
+```
+
+Or install the binary directly, no package manager needed.
+
 **macOS / Linux / WSL / Git Bash** — auto-detects OS and architecture:
 
 ```bash
@@ -27,6 +42,10 @@ curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | b
 ```powershell
 irm https://raw.githubusercontent.com/plivo/plivo-cli/main/install.ps1 | iex
 ```
+
+If you installed with `curl | bash` first and later switch to Homebrew, the
+older copy in `~/.local/bin` stays earlier on your `PATH` and keeps winning.
+Homebrew warns when it spots this — remove `~/.local/bin/plivo` to switch over.
 
 Both installers fetch the matching release binary (`darwin`/`linux`/`windows` × `amd64`/`arm64`). Override with `PLIVO_CLI_VERSION` (a release tag) or `PLIVO_INSTALL_DIR` (target directory).
 

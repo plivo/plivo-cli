@@ -79,6 +79,11 @@ jobs:
       - name: smoke - exercise the built binary
         run: ./scripts/smoke.sh ./plivo
 
+      # The tap ships a generated formula; a template break would take out
+      # `brew install` for everyone, so pin the rendering.
+      - name: tap render
+        run: ./scripts/gen-tap-test.sh
+
   # Build and run the binary natively on every platform we ship.
   smoke-os:
     name: smoke-os (${{ matrix.runner }})
