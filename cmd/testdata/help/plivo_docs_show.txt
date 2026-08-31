@@ -1,0 +1,26 @@
+Print a page's full text.
+
+The reference can be a URL, a path fragment such as voice/api/call, or a page
+title. The most specific match wins.
+
+Usage:
+  plivo docs show <path-or-title> [flags]
+
+Examples:
+  plivo docs show voice/api/call
+  plivo docs show "Account API"
+
+Flags:
+  -h, --help   help for show
+
+Global Flags:
+      --dry-run            print the HTTP request without sending
+      --explain            explain what the command will do before executing
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --refresh            bypass the cache and re-fetch
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts

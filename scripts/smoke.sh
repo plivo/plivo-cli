@@ -43,7 +43,8 @@ done
 # Every command group must render --help. `agent` is a coming-soon stub.
 echo "--> per-group --help"
 groups=(
-  "account" "agent" "ask" "auth" "lookup" "messaging" "numbers" "support" "upgrade" "verify" "voice"
+  "account" "agent" "ask" "auth" "docs" "lookup" "messaging" "numbers" "support" "upgrade" "verify" "voice"
+  "docs search" "docs list" "docs show"
   "account subaccounts" "account applications"
   "numbers masking" "numbers masking sessions"
   "numbers compliance" "numbers compliance requirements"

@@ -1,0 +1,29 @@
+Search every documentation page.
+
+A page matches only if it contains ALL the keywords, ranked by how often they
+appear. Matching is case-insensitive and substring-based, so partial words and
+API field names both work.
+
+Usage:
+  plivo docs search <keywords...> [flags]
+
+Examples:
+  plivo docs search audio streaming
+  plivo docs search bidirectional
+  plivo docs search 10dlc brand registration -o json
+
+Flags:
+  -h, --help        help for search
+      --limit int   maximum results (default 10)
+
+Global Flags:
+      --dry-run            print the HTTP request without sending
+      --explain            explain what the command will do before executing
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --refresh            bypass the cache and re-fetch
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts

@@ -5,6 +5,18 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `plivo docs` — read the documentation from the terminal. `docs search
+  <keywords>` full-text searches every page (a page must contain all the
+  keywords, ranked by frequency), `docs list` shows the index, and
+  `docs show <path-or-title>` prints one page. Backed by the docs site's own
+  `llms.txt` / `llms-full.txt` exports, so it needs **no credentials** and works
+  in a bare container. The full text is cached under `~/.plivo/cache` for a day;
+  `--refresh` re-fetches, and a stale cache is served if the network is down.
+
 ## [0.3.0] - 2026-08-28
 
 ### Changed
