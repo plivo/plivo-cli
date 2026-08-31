@@ -165,7 +165,72 @@ func verifyDownload(ctx context.Context, rel *release.Release, asset *release.As
 		return err
 	}
 	defer f.Close()
-	return release.VerifyChecksum(buf.String(), asset.Name, f)
+	if err := release.VerifyChecksum(buf.String(), asset.Name, f); err != nil {
+		return err
+	}
+	return verifyManifestSignature(ctx, rel, buf.String())
+}
+
+// verifyManifestSignature checks the signature over SHA256SUMS when the release
+// carries one and cosign is available. The hash check above already guarantees
+// integrity; this adds provenance — that the manifest came from us.
+//
+// A missing signature or missing cosign is not an error: releases predating
+// signing have none, and we will not make an upgrade impossible over a tool the
+// user never installed. A signature that is PRESENT and fails is always fatal.
+func verifyManifestSignature(ctx context.Context, rel *release.Release, sums string) error {
+	sigAsset, sigErr := rel.AssetByName("SHA256SUMS.sig")
+	certAsset, certErr := rel.AssetByName("SHA256SUMS.pem")
+	if sigErr != nil || certErr != nil {
+		return nil // unsigned release
+	}
+	cosign := release.CosignPath()
+	if cosign == "" {
+		fmt.Fprintln(os.Stderr, "  signature present but cosign is not installed — skipping provenance check")
+		fmt.Fprintln(os.Stderr, "  install it with `brew install cosign` to verify who signed this release")
+		return nil
+	}
+
+	dir, err := os.MkdirTemp("", "plivo-verify-")
+	if err != nil {
+		return nil // cannot stage the artefacts; the hash check already passed
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+
+	sumsPath := filepath.Join(dir, "SHA256SUMS")
+	if err := os.WriteFile(sumsPath, []byte(sums), 0o600); err != nil {
+		return nil
+	}
+	sigPath, err := stageAsset(ctx, dir, "SHA256SUMS.sig", sigAsset)
+	if err != nil {
+		return nil
+	}
+	certPath, err := stageAsset(ctx, dir, "SHA256SUMS.pem", certAsset)
+	if err != nil {
+		return nil
+	}
+
+	fmt.Fprintln(os.Stderr, "→ Verifying signature…")
+	res, detail, err := release.VerifySignature(cosign, sumsPath, sigPath, certPath)
+	switch res {
+	case release.SignatureVerified:
+		fmt.Fprintf(os.Stderr, "  ✓ signed by %s\n", detail)
+		return nil
+	case release.SignatureSkipped:
+		fmt.Fprintf(os.Stderr, "  signature check skipped: %s\n", detail)
+		return nil
+	default:
+		return fmt.Errorf("%w: %s", err, detail)
+	}
+}
+
+func stageAsset(ctx context.Context, dir, name string, a *release.Asset) (string, error) {
+	var buf bytes.Buffer
+	if _, err := release.DownloadAsset(ctx, a.BrowserDownloadURL, &buf); err != nil {
+		return "", err
+	}
+	p := filepath.Join(dir, name)
+	return p, os.WriteFile(p, buf.Bytes(), 0o600)
 }
 
 // resolveExePath returns the fully symlink-resolved path of the running
