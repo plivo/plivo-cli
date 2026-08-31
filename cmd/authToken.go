@@ -34,6 +34,8 @@ classic auth_id / auth_token Basic-Auth credentials and let an agent script
 hold a least-privilege token instead of full account creds.
 
 Requires a Contacto session — run 'plivo contacto login' first.`,
+	Args: cobra.NoArgs,
+	RunE: groupRunE,
 }
 
 var (

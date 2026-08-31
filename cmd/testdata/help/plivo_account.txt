@@ -1,6 +1,7 @@
 Inspect and update the active Plivo account
 
 Usage:
+  plivo account [flags]
   plivo account [command]
 
 Available Commands:

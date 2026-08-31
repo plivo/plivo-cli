@@ -16,6 +16,8 @@ var recordingCmd = &cobra.Command{
 	Use:     "recordings",
 	Aliases: []string{"rec", "recording"},
 	Short:   "List, fetch, and delete call/conference recordings",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (

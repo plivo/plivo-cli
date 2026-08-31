@@ -30,6 +30,8 @@ var docsCmd = &cobra.Command{
 Backed by the docs site's own machine-readable exports, so no credentials are
 needed. The full text is cached under ~/.plivo/cache for a day; pass --refresh
 to re-fetch.`,
+	Args: cobra.NoArgs,
+	RunE: groupRunE,
 }
 
 var docsSearchCmd = &cobra.Command{

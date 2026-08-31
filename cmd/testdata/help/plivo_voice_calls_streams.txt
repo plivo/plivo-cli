@@ -1,6 +1,7 @@
 Live audio streams on a call (WebSocket bridge for transcription / agents)
 
 Usage:
+  plivo voice calls streams [flags]
   plivo voice calls streams [command]
 
 Aliases:

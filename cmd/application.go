@@ -16,6 +16,8 @@ var applicationCmd = &cobra.Command{
 	Use:     "applications",
 	Aliases: []string{"app", "application"},
 	Short:   "Manage Plivo applications (voice/messaging webhooks)",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (

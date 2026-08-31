@@ -1,6 +1,7 @@
 Per-member actions inside a conference
 
 Usage:
+  plivo voice conferences member [flags]
   plivo voice conferences member [command]
 
 Available Commands:

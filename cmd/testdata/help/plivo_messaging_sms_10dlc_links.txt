@@ -1,6 +1,7 @@
 10DLC number-to-campaign linking
 
 Usage:
+  plivo messaging sms 10dlc links [flags]
   plivo messaging sms 10dlc links [command]
 
 Aliases:

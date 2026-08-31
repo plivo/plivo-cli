@@ -1,6 +1,7 @@
 10DLC campaign registration (use cases for a brand)
 
 Usage:
+  plivo messaging sms 10dlc campaigns [flags]
   plivo messaging sms 10dlc campaigns [command]
 
 Aliases:

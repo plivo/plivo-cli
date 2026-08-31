@@ -1,6 +1,7 @@
 Manage account phone numbers
 
 Usage:
+  plivo numbers [flags]
   plivo numbers [command]
 
 Aliases:

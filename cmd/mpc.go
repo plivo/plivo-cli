@@ -16,6 +16,8 @@ var mpcCmd = &cobra.Command{
 	Use:     "multiparty",
 	Aliases: []string{"mpc"},
 	Short:   "Multi-Party Calls (MPC) — group voice rooms with dynamic participants",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (
@@ -61,6 +63,8 @@ var mpcParticipantCmd = &cobra.Command{
 	Use:     "participant",
 	Aliases: []string{"part"},
 	Short:   "Per-participant actions inside an MPC",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (

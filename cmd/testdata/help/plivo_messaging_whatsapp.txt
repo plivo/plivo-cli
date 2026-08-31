@@ -1,6 +1,7 @@
 WhatsApp — Plivo's WhatsApp Business API surface
 
 Usage:
+  plivo messaging whatsapp [flags]
   plivo messaging whatsapp [command]
 
 Aliases:

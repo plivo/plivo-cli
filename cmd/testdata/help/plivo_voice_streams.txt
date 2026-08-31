@@ -11,6 +11,7 @@ itself — they don't act on an existing call-bound stream.
             handler. Restores the original answer_url on Ctrl+C.
 
 Usage:
+  plivo voice streams [flags]
   plivo voice streams [command]
 
 Available Commands:

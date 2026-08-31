@@ -16,6 +16,8 @@ var linkCmd = &cobra.Command{
 	Use:     "links",
 	Aliases: []string{"link"},
 	Short:   "10DLC number-to-campaign linking",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (

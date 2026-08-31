@@ -1,6 +1,7 @@
 Manage number-masking sessions
 
 Usage:
+  plivo numbers masking sessions [flags]
   plivo numbers masking sessions [command]
 
 Aliases:

@@ -1,6 +1,7 @@
 List, fetch, and delete call/conference recordings
 
 Usage:
+  plivo voice recordings [flags]
   plivo voice recordings [command]
 
 Aliases:

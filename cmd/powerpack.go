@@ -16,6 +16,8 @@ var powerpackCmd = &cobra.Command{
 	Use:     "powerpacks",
 	Aliases: []string{"pp", "powerpack"},
 	Short:   "Powerpacks — number pools for high-volume SMS",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (
@@ -76,6 +78,8 @@ var ppNumberCmd = &cobra.Command{
 	Use:     "numbers",
 	Aliases: []string{"number"},
 	Short:   "Manage numbers inside a powerpack",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (

@@ -1,6 +1,7 @@
 Number-Masking sessions (privacy-preserving call/SMS bridge)
 
 Usage:
+  plivo numbers masking [flags]
   plivo numbers masking [command]
 
 Aliases:

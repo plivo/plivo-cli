@@ -17,6 +17,8 @@ var campaignCmd = &cobra.Command{
 	Use:     "campaigns",
 	Aliases: []string{"camp", "campaign"},
 	Short:   "10DLC campaign registration (use cases for a brand)",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (

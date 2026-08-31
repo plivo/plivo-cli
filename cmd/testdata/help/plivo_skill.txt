@@ -1,6 +1,7 @@
 Manage the plivo-cli agent skill
 
 Usage:
+  plivo skill [flags]
   plivo skill [command]
 
 Available Commands:

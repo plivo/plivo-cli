@@ -1,6 +1,7 @@
 Manage CLI settings (telemetry on/off, get/set)
 
 Usage:
+  plivo config [flags]
   plivo config [command]
 
 Available Commands:

@@ -1,6 +1,7 @@
 Manage Plivo applications (voice/messaging webhooks)
 
 Usage:
+  plivo account applications [flags]
   plivo account applications [command]
 
 Aliases:

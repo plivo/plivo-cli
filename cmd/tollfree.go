@@ -15,6 +15,8 @@ var tollfreeCmd = &cobra.Command{
 	Use:     "tollfree",
 	Aliases: []string{"tfv"},
 	Short:   "Toll-free verification (US TFN messaging compliance)",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (

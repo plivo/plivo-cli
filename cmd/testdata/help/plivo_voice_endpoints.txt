@@ -1,6 +1,7 @@
 Manage SIP endpoints (registered SIP devices/usernames)
 
 Usage:
+  plivo voice endpoints [flags]
   plivo voice endpoints [command]
 
 Aliases:

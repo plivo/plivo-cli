@@ -16,12 +16,16 @@ var maskingCmd = &cobra.Command{
 	Use:     "masking",
 	Aliases: []string{"mask"},
 	Short:   "Number-Masking sessions (privacy-preserving call/SMS bridge)",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var maskingSessionCmd = &cobra.Command{
 	Use:     "sessions",
 	Aliases: []string{"session"},
 	Short:   "Manage number-masking sessions",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (

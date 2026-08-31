@@ -16,6 +16,8 @@ var numberCmd = &cobra.Command{
 	Use:     "numbers",
 	Aliases: []string{"number"},
 	Short:   "Manage account phone numbers",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (

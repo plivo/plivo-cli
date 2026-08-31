@@ -1,6 +1,7 @@
 Manage subaccounts under the master account
 
 Usage:
+  plivo account subaccounts [flags]
   plivo account subaccounts [command]
 
 Aliases:

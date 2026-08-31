@@ -1,6 +1,7 @@
 Per-participant actions inside an MPC
 
 Usage:
+  plivo voice multiparty participant [flags]
   plivo voice multiparty participant [command]
 
 Aliases:

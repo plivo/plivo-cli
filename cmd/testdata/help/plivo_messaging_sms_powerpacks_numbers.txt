@@ -1,6 +1,7 @@
 Manage numbers inside a powerpack
 
 Usage:
+  plivo messaging sms powerpacks numbers [flags]
   plivo messaging sms powerpacks numbers [command]
 
 Aliases:

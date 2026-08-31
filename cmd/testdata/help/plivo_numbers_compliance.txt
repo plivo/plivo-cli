@@ -1,6 +1,7 @@
 Regulatory compliance for phone numbers (requirements, applications, linking)
 
 Usage:
+  plivo numbers compliance [flags]
   plivo numbers compliance [command]
 
 Available Commands:

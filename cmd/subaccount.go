@@ -16,6 +16,8 @@ var subaccountCmd = &cobra.Command{
 	Use:     "subaccounts",
 	Aliases: []string{"sub", "subaccount"},
 	Short:   "Manage subaccounts under the master account",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (

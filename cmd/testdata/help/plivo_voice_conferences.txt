@@ -1,6 +1,7 @@
 Inspect and control live audio conferences
 
 Usage:
+  plivo voice conferences [flags]
   plivo voice conferences [command]
 
 Aliases:
