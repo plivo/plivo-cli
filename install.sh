@@ -138,7 +138,7 @@ echo "✓ Checksum verified"
 # Best-effort by design — releases predating signing carry no signature, and we
 # will not block an install over a tool the user never installed. But a
 # signature that IS present and fails to verify is fatal.
-TRUSTED_IDENTITY="releases@plivo.com"
+TRUSTED_IDENTITY="cx-tech@plivo.com"
 TRUSTED_ISSUERS="https://accounts.google.com https://github.com/login/oauth"
 SIG_URL="${SUMS_URL}.sig"
 CERT_URL="${SUMS_URL%SHA256SUMS}SHA256SUMS.pem"

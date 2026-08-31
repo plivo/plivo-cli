@@ -86,6 +86,47 @@ try {
     }
     Write-Host "OK Checksum verified"
 
+    # Provenance: the checksum above proves the bytes are intact, this proves
+    # they came from us. Best-effort -- releases predating signing carry no
+    # signature, and we will not block an install over a tool the user never
+    # installed. A signature that IS present and fails is fatal.
+    $TrustedIdentity = 'cx-tech@plivo.com'
+    $TrustedIssuers  = @('https://accounts.google.com', 'https://github.com/login/oauth')
+    $SigUrl  = "$SumsUrl.sig"
+    $CertUrl = "$SumsUrl.pem"
+    $TmpSig  = Join-Path $TmpDir 'SHA256SUMS.sig'
+    $TmpCert = Join-Path $TmpDir 'SHA256SUMS.pem'
+    $haveSig = $false
+    try {
+        Invoke-WebRequest -Uri $SigUrl  -OutFile $TmpSig  -UseBasicParsing -ErrorAction Stop
+        Invoke-WebRequest -Uri $CertUrl -OutFile $TmpCert -UseBasicParsing -ErrorAction Stop
+        $haveSig = $true
+    } catch { $haveSig = $false }
+
+    if ($haveSig) {
+        $cosign = Get-Command cosign -ErrorAction SilentlyContinue
+        if ($cosign) {
+            $sigOk = $false
+            foreach ($iss in $TrustedIssuers) {
+                & $cosign.Source verify-blob $TmpSums `
+                    --signature $TmpSig `
+                    --certificate $TmpCert `
+                    --certificate-identity $TrustedIdentity `
+                    --certificate-oidc-issuer $iss 2>$null 1>$null
+                if ($LASTEXITCODE -eq 0) { $sigOk = $true; break }
+            }
+            if ($sigOk) {
+                Write-Host "OK Signature verified ($TrustedIdentity)"
+            } else {
+                Write-Error "The SHA256SUMS signature did NOT verify -- refusing to install.`n  Expected signer: $TrustedIdentity"
+                exit 1
+            }
+        } else {
+            Write-Host "-- Signature published but cosign is not installed; provenance not checked."
+            Write-Host "   Install it from https://docs.sigstore.dev/cosign/installation/"
+        }
+    }
+
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
     Move-Item -Force -Path $TmpBin -Destination $Target
 } finally {

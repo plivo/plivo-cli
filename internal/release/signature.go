@@ -23,7 +23,7 @@ import (
 // that would fix it is `plivo upgrade`, the very thing that would break.
 // Both GitHub CLI and HashiCorp had to retrofit this under pressure.
 var TrustedIdentities = []string{
-	"releases@plivo.com",
+	"cx-tech@plivo.com",
 }
 
 // TrustedIssuers are the OIDC issuers those identities may come from.

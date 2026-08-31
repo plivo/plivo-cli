@@ -12,7 +12,7 @@
 # upload both outputs as release assets.
 set -euo pipefail
 
-IDENTITY="${PLIVO_SIGN_IDENTITY:-releases@plivo.com}"
+IDENTITY="${PLIVO_SIGN_IDENTITY:-cx-tech@plivo.com}"
 SUMS="${1:-dist/SHA256SUMS}"
 
 command -v cosign >/dev/null 2>&1 || {
