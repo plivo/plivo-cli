@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `voice streams forward` no longer needs ngrok. It defaults to
+  **localhost.run** over ssh — no install, no account, nothing to sign up for —
+  and uses ngrok instead when it is already on PATH. `--tunnel auto | ngrok |
+  localhost.run` forces a choice.
+
 - `plivo docs` — read the documentation from the terminal. `docs search
   <keywords>` full-text searches every page (a page must contain all the
   keywords, ranked by frequency), `docs list` shows the index, and

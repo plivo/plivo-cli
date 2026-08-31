@@ -3269,13 +3269,14 @@ Redirect an app's answer_url to a local tunnel so calls stream into your local h
 
 One-command local-dev experience for voice streaming.
 
-Saves the app's current answer_url, starts an ngrok tunnel + a local
+Saves the app's current answer_url, starts a tunnel + a local
 HTTP/WebSocket server, points the app at the tunnel, and forwards
 incoming call audio to your local WebSocket handler. Restores the
 original answer_url on Ctrl+C.
 
-Requires ngrok in PATH (or at ~/.plivo/bin/ngrok). Install from
-https://ngrok.com/download.
+No setup required: defaults to localhost.run over ssh, which needs no
+install and no account. Uses ngrok instead when it is already on PATH
+(or at ~/.plivo/bin/ngrok). Force either with --tunnel.
 
 Nothing is purchased, created, or deleted — the only mutation is one
 field on one app, restored on exit.
@@ -3307,6 +3308,7 @@ Flags:
       --print-payload   dump full webhook bodies to terminal (verbose)
       --rate int        sample rate in Hz (default 8000)
       --to string       local WebSocket URL to forward call audio to, e.g. ws://localhost:7860/ws (required)
+      --tunnel string   tunnel provider: auto | ngrok | localhost.run (default "auto")
   -y, --yes             skip the confirmation prompt
 ```
 
