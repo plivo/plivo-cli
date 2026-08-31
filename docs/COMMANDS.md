@@ -3306,7 +3306,7 @@ Flags:
       --keep            do NOT restore the original answer_url on exit (advanced)
       --number string   E.164 number attached to --app (required)
       --print-payload   dump full webhook bodies to terminal (verbose)
-      --rate int        sample rate in Hz (default 8000)
+      --rate int        sample rate in Hz (mulaw: 8000; l16: 8000 or 16000) (default 8000)
       --to string       local WebSocket URL to forward call audio to, e.g. ws://localhost:7860/ws (required)
       --tunnel string   tunnel provider: auto | ngrok | localhost.run (default "auto")
   -y, --yes             skip the confirmation prompt
@@ -3346,7 +3346,7 @@ Flags:
       --codec string    audio codec: mulaw | l16 (default "mulaw")
       --duration int    seconds of synthetic audio to stream (max 30) (default 3)
       --insecure        skip TLS verification (self-signed dev certs only)
-      --rate int        sample rate in Hz (8000 for mulaw, 16000 typical for l16) (default 8000)
+      --rate int        sample rate in Hz (mulaw: 8000; l16: 8000 or 16000) (default 8000)
       --to string       WebSocket URL of the endpoint to test (ws:// or wss://, required)
 ```
 

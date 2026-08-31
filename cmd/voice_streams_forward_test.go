@@ -14,25 +14,6 @@ import (
 	"github.com/plivo/plivo-cli/internal/api"
 )
 
-// codecMime maps the human flag to the Plivo <Stream> contentType. Two values
-// are valid; everything else falls back to mulaw (the call-path default).
-func TestCodecMime(t *testing.T) {
-	cases := map[string]string{
-		"mulaw":  "audio/x-mulaw",
-		"MULAW":  "audio/x-mulaw",
-		"l16":    "audio/l16",
-		"L16":    "audio/l16",
-		"":       "audio/x-mulaw",
-		"opus":   "audio/x-mulaw",
-		"random": "audio/x-mulaw",
-	}
-	for in, want := range cases {
-		if got := codecMime(in); got != want {
-			t.Errorf("codecMime(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 // /answer must return PlivoXML referencing the supplied wss URL and codec.
 // Bidirectional attr only appears when bidi=true.
 func TestBuildLocalStreamServer_answerXML(t *testing.T) {
@@ -45,19 +26,23 @@ func TestBuildLocalStreamServer_answerXML(t *testing.T) {
 		denySubs []string
 	}{
 		{
+			// Codec and rate are one combined attribute value; there is no
+			// sampleRate attribute on <Stream>. An earlier version of this
+			// test asserted the split form and so locked the bug in.
 			name:     "mulaw 8k unidirectional",
 			bidi:     false,
 			codec:    "mulaw",
 			rate:     8000,
-			wantSubs: []string{`contentType="audio/x-mulaw"`, `sampleRate="8000"`, "wss://abc.ngrok.dev/ws"},
-			denySubs: []string{`bidirectional="true"`},
+			wantSubs: []string{`contentType="audio/x-mulaw;rate=8000"`, "wss://abc.ngrok.dev/ws"},
+			denySubs: []string{`bidirectional="true"`, "sampleRate"},
 		},
 		{
 			name:     "l16 16k bidirectional",
 			bidi:     true,
 			codec:    "l16",
 			rate:     16000,
-			wantSubs: []string{`bidirectional="true"`, `contentType="audio/l16"`, `sampleRate="16000"`},
+			wantSubs: []string{`bidirectional="true"`, `contentType="audio/x-l16;rate=16000"`},
+			denySubs: []string{"sampleRate", `contentType="audio/l16"`},
 		},
 	}
 	for _, c := range cases {

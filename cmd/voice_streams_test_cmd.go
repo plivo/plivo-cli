@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -47,7 +46,7 @@ func init() {
 	voiceStreamsTestCmd.Flags().StringVar(&streamsTestTo, "to", "", "WebSocket URL of the endpoint to test (ws:// or wss://, required)")
 	voiceStreamsTestCmd.Flags().IntVar(&streamsTestDuration, "duration", 3, "seconds of synthetic audio to stream (max 30)")
 	voiceStreamsTestCmd.Flags().StringVar(&streamsTestCodec, "codec", "mulaw", "audio codec: mulaw | l16")
-	voiceStreamsTestCmd.Flags().IntVar(&streamsTestRate, "rate", 8000, "sample rate in Hz (8000 for mulaw, 16000 typical for l16)")
+	voiceStreamsTestCmd.Flags().IntVar(&streamsTestRate, "rate", 8000, "sample rate in Hz (mulaw: 8000; l16: 8000 or 16000)")
 	voiceStreamsTestCmd.Flags().BoolVar(&streamsTestBidirectional, "bidirectional", false, "also read frames back from the endpoint (test bot→caller path)")
 	voiceStreamsTestCmd.Flags().BoolVar(&streamsTestInsecure, "insecure", false, "skip TLS verification (self-signed dev certs only)")
 	_ = voiceStreamsTestCmd.MarkFlagRequired("to")
@@ -57,17 +56,17 @@ func init() {
 
 func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	if streamsTestTo == "" {
-		return clierr.BadFlag("--to", "required (WebSocket URL of the endpoint to test)")
+		return clierr.BadFlag("to", "required (WebSocket URL of the endpoint to test)")
 	}
 	if streamsTestDuration <= 0 || streamsTestDuration > 30 {
-		return clierr.BadFlag("--duration", "must be 1..30 seconds")
+		return clierr.BadFlag("duration", "must be 1..30 seconds")
 	}
-	if streamsTestCodec != "mulaw" && streamsTestCodec != "l16" {
-		return clierr.BadFlag("--codec", "must be mulaw | l16")
+	if err := wsproxy.ValidateCodecRate(streamsTestCodec, streamsTestRate); err != nil {
+		return clierr.BadFlag("codec", err.Error())
 	}
 
 	mediaFormat := wsproxy.MediaFormat{
-		Encoding:   codecEncoding(streamsTestCodec),
+		Encoding:   wsproxy.Encoding(streamsTestCodec),
 		SampleRate: streamsTestRate,
 		Channels:   1,
 	}
@@ -113,7 +112,7 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	// --- Phase 3: stream synthetic audio ---
 	const frameMs = 20
 	totalFrames := streamsTestDuration * 1000 / frameMs
-	frames := wsproxy.SyntheticMulaw(totalFrames, frameMs, streamsTestRate)
+	frames := wsproxy.SyntheticAudio(streamsTestCodec, totalFrames, frameMs, streamsTestRate)
 
 	sendStart := time.Now()
 	var sendErrs int
@@ -181,16 +180,5 @@ func readBidirectionalFrames(ctx context.Context, conn *websocket.Conn) int {
 			return count
 		}
 		count++
-	}
-}
-
-// codecEncoding maps the human-friendly --codec value to the Plivo
-// mediaFormat.encoding string.
-func codecEncoding(codec string) string {
-	switch strings.ToLower(codec) {
-	case "l16":
-		return "audio/l16"
-	default:
-		return "audio/x-mulaw"
 	}
 }

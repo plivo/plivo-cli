@@ -73,7 +73,7 @@ func init() {
 	voiceStreamsForwardCmd.Flags().BoolVarP(&streamsFwdYes, "yes", "y", false, "skip the confirmation prompt")
 	voiceStreamsForwardCmd.Flags().BoolVar(&streamsFwdKeep, "keep", false, "do NOT restore the original answer_url on exit (advanced)")
 	voiceStreamsForwardCmd.Flags().StringVar(&streamsFwdCodec, "codec", "mulaw", "audio codec advertised to Plivo: mulaw | l16")
-	voiceStreamsForwardCmd.Flags().IntVar(&streamsFwdRate, "rate", 8000, "sample rate in Hz")
+	voiceStreamsForwardCmd.Flags().IntVar(&streamsFwdRate, "rate", 8000, "sample rate in Hz (mulaw: 8000; l16: 8000 or 16000)")
 	voiceStreamsForwardCmd.Flags().BoolVar(&streamsFwdBidirectional, "bidirectional", true, "allow bot to send audio back to the caller")
 	voiceStreamsForwardCmd.Flags().BoolVar(&streamsFwdPrintPayload, "print-payload", false, "dump full webhook bodies to terminal (verbose)")
 	voiceStreamsForwardCmd.Flags().StringVar(&streamsFwdTunnel, "tunnel", "auto", "tunnel provider: auto | ngrok | localhost.run")
@@ -86,7 +86,10 @@ func init() {
 
 func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	if !strings.HasPrefix(streamsFwdTo, "ws://") && !strings.HasPrefix(streamsFwdTo, "wss://") {
-		return clierr.BadFlag("--to", "must be a WebSocket URL (ws:// or wss://)")
+		return clierr.BadFlag("to", "must be a WebSocket URL (ws:// or wss://)")
+	}
+	if err := wsproxy.ValidateCodecRate(streamsFwdCodec, streamsFwdRate); err != nil {
+		return clierr.BadFlag("codec", err.Error())
 	}
 
 	out := cmd.OutOrStdout()
@@ -251,8 +254,8 @@ func buildLocalStreamServer(out io.Writer, wssTunnelURL, customerWS string, bidi
 		}
 		fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Stream%s contentType="%s" sampleRate="%d">%s</Stream>
-</Response>`, bidiAttr, codecMime(codec), rate, wssTunnelURL)
+  <Stream%s contentType="%s">%s</Stream>
+</Response>`, bidiAttr, wsproxy.ContentType(codec, rate), wssTunnelURL)
 	})
 
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
@@ -283,16 +286,6 @@ func buildLocalStreamServer(out io.Writer, wssTunnelURL, customerWS string, bidi
 	return &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
-	}
-}
-
-// codecMime maps the human flag value to the Plivo <Stream> contentType.
-func codecMime(codec string) string {
-	switch strings.ToLower(codec) {
-	case "l16":
-		return "audio/l16"
-	default:
-		return "audio/x-mulaw"
 	}
 }
 
