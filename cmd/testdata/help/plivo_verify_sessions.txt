@@ -1,6 +1,7 @@
 Manage Verify sessions
 
 Usage:
+  plivo verify sessions [flags]
   plivo verify sessions [command]
 
 Aliases:

@@ -1,6 +1,7 @@
 Manage credential profiles (list / use / remove / whoami)
 
 Usage:
+  plivo auth [flags]
   plivo auth [command]
 
 Available Commands:

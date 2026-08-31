@@ -13,6 +13,8 @@ import (
 var accountCmd = &cobra.Command{
 	Use:   "account",
 	Short: "Inspect and update the active Plivo account",
+	Args:  cobra.NoArgs,
+	RunE:  groupRunE,
 }
 
 var accountGetCmd = &cobra.Command{

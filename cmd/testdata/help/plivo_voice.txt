@@ -1,6 +1,7 @@
 Voice — calls, conferences, multiparty, recordings, endpoints
 
 Usage:
+  plivo voice [flags]
   plivo voice [command]
 
 Available Commands:

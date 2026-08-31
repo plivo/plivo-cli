@@ -17,6 +17,8 @@ import (
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Manage CLI settings (telemetry on/off, get/set)",
+	Args:  cobra.NoArgs,
+	RunE:  groupRunE,
 }
 
 var configTelemetryCmd = &cobra.Command{

@@ -1,6 +1,7 @@
 SMS — A2P / P2P short-message-service (incl. 10DLC, powerpacks, toll-free)
 
 Usage:
+  plivo messaging sms [flags]
   plivo messaging sms [command]
 
 Available Commands:

@@ -30,6 +30,8 @@ var messageCmd = &cobra.Command{
 	Use:     "messaging",
 	Aliases: []string{"message", "msg", "sms"},
 	Short:   "Send messages (SMS / MMS / WhatsApp) — channel-split surface",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 // ─── Channel subgroups ──────────────────────────────────────────────────────
@@ -37,17 +39,23 @@ var messageCmd = &cobra.Command{
 var messagingSmsCmd = &cobra.Command{
 	Use:   "sms",
 	Short: "SMS — A2P / P2P short-message-service (incl. 10DLC, powerpacks, toll-free)",
+	Args:  cobra.NoArgs,
+	RunE:  groupRunE,
 }
 
 var messagingWhatsappCmd = &cobra.Command{
 	Use:     "whatsapp",
 	Aliases: []string{"wa"},
 	Short:   "WhatsApp — Plivo's WhatsApp Business API surface",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var messagingMmsCmd = &cobra.Command{
 	Use:   "mms",
 	Short: "MMS — multimedia messages (US/Canada)",
+	Args:  cobra.NoArgs,
+	RunE:  groupRunE,
 }
 
 // ─── Per-channel send + list flags (one set per channel; tiny duplication

@@ -5,6 +5,7 @@ needed. The full text is cached under ~/.plivo/cache for a day; pass --refresh
 to re-fetch.
 
 Usage:
+  plivo docs [flags]
   plivo docs [command]
 
 Available Commands:

@@ -1,6 +1,7 @@
 Make and inspect voice calls
 
 Usage:
+  plivo voice calls [flags]
   plivo voice calls [command]
 
 Aliases:

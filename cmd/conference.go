@@ -14,6 +14,8 @@ var conferenceCmd = &cobra.Command{
 	Use:     "conferences",
 	Aliases: []string{"conf", "conference"},
 	Short:   "Inspect and control live audio conferences",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var confListCmd = &cobra.Command{
@@ -40,6 +42,8 @@ var confHangupCmd = &cobra.Command{
 var confMemberCmd = &cobra.Command{
 	Use:   "member",
 	Short: "Per-member actions inside a conference",
+	Args:  cobra.NoArgs,
+	RunE:  groupRunE,
 }
 
 var confMemberKickCmd = &cobra.Command{

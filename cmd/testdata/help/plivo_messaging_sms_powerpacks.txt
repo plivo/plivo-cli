@@ -1,6 +1,7 @@
 Powerpacks — number pools for high-volume SMS
 
 Usage:
+  plivo messaging sms powerpacks [flags]
   plivo messaging sms powerpacks [command]
 
 Aliases:

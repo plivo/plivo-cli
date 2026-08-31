@@ -1,6 +1,7 @@
 Send messages (SMS / MMS / WhatsApp) — channel-split surface
 
 Usage:
+  plivo messaging [flags]
   plivo messaging [command]
 
 Aliases:

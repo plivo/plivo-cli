@@ -14,6 +14,8 @@ var streamCmd = &cobra.Command{
 	Use:     "streams",
 	Aliases: []string{"stream"},
 	Short:   "Live audio streams on a call (WebSocket bridge for transcription / agents)",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var streamListCmd = &cobra.Command{

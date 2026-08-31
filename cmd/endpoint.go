@@ -16,6 +16,8 @@ var endpointCmd = &cobra.Command{
 	Use:     "endpoints",
 	Aliases: []string{"ep", "endpoint"},
 	Short:   "Manage SIP endpoints (registered SIP devices/usernames)",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (

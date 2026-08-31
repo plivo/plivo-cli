@@ -1,6 +1,7 @@
 10DLC brand registration (US A2P 10-digit-long-code messaging)
 
 Usage:
+  plivo messaging sms 10dlc brands [flags]
   plivo messaging sms 10dlc brands [command]
 
 Aliases:

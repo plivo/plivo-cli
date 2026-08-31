@@ -345,6 +345,41 @@ func TestEveryRegisteredCmd_hasShortDescription(t *testing.T) {
 	visit(rootCmd)
 }
 
+// ─── Group commands reject an unknown subcommand instead of exiting 0 ───────
+
+// TestGroupCommands_rejectUnknownSubcommand walks the whole tree and, for
+// every command that only groups subcommands, checks that an unrecognized
+// trailing token errors instead of printing help and exiting 0. Cobra's
+// own default (legacyArgs, in the vendored library) only does this check
+// for the true root — every other parent command needs its own Args +
+// RunE. See voice_streams_test.go for the specific case that surfaced
+// this. "help"/"completion" are cobra's own auto-added commands, not ours
+// to fix.
+func TestGroupCommands_rejectUnknownSubcommand(t *testing.T) {
+	setFakeCreds(t)
+
+	var walk func(c *cobra.Command, path []string)
+	walk = func(c *cobra.Command, path []string) {
+		for _, child := range c.Commands() {
+			if child.Name() == "help" || child.Name() == "completion" {
+				continue
+			}
+			childPath := append(append([]string(nil), path...), child.Name())
+			if child.HasSubCommands() {
+				t.Run(strings.Join(childPath, "_"), func(t *testing.T) {
+					args := append(append([]string(nil), childPath...), "this-subcommand-does-not-exist")
+					err, _, _ := execCmd(t, args...)
+					if err == nil {
+						t.Errorf("plivo %s — unknown subcommand accepted silently (help + exit 0) instead of erroring", strings.Join(args, " "))
+					}
+				})
+			}
+			walk(child, childPath)
+		}
+	}
+	walk(rootCmd, nil)
+}
+
 // findCmdNoFail is a non-fatal variant of findCmd for batch checks where we
 // want to report all missing commands in one run rather than aborting on the
 // first.

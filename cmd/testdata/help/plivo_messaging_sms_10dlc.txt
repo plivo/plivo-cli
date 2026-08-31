@@ -1,6 +1,7 @@
 US A2P 10DLC registration — brands, campaigns, links
 
 Usage:
+  plivo messaging sms 10dlc [flags]
   plivo messaging sms 10dlc [command]
 
 Available Commands:

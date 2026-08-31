@@ -1,6 +1,7 @@
 MMS — multimedia messages (US/Canada)
 
 Usage:
+  plivo messaging mms [flags]
   plivo messaging mms [command]
 
 Available Commands:

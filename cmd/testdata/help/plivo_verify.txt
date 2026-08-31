@@ -1,6 +1,7 @@
 Plivo Verify — OTP / phone-number verification sessions
 
 Usage:
+  plivo verify [flags]
   plivo verify [command]
 
 Available Commands:

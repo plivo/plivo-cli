@@ -1,6 +1,7 @@
 Toll-free verification (US TFN messaging compliance)
 
 Usage:
+  plivo messaging sms tollfree [flags]
   plivo messaging sms tollfree [command]
 
 Aliases:

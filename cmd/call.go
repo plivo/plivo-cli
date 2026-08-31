@@ -16,6 +16,8 @@ var callCmd = &cobra.Command{
 	Use:     "calls",
 	Aliases: []string{"call"},
 	Short:   "Make and inspect voice calls",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (

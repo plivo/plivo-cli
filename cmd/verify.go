@@ -15,12 +15,16 @@ import (
 var verifyCmd = &cobra.Command{
 	Use:   "verify",
 	Short: "Plivo Verify — OTP / phone-number verification sessions",
+	Args:  cobra.NoArgs,
+	RunE:  groupRunE,
 }
 
 var verifySessionCmd = &cobra.Command{
 	Use:     "sessions",
 	Aliases: []string{"session"},
 	Short:   "Manage Verify sessions",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (

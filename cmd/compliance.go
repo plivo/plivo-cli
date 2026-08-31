@@ -19,6 +19,8 @@ import (
 var complianceCmd = &cobra.Command{
 	Use:   "compliance",
 	Short: "Regulatory compliance for phone numbers (requirements, applications, linking)",
+	Args:  cobra.NoArgs,
+	RunE:  groupRunE,
 }
 
 // requirements

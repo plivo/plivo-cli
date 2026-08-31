@@ -16,6 +16,8 @@ import (
 var authCmd = &cobra.Command{
 	Use:   "auth",
 	Short: "Manage credential profiles (list / use / remove / whoami)",
+	Args:  cobra.NoArgs,
+	RunE:  groupRunE,
 }
 
 var authListCmd = &cobra.Command{

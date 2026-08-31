@@ -16,6 +16,8 @@ var brandCmd = &cobra.Command{
 	Use:     "brands",
 	Aliases: []string{"brand"},
 	Short:   "10DLC brand registration (US A2P 10-digit-long-code messaging)",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (
