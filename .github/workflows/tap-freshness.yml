@@ -1,0 +1,24 @@
+# The Homebrew tap is bumped by hand after a release (pushing to it is a GitHub
+# API write, blocked from hosted runners). A missed bump is silent: brew just
+# keeps serving the old version. This is the thing that notices.
+#
+# Its own workflow rather than a schedule on ci.yml, which would run fourteen
+# jobs a day to check one string.
+name: Tap freshness
+
+on:
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tap-freshness:
+    name: tap-freshness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - name: Compare the tap formula to the latest release
+        run: ./scripts/check-tap-fresh.sh

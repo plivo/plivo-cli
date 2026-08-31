@@ -84,6 +84,11 @@ jobs:
       - name: tap render
         run: ./scripts/gen-tap-test.sh
 
+      # A forgotten tap bump is invisible otherwise: brew keeps serving the old
+      # version and nothing complains.
+      - name: tap freshness
+        run: ./scripts/check-tap-fresh.sh
+
   # Build and run the binary natively on every platform we ship.
   smoke-os:
     name: smoke-os (${{ matrix.runner }})
