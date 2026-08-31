@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/plivo/plivo-cli/internal/api"
@@ -134,6 +135,60 @@ func TestDiagnoseMessaging_unknownUUID_refusesForEveryChannel(t *testing.T) {
 			}
 			if hitChat(paths()) {
 				t.Error("the assistant must not be reached for an unknown message uuid")
+			}
+		})
+	}
+}
+
+// TestDiagnose_unknownID_neverFilesATicket is a dedicated regression guard,
+// separate from the hitChat() checks above: it points the client's whole
+// assistant surface at a counting-only server and requires the hit count to
+// be exactly 0, so a future refactor of the shared diagnoseServer/hitChat
+// helpers can't silently let an unknown id reach the assistant (which
+// auto-files a support ticket) without this test catching it.
+func TestDiagnose_unknownID_neverFilesATicket(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"voice", []string{"voice", "calls", "diagnose", "00000000-0000-4000-8000-000000000000"}},
+		{"sms", []string{"messaging", "sms", "diagnose", "00000000-0000-0000-0000-000000000000"}},
+		{"whatsapp", []string{"messaging", "whatsapp", "diagnose", "00000000-0000-0000-0000-000000000000"}},
+		{"mms", []string{"messaging", "mms", "diagnose", "00000000-0000-0000-0000-000000000000"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setFakeCreds(t)
+
+			// Resource pre-check: always 404s (the id is unknown).
+			lookupSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(`{"error":"not found"}`))
+			}))
+			t.Cleanup(lookupSrv.Close)
+
+			// Assistant surface: counts every request it receives. Any hit
+			// here is a ticket-creating call, so the count must stay 0.
+			var chatHits atomic.Int64
+			chatSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				chatHits.Add(1)
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = w.Write([]byte("event: final\ndata: {\"answer\":\"ok\"}\n\n"))
+			}))
+			t.Cleanup(chatSrv.Close)
+
+			clientForTest = &api.Client{
+				BaseURL: lookupSrv.URL, BuddyBaseURL: chatSrv.URL,
+				AuthID: "MAFAKEFORTEST", AuthToken: "tok", HTTP: &http.Client{},
+			}
+			t.Cleanup(func() { clientForTest = nil })
+
+			err, _, _ := execCmd(t, tc.args...)
+			if err == nil || !strings.Contains(err.Error(), "RESOURCE_NOT_FOUND") {
+				t.Fatalf("expected RESOURCE_NOT_FOUND for an unknown id, got: %v", err)
+			}
+			if got := chatHits.Load(); got != 0 {
+				t.Errorf("assistant endpoint received %d request(s) for an unknown id, want 0 — this would auto-file a support ticket", got)
 			}
 		})
 	}
