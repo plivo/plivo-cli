@@ -10,11 +10,13 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
+	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/plivo/plivo-cli/internal/tunnel"
 	"github.com/plivo/plivo-cli/internal/wsproxy"
 
@@ -66,6 +68,16 @@ field on one app, restored on exit.`,
 	RunE: runVoiceStreamsForward,
 }
 
+// streamsFwdResult is the -o json summary for `plivo voice streams
+// forward` — one final object instead of the run's progress narration.
+type streamsFwdResult struct {
+	AppID          string `json:"app_id"`
+	TunnelURL      string `json:"tunnel_url"`
+	Restored       bool   `json:"restored"`
+	RestoreError   string `json:"restore_error,omitempty"`
+	EventsObserved int64  `json:"events_observed"`
+}
+
 func init() {
 	voiceStreamsForwardCmd.Flags().StringVar(&streamsFwdNumber, "number", "", "E.164 number attached to --app (required)")
 	voiceStreamsForwardCmd.Flags().StringVar(&streamsFwdAppID, "app", "", "Plivo Application UUID whose answer_url will be temporarily redirected (required)")
@@ -93,6 +105,7 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	}
 
 	out := cmd.OutOrStdout()
+	jsonOut := effectiveFormat() == output.FormatJSON
 	client := streamsFwdClientForTest
 	if client == nil {
 		c, _, err := getClient()
@@ -119,6 +132,14 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	originalAnswerURL := app.AnswerURL
 
 	if dryRunFlag {
+		if jsonOut {
+			return output.JSONSuccess(os.Stdout, map[string]any{
+				"dry_run":         true,
+				"app_id":          streamsFwdAppID,
+				"from_answer_url": originalAnswerURL,
+				"to":              streamsFwdTo,
+			}, nil)
+		}
 		fmt.Fprintf(out, "[dry-run] Would redirect app %q (%s) answer_url:\n", app.AppName, streamsFwdAppID)
 		fmt.Fprintf(out, "  from: %s\n", originalAnswerURL)
 		fmt.Fprintf(out, "  to:   https://<ngrok-tunnel>/answer (via local server)\n")
@@ -143,21 +164,27 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 		return clierr.Wrap(fmt.Errorf("bind local port: %w", err))
 	}
 	localPort := listener.Addr().(*net.TCPAddr).Port
-	fmt.Fprintf(out, "⠋ Local server on :%d\n", localPort)
+	if !jsonOut {
+		fmt.Fprintf(out, "⠋ Local server on :%d\n", localPort)
+	}
 
 	// Cancel context drives a clean teardown end-to-end.
 	ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
 	// --- Start the tunnel ---
-	fmt.Fprintf(out, "⠋ Starting tunnel via %s...\n", tunnel.Describe(streamsFwdTunnel))
+	if !jsonOut {
+		fmt.Fprintf(out, "⠋ Starting tunnel via %s...\n", tunnel.Describe(streamsFwdTunnel))
+	}
 	tn, err := tunnel.Start(ctx, localPort, streamsFwdTunnel)
 	if err != nil {
 		listener.Close()
 		return clierr.Wrap(err)
 	}
 	defer tn.Close()
-	fmt.Fprintf(out, "⠋ Tunnel: %s → :%d\n", tn.PublicURL, localPort)
+	if !jsonOut {
+		fmt.Fprintf(out, "⠋ Tunnel: %s → :%d\n", tn.PublicURL, localPort)
+	}
 
 	// --- PATCH app's answer_url to the tunnel ---
 	tunnelAnswerURL := tn.PublicURL + "/answer"
@@ -172,12 +199,15 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 		listener.Close()
 		return apiErr
 	}
-	fmt.Fprintf(out, "⠋ App answer_url updated → %s\n\n", tunnelAnswerURL)
-	fmt.Fprintf(out, "✓ Ready. Dial %s — events stream below.\n\n", streamsFwdNumber)
+	if !jsonOut {
+		fmt.Fprintf(out, "⠋ App answer_url updated → %s\n\n", tunnelAnswerURL)
+		fmt.Fprintf(out, "✓ Ready. Dial %s — events stream below.\n\n", streamsFwdNumber)
+	}
 
 	// --- Start serving (HTTP for answer webhook, /ws for streaming) ---
+	var events atomic.Int64
 	wsTunnelURL := strings.Replace(tn.PublicURL, "https://", "wss://", 1) + "/ws"
-	srv := buildLocalStreamServer(out, wsTunnelURL, streamsFwdTo, streamsFwdBidirectional, streamsFwdCodec, streamsFwdRate, streamsFwdPrintPayload)
+	srv := buildLocalStreamServer(out, wsTunnelURL, streamsFwdTo, streamsFwdBidirectional, streamsFwdCodec, streamsFwdRate, streamsFwdPrintPayload, jsonOut, &events)
 	srvErrCh := make(chan error, 1)
 	go func() {
 		err := srv.Serve(listener)
@@ -190,9 +220,13 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	// --- Wait for SIGINT or fatal server error ---
 	select {
 	case <-ctx.Done():
-		fmt.Fprintf(out, "\n^C — tearing down...\n")
+		if !jsonOut {
+			fmt.Fprintf(out, "\n^C — tearing down...\n")
+		}
 	case err := <-srvErrCh:
-		fmt.Fprintf(out, "\nlocal server error: %v\n", err)
+		if !jsonOut {
+			fmt.Fprintf(out, "\nlocal server error: %v\n", err)
+		}
 	}
 
 	// --- Teardown: stop server, restore answer_url, kill ngrok ---
@@ -200,29 +234,51 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	_ = srv.Shutdown(shutdownCtx)
 	shutdownCancel()
 
+	var restored bool
+	var restoreErr string
 	if !streamsFwdKeep {
-		fmt.Fprintf(out, "  Restoring answer_url on %q...", app.AppName)
+		if !jsonOut {
+			fmt.Fprintf(out, "  Restoring answer_url on %q...", app.AppName)
+		}
 		restoreBody := map[string]interface{}{
 			"answer_url":    originalAnswerURL,
 			"answer_method": app.AnswerMethod,
 		}
 		if apiErr, err := client.Do("POST", client.AccountURL("Application", streamsFwdAppID), restoreBody, nil, nil); err != nil {
-			fmt.Fprintf(out, " ✗ FAILED: %v\n", err)
-			fmt.Fprintf(out, "  Manual restore: plivo account applications update %s --answer-url %s\n",
-				streamsFwdAppID, originalAnswerURL)
+			restoreErr = err.Error()
+			if !jsonOut {
+				fmt.Fprintf(out, " ✗ FAILED: %v\n", err)
+				fmt.Fprintf(out, "  Manual restore: plivo account applications update %s --answer-url %s\n",
+					streamsFwdAppID, originalAnswerURL)
+			}
 		} else if apiErr != nil {
-			fmt.Fprintf(out, " ✗ %s\n", apiErr.Message)
-			fmt.Fprintf(out, "  Manual restore: plivo account applications update %s --answer-url %s\n",
-				streamsFwdAppID, originalAnswerURL)
+			restoreErr = apiErr.Message
+			if !jsonOut {
+				fmt.Fprintf(out, " ✗ %s\n", apiErr.Message)
+				fmt.Fprintf(out, "  Manual restore: plivo account applications update %s --answer-url %s\n",
+					streamsFwdAppID, originalAnswerURL)
+			}
 		} else {
-			fmt.Fprintf(out, " done.\n")
+			restored = true
+			if !jsonOut {
+				fmt.Fprintf(out, " done.\n")
+			}
 		}
-	} else {
+	} else if !jsonOut {
 		fmt.Fprintf(out, "  --keep set; answer_url left at %s\n", tunnelAnswerURL)
 		fmt.Fprintf(out, "  Manual restore: plivo account applications update %s --answer-url %s\n",
 			streamsFwdAppID, originalAnswerURL)
 	}
 
+	if jsonOut {
+		return output.JSONSuccess(os.Stdout, streamsFwdResult{
+			AppID:          streamsFwdAppID,
+			TunnelURL:      tn.PublicURL,
+			Restored:       restored,
+			RestoreError:   restoreErr,
+			EventsObserved: events.Load(),
+		}, nil)
+	}
 	fmt.Fprintf(out, "✓ All cleaned up.\n")
 	return nil
 }
@@ -233,19 +289,24 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 //	GET  /ws      → upgrades to WebSocket and bridges Plivo ↔ customer's --to
 //
 // Lifecycle events on the answer webhook + WS connect/disconnect are
-// printed to out.
-func buildLocalStreamServer(out io.Writer, wssTunnelURL, customerWS string, bidir bool, codec string, rate int, printPayload bool) *http.Server {
+// printed to out, unless jsonOut suppresses them for a clean summary at
+// the end of the run; events is incremented on each one regardless so the
+// summary can still report an events_observed count.
+func buildLocalStreamServer(out io.Writer, wssTunnelURL, customerWS string, bidir bool, codec string, rate int, printPayload, jsonOut bool, events *atomic.Int64) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/answer", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost && r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		fmt.Fprintf(out, "[%s] answer webhook from %s\n", time.Now().Format("15:04:05"), r.RemoteAddr)
-		if printPayload {
-			body := make([]byte, 4096)
-			n, _ := r.Body.Read(body)
-			fmt.Fprintf(out, "  body (%d bytes): %s\n", n, string(body[:n]))
+		events.Add(1)
+		if !jsonOut {
+			fmt.Fprintf(out, "[%s] answer webhook from %s\n", time.Now().Format("15:04:05"), r.RemoteAddr)
+			if printPayload {
+				body := make([]byte, 4096)
+				n, _ := r.Body.Read(body)
+				fmt.Fprintf(out, "  body (%d bytes): %s\n", n, string(body[:n]))
+			}
 		}
 		w.Header().Set("Content-Type", "application/xml; charset=UTF-8")
 		bidiAttr := ""
@@ -259,10 +320,16 @@ func buildLocalStreamServer(out io.Writer, wssTunnelURL, customerWS string, bidi
 	})
 
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(out, "[%s] StreamConnect ← Plivo\n", time.Now().Format("15:04:05"))
+		events.Add(1)
+		if !jsonOut {
+			fmt.Fprintf(out, "[%s] StreamConnect ← Plivo\n", time.Now().Format("15:04:05"))
+		}
 		plivoConn, err := websocket.Accept(w, r, nil)
 		if err != nil {
-			fmt.Fprintf(out, "  WS accept failed: %v\n", err)
+			events.Add(1)
+			if !jsonOut {
+				fmt.Fprintf(out, "  WS accept failed: %v\n", err)
+			}
 			return
 		}
 		defer plivoConn.Close(websocket.StatusNormalClosure, "")
@@ -271,16 +338,25 @@ func buildLocalStreamServer(out io.Writer, wssTunnelURL, customerWS string, bidi
 		customerConn, _, err := websocket.Dial(dialCtx, customerWS, nil)
 		dialCancel()
 		if err != nil {
-			fmt.Fprintf(out, "  dial customer WS %s failed: %v\n", customerWS, err)
+			events.Add(1)
+			if !jsonOut {
+				fmt.Fprintf(out, "  dial customer WS %s failed: %v\n", customerWS, err)
+			}
 			plivoConn.Close(websocket.StatusInternalError, "customer endpoint unreachable")
 			return
 		}
 		defer customerConn.Close(websocket.StatusNormalClosure, "")
-		fmt.Fprintf(out, "[%s] StreamForwarding plivo ↔ %s (bidi=%v)\n", time.Now().Format("15:04:05"), customerWS, bidir)
+		events.Add(1)
+		if !jsonOut {
+			fmt.Fprintf(out, "[%s] StreamForwarding plivo ↔ %s (bidi=%v)\n", time.Now().Format("15:04:05"), customerWS, bidir)
+		}
 
 		bridgeStart := time.Now()
 		_ = wsproxy.Bridge(r.Context(), plivoConn, customerConn)
-		fmt.Fprintf(out, "[%s] StreamDisconnect (after %s)\n", time.Now().Format("15:04:05"), time.Since(bridgeStart).Round(time.Millisecond))
+		events.Add(1)
+		if !jsonOut {
+			fmt.Fprintf(out, "[%s] StreamDisconnect (after %s)\n", time.Now().Format("15:04:05"), time.Since(bridgeStart).Round(time.Millisecond))
+		}
 	})
 
 	return &http.Server{

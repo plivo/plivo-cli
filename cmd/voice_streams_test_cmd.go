@@ -5,11 +5,13 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/plivo/plivo-cli/internal/clierr"
+	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/plivo/plivo-cli/internal/wsproxy"
 
 	"github.com/coder/websocket"
@@ -54,6 +56,19 @@ func init() {
 	voiceStreamsCmd.AddCommand(voiceStreamsTestCmd)
 }
 
+// streamsTestResult is the -o json summary for `plivo voice streams test` —
+// one final object instead of the human progress narration.
+type streamsTestResult struct {
+	Connected      bool   `json:"connected"`
+	HandshakeSent  bool   `json:"handshake_sent"`
+	FramesSent     int    `json:"frames_sent"`
+	Codec          string `json:"codec"`
+	Rate           int    `json:"rate"`
+	Bidirectional  bool   `json:"bidirectional"`
+	FramesReadBack int    `json:"frames_read_back"`
+	Errors         int    `json:"errors"`
+}
+
 func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	if streamsTestTo == "" {
 		return clierr.BadFlag("to", "required (WebSocket URL of the endpoint to test)")
@@ -84,6 +99,8 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	}
 
 	out := cmd.OutOrStdout()
+	jsonOut := effectiveFormat() == output.FormatJSON
+	result := streamsTestResult{Codec: streamsTestCodec, Rate: streamsTestRate, Bidirectional: streamsTestBidirectional}
 
 	// --- Phase 1: connect ---
 	dialCtx, dialCancel := context.WithTimeout(ctx, 10*time.Second)
@@ -94,7 +111,10 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 		return clierr.NetworkError(streamsTestTo, err)
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "test complete")
-	fmt.Fprintf(out, "✓ Connection established (%dms)\n", time.Since(dialStart).Milliseconds())
+	result.Connected = true
+	if !jsonOut {
+		fmt.Fprintf(out, "✓ Connection established (%dms)\n", time.Since(dialStart).Milliseconds())
+	}
 
 	// --- Phase 2: handshake (start frame) ---
 	startFrame, err := wsproxy.EncodeStart("test-stream", "test-call", "test-account", mediaFormat)
@@ -107,7 +127,10 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return clierr.NetworkError(streamsTestTo, fmt.Errorf("send start frame: %w", err))
 	}
-	fmt.Fprintf(out, "✓ Sent Plivo handshake frame\n")
+	result.HandshakeSent = true
+	if !jsonOut {
+		fmt.Fprintf(out, "✓ Sent Plivo handshake frame\n")
+	}
 
 	// --- Phase 3: stream synthetic audio ---
 	const frameMs = 20
@@ -115,7 +138,7 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	frames := wsproxy.SyntheticAudio(streamsTestCodec, totalFrames, frameMs, streamsTestRate)
 
 	sendStart := time.Now()
-	var sendErrs int
+	var sendErrs, framesSent int
 	for i, audio := range frames {
 		mediaCtx, mediaCancel := context.WithTimeout(ctx, 500*time.Millisecond)
 		raw, _ := wsproxy.EncodeMedia("inbound", i+1, i*frameMs, audio)
@@ -132,6 +155,7 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 			continue
 		}
 		mediaCancel()
+		framesSent++
 		// 20ms-paced; if we're falling behind, send-as-fast-as-possible
 		// instead. The endpoint should drain.
 		nextSend := sendStart.Add(time.Duration(i+1) * time.Duration(frameMs) * time.Millisecond)
@@ -142,10 +166,14 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 			}
 		}
 	}
-	fmt.Fprintf(out, "✓ Streamed %ds of synthetic %s %dHz audio (%d frames)\n",
-		streamsTestDuration, streamsTestCodec, streamsTestRate, totalFrames)
-	if sendErrs > 0 {
-		fmt.Fprintf(out, "⚠ %d frame send errors during streaming\n", sendErrs)
+	result.FramesSent = framesSent
+	result.Errors = sendErrs
+	if !jsonOut {
+		fmt.Fprintf(out, "✓ Streamed %ds of synthetic %s %dHz audio (%d frames)\n",
+			streamsTestDuration, streamsTestCodec, streamsTestRate, totalFrames)
+		if sendErrs > 0 {
+			fmt.Fprintf(out, "⚠ %d frame send errors during streaming\n", sendErrs)
+		}
 	}
 
 	// --- Phase 4: bidirectional read-back (optional) ---
@@ -153,10 +181,13 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 		readCtx, readCancel := context.WithTimeout(ctx, time.Duration(streamsTestDuration)*time.Second)
 		framesRead := readBidirectionalFrames(readCtx, conn)
 		readCancel()
-		if framesRead == 0 {
-			fmt.Fprintf(out, "⚠ No frames received back from endpoint — bot→caller path may not be wired\n")
-		} else {
-			fmt.Fprintf(out, "✓ Received %d frames back from endpoint (bot→caller path live)\n", framesRead)
+		result.FramesReadBack = framesRead
+		if !jsonOut {
+			if framesRead == 0 {
+				fmt.Fprintf(out, "⚠ No frames received back from endpoint — bot→caller path may not be wired\n")
+			} else {
+				fmt.Fprintf(out, "✓ Received %d frames back from endpoint (bot→caller path live)\n", framesRead)
+			}
 		}
 	}
 
@@ -166,6 +197,9 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	_ = conn.Write(stopCtx, websocket.MessageText, stop)
 	stopCancel()
 
+	if jsonOut {
+		return output.JSONSuccess(os.Stdout, result, nil)
+	}
 	fmt.Fprintf(out, "\nEndpoint is ready to receive Plivo audio streams.\n")
 	return nil
 }

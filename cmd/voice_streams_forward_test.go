@@ -3,11 +3,13 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/coder/websocket"
@@ -48,8 +50,9 @@ func TestBuildLocalStreamServer_answerXML(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			var out bytes.Buffer
+			var events atomic.Int64
 			srv := buildLocalStreamServer(&out, "wss://abc.ngrok.dev/ws", "ws://localhost:7860/ws",
-				c.bidi, c.codec, c.rate, false)
+				c.bidi, c.codec, c.rate, false, false, &events)
 			// Stand up a transient httptest server with our mux. Hitting /answer
 			// from a real client is the only way to verify the response shape.
 			ts := httptest.NewServer(srv.Handler)
@@ -85,7 +88,8 @@ func TestBuildLocalStreamServer_answerXML(t *testing.T) {
 // and a 405 is more informative than serving the same XML to a stray probe.
 func TestBuildLocalStreamServer_answerRejectsBadMethod(t *testing.T) {
 	var out bytes.Buffer
-	srv := buildLocalStreamServer(&out, "wss://x/ws", "ws://x/ws", true, "mulaw", 8000, false)
+	var events atomic.Int64
+	srv := buildLocalStreamServer(&out, "wss://x/ws", "ws://x/ws", true, "mulaw", 8000, false, false, &events)
 	ts := httptest.NewServer(srv.Handler)
 	defer ts.Close()
 
@@ -105,8 +109,9 @@ func TestBuildLocalStreamServer_answerRejectsBadMethod(t *testing.T) {
 // of leaking the Plivo connection.
 func TestBuildLocalStreamServer_wsBridgeUnreachableCustomer(t *testing.T) {
 	var logBuf bytes.Buffer
+	var events atomic.Int64
 	// Customer URL points at an unbound port; dial will fail.
-	srv := buildLocalStreamServer(&logBuf, "wss://x/ws", "ws://127.0.0.1:1/ws", true, "mulaw", 8000, false)
+	srv := buildLocalStreamServer(&logBuf, "wss://x/ws", "ws://127.0.0.1:1/ws", true, "mulaw", 8000, false, false, &events)
 	ts := httptest.NewServer(srv.Handler)
 	defer ts.Close()
 
@@ -131,6 +136,10 @@ func TestBuildLocalStreamServer_wsBridgeUnreachableCustomer(t *testing.T) {
 	if !strings.Contains(logs, "dial customer WS") || !strings.Contains(logs, "failed") {
 		t.Errorf("expected dial-customer-failed log, got: %s", logs)
 	}
+	// StreamConnect + dial-failed.
+	if got := events.Load(); got != 2 {
+		t.Errorf("events = %d, want 2", got)
+	}
 }
 
 // /ws should bridge frames cleanly when both sides come up.
@@ -153,7 +162,8 @@ func TestBuildLocalStreamServer_wsBridgeBidirectional(t *testing.T) {
 	botWS := strings.Replace(bot.URL, "http://", "ws://", 1)
 
 	var logBuf bytes.Buffer
-	srv := buildLocalStreamServer(&logBuf, "wss://x/ws", botWS, true, "mulaw", 8000, false)
+	var events atomic.Int64
+	srv := buildLocalStreamServer(&logBuf, "wss://x/ws", botWS, true, "mulaw", 8000, false, false, &events)
 	ts := httptest.NewServer(srv.Handler)
 	defer ts.Close()
 
@@ -175,6 +185,39 @@ func TestBuildLocalStreamServer_wsBridgeBidirectional(t *testing.T) {
 	}
 	if string(got) != "echo:hello" {
 		t.Errorf("got %q, want %q", got, "echo:hello")
+	}
+}
+
+// jsonOut=true must suppress the lifecycle log lines while still counting
+// events, so `-o json`'s final events_observed is accurate even though
+// nothing was printed along the way.
+func TestBuildLocalStreamServer_jsonOutSuppressesLogsButCountsEvents(t *testing.T) {
+	var logBuf bytes.Buffer
+	var events atomic.Int64
+	// Customer URL points at an unbound port; dial will fail, exercising
+	// the StreamConnect + dial-failed pair without needing a real bot.
+	srv := buildLocalStreamServer(&logBuf, "wss://x/ws", "ws://127.0.0.1:1/ws", true, "mulaw", 8000, false, true, &events)
+	ts := httptest.NewServer(srv.Handler)
+	defer ts.Close()
+
+	wsURL := strings.Replace(ts.URL, "http://", "ws://", 1) + "/ws"
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatalf("dial /ws: %v", err)
+	}
+	_, _, err = conn.Read(ctx)
+	if err == nil {
+		t.Error("expected read error after server gave up on customer dial")
+	}
+	conn.Close(websocket.StatusNormalClosure, "")
+
+	if logBuf.Len() != 0 {
+		t.Errorf("jsonOut=true should suppress all progress logs, got: %q", logBuf.String())
+	}
+	if got := events.Load(); got != 2 {
+		t.Errorf("events = %d, want 2 (still counted despite suppressed logs)", got)
 	}
 }
 
@@ -226,7 +269,7 @@ func TestVoiceStreamsForward_dryRun_showsRealAppInfo(t *testing.T) {
 	streamsFwdClientForTest = &api.Client{BaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", HTTP: &http.Client{}}
 	defer func() { streamsFwdClientForTest = nil }()
 
-	err, stdout, _ := execCmd(t, "voice", "streams", "forward",
+	err, stdout, _ := execCmd(t, "-o", "table", "voice", "streams", "forward",
 		"--number", "+14155550142", "--app", "APP123", "--to", "ws://localhost:7860/ws", "--dry-run")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -239,6 +282,45 @@ func TestVoiceStreamsForward_dryRun_showsRealAppInfo(t *testing.T) {
 	}
 	if strings.Contains(stdout, `app ""`) || strings.Contains(stdout, "from: \n") {
 		t.Errorf("dry-run output still shows blanks, got:\n%s", stdout)
+	}
+}
+
+// --dry-run -o json must emit a single parseable preview object, not prose.
+func TestVoiceStreamsForward_dryRun_json(t *testing.T) {
+	setFakeCreds(t)
+	srv := forwardTestServer(t, http.StatusOK, 0)
+	defer srv.Close()
+	streamsFwdClientForTest = &api.Client{BaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", HTTP: &http.Client{}}
+	defer func() { streamsFwdClientForTest = nil }()
+
+	err, stdout, _ := execCmd(t, "voice", "streams", "forward",
+		"--number", "+14155550142", "--app", "APP123", "--to", "ws://localhost:7860/ws", "--dry-run", "-o", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var env struct {
+		Data struct {
+			DryRun        bool   `json:"dry_run"`
+			AppID         string `json:"app_id"`
+			FromAnswerURL string `json:"from_answer_url"`
+			To            string `json:"to"`
+		} `json:"data"`
+	}
+	if jsonErr := json.Unmarshal([]byte(stdout), &env); jsonErr != nil {
+		t.Fatalf("stdout is not valid JSON: %v\nstdout: %q", jsonErr, stdout)
+	}
+	if !env.Data.DryRun {
+		t.Error("dry_run should be true")
+	}
+	if env.Data.AppID != "APP123" {
+		t.Errorf("app_id = %q, want APP123", env.Data.AppID)
+	}
+	if env.Data.FromAnswerURL != "https://old.example.com/answer" {
+		t.Errorf("from_answer_url = %q, want the real current answer_url", env.Data.FromAnswerURL)
+	}
+	if env.Data.To != "ws://localhost:7860/ws" {
+		t.Errorf("to = %q, want the --to value", env.Data.To)
 	}
 }
 
