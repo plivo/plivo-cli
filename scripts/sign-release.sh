@@ -23,7 +23,11 @@ command -v cosign >/dev/null 2>&1 || {
 
 echo "→ Signing $SUMS as $IDENTITY"
 echo "  A browser will open; log in as $IDENTITY, not your personal account."
-cosign sign-blob --yes "$SUMS" \
+# cosign 3.x defaults to the new bundle format, which requires --bundle. Pin it
+# off: the detached .sig/.pem pair is what install.sh and `plivo upgrade` verify.
+# The bundle format will eventually be the only one, so this needs revisiting
+# alongside the verifier.
+cosign sign-blob --yes --new-bundle-format=false --use-signing-config=false "$SUMS" \
   --output-signature   "${SUMS}.sig" \
   --output-certificate "${SUMS%SHA256SUMS}SHA256SUMS.pem"
 

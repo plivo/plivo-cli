@@ -12,8 +12,6 @@ A single static Go binary for provisioning numbers, wiring voice-agent applicati
 - Send messages, run number lookups, manage verify sessions
 - Script everything — table for humans, JSON for pipelines, predictable exit codes for retries
 
-> **Status:** pre-release. Install one-liners activate once the first release is published.
-
 ## Install
 
 **Homebrew (macOS / Linux)** — recommended:
@@ -42,6 +40,31 @@ curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | b
 ```powershell
 irm https://raw.githubusercontent.com/plivo/plivo-cli/main/install.ps1 | iex
 ```
+
+### Verifying a release
+
+Both installers check the SHA-256 checksums, and also verify who signed them
+when [cosign](https://docs.sigstore.dev/cosign/installation/) is present. To
+check by hand:
+
+```bash
+V=v0.3.0
+for f in SHA256SUMS SHA256SUMS.sig SHA256SUMS.pem; do
+  curl -fsSLO "https://github.com/plivo/plivo-cli/releases/download/$V/$f"
+done
+
+cosign verify-blob SHA256SUMS \
+  --signature SHA256SUMS.sig --certificate SHA256SUMS.pem \
+  --certificate-identity cx-tech@plivo.com \
+  --certificate-oidc-issuer https://accounts.google.com
+```
+
+`Verified OK` means the checksums genuinely came from Plivo. Pinning both the
+identity and the issuer is the point — without them, any valid Sigstore
+signature would pass.
+
+Releases before v0.3.0 are unsigned, so verification is skipped rather than
+failed for those.
 
 If you installed with `curl | bash` first and later switch to Homebrew, the
 older copy in `~/.local/bin` stays earlier on your `PATH` and keeps winning.
