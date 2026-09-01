@@ -156,6 +156,9 @@ func init() {
 	registerSendFlags(messagingWhatsappSendCmd, &whatsappSendSrc, &whatsappSendDst, &whatsappSendText, &whatsappSendURL, &whatsappSendMethod)
 	registerSendFlags(messagingMmsSendCmd, &mmsSendSrc, &mmsSendDst, &mmsSendText, &mmsSendURL, &mmsSendMethod)
 	messagingMmsSendCmd.Flags().StringArrayVar(&mmsSendMediaURLs, "media-url", nil, "URL of a hosted image/media file to attach (repeatable, up to 10)")
+	registerExplainFlag(messagingSmsSendCmd)
+	registerExplainFlag(messagingWhatsappSendCmd)
+	registerExplainFlag(messagingMmsSendCmd)
 
 	// SMS list flags
 	registerListFlags(messagingSmsListCmd, &smsListLimit, &smsListOffset, &smsListState, &smsListDirection, &smsListFrom, &smsListTo)

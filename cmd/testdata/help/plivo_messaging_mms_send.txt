@@ -5,6 +5,7 @@ Usage:
 
 Flags:
       --dst string              destination, separate multiple with < (required)
+      --explain                 narrate in plain English before executing
   -h, --help                    help for send
       --media-url stringArray   URL of a hosted image/media file to attach (repeatable, up to 10)
       --method string           callback method GET|POST (default "POST")
@@ -14,7 +15,6 @@ Flags:
 
 Global Flags:
       --dry-run            print the HTTP request without sending
-      --explain            explain what the command will do before executing
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
   -o, --output string      output format: table|json (default: table for TTY, json otherwise)

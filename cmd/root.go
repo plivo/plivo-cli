@@ -24,9 +24,11 @@ var (
 	logLevel     string
 	yesFlag      bool
 	dryRunFlag   bool
-	explainFlag  bool
-	timeoutSec   int
-	adminServer  string
+	// explainFlag backs --explain. Registered locally (not persistent) by
+	// registerExplainFlag, only on the commands that actually read it.
+	explainFlag bool
+	timeoutSec  int
+	adminServer string
 )
 
 var rootCmd = &cobra.Command{
@@ -154,11 +156,23 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "warn", "log level: debug|info|warn|error|none")
 	rootCmd.PersistentFlags().BoolVarP(&yesFlag, "yes", "y", false, "skip confirmation prompts")
 	rootCmd.PersistentFlags().BoolVar(&dryRunFlag, "dry-run", false, "print the HTTP request without sending")
-	rootCmd.PersistentFlags().BoolVar(&explainFlag, "explain", false, "explain what the command will do before executing")
 	rootCmd.PersistentFlags().IntVar(&timeoutSec, "timeout", 30, "request timeout in seconds")
 	// Additional admin-only flags are registered in build-tag-gated files;
 	// the backing var (adminServer) lives above and stays "" in the public
 	// build.
+	//
+	// --explain is intentionally NOT here. It used to be persistent, so all
+	// 172 commands silently accepted it whether or not they implemented it.
+	// It's registered locally, per command, via registerExplainFlag — see
+	// call sites in api.go, application.go, auth.go, call.go, message.go,
+	// number.go, verify.go.
+}
+
+// registerExplainFlag adds a local (non-persistent) --explain flag to cmd.
+// Call this only on commands whose RunE actually reads explainFlag —
+// everything else should reject the flag rather than silently ignore it.
+func registerExplainFlag(cmd *cobra.Command) {
+	cmd.Flags().BoolVar(&explainFlag, "explain", false, "narrate in plain English before executing")
 }
 
 // credSource records which source supplied the credentials ("env" or a profile

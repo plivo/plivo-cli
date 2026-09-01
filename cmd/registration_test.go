@@ -233,13 +233,72 @@ func TestRequiredFlags(t *testing.T) {
 func TestRootPersistentFlags(t *testing.T) {
 	expected := []string{
 		"profile", "output", "quiet", "no-color", "log-level",
-		"yes", "dry-run", "explain", "timeout",
+		"yes", "dry-run", "timeout",
 		// Additional admin-only persistent flags are verified in internal_registration_test.go.
+		// --explain is deliberately NOT here — see TestExplainFlag_* below.
 	}
 	for _, name := range expected {
 		t.Run(name, func(t *testing.T) {
 			if rootCmd.PersistentFlags().Lookup(name) == nil {
 				t.Errorf("persistent flag --%s missing on rootCmd", name)
+			}
+		})
+	}
+}
+
+// ─── --explain: local flag on exactly the commands that implement it ───────
+//
+// --explain used to be persistent, so all 172 commands silently accepted it
+// whether or not they read it. It's now registered locally (registerExplainFlag)
+// only on the commands below; everything else must reject it as an unknown flag.
+
+func TestExplainFlag_notPersistent(t *testing.T) {
+	if rootCmd.PersistentFlags().Lookup("explain") != nil {
+		t.Fatal("--explain must not be a persistent flag on rootCmd")
+	}
+}
+
+func TestExplainFlag_registeredOnImplementingCommands(t *testing.T) {
+	// Keep in sync with the `if explainFlag {` call sites in cmd/*.go.
+	paths := [][]string{
+		{"api"},
+		{"account", "applications", "create"},
+		{"auth", "whoami"},
+		{"voice", "calls", "make"},
+		{"messaging", "sms", "send"},
+		{"messaging", "mms", "send"},
+		{"messaging", "whatsapp", "send"},
+		{"numbers", "buy"},
+		{"numbers", "release"},
+		{"verify", "sessions", "create"},
+	}
+	for _, path := range paths {
+		t.Run(strings.Join(path, "_"), func(t *testing.T) {
+			cmd := findCmd(t, path...)
+			if cmd.Flags().Lookup("explain") == nil {
+				t.Errorf("plivo %s should register --explain locally", strings.Join(path, " "))
+			}
+		})
+	}
+}
+
+func TestExplainFlag_unsupportedCommandRejectsIt(t *testing.T) {
+	// A sample of commands that never read explainFlag. ParseFlags exercises
+	// the same local+inherited flag resolution cobra uses before RunE, so
+	// this proves --explain isn't silently accepted via inheritance anymore.
+	paths := [][]string{
+		{"numbers", "list"},
+		{"voice", "calls", "list"},
+		{"account", "get"},
+	}
+	for _, path := range paths {
+		t.Run(strings.Join(path, "_"), func(t *testing.T) {
+			cmd := findCmd(t, path...)
+			t.Cleanup(func() { resetAllFlags(rootCmd) })
+			if err := cmd.ParseFlags([]string{"--explain"}); err == nil {
+				t.Errorf("plivo %s should reject --explain (unknown flag)", strings.Join(path, " "))
+			} else if !strings.Contains(err.Error(), "unknown flag") {
+				t.Errorf("plivo %s: expected an unknown-flag error, got: %v", strings.Join(path, " "), err)
 			}
 		})
 	}

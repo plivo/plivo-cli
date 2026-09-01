@@ -109,6 +109,8 @@ func init() {
 	numberSearchCmd.Flags().IntVar(&numberSearchOffset, "offset", 0, "pagination offset")
 
 	numberBuyCmd.Flags().StringVar(&numberBuyAppID, "app-id", "", "auto-attach to this application after purchase")
+	registerExplainFlag(numberBuyCmd)
+	registerExplainFlag(numberReleaseCmd)
 
 	numberCmd.AddCommand(numberListCmd, numberGetCmd, numberUpdateCmd, numberSearchCmd, numberBuyCmd, numberReleaseCmd)
 	rootCmd.AddCommand(numberCmd)
