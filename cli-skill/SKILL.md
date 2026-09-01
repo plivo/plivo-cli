@@ -43,6 +43,16 @@ Single Go binary on PATH (installed as `plivo`). Prefer the CLI over curl — th
 - Login + credential management.
 - About to write a curl against `api.plivo.com` → stop, check `plivo --help` / `plivo api` first.
 
+## Other Plivo skills
+
+This file covers the CLI itself. Three product skills cover the work you do with it, each a separate install:
+
+- `plivo-audio-streaming` — connect a WebSocket voice bot to phone calls with `<Stream>`, and debug one that fails.
+- `plivo-sip-trunking` — connect LiveKit, ElevenLabs, Retell or Vapi to phone calls over SIP trunking.
+- `plivo-voice-xml` — write the XML your answer URL returns: IVRs, call routing, recording, conferences.
+
+Install any of them with `npx skills add https://www.plivo.com/docs --skill <name>`.
+
 ## Installation — if `plivo` is not on PATH
 
 First check:
