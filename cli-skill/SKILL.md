@@ -264,7 +264,7 @@ plivo voice streams forward --number +1415... --app <APP_UUID> --to ws://localho
 
 **Send your first SMS**
 ```bash
-plivo numbers list --type local -o json | jq '.data[].number'  # pick a src
+plivo numbers list --type local -o json | jq '.data.objects[].number'  # pick a src
 plivo messaging sms send --src +1415... --dst +1415... --text "hi" --dry-run
 plivo messaging sms send --src +1415... --dst +1415... --text "hi" --yes
 ```
@@ -653,10 +653,10 @@ All envelopes carry `hint` + `retryable`. Unknown/unmapped codes exit 1.
 plivo voice calls get <uuid> -o json | jq '.data.duration'
 
 # Filter
-plivo numbers list -o json | jq '.data[] | select(.type=="local")'
+plivo numbers list -o json | jq '.data.objects[] | select(.type=="local")'
 
 # Pipe across calls
-APP_ID=$(plivo account applications list -o json | jq -r '.data[0].app_id')
+APP_ID=$(plivo account applications list -o json | jq -r '.data.objects[0].app_id')
 plivo numbers update +1... --app-id "$APP_ID" -o json
 ```
 
