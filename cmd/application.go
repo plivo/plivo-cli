@@ -90,6 +90,7 @@ func init() {
 	applicationCreateCmd.Flags().StringVar(&appCreateFallbackAnswerURL, "fallback-answer-url", "", "backup webhook if answer-url fails")
 	applicationCreateCmd.Flags().BoolVar(&appCreateDefaultNumberApp, "default-number-app", false, "set as default for new numbers")
 	applicationCreateCmd.Flags().BoolVar(&appCreateLogIncoming, "log-incoming-messages", true, "log inbound SMS content")
+	registerExplainFlag(applicationCreateCmd)
 
 	applicationListCmd.Flags().IntVar(&appListLimit, "limit", 20, "results per page")
 	applicationListCmd.Flags().IntVar(&appListOffset, "offset", 0, "pagination offset")

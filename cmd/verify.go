@@ -81,6 +81,7 @@ func init() {
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateLocale, "locale", "", "BCP-47 locale, e.g. en-US")
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateMethod, "method", "", "HTTP method for callback URL")
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateURL, "url", "", "callback URL for session status events")
+	registerExplainFlag(verifySessionCreateCmd)
 
 	verifySessionListCmd.Flags().IntVar(&vsListLimit, "limit", 20, "results per page")
 	verifySessionListCmd.Flags().IntVar(&vsListOffset, "offset", 0, "pagination offset")

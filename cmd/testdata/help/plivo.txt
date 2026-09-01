@@ -32,7 +32,6 @@ Available Commands:
 
 Flags:
       --dry-run            print the HTTP request without sending
-      --explain            explain what the command will do before executing
   -h, --help               help for plivo
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output

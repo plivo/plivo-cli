@@ -74,6 +74,7 @@ func init() {
 	callMakeCmd.Flags().StringVar(&callMakeHangupURL, "hangup-url", "", "URL hit when call ends")
 	callMakeCmd.Flags().StringVar(&callMakeRingURL, "ring-url", "", "URL hit when call starts ringing")
 	callMakeCmd.Flags().StringVar(&callMakeMachineDetect, "machine-detection", "", "none|true|hangup")
+	registerExplainFlag(callMakeCmd)
 
 	callTransferCmd.Flags().StringVar(&callTransferLegs, "legs", "aleg", "which leg(s) to act on: aleg|bleg|both")
 	callTransferCmd.Flags().StringVar(&callTransferAlegURL, "aleg-url", "", "new URL for A-leg (caller side)")

@@ -47,6 +47,7 @@ var authWhoamiCmd = &cobra.Command{
 }
 
 func init() {
+	registerExplainFlag(authWhoamiCmd)
 	authCmd.AddCommand(authListCmd, authUseCmd, authRemoveCmd, authWhoamiCmd)
 	rootCmd.AddCommand(authCmd)
 }

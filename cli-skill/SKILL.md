@@ -99,14 +99,19 @@ This skill ships with each plivo-cli release; reinstall the CLI to update.
 | `--profile <name>` | string | active profile | invoke against a non-active profile for this call only |
 | `-o, --output <fmt>` | `table\|json` | `table` on TTY, `json` when piped | force JSON for scripts |
 | `--dry-run` | bool | false | (API-backed commands) print the HTTP request and exit 0 — preview without spending |
-| `--explain` | bool | false | (API-backed commands) narrate in plain English before executing |
 | `-y, --yes` | bool | false | confirm spend / destructive verbs (refused otherwise) |
 | `-q, --quiet` | bool | false | suppress non-data output (banners, hints) |
 | `--no-color` | bool | false | strip ANSI from output |
 | `--log-level <level>` | `debug\|info\|warn\|error\|none` | `warn` | `debug` prints outbound URLs to stderr |
 | `--timeout <sec>` | int | 30 | per-request timeout |
 
-`--dry-run` and `--explain` apply to API-backed commands — they're no-ops for `login`, `ask`, `upgrade`, `voice streams test`, and similar non-REST flows.
+`--dry-run` applies to API-backed commands — it's a no-op for `login`, `ask`, `upgrade`, `voice streams test`, and similar non-REST flows.
+
+### `--explain` — narrate before executing (not universal)
+
+Unlike the flags above, `--explain` is a **local** flag registered on only these commands; anywhere else it's rejected with `unknown flag: --explain`:
+
+`plivo api`, `plivo account applications create`, `plivo auth whoami`, `plivo voice calls make`, `plivo messaging {sms,mms,whatsapp} send`, `plivo numbers buy`, `plivo numbers release`, `plivo verify sessions create`.
 
 ## Top-level command map
 
@@ -177,7 +182,7 @@ Delete a profile + best-effort remove its token from the keychain. With no arg �
 - **Stable error envelope** on stderr: `{"error":{"code", "message", "hint", "retryable", "status_code", ...}}`. Switch on `code`, never message text.
 - **Verify before inventing**: `plivo <cmd> --help` is the source of truth. The CLI evolves; don't assume from memory.
 - **`--dry-run`** previews the exact HTTP request without sending. Works on every API-backed command.
-- **`--explain`** narrates the action in plain English before running.
+- **`--explain`** narrates the action in plain English before running — only on the commands listed under "Universal flags" above; everywhere else it's `unknown flag: --explain`.
 
 ## JSON output envelopes
 

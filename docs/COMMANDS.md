@@ -221,7 +221,6 @@ Flags:
 
 ```
       --dry-run            print the HTTP request without sending
-      --explain            explain what the command will do before executing
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
   -o, --output string      output format: table|json (default: table for TTY, json otherwise)
@@ -287,6 +286,7 @@ Flags:
       --answer-url string            webhook for incoming calls (required)
       --app-name string              application name (required)
       --default-number-app           set as default for new numbers
+      --explain                      narrate in plain English before executing
       --fallback-answer-url string   backup webhook if answer-url fails
       --hangup-url string            webhook for call hangup
       --log-incoming-messages        log inbound SMS content (default true)
@@ -528,6 +528,7 @@ Flags:
 
 ```
       --body string          request body: literal JSON, @path/to/file, or @- for stdin
+      --explain              narrate in plain English before executing
       --header stringArray   extra header as 'Key: Value' (repeatable; overrides defaults)
       --method string        HTTP method (alternative to the positional arg; useful when piping)
       --query stringArray    query param as key=value (repeatable)
@@ -634,7 +635,13 @@ plivo auth use <profile>
 Verify credentials and print active account
 
 ```
-plivo auth whoami
+plivo auth whoami [flags]
+```
+
+Flags:
+
+```
+      --explain   narrate in plain English before executing
 ```
 
 ---
@@ -1018,6 +1025,7 @@ Flags:
 
 ```
       --dst string              destination, separate multiple with < (required)
+      --explain                 narrate in plain English before executing
       --media-url stringArray   URL of a hosted image/media file to attach (repeatable, up to 10)
       --method string           callback method GET|POST (default "POST")
       --src string              sender (E.164, shortcode, or sender ID) (required)
@@ -1537,6 +1545,7 @@ Flags:
 
 ```
       --dst string      destination, separate multiple with < (required)
+      --explain         narrate in plain English before executing
       --method string   callback method GET|POST (default "POST")
       --src string      sender (E.164, shortcode, or sender ID) (required)
       --text string     message body (required)
@@ -1692,6 +1701,7 @@ Flags:
 
 ```
       --dst string      destination, separate multiple with < (required)
+      --explain         narrate in plain English before executing
       --method string   callback method GET|POST (default "POST")
       --src string      sender (E.164, shortcode, or sender ID) (required)
       --text string     message body (required)
@@ -1737,6 +1747,7 @@ Flags:
 
 ```
       --app-id string   auto-attach to this application after purchase
+      --explain         narrate in plain English before executing
 ```
 
 ---
@@ -2094,7 +2105,13 @@ Flags:
 Release a rented number (requires --yes; stops monthly billing)
 
 ```
-plivo numbers release <number>
+plivo numbers release <number> [flags]
+```
+
+Flags:
+
+```
+      --explain   narrate in plain English before executing
 ```
 
 ---
@@ -2289,6 +2306,7 @@ Flags:
       --alpha-sender string   alphanumeric sender id
       --app-uuid string       Verify application uuid (required)
       --channel string        delivery channel: sms|voice|whatsapp (default "sms")
+      --explain               narrate in plain English before executing
       --locale string         BCP-47 locale, e.g. en-US
       --method string         HTTP method for callback URL
       --recipient string      E.164 destination number (required)
@@ -2491,6 +2509,7 @@ Flags:
 ```
       --answer-method string       GET|POST (default "GET")
       --answer-url string          URL returning PlivoXML to play on answer (default: Plivo's hello demo) (default "https://s3.amazonaws.com/static.plivo.com/answer.xml")
+      --explain                    narrate in plain English before executing
       --from string                source number (E.164) — must be on your account (required)
       --hangup-url string          URL hit when call ends
       --machine-detection string   none|true|hangup
