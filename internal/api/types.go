@@ -719,9 +719,9 @@ type BuddyChatRequest struct {
 	Attachments []BuddyAttachment `json:"attachments,omitempty"`
 	UserContext BuddyUserContext  `json:"userContext"`
 	PageURL     string            `json:"pageUrl,omitempty"`
-	// SessionID continues a prior conversation. Empty on the first turn; set from
-	// the server's `session` event (PAI stream contract) and replayed on
-	// follow-ups so the backend can thread the session.
+	// SessionID groups the turns of one conversation for analytics. Minted by
+	// the client (see newBuddySessionID in cmd/buddy.go) because the server
+	// emits no `session` event to take it from, and replayed on follow-ups.
 	SessionID string `json:"session_id,omitempty"`
 }
 
