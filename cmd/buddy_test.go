@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -232,5 +234,82 @@ func TestBuddyRenderer_jsonMode_terminatesOnDone(t *testing.T) {
 	o := out.String()
 	if !strings.Contains(o, `"event":"result"`) || !strings.Contains(o, `"event":"done"`) {
 		t.Errorf("json mode should pass through result+done, got:\n%s", o)
+	}
+}
+
+// `support` lists "your" past escalations — that needs a human identity
+// (AomUUID), which only a browser login populates. Env-var / manually
+// entered creds have none, so the command must refuse with a clear error
+// instead of whatever the backend would otherwise do with an unscoped query.
+func TestRunSupport_noAomUUID_refusesWithClearError(t *testing.T) {
+	setFakeCreds(t)
+	hit := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	supportClientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", HTTP: &http.Client{}}
+	defer func() { supportClientForTest = nil }()
+
+	err, _, _ := execCmd(t, "support")
+	if err == nil || !strings.Contains(err.Error(), "AUTH_FORBIDDEN") {
+		t.Fatalf("expected AUTH_FORBIDDEN, got: %v", err)
+	}
+	if hit {
+		t.Error("support should refuse before ever hitting the network without an AomUUID")
+	}
+}
+
+// --dry-run sends nothing, so the identity guard must not suppress the
+// preview. Regression: it did, which broke the smoke suite on any machine
+// without a browser-login profile (i.e. all of CI).
+func TestRunSupport_noAomUUID_dryRunStillPreviews(t *testing.T) {
+	setFakeCreds(t)
+	hit := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hit = true
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	supportClientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", DryRun: true, HTTP: &http.Client{}}
+	defer func() { supportClientForTest = nil }()
+
+	err, _, stderr := execCmd(t, "support", "--dry-run")
+	if err != nil {
+		t.Fatalf("--dry-run should preview, not refuse: %v", err)
+	}
+	if !strings.Contains(stderr, "escalations") {
+		t.Errorf("expected the escalations URL in the dry-run preview, got: %s", stderr)
+	}
+	if hit {
+		t.Error("--dry-run must not send a request")
+	}
+}
+
+// A profile with an AomUUID (browser login) must reach the escalations
+// endpoint normally.
+func TestRunSupport_withAomUUID_reachesEscalationsEndpoint(t *testing.T) {
+	setFakeCreds(t)
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"api_id":"x","status":"ok","data":{"escalations":[]}}`))
+	}))
+	defer srv.Close()
+	supportClientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", AomUUID: "aom-123", HTTP: &http.Client{}}
+	defer func() { supportClientForTest = nil }()
+
+	err, stdout, _ := execCmd(t, "support")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(gotPath, "/escalations") {
+		t.Errorf("expected a request to .../escalations, got path %q", gotPath)
+	}
+	// Non-TTY test env resolves to JSON output; empty escalations -> "data":[].
+	if !strings.Contains(stdout, `"data": []`) {
+		t.Errorf("expected an empty data array, got stdout: %q", stdout)
 	}
 }

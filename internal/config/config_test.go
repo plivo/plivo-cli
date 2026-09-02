@@ -238,25 +238,88 @@ func TestResolve_envVarsWhenNoProfile(t *testing.T) {
 	}
 }
 
-func TestResolve_profileBeatsEnvVars(t *testing.T) {
+// Env vars beat the ACTIVE profile. Previously the profile won, so exporting
+// credentials was silently ignored whenever any profile was stored — including
+// one holding a stale or revoked token.
+func TestResolve_envVarsBeatActiveProfile(t *testing.T) {
 	withHomeDir(t)
 	t.Setenv("PLIVO_AUTH_ID", "MAenv")
 	t.Setenv("PLIVO_AUTH_TOKEN", "tokenv")
 	_ = Save(&Config{
 		Active: "work",
 		Profiles: map[string]Profile{
-			"work": {AuthID: "MAprofile", AuthToken: "tokprofile"},
+			"work": {AuthID: "MAprofile", AuthToken: "stale-token"},
 		},
 	})
 	prof, src, err := Resolve("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if prof.AuthID != "MAprofile" {
-		t.Errorf("profile should win over env: AuthID = %q", prof.AuthID)
+	if prof.AuthID != "MAenv" || prof.AuthToken != "tokenv" {
+		t.Errorf("env should win over the active profile, got AuthID=%q", prof.AuthID)
 	}
-	if src != "work" {
-		t.Errorf("src = %q", src)
+	if src != "env" {
+		t.Errorf("src = %q, want env", src)
+	}
+}
+
+// An explicit --profile still beats env vars: naming one is explicit intent.
+func TestResolve_explicitProfileBeatsEnvVars(t *testing.T) {
+	withHomeDir(t)
+	t.Setenv("PLIVO_AUTH_ID", "MAenv")
+	t.Setenv("PLIVO_AUTH_TOKEN", "tokenv")
+	_ = Save(&Config{
+		Active: "work",
+		Profiles: map[string]Profile{
+			"work":  {AuthID: "MAwork", AuthToken: "tokwork"},
+			"other": {AuthID: "MAother", AuthToken: "tokother"},
+		},
+	})
+	prof, src, err := Resolve("other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prof.AuthID != "MAother" {
+		t.Errorf("explicit profile should win, got %q", prof.AuthID)
+	}
+	if src != "other" {
+		t.Errorf("src = %q, want other", src)
+	}
+}
+
+// An active profile is still used when no env vars are set.
+func TestResolve_activeProfileWhenNoEnv(t *testing.T) {
+	withHomeDir(t)
+	t.Setenv("PLIVO_AUTH_ID", "")
+	t.Setenv("PLIVO_AUTH_TOKEN", "")
+	_ = Save(&Config{
+		Active:   "work",
+		Profiles: map[string]Profile{"work": {AuthID: "MAprofile", AuthToken: "tokprofile"}},
+	})
+	prof, src, err := Resolve("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prof.AuthID != "MAprofile" || src != "work" {
+		t.Errorf("got AuthID=%q src=%q", prof.AuthID, src)
+	}
+}
+
+// Only one env var set is not credentials; fall back to the profile.
+func TestResolve_partialEnvFallsBackToProfile(t *testing.T) {
+	withHomeDir(t)
+	t.Setenv("PLIVO_AUTH_ID", "MAenv")
+	t.Setenv("PLIVO_AUTH_TOKEN", "")
+	_ = Save(&Config{
+		Active:   "work",
+		Profiles: map[string]Profile{"work": {AuthID: "MAprofile", AuthToken: "tokprofile"}},
+	})
+	prof, src, err := Resolve("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prof.AuthID != "MAprofile" || src != "work" {
+		t.Errorf("got AuthID=%q src=%q", prof.AuthID, src)
 	}
 }
 
@@ -314,5 +377,86 @@ func TestResolve_partialEnvVars_doesNotMatch(t *testing.T) {
 	_, _, err := Resolve("")
 	if err == nil {
 		t.Fatal("expected AuthMissing when only AUTH_ID is set")
+	}
+}
+
+// ─── TelemetryEnabled ─────────────────────────────────────────────────────
+
+func TestTelemetryEnabled_defaultOn_noConfigFile(t *testing.T) {
+	withHomeDir(t)
+	t.Setenv(TelemetryEnvVar, "")
+	if !TelemetryEnabled() {
+		t.Error("TelemetryEnabled should default true with no config.toml")
+	}
+}
+
+func TestTelemetryEnabled_defaultOn_configFileWithoutTelemetryTable(t *testing.T) {
+	withHomeDir(t)
+	t.Setenv(TelemetryEnvVar, "")
+	// A config.toml saved before this field existed — Telemetry.Enabled
+	// round-trips as nil, which must still mean "on".
+	_ = Save(&Config{Active: "work", Profiles: map[string]Profile{"work": {AuthID: "MA"}}})
+	if !TelemetryEnabled() {
+		t.Error("TelemetryEnabled should stay true when [telemetry] table is absent")
+	}
+}
+
+func TestTelemetryEnabled_offPersistsAndRoundTrips(t *testing.T) {
+	withHomeDir(t)
+	t.Setenv(TelemetryEnvVar, "")
+	off := false
+	_ = Save(&Config{Profiles: map[string]Profile{}, Telemetry: TelemetryConfig{Enabled: &off}})
+
+	if TelemetryEnabled() {
+		t.Error("TelemetryEnabled should be false after saving Enabled=false")
+	}
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Telemetry.Enabled == nil || *cfg.Telemetry.Enabled != false {
+		t.Errorf("Telemetry.Enabled round-trip = %v, want pointer to false", cfg.Telemetry.Enabled)
+	}
+}
+
+func TestTelemetryEnabled_onPersistsAndRoundTrips(t *testing.T) {
+	withHomeDir(t)
+	t.Setenv(TelemetryEnvVar, "")
+	on := true
+	_ = Save(&Config{Profiles: map[string]Profile{}, Telemetry: TelemetryConfig{Enabled: &on}})
+
+	if !TelemetryEnabled() {
+		t.Error("TelemetryEnabled should be true after saving Enabled=true")
+	}
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Telemetry.Enabled == nil || *cfg.Telemetry.Enabled != true {
+		t.Errorf("Telemetry.Enabled round-trip = %v, want pointer to true", cfg.Telemetry.Enabled)
+	}
+}
+
+// TestTelemetryEnabled_envVarWinsOverConfig — PLIVO_CLI_TELEMETRY=0 is the
+// umbrella off-switch: it disables telemetry even when config.toml says on.
+func TestTelemetryEnabled_envVarWinsOverConfig(t *testing.T) {
+	withHomeDir(t)
+	on := true
+	_ = Save(&Config{Profiles: map[string]Profile{}, Telemetry: TelemetryConfig{Enabled: &on}})
+	t.Setenv(TelemetryEnvVar, "0")
+
+	if TelemetryEnabled() {
+		t.Error("PLIVO_CLI_TELEMETRY=0 should win over config.toml's telemetry=on")
+	}
+}
+
+// TestTelemetryEnabled_envVarOnlyDisablesOnExactZero matches this repo's
+// existing convention (internal/feedback: `== "0"`) — any other value,
+// including "false", is not the off signal and leaves the config in charge.
+func TestTelemetryEnabled_envVarOnlyDisablesOnExactZero(t *testing.T) {
+	withHomeDir(t)
+	t.Setenv(TelemetryEnvVar, "false")
+	if !TelemetryEnabled() {
+		t.Error(`PLIVO_CLI_TELEMETRY="false" should NOT disable telemetry — only exact "0" does`)
 	}
 }

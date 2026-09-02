@@ -34,15 +34,16 @@ When you submit feedback, the following is attached automatically:
 - **CLI version**, OS, architecture
 - **Anonymous machine ID** (one UUID per machine, persisted at
   `~/.plivo/machine-id`)
-- **Hashed auth ID** if you're logged in (one-way SHA-256 prefix, not
-  reversible from outside Plivo)
 - **Session ID** (one UUID per CLI invocation)
+- If you're logged in and haven't opted out (see below): your **auth
+  ID**, **email**, **region**, and **AOM UUID**, sent as request headers
+  — raw, not hashed — so feedback joins the same per-account view as
+  everything else the CLI reports.
 
 We do NOT collect:
 
 - Phone numbers (any format)
 - Auth tokens or scoped tokens
-- Email addresses
 - File paths or attachment paths
 - Free-text from `plivo ask` / `plivo support` message bodies
 - Argument values you passed to the CLI
@@ -52,11 +53,13 @@ the same scrub server-side.
 
 ## Privacy & opt-out
 
-Feedback submissions share the same opt-out plumbing as Plivo CLI
-telemetry (when wired up — see the telemetry docs once published).
-Setting `PLIVO_CLI_TELEMETRY=0` will eventually disable contextual
-auto-prompts, but the explicit `plivo feedback` command always works
-when you invoke it directly.
+`plivo config telemetry off` (or `PLIVO_CLI_TELEMETRY=0`) strips the
+auth ID / email / region / AOM UUID headers from every CLI request,
+feedback included — your rating, comment, and CLI version still send.
+`PLIVO_FEEDBACK_TELEMETRY=0` goes further and disables feedback
+submission entirely; `PLIVO_FEEDBACK_PROMPT=0` only silences the
+auto-prompt. The explicit `plivo feedback` command still works either
+way, unless you've set `PLIVO_FEEDBACK_TELEMETRY=0`.
 
 ## How it's sent
 

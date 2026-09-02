@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/plivo/plivo-cli/internal/config"
 	"github.com/plivo/plivo-cli/internal/feedback"
 )
 
@@ -297,5 +298,57 @@ func TestFeedback_redactsPIIBeforeSubmit(t *testing.T) {
 	}
 	if got.RedactionCount != 1 {
 		t.Errorf("RedactionCount = %d, want 1", got.RedactionCount)
+	}
+}
+
+// resolveFeedbackTransport is a second, independent implementation of the
+// identity-header set api.Client.addCLIHeaders builds (feedback doesn't go
+// through the client) — it has to honor the same telemetry gate or the
+// opt-out leaks through this one path. Lock that here directly, with a
+// real config.toml profile so Email/Region/AomUUID are actually populated.
+func TestResolveFeedbackTransport_gatesIdentityHeadersOnTelemetry(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
+	t.Setenv(config.TelemetryEnvVar, "")
+	oldProfile := profileFlag
+	profileFlag = ""
+	t.Cleanup(func() { profileFlag = oldProfile })
+
+	profile := config.Profile{AuthID: "MAWORK", AuthToken: "tok", Email: "a@b.com", Region: "us-east-1", AomUUID: "aom-1"}
+
+	// Telemetry on (default) — all four identity headers present.
+	if err := config.Save(&config.Config{Active: "work", Profiles: map[string]config.Profile{"work": profile}}); err != nil {
+		t.Fatal(err)
+	}
+	_, headers := resolveFeedbackTransport("MAWORK")
+	for k, want := range map[string]string{
+		"X-Plivo-CLI-Auth-ID":  "MAWORK",
+		"X-Plivo-CLI-Email":    "a@b.com",
+		"X-Plivo-CLI-Region":   "us-east-1",
+		"X-Plivo-CLI-AOM-UUID": "aom-1",
+	} {
+		if headers[k] != want {
+			t.Errorf("telemetry on: header %s = %q, want %q", k, headers[k], want)
+		}
+	}
+
+	// Telemetry off — all four identity headers absent; version/os/arch survive.
+	off := false
+	if err := config.Save(&config.Config{
+		Active:    "work",
+		Profiles:  map[string]config.Profile{"work": profile},
+		Telemetry: config.TelemetryConfig{Enabled: &off},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, headers = resolveFeedbackTransport("MAWORK")
+	for _, k := range []string{"X-Plivo-CLI-Auth-ID", "X-Plivo-CLI-Email", "X-Plivo-CLI-Region", "X-Plivo-CLI-AOM-UUID"} {
+		if v, ok := headers[k]; ok {
+			t.Errorf("telemetry off: header %s should be absent, got %q", k, v)
+		}
+	}
+	if headers["X-Plivo-CLI-Version"] == "" {
+		t.Error("telemetry off: X-Plivo-CLI-Version should still be present")
 	}
 }

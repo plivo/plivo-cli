@@ -17,6 +17,8 @@ var campaignCmd = &cobra.Command{
 	Use:     "campaigns",
 	Aliases: []string{"camp", "campaign"},
 	Short:   "10DLC campaign registration (use cases for a brand)",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (
@@ -145,7 +147,7 @@ func runCampaignList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Campaigns, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"CAMPAIGN_ID", "ALIAS", "BRAND_ID", "USECASE", "STATUS"}}
 	for _, c := range resp.Campaigns {
@@ -172,7 +174,7 @@ func runCampaignGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, c, nil)
+		return output.JSONRaw(os.Stdout, c.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"campaign_id", c.CampaignID},
@@ -231,6 +233,7 @@ func runCampaignCreate(cmd *cobra.Command, args []string) error {
 	applyDryRun(client, dryRun)
 
 	var resp struct {
+		api.RawBody
 		APIID      string `json:"api_id"`
 		CampaignID string `json:"campaign_id"`
 		Message    string `json:"message"`
@@ -246,7 +249,7 @@ func runCampaignCreate(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"campaign_id", resp.CampaignID},

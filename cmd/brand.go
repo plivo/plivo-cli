@@ -16,6 +16,8 @@ var brandCmd = &cobra.Command{
 	Use:     "brands",
 	Aliases: []string{"brand"},
 	Short:   "10DLC brand registration (US A2P 10-digit-long-code messaging)",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (
@@ -117,7 +119,7 @@ func runBrandList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Brands, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"BRAND_ID", "ALIAS", "LEGAL_NAME", "TYPE", "STATUS", "VERTICAL"}}
 	for _, b := range resp.Brands {
@@ -144,7 +146,7 @@ func runBrandGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, b, nil)
+		return output.JSONRaw(os.Stdout, b.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"brand_id", b.BrandID},
@@ -192,6 +194,7 @@ func runBrandCreate(cmd *cobra.Command, args []string) error {
 	applyDryRun(client, dryRun)
 
 	var resp struct {
+		api.RawBody
 		APIID   string `json:"api_id"`
 		BrandID string `json:"brand_id"`
 		Message string `json:"message"`
@@ -207,7 +210,7 @@ func runBrandCreate(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"brand_id", resp.BrandID},

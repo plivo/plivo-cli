@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/plivo/plivo-cli/internal/release"
 	"github.com/plivo/plivo-cli/internal/version"
 	"github.com/spf13/cobra"
@@ -48,6 +49,15 @@ If you installed via Homebrew this command will refuse — use ` + "`brew upgrad
 	RunE: runUpgrade,
 }
 
+// upgradeResult is the -o json summary for `plivo upgrade` — one final
+// object instead of the stderr progress narration, which is left as-is.
+type upgradeResult struct {
+	CurrentVersion    string `json:"current_version"`
+	LatestVersion     string `json:"latest_version,omitempty"`
+	Upgraded          bool   `json:"upgraded"`
+	SignatureVerified string `json:"signature_verified"` // verified: <signer> | skipped: <reason> | unsigned | n/a
+}
+
 func init() {
 	upgradeCmd.Flags().BoolVar(&upgradeCheck, "check", false, "report whether a newer release exists, but don't install")
 	upgradeCmd.Flags().BoolVar(&upgradeForce, "force", false, "reinstall even if the running binary is already on the target release")
@@ -56,6 +66,8 @@ func init() {
 }
 
 func runUpgrade(cmd *cobra.Command, args []string) error {
+	jsonOut := effectiveFormat() == output.FormatJSON
+
 	ctx, cancel := context.WithTimeout(cmd.Context(), 60*time.Second)
 	defer cancel()
 
@@ -79,6 +91,13 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		// --check paths — surface it as a friendly message, not exit 1.
 		if errors.Is(err, release.ErrNoReleases) {
 			fmt.Fprintln(os.Stderr, "No releases published yet — nothing to upgrade to.")
+			if jsonOut {
+				return output.JSONSuccess(os.Stdout, upgradeResult{
+					CurrentVersion:    version.Value,
+					Upgraded:          false,
+					SignatureVerified: "n/a",
+				}, nil)
+			}
 			return nil
 		}
 		return err
@@ -90,6 +109,14 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	// Up-to-date short-circuit (skipped by --force).
 	if !upgradeForce && !release.IsNewer(current, target) {
 		fmt.Fprintf(os.Stderr, "✓ Already on the latest version (%s)\n", current)
+		if jsonOut {
+			return output.JSONSuccess(os.Stdout, upgradeResult{
+				CurrentVersion:    current,
+				LatestVersion:     target,
+				Upgraded:          false,
+				SignatureVerified: "n/a",
+			}, nil)
+		}
 		return nil
 	}
 
@@ -97,6 +124,14 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	if upgradeCheck {
 		fmt.Fprintf(os.Stderr, "A newer version of plivo is available: %s (you have %s)\n", target, current)
 		fmt.Fprintf(os.Stderr, "  Run `plivo upgrade` to install\n")
+		if jsonOut {
+			return output.JSONSuccess(os.Stdout, upgradeResult{
+				CurrentVersion:    current,
+				LatestVersion:     target,
+				Upgraded:          false,
+				SignatureVerified: "n/a",
+			}, nil)
+		}
 		return nil
 	}
 
@@ -128,7 +163,8 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 
 	// Integrity: verify against the release-published SHA256SUMS before
 	// swapping the binary in. A size match is not an integrity check.
-	if err := verifyDownload(ctx, rel, asset, tmpPath); err != nil {
+	sigStatus, err := verifyDownload(ctx, rel, asset, tmpPath)
+	if err != nil {
 		_ = os.Remove(tmpPath)
 		return err
 	}
@@ -144,28 +180,103 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintf(os.Stderr, "✓ Upgraded plivo to %s\n", target)
 	fmt.Fprintf(os.Stderr, "  Binary: %s\n", exePath)
+	if jsonOut {
+		return output.JSONSuccess(os.Stdout, upgradeResult{
+			CurrentVersion:    current,
+			LatestVersion:     target,
+			Upgraded:          true,
+			SignatureVerified: sigStatus,
+		}, nil)
+	}
 	return nil
 }
 
 // verifyDownload fetches the release's SHA256SUMS manifest and verifies the
 // file at path against the entry for asset.Name. Returns an error (and installs
 // nothing) if the manifest is missing, lacks the asset, or the hash mismatches.
-func verifyDownload(ctx context.Context, rel *release.Release, asset *release.Asset, path string) error {
+// The string result is a signature-verification status for the -o json
+// summary; only meaningful when err is nil.
+func verifyDownload(ctx context.Context, rel *release.Release, asset *release.Asset, path string) (string, error) {
 	fmt.Fprintln(os.Stderr, "→ Verifying SHA-256…")
 	sums, err := rel.AssetByName("SHA256SUMS")
 	if err != nil {
-		return fmt.Errorf("release %s publishes no SHA256SUMS; refusing to install an unverified binary", rel.TagName)
+		return "", fmt.Errorf("release %s publishes no SHA256SUMS; refusing to install an unverified binary", rel.TagName)
 	}
 	var buf bytes.Buffer
 	if _, err := release.DownloadAsset(ctx, sums.BrowserDownloadURL, &buf); err != nil {
-		return fmt.Errorf("download SHA256SUMS: %w", err)
+		return "", fmt.Errorf("download SHA256SUMS: %w", err)
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer f.Close()
-	return release.VerifyChecksum(buf.String(), asset.Name, f)
+	if err := release.VerifyChecksum(buf.String(), asset.Name, f); err != nil {
+		return "", err
+	}
+	return verifyManifestSignature(ctx, rel, buf.String())
+}
+
+// verifyManifestSignature checks the signature over SHA256SUMS when the release
+// carries one and cosign is available. The hash check above already guarantees
+// integrity; this adds provenance — that the manifest came from us.
+//
+// A missing signature or missing cosign is not an error: releases predating
+// signing have none, and we will not make an upgrade impossible over a tool the
+// user never installed. A signature that is PRESENT and fails is always fatal.
+func verifyManifestSignature(ctx context.Context, rel *release.Release, sums string) (string, error) {
+	sigAsset, sigErr := rel.AssetByName("SHA256SUMS.sig")
+	certAsset, certErr := rel.AssetByName("SHA256SUMS.pem")
+	if sigErr != nil || certErr != nil {
+		return "unsigned", nil
+	}
+	cosign := release.CosignPath()
+	if cosign == "" {
+		fmt.Fprintln(os.Stderr, "  signature present but cosign is not installed — skipping provenance check")
+		fmt.Fprintln(os.Stderr, "  install it with `brew install cosign` to verify who signed this release")
+		return "skipped: cosign not installed", nil
+	}
+
+	dir, err := os.MkdirTemp("", "plivo-verify-")
+	if err != nil {
+		return "skipped: could not stage artifacts", nil // the hash check already passed
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+
+	sumsPath := filepath.Join(dir, "SHA256SUMS")
+	if err := os.WriteFile(sumsPath, []byte(sums), 0o600); err != nil {
+		return "skipped: could not stage artifacts", nil
+	}
+	sigPath, err := stageAsset(ctx, dir, "SHA256SUMS.sig", sigAsset)
+	if err != nil {
+		return "skipped: could not download signature", nil
+	}
+	certPath, err := stageAsset(ctx, dir, "SHA256SUMS.pem", certAsset)
+	if err != nil {
+		return "skipped: could not download signature", nil
+	}
+
+	fmt.Fprintln(os.Stderr, "→ Verifying signature…")
+	res, detail, err := release.VerifySignature(cosign, sumsPath, sigPath, certPath)
+	switch res {
+	case release.SignatureVerified:
+		fmt.Fprintf(os.Stderr, "  ✓ signed by %s\n", detail)
+		return "verified: " + detail, nil
+	case release.SignatureSkipped:
+		fmt.Fprintf(os.Stderr, "  signature check skipped: %s\n", detail)
+		return "skipped: " + detail, nil
+	default:
+		return "failed", fmt.Errorf("%w: %s", err, detail)
+	}
+}
+
+func stageAsset(ctx context.Context, dir, name string, a *release.Asset) (string, error) {
+	var buf bytes.Buffer
+	if _, err := release.DownloadAsset(ctx, a.BrowserDownloadURL, &buf); err != nil {
+		return "", err
+	}
+	p := filepath.Join(dir, name)
+	return p, os.WriteFile(p, buf.Bytes(), 0o600)
 }
 
 // resolveExePath returns the fully symlink-resolved path of the running

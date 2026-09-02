@@ -16,6 +16,8 @@ var recordingCmd = &cobra.Command{
 	Use:     "recordings",
 	Aliases: []string{"rec", "recording"},
 	Short:   "List, fetch, and delete call/conference recordings",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (
@@ -92,11 +94,11 @@ func runRecordingList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"RECORDING_ID", "CALL_UUID", "TYPE", "FORMAT", "DURATION_MS", "ADDED"}}
 	for _, r := range resp.Objects {
-		rows = append(rows, []string{r.RecordingID, r.CallUUID, r.RecordingType, r.RecordingFormat, strconv.Itoa(r.RecordingDurationMS), r.AddTime})
+		rows = append(rows, []string{r.RecordingID, r.CallUUID, r.RecordingType, r.RecordingFormat, r.RecordingDurationMS, r.AddTime})
 	}
 	return output.Table(os.Stdout, rows)
 }
@@ -119,7 +121,7 @@ func runRecordingGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, r, nil)
+		return output.JSONRaw(os.Stdout, r.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"recording_id", r.RecordingID},
@@ -128,7 +130,7 @@ func runRecordingGet(cmd *cobra.Command, args []string) error {
 		{"type", r.RecordingType},
 		{"format", r.RecordingFormat},
 		{"url", r.RecordingURL},
-		{"duration_ms", strconv.Itoa(r.RecordingDurationMS)},
+		{"duration_ms", r.RecordingDurationMS},
 		{"add_time", r.AddTime},
 	})
 }

@@ -14,6 +14,8 @@ var conferenceCmd = &cobra.Command{
 	Use:     "conferences",
 	Aliases: []string{"conf", "conference"},
 	Short:   "Inspect and control live audio conferences",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var confListCmd = &cobra.Command{
@@ -40,6 +42,8 @@ var confHangupCmd = &cobra.Command{
 var confMemberCmd = &cobra.Command{
 	Use:   "member",
 	Short: "Per-member actions inside a conference",
+	Args:  cobra.NoArgs,
+	RunE:  groupRunE,
 }
 
 var confMemberKickCmd = &cobra.Command{
@@ -182,7 +186,7 @@ func runConferenceList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Conferences, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	if len(resp.Conferences) == 0 {
 		fmt.Fprintln(os.Stdout, "(no active conferences)")
@@ -213,7 +217,7 @@ func runConferenceGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, c, nil)
+		return output.JSONRaw(os.Stdout, c.Raw())
 	}
 	_ = output.KV(os.Stdout, [][2]string{
 		{"conference_name", c.ConferenceName},
@@ -307,6 +311,7 @@ func runConferenceRecord(cmd *cobra.Command, args []string) error {
 		body["callback_url"] = confRecordCallbackURL
 	}
 	var resp struct {
+		api.RawBody
 		APIID       string `json:"api_id"`
 		Message     string `json:"message"`
 		RecordingID string `json:"recording_id"`
@@ -323,7 +328,7 @@ func runConferenceRecord(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"recording_id", resp.RecordingID},

@@ -30,6 +30,8 @@ var messageCmd = &cobra.Command{
 	Use:     "messaging",
 	Aliases: []string{"message", "msg", "sms"},
 	Short:   "Send messages (SMS / MMS / WhatsApp) — channel-split surface",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 // ─── Channel subgroups ──────────────────────────────────────────────────────
@@ -37,17 +39,23 @@ var messageCmd = &cobra.Command{
 var messagingSmsCmd = &cobra.Command{
 	Use:   "sms",
 	Short: "SMS — A2P / P2P short-message-service (incl. 10DLC, powerpacks, toll-free)",
+	Args:  cobra.NoArgs,
+	RunE:  groupRunE,
 }
 
 var messagingWhatsappCmd = &cobra.Command{
 	Use:     "whatsapp",
 	Aliases: []string{"wa"},
 	Short:   "WhatsApp — Plivo's WhatsApp Business API surface",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var messagingMmsCmd = &cobra.Command{
 	Use:   "mms",
 	Short: "MMS — multimedia messages (US/Canada)",
+	Args:  cobra.NoArgs,
+	RunE:  groupRunE,
 }
 
 // ─── Per-channel send + list flags (one set per channel; tiny duplication
@@ -59,6 +67,14 @@ var (
 	whatsappSendSrc, whatsappSendDst, whatsappSendText, whatsappSendURL, whatsappSendMethod string
 
 	mmsSendSrc, mmsSendDst, mmsSendText, mmsSendURL, mmsSendMethod string
+
+	// mmsSendMediaURLs holds --media-url; MMS-only, so it's not part of the
+	// shared registerSendFlags set below.
+	mmsSendMediaURLs []string
+
+	// messageClientForTest is a package-level test hook, mirroring
+	// apiClientForTest in cmd/api.go.
+	messageClientForTest *api.Client
 )
 
 var (
@@ -76,7 +92,7 @@ var messagingSmsSendCmd = &cobra.Command{
 	Use:   "send",
 	Short: "Send an SMS (requires --yes; spends money — use --dry-run to preview)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runMessageSendForChannel(cmd, "sms", smsSendSrc, smsSendDst, smsSendText, smsSendURL, smsSendMethod)
+		return runMessageSendForChannel(cmd, "sms", smsSendSrc, smsSendDst, smsSendText, smsSendURL, smsSendMethod, nil)
 	},
 }
 
@@ -84,7 +100,7 @@ var messagingWhatsappSendCmd = &cobra.Command{
 	Use:   "send",
 	Short: "Send a WhatsApp message (requires --yes; spends money — use --dry-run to preview)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runMessageSendForChannel(cmd, "whatsapp", whatsappSendSrc, whatsappSendDst, whatsappSendText, whatsappSendURL, whatsappSendMethod)
+		return runMessageSendForChannel(cmd, "whatsapp", whatsappSendSrc, whatsappSendDst, whatsappSendText, whatsappSendURL, whatsappSendMethod, nil)
 	},
 }
 
@@ -92,7 +108,7 @@ var messagingMmsSendCmd = &cobra.Command{
 	Use:   "send",
 	Short: "Send an MMS (requires --yes; spends money — use --dry-run to preview)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runMessageSendForChannel(cmd, "mms", mmsSendSrc, mmsSendDst, mmsSendText, mmsSendURL, mmsSendMethod)
+		return runMessageSendForChannel(cmd, "mms", mmsSendSrc, mmsSendDst, mmsSendText, mmsSendURL, mmsSendMethod, mmsSendMediaURLs)
 	},
 }
 
@@ -139,6 +155,10 @@ func init() {
 	registerSendFlags(messagingSmsSendCmd, &smsSendSrc, &smsSendDst, &smsSendText, &smsSendURL, &smsSendMethod)
 	registerSendFlags(messagingWhatsappSendCmd, &whatsappSendSrc, &whatsappSendDst, &whatsappSendText, &whatsappSendURL, &whatsappSendMethod)
 	registerSendFlags(messagingMmsSendCmd, &mmsSendSrc, &mmsSendDst, &mmsSendText, &mmsSendURL, &mmsSendMethod)
+	messagingMmsSendCmd.Flags().StringArrayVar(&mmsSendMediaURLs, "media-url", nil, "URL of a hosted image/media file to attach (repeatable, up to 10)")
+	registerExplainFlag(messagingSmsSendCmd)
+	registerExplainFlag(messagingWhatsappSendCmd)
+	registerExplainFlag(messagingMmsSendCmd)
 
 	// SMS list flags
 	registerListFlags(messagingSmsListCmd, &smsListLimit, &smsListOffset, &smsListState, &smsListDirection, &smsListFrom, &smsListTo)
@@ -161,7 +181,9 @@ func init() {
 func registerSendFlags(cmd *cobra.Command, src, dst, text, urlFlag, method *string) {
 	cmd.Flags().StringVar(src, "src", "", "sender (E.164, shortcode, or sender ID) (required)")
 	_ = cmd.MarkFlagRequired("src")
-	cmd.Flags().StringVar(dst, "dst", "", "destination, separate multiple with `<` (required)")
+	// No backticks around the < — pflag reads those as a type-name override,
+	// which rendered this flag as "--dst <" in --help.
+	cmd.Flags().StringVar(dst, "dst", "", "destination, separate multiple with < (required)")
 	_ = cmd.MarkFlagRequired("dst")
 	cmd.Flags().StringVar(text, "text", "", "message body (required)")
 	_ = cmd.MarkFlagRequired("text")
@@ -183,10 +205,15 @@ func registerListFlags(cmd *cobra.Command, limit, offset *int, state, direction,
 // runMessageSendForChannel is the shared body of all three per-channel
 // send commands. Hardcodes the message_type per channel; everything else
 // flows through the same body shape the Plivo Message API expects.
-func runMessageSendForChannel(cmd *cobra.Command, channel, src, dst, text, urlFlag, method string) error {
-	client, _, err := getClient()
-	if err != nil {
-		return err
+// mediaURLs is only ever non-empty for the mms channel.
+func runMessageSendForChannel(cmd *cobra.Command, channel, src, dst, text, urlFlag, method string, mediaURLs []string) error {
+	client := messageClientForTest
+	if client == nil {
+		c, _, err := getClient()
+		if err != nil {
+			return err
+		}
+		client = c
 	}
 	body := map[string]any{
 		"src":  src,
@@ -197,6 +224,9 @@ func runMessageSendForChannel(cmd *cobra.Command, channel, src, dst, text, urlFl
 	if urlFlag != "" {
 		body["url"] = urlFlag
 		body["method"] = method
+	}
+	if len(mediaURLs) > 0 {
+		body["media_urls"] = mediaURLs
 	}
 
 	// Spend-verb gate: refuse without --yes (DESTRUCTIVE_REFUSED, exit 5);
@@ -223,7 +253,7 @@ func runMessageSendForChannel(cmd *cobra.Command, channel, src, dst, text, urlFl
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"message", resp.Message},
@@ -270,7 +300,7 @@ func runMessageListForChannel(cmd *cobra.Command, channel string,
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"UUID", "FROM", "TO", "STATE", "TYPE", "TIME"}}
 	for _, m := range resp.Objects {
@@ -297,7 +327,7 @@ func runMessageGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, m, nil)
+		return output.JSONRaw(os.Stdout, m.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"uuid", m.MessageUUID},

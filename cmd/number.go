@@ -16,6 +16,8 @@ var numberCmd = &cobra.Command{
 	Use:     "numbers",
 	Aliases: []string{"number"},
 	Short:   "Manage account phone numbers",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (
@@ -107,6 +109,8 @@ func init() {
 	numberSearchCmd.Flags().IntVar(&numberSearchOffset, "offset", 0, "pagination offset")
 
 	numberBuyCmd.Flags().StringVar(&numberBuyAppID, "app-id", "", "auto-attach to this application after purchase")
+	registerExplainFlag(numberBuyCmd)
+	registerExplainFlag(numberReleaseCmd)
 
 	numberCmd.AddCommand(numberListCmd, numberGetCmd, numberUpdateCmd, numberSearchCmd, numberBuyCmd, numberReleaseCmd)
 	rootCmd.AddCommand(numberCmd)
@@ -178,7 +182,7 @@ func runNumberList(cmd *cobra.Command, args []string) error {
 
 func renderNumberList(resp api.NumberList) error {
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"NUMBER", "TYPE", "COUNTRY", "APP_ID", "ALIAS"}}
 	for _, n := range resp.Objects {
@@ -205,7 +209,7 @@ func runNumberGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, n, nil)
+		return output.JSONRaw(os.Stdout, n.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"number", n.Number},
@@ -275,6 +279,7 @@ func runNumberBuy(cmd *cobra.Command, args []string) error {
 	}
 	// POST /Account/{auth_id}/PhoneNumber/{number}/
 	var resp struct {
+		api.RawBody
 		APIID   string `json:"api_id"`
 		Status  string `json:"status"`
 		Message string `json:"message"`
@@ -294,7 +299,7 @@ func runNumberBuy(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"number", number},

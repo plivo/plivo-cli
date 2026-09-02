@@ -245,7 +245,7 @@ func TestRecording_unmarshal(t *testing.T) {
 		"recording_type": "call",
 		"recording_format": "mp3",
 		"recording_url": "https://s3.amazonaws.com/recording.mp3",
-		"recording_duration_ms": 30000,
+		"recording_duration_ms": "30000",
 		"add_time": "2026-01-01T00:00:00Z"
 	}`)
 	var r Recording
@@ -255,8 +255,8 @@ func TestRecording_unmarshal(t *testing.T) {
 	if r.RecordingID != "rec-uuid" || r.CallUUID != "call-uuid" {
 		t.Errorf("ids wrong: %+v", r)
 	}
-	if r.RecordingDurationMS != 30000 {
-		t.Errorf("duration_ms wrong: %d", r.RecordingDurationMS)
+	if r.RecordingDurationMS != "30000" {
+		t.Errorf("duration_ms wrong: %s", r.RecordingDurationMS)
 	}
 }
 

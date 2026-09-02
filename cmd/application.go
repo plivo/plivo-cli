@@ -16,6 +16,8 @@ var applicationCmd = &cobra.Command{
 	Use:     "applications",
 	Aliases: []string{"app", "application"},
 	Short:   "Manage Plivo applications (voice/messaging webhooks)",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (
@@ -88,6 +90,7 @@ func init() {
 	applicationCreateCmd.Flags().StringVar(&appCreateFallbackAnswerURL, "fallback-answer-url", "", "backup webhook if answer-url fails")
 	applicationCreateCmd.Flags().BoolVar(&appCreateDefaultNumberApp, "default-number-app", false, "set as default for new numbers")
 	applicationCreateCmd.Flags().BoolVar(&appCreateLogIncoming, "log-incoming-messages", true, "log inbound SMS content")
+	registerExplainFlag(applicationCreateCmd)
 
 	applicationListCmd.Flags().IntVar(&appListLimit, "limit", 20, "results per page")
 	applicationListCmd.Flags().IntVar(&appListOffset, "offset", 0, "pagination offset")
@@ -133,6 +136,7 @@ func runAppCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	var resp struct {
+		api.RawBody
 		APIID   string `json:"api_id"`
 		AppID   string `json:"app_id"`
 		Message string `json:"message"`
@@ -148,7 +152,7 @@ func runAppCreate(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	fmt.Fprintf(os.Stderr, "%s\n", resp.Message)
 	return output.KV(os.Stdout, [][2]string{
@@ -178,7 +182,7 @@ func runAppList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"APP_ID", "NAME", "ANSWER_URL", "MESSAGE_URL", "ENABLED"}}
 	for _, a := range resp.Objects {
@@ -205,7 +209,7 @@ func runAppGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, a, nil)
+		return output.JSONRaw(os.Stdout, a.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"app_id", a.AppID},

@@ -371,7 +371,9 @@ func printREPLHelp(w io.Writer) {
 // cancels the in-flight turn; Ctrl-D or /exit leaves. An optional firstMsg
 // seeds the first turn (`plivo ask -i "..."`).
 func runInteractiveAsk(client *api.Client, url, firstMsg string) error {
-	if effectiveFormat() == output.FormatJSON {
+	// Only refuse an EXPLICIT -o json — the non-TTY default (e.g. piped
+	// through `tee`) shouldn't block a session that's still human-driven.
+	if strings.EqualFold(outputFormat, "json") {
 		return clierr.BadInput("interactive mode (-i) can't be combined with -o json")
 	}
 	if dryRunFlag {
@@ -872,10 +874,29 @@ func (r *buddyRenderer) withSpinnerCleared(fn func()) {
 	fn()
 }
 
+// supportClientForTest is a package-level test hook, mirroring
+// apiClientForTest in cmd/api.go.
+var supportClientForTest *api.Client
+
 func runSupport(cmd *cobra.Command, args []string) error {
-	client, _, err := getClient()
-	if err != nil {
-		return err
+	client := supportClientForTest
+	if client == nil {
+		c, _, err := getClient()
+		if err != nil {
+			return err
+		}
+		client = c
+	}
+	// "Your past escalations" needs a human identity to scope by — only a
+	// browser `plivo login` populates one. PLIVO_AUTH_ID/TOKEN env auth (and
+	// older manually-entered profiles) can't be attributed to a person.
+	// --dry-run sends nothing, so it still previews the request.
+	if client.AomUUID == "" && !dryRunFlag {
+		return &clierr.Error{
+			Code:    clierr.CodeAuthForbidden,
+			Message: "support needs a browser-login profile to scope escalations to you",
+			Hint:    "Run `plivo login` — env var or manually-entered credentials have no per-user identity to filter by.",
+		}
 	}
 	applyBuddyURL(client)
 

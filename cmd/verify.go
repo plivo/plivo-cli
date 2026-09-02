@@ -15,12 +15,16 @@ import (
 var verifyCmd = &cobra.Command{
 	Use:   "verify",
 	Short: "Plivo Verify — OTP / phone-number verification sessions",
+	Args:  cobra.NoArgs,
+	RunE:  groupRunE,
 }
 
 var verifySessionCmd = &cobra.Command{
 	Use:     "sessions",
 	Aliases: []string{"session"},
 	Short:   "Manage Verify sessions",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (
@@ -77,6 +81,7 @@ func init() {
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateLocale, "locale", "", "BCP-47 locale, e.g. en-US")
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateMethod, "method", "", "HTTP method for callback URL")
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateURL, "url", "", "callback URL for session status events")
+	registerExplainFlag(verifySessionCreateCmd)
 
 	verifySessionListCmd.Flags().IntVar(&vsListLimit, "limit", 20, "results per page")
 	verifySessionListCmd.Flags().IntVar(&vsListOffset, "offset", 0, "pagination offset")
@@ -124,6 +129,7 @@ func runVerifySessionCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	var resp struct {
+		api.RawBody
 		APIID       string `json:"api_id"`
 		SessionUUID string `json:"session_uuid"`
 		Message     string `json:"message"`
@@ -140,7 +146,7 @@ func runVerifySessionCreate(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"session_uuid", resp.SessionUUID},
@@ -166,7 +172,7 @@ func runVerifySessionGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, s, nil)
+		return output.JSONRaw(os.Stdout, s.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"session_uuid", s.SessionUUID},
@@ -205,7 +211,7 @@ func runVerifySessionList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"SESSION_UUID", "RECIPIENT", "CHANNEL", "STATUS", "ATTEMPTS", "CREATED"}}
 	for _, s := range resp.Objects {
@@ -225,6 +231,7 @@ func runVerifySessionValidate(cmd *cobra.Command, args []string) error {
 	}
 	body := map[string]any{"otp": vsValidateOTP}
 	var resp struct {
+		api.RawBody
 		APIID    string `json:"api_id"`
 		Message  string `json:"message"`
 		Verified bool   `json:"verified,omitempty"`
@@ -240,7 +247,7 @@ func runVerifySessionValidate(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"message", resp.Message},

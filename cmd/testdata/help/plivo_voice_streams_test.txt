@@ -21,13 +21,11 @@ Flags:
       --duration int    seconds of synthetic audio to stream (max 30) (default 3)
   -h, --help            help for test
       --insecure        skip TLS verification (self-signed dev certs only)
-      --rate int        sample rate in Hz (8000 for mulaw, 16000 typical for l16) (default 8000)
+      --rate int        sample rate in Hz (mulaw: 8000; l16: 8000 or 16000) (default 8000)
       --to string       WebSocket URL of the endpoint to test (ws:// or wss://, required)
 
 Global Flags:
-      --all                auto-paginate through all pages
       --dry-run            print the HTTP request without sending
-      --explain            explain what the command will do before executing
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
   -o, --output string      output format: table|json (default: table for TTY, json otherwise)

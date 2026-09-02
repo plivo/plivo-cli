@@ -23,6 +23,8 @@ const skillFileName = "SKILL.md"
 var skillCmd = &cobra.Command{
 	Use:   "skill",
 	Short: "Manage the plivo-cli agent skill",
+	Args:  cobra.NoArgs,
+	RunE:  groupRunE,
 }
 
 // skillInstallCmd writes the embedded SKILL.md into the agent skills directory

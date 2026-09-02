@@ -57,6 +57,21 @@ vet: ## go vet
 test: ## go test
 	go test ./...
 
+# VERSION defaults to `git describe` (see top of file), so right after tagging
+# this needs no arguments. Override with VERSION=v0.3.0 to re-render an old tag.
+release-tap: ## Render the Homebrew formula + Scoop manifest into $(TAP) (run after the release exists)
+	@test -f dist/SHA256SUMS || { echo "✗ dist/SHA256SUMS missing — run 'make build-all' and regenerate it first"; exit 2; }
+	scripts/gen-tap.sh "$(VERSION)" dist/SHA256SUMS "$(or $(TAP),../homebrew-tap)"
+
+test-tap: ## Check gen-tap.sh still renders the golden output
+	scripts/gen-tap-test.sh
+
+check-tap-fresh: ## Warn if the Homebrew tap is behind the latest release
+	scripts/check-tap-fresh.sh
+
+sign-release: ## Sign dist/SHA256SUMS with cosign keyless (opens a browser)
+	scripts/sign-release.sh dist/SHA256SUMS
+
 docs: ## Regenerate the command reference (docs/COMMANDS.md)
 	go run ./tools/gendocs -o docs/COMMANDS.md
 

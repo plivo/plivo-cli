@@ -86,6 +86,7 @@ func init() {
 	apiCmd.Flags().StringVar(&apiBodyFlag, "body", "", "request body: literal JSON, @path/to/file, or @- for stdin")
 	apiCmd.Flags().StringArrayVar(&apiQueryFlags, "query", nil, "query param as key=value (repeatable)")
 	apiCmd.Flags().StringArrayVar(&apiHeaderFlags, "header", nil, "extra header as 'Key: Value' (repeatable; overrides defaults)")
+	registerExplainFlag(apiCmd)
 	rootCmd.AddCommand(apiCmd)
 }
 
