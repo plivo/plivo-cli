@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/plivo/plivo-cli/internal/api"
@@ -132,6 +135,160 @@ func TestBuddySession_reset(t *testing.T) {
 	s.record("user", "c")
 	if len(s.history) != 1 || s.history[0].Text != "c" {
 		t.Errorf("history after reset+record = %+v, want one turn 'c'", s.history)
+	}
+}
+
+// /reset starts a new conversation, so it must rotate the session id too —
+// reusing the old one would thread the "new" conversation into the old one
+// in analytics.
+func TestBuddySession_reset_rotatesSessionID(t *testing.T) {
+	s := &buddySession{sessionID: newBuddySessionID()}
+	before := s.sessionID
+	s.reset()
+	if s.sessionID == "" {
+		t.Error("reset should mint a fresh session id, not clear it to empty")
+	}
+	if s.sessionID == before {
+		t.Errorf("reset should rotate the session id, still %q", before)
+	}
+}
+
+func TestNewBuddySessionID_nonEmpty_unique_within64Chars(t *testing.T) {
+	a, b := newBuddySessionID(), newBuddySessionID()
+	if a == "" || b == "" {
+		t.Fatal("newBuddySessionID must not return an empty string")
+	}
+	if a == b {
+		t.Errorf("two mints returned the same id: %q", a)
+	}
+	if len(a) > 64 || len(b) > 64 {
+		t.Errorf("session id exceeds the server's 64-char limit: %q (%d), %q (%d)", a, len(a), b, len(b))
+	}
+}
+
+// chatSessionIDServer replies to POST .../chat with a minimal `final` event
+// and records the session_id each request body carried, in order — the
+// harness for asserting how newBuddySessionID's value threads across turns.
+func chatSessionIDServer(t *testing.T) (srv *httptest.Server, sessionIDs func() []string) {
+	t.Helper()
+	var mu sync.Mutex
+	var ids []string
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/chat") {
+			_, _ = w.Write([]byte(`{}`)) // e.g. the account-balance lookup
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		var req api.BuddyChatRequest
+		_ = json.Unmarshal(body, &req)
+		mu.Lock()
+		ids = append(ids, req.SessionID)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: final\ndata: {\"answer\":\"ok\",\"latency_ms\":1}\n\n"))
+	}))
+	t.Cleanup(srv.Close)
+	return srv, func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		out := make([]string, len(ids))
+		copy(out, ids)
+		return out
+	}
+}
+
+// (a) a fresh conversation mints an id and sends it, (b) a second turn in
+// the same conversation reuses it, (e) it stays within the server's 64-char
+// limit.
+func TestRunInteractiveAsk_sessionID_mintedAndSharedAcrossTurns(t *testing.T) {
+	srv, sessionIDs := chatSessionIDServer(t)
+	client := &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, HTTP: &http.Client{}}
+
+	stdinTokenFn(t, "first turn\nsecond turn\n", func() {
+		_ = runInteractiveAsk(client, srv.URL+"/chat", "")
+	})
+
+	ids := sessionIDs()
+	if len(ids) != 2 {
+		t.Fatalf("got %d chat requests, want 2: %+v", len(ids), ids)
+	}
+	if ids[0] == "" {
+		t.Error("the first turn should mint and send a non-empty session_id")
+	}
+	if len(ids[0]) > 64 {
+		t.Errorf("session_id is %d chars, server max is 64", len(ids[0]))
+	}
+	if ids[0] != ids[1] {
+		t.Errorf("a second turn in the same conversation should reuse the id: %q != %q", ids[0], ids[1])
+	}
+}
+
+// (c) resetting the conversation changes the id.
+func TestRunInteractiveAsk_reset_rotatesSessionID(t *testing.T) {
+	srv, sessionIDs := chatSessionIDServer(t)
+	client := &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, HTTP: &http.Client{}}
+
+	stdinTokenFn(t, "first turn\n/reset\nsecond turn\n", func() {
+		_ = runInteractiveAsk(client, srv.URL+"/chat", "")
+	})
+
+	ids := sessionIDs()
+	if len(ids) != 2 {
+		t.Fatalf("got %d chat requests, want 2 (/reset itself sends none): %+v", len(ids), ids)
+	}
+	if ids[0] == ids[1] {
+		t.Errorf("/reset should rotate the session_id, both turns got %q", ids[0])
+	}
+	if ids[1] == "" {
+		t.Error("the turn after /reset should still send a non-empty session_id")
+	}
+}
+
+// A one-shot `ask` (no -i) is its own single-turn conversation — it must
+// still mint and send a session_id even though it carries no history.
+func TestRunAsk_oneShot_sendsSessionID(t *testing.T) {
+	setFakeCreds(t) // isolates HOME so applyBuddyURL's config.Load() can't pick up a real ~/.plivo/config.toml
+	srv, sessionIDs := chatSessionIDServer(t)
+	clientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "MAFAKE1", AuthToken: "tok", HTTP: &http.Client{}}
+	t.Cleanup(func() { clientForTest = nil })
+
+	err, _, _ := execCmd(t, "ask", "what does error 30007 mean?")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ids := sessionIDs()
+	if len(ids) != 1 || ids[0] == "" {
+		t.Fatalf("expected exactly one request with a non-empty session_id, got %+v", ids)
+	}
+	if len(ids[0]) > 64 {
+		t.Errorf("session_id is %d chars, server max is 64", len(ids[0]))
+	}
+}
+
+// (d) a different profile gets a different id. There's no cross-process
+// persistence backing this (buddySession's history doesn't survive past its
+// own -i REPL either — see newBuddySessionID), so this holds unconditionally:
+// every invocation, on any profile, mints its own fresh id.
+func TestRunAsk_differentClients_getDifferentSessionIDs(t *testing.T) {
+	setFakeCreds(t)
+	srv, sessionIDs := chatSessionIDServer(t)
+	t.Cleanup(func() { clientForTest = nil })
+
+	clientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "MAFAKE1", AuthToken: "tok", HTTP: &http.Client{}}
+	if err, _, _ := execCmd(t, "ask", "question one"); err != nil {
+		t.Fatalf("first ask: %v", err)
+	}
+	clientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "MAFAKE2", AuthToken: "tok", HTTP: &http.Client{}}
+	if err, _, _ := execCmd(t, "ask", "question two"); err != nil {
+		t.Fatalf("second ask (different profile): %v", err)
+	}
+
+	ids := sessionIDs()
+	if len(ids) != 2 {
+		t.Fatalf("got %d chat requests, want 2: %+v", len(ids), ids)
+	}
+	if ids[0] == ids[1] {
+		t.Errorf("different profiles/invocations must not share a session_id, both got %q", ids[0])
 	}
 }
 

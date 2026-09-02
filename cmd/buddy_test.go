@@ -175,6 +175,107 @@ func TestBuddyRenderer_messageEvent_printedOnceAsBlock(t *testing.T) {
 	}
 }
 
+// PAI stream contract: session/result/cost/done arrive as raw (unwrapped)
+// payloads. `result` is the complete answer (no token deltas), `done` ends the
+// stream, `session` is captured for continuation, and `cost` is hidden in normal
+// output.
+func TestBuddyRenderer_paiContract_sessionResultCostDone(t *testing.T) {
+	var out, err bytes.Buffer
+	r := &buddyRenderer{out: &out, err: &err, startedAt: time.Now()}
+	events := []api.SSEEvent{
+		{Event: "session", Data: `{"session_id":"sess-123"}`},
+		{Event: "result", Data: `{"text":"Here is the analysis.\n"}`},
+		{Event: "cost", Data: `{"total_cost_usd":0.169562}`},
+		{Event: "done", Data: `{}`},
+	}
+	stopped := false
+	for _, ev := range events {
+		if !r.handle(ev) {
+			stopped = true
+			break
+		}
+	}
+	if !stopped {
+		t.Error("handle should return false on `done` to end the stream")
+	}
+	if r.sessionID != "sess-123" {
+		t.Errorf("session_id not captured, got %q", r.sessionID)
+	}
+	if o := out.String(); !strings.Contains(o, "Here is the analysis.") {
+		t.Errorf("result text missing on stdout, got:\n%s", o)
+	}
+	e := err.String()
+	if strings.Contains(e, "cost") || strings.Contains(e, "0.16") {
+		t.Errorf("cost must be hidden in non-verbose mode, got stderr:\n%s", e)
+	}
+	if !strings.Contains(e, "(done in") {
+		t.Errorf("done footer missing, got stderr:\n%s", e)
+	}
+}
+
+func TestBuddyRenderer_paiCost_visibleWithVerbose(t *testing.T) {
+	var out, err bytes.Buffer
+	r := &buddyRenderer{out: &out, err: &err, verbose: true, startedAt: time.Now()}
+	r.handle(api.SSEEvent{Event: "cost", Data: `{"total_cost_usd":0.169562}`})
+	if e := err.String(); !strings.Contains(e, "0.1696") {
+		t.Errorf("cost should print on stderr in verbose mode, got:\n%s", e)
+	}
+}
+
+func TestBuddyRenderer_jsonMode_terminatesOnDone(t *testing.T) {
+	var out, err bytes.Buffer
+	r := &buddyRenderer{out: &out, err: &err, jsonMode: true, startedAt: time.Now()}
+	if !r.handle(api.SSEEvent{Event: "result", Data: `{"text":"x"}`}) {
+		t.Error("json mode should continue on result")
+	}
+	if r.handle(api.SSEEvent{Event: "done", Data: `{}`}) {
+		t.Error("json mode should stop on done")
+	}
+	o := out.String()
+	if !strings.Contains(o, `"event":"result"`) || !strings.Contains(o, `"event":"done"`) {
+		t.Errorf("json mode should pass through result+done, got:\n%s", o)
+	}
+}
+
+// The switch in handle() has no default case, so an event name it doesn't
+// recognize falls through to the final `return true` — the stream keeps
+// going and nothing is printed. Covers both a hypothetical renamed/future
+// server event and any other unexpected event name.
+func TestBuddyRenderer_unknownEvent_gracefulNoErrorNoTerminate(t *testing.T) {
+	var out, err bytes.Buffer
+	r := &buddyRenderer{out: &out, err: &err, startedAt: time.Now()}
+	if !r.handle(api.SSEEvent{Event: "some_future_event", Data: `{"whatever":true}`}) {
+		t.Error("an unrecognized event must not terminate the stream")
+	}
+	if r.errorSeen {
+		t.Error("an unrecognized event must not be treated as an error")
+	}
+	if out.Len() != 0 || err.Len() != 0 {
+		t.Errorf("an unrecognized event should print nothing, got out=%q err=%q", out.String(), err.String())
+	}
+}
+
+// `done` and `final` are alternate terminators for two different contracts
+// (PAI vs legacy) — a stream only ever emits one, never both. Confirm `done`
+// arriving after tokens already streamed live doesn't reprint or drop them.
+func TestBuddyRenderer_doneAfterStreamedTokens_noDoublePrint(t *testing.T) {
+	var out, err bytes.Buffer
+	r := &buddyRenderer{out: &out, err: &err, startedAt: time.Now()}
+	r.handle(api.SSEEvent{Event: "start", Data: `{}`})
+	r.handle(api.SSEEvent{Event: "token", Data: `{"text":"Hello "}`})
+	r.handle(api.SSEEvent{Event: "token", Data: `{"text":"world"}`})
+	if cont := r.handle(api.SSEEvent{Event: "done", Data: `{}`}); cont {
+		t.Error("done should terminate the stream")
+	}
+	o := out.String()
+	if n := strings.Count(o, "Hello world"); n != 1 {
+		t.Errorf("streamed answer should appear exactly once, got %d in:\n%s", n, o)
+	}
+	if !r.streamed {
+		t.Error("streamed should stay true — tokens arrived before done")
+	}
+}
+
 // `support` lists "your" past escalations — that needs a human identity
 // (AomUUID), which only a browser login populates. Env-var / manually
 // entered creds have none, so the command must refuse with a clear error

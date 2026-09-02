@@ -719,6 +719,10 @@ type BuddyChatRequest struct {
 	Attachments []BuddyAttachment `json:"attachments,omitempty"`
 	UserContext BuddyUserContext  `json:"userContext"`
 	PageURL     string            `json:"pageUrl,omitempty"`
+	// SessionID continues a prior conversation. Empty on the first turn; set from
+	// the server's `session` event (PAI stream contract) and replayed on
+	// follow-ups so the backend can thread the session.
+	SessionID string `json:"session_id,omitempty"`
 }
 
 // BuddyEscalation is one row from GET /v1/aiassist/buddy-ext/escalations.

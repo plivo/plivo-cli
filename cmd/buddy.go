@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/config"
@@ -43,6 +44,14 @@ const (
 	// server enforces the same ceiling.
 	maxHistoryTurns = 20
 )
+
+// newBuddySessionID mints a client-side conversation id for the request's
+// `session_id` field. The server never emits a `session` SSE event on this
+// stream (nothing to echo back), so the id has to originate here — same
+// pattern the web console uses (a UUID kept for the life of one
+// conversation, rotated when it resets). A UUID string is 36 chars, well
+// under the server's 64-char limit.
+func newBuddySessionID() string { return uuid.NewString() }
 
 var askCmd = &cobra.Command{
 	Use:   "ask [message]",
@@ -139,6 +148,10 @@ func runAsk(cmd *cobra.Command, args []string) error {
 		Message:     message,
 		UserContext: buildBuddyUserContext(client),
 		PageURL:     buddyCLIPageURL,
+		// A one-shot ask sends no history, so it's a single-turn conversation
+		// on its own — mint a fresh id rather than reusing one across
+		// unrelated asks.
+		SessionID: newBuddySessionID(),
 	}
 
 	// --dry-run: print what would be sent, don't open the SSE stream.
@@ -239,6 +252,12 @@ type buddySession struct {
 	url     string
 	uctx    api.BuddyUserContext
 	history []api.BuddyTurn
+	// sessionID identifies this conversation for analytics. Client-minted
+	// (see newBuddySessionID) since the server doesn't emit a `session`
+	// event to echo; held for the life of the session and replayed on every
+	// turn so follow-ups thread together. If the server ever starts sending
+	// a real `session` event, sendTurn adopts it here going forward.
+	sessionID string
 }
 
 // historyForRequest returns the most recent turns, capped at maxHistoryTurns.
@@ -254,8 +273,12 @@ func (s *buddySession) record(role, text string) {
 	s.history = append(s.history, api.BuddyTurn{Role: role, Text: text})
 }
 
-// reset clears the conversation history.
-func (s *buddySession) reset() { s.history = nil }
+// reset clears the conversation history and rotates in a fresh session id —
+// /reset starts a new conversation, so it gets a new identity too.
+func (s *buddySession) reset() {
+	s.history = nil
+	s.sessionID = newBuddySessionID()
+}
 
 // sendTurn streams one assistant turn (the renderer prints as it goes) and
 // returns the answer text plus ok. On error or Ctrl-C it prints the reason and
@@ -267,6 +290,7 @@ func (s *buddySession) sendTurn(message string) (answer string, ok bool) {
 		History:     s.historyForRequest(),
 		UserContext: s.uctx,
 		PageURL:     buddyCLIPageURL,
+		SessionID:   s.sessionID,
 	}
 
 	turnCtx, cancel := context.WithCancel(context.Background())
@@ -290,6 +314,11 @@ func (s *buddySession) sendTurn(message string) (answer string, ok bool) {
 		return r.handle(ev)
 	})
 	r.stopSpinner() // reap the spinner on every exit path (idempotent)
+	if r.sessionID != "" {
+		// The server sent a real `session` event (not currently part of the
+		// contract) — adopt its id over the client-minted one going forward.
+		s.sessionID = r.sessionID
+	}
 
 	switch {
 	case turnCtx.Err() == context.Canceled:
@@ -372,7 +401,12 @@ func runInteractiveAsk(client *api.Client, url, firstMsg string) error {
 		return clierr.BadInput("--dry-run isn't supported in interactive mode (-i)")
 	}
 
-	sess := &buddySession{client: client, url: url, uctx: buildBuddyUserContext(client)}
+	sess := &buddySession{
+		client:    client,
+		url:       url,
+		uctx:      buildBuddyUserContext(client),
+		sessionID: newBuddySessionID(), // minted up front: every turn in this REPL shares it
+	}
 
 	fmt.Fprintln(os.Stderr, "Plivo AI assistant — interactive mode.")
 	fmt.Fprintln(os.Stderr, "Type a message and press Enter. Commands: /reset, /help, /exit (or Ctrl-D).")
@@ -452,6 +486,11 @@ type buddyRenderer struct {
 	hadNarration bool
 	errorSeen    bool
 	errorMsg     string
+	// sessionID is captured from a `session` event, if one ever arrives (the
+	// current server contract never sends one — see newBuddySessionID, which
+	// mints the id the CLI actually sends). Kept so buddySession.sendTurn can
+	// adopt a server-assigned id over the client-minted one if that changes.
+	sessionID string
 
 	// mu serialises all writes to err (and the spinner state it reads).
 	mu sync.Mutex
@@ -470,7 +509,8 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 			"event": ev.Event,
 			"data":  raw,
 		})
-		return ev.Event != "final" && ev.Event != "error"
+		// `final`/`error` end the legacy stream; `done` ends the PAI stream.
+		return ev.Event != "final" && ev.Event != "error" && ev.Event != "done"
 	}
 
 	switch ev.Event {
@@ -615,6 +655,67 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		fmt.Fprintf(r.err, "\nbuddy error: %s\n", d.Error)
 		r.errorSeen = true
 		r.errorMsg = d.Error
+		return false
+
+	// --- PAI stream contract (session / result / cost / done) ------------------
+	// Not part of the server's current event set — confirmed against the
+	// server's event-type enum, which is closed and doesn't include any of
+	// these four. Kept as forward-compatible no-ops (same call the web
+	// console made for its equivalent handlers): harmless today, and correct
+	// if the server ever starts sending them. These arrive as raw {"...":...}
+	// payloads (no {type,data} wrapper); buddyInner falls back to the raw
+	// bytes, so unmarshalling the flat shape works either way.
+
+	case "session":
+		// {"session_id": "..."} — would let the server assign the id instead
+		// of the client-minted one (see newBuddySessionID); see the adoption
+		// in sendTurn. Never fires today.
+		var d struct {
+			SessionID string `json:"session_id"`
+		}
+		_ = json.Unmarshal(buddyInner(ev.Data), &d)
+		if d.SessionID != "" {
+			r.sessionID = d.SessionID
+		}
+
+	case "result":
+		// {"text": "..."} — the complete, sanitized answer (no token deltas).
+		// Mirror `message`: replace the accumulated answer; `done` prints it.
+		var d struct {
+			Text string `json:"text"`
+		}
+		_ = json.Unmarshal(buddyInner(ev.Data), &d)
+		r.stopSpinner()
+		r.answerBuf.Reset()
+		r.answerBuf.WriteString(d.Text)
+
+	case "cost":
+		// {"total_cost_usd": ...} — internal metric; show only in --verbose.
+		if !r.verbose {
+			return true
+		}
+		var d struct {
+			TotalCostUSD float64 `json:"total_cost_usd"`
+		}
+		_ = json.Unmarshal(buddyInner(ev.Data), &d)
+		r.withSpinnerCleared(func() {
+			fmt.Fprintf(r.err, "  (cost: $%.4f)\n", d.TotalCostUSD)
+		})
+
+	case "done":
+		// {} — a second, alternate stream terminator alongside `final`. The
+		// server only ever emits one or the other per stream (never both),
+		// so this can't cut off output `final` would otherwise have flushed.
+		// Mirrors `final`: flush the answer block (if it wasn't streamed live
+		// token-by-token) and close out.
+		r.stopSpinner()
+		r.clearNarrationLine()
+		if r.streamed {
+			fmt.Fprintln(r.out) // tokens already streamed; just close the line
+		} else if answer := strings.TrimRight(r.answerBuf.String(), "\n"); answer != "" {
+			fmt.Fprintln(r.out, answer)
+		}
+		fmt.Fprintf(r.err, "(done in %.1fs)\n", time.Since(r.startedAt).Seconds())
 		return false
 	}
 	return true
