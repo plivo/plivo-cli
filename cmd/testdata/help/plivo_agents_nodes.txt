@@ -1,6 +1,7 @@
 Browse the AI-agent node catalogue (types available for flow graphs)
 
 Usage:
+  plivo agents nodes [flags]
   plivo agents nodes [command]
 
 Available Commands:
@@ -11,9 +12,7 @@ Flags:
   -h, --help   help for nodes
 
 Global Flags:
-      --all                auto-paginate through all pages
       --dry-run            print the HTTP request without sending
-      --explain            explain what the command will do before executing
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
   -o, --output string      output format: table|json (default: table for TTY, json otherwise)
