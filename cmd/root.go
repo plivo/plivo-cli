@@ -24,10 +24,11 @@ var (
 	logLevel     string
 	yesFlag      bool
 	dryRunFlag   bool
-	explainFlag  bool
-	timeoutSec   int
-	allFlag      bool
-	adminServer  string
+	// explainFlag backs --explain. Registered locally (not persistent) by
+	// registerExplainFlag, only on the commands that actually read it.
+	explainFlag bool
+	timeoutSec  int
+	adminServer string
 )
 
 var rootCmd = &cobra.Command{
@@ -155,25 +156,50 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "warn", "log level: debug|info|warn|error|none")
 	rootCmd.PersistentFlags().BoolVarP(&yesFlag, "yes", "y", false, "skip confirmation prompts")
 	rootCmd.PersistentFlags().BoolVar(&dryRunFlag, "dry-run", false, "print the HTTP request without sending")
-	rootCmd.PersistentFlags().BoolVar(&explainFlag, "explain", false, "explain what the command will do before executing")
 	rootCmd.PersistentFlags().IntVar(&timeoutSec, "timeout", 30, "request timeout in seconds")
-	rootCmd.PersistentFlags().BoolVar(&allFlag, "all", false, "auto-paginate through all pages")
 	// Additional admin-only flags are registered in build-tag-gated files;
 	// the backing var (adminServer) lives above and stays "" in the public
 	// build.
+	//
+	// --explain is intentionally NOT here. It used to be persistent, so all
+	// 172 commands silently accepted it whether or not they implemented it.
+	// It's registered locally, per command, via registerExplainFlag — see
+	// call sites in api.go, application.go, auth.go, call.go, message.go,
+	// number.go, verify.go.
 }
+
+// registerExplainFlag adds a local (non-persistent) --explain flag to cmd.
+// Call this only on commands whose RunE actually reads explainFlag —
+// everything else should reject the flag rather than silently ignore it.
+func registerExplainFlag(cmd *cobra.Command) {
+	cmd.Flags().BoolVar(&explainFlag, "explain", false, "narrate in plain English before executing")
+}
+
+// credSource records which source supplied the credentials ("env" or a profile
+// name), so a rejected-credentials error can point at the right thing.
+var credSource string
+
+// clientForTest is a package-level test hook, mirroring apiClientForTest in
+// api.go. When non-nil every command gets this client, so tests can point a
+// command at an httptest server without real credentials.
+var clientForTest *api.Client
 
 // getClient resolves credentials and returns a configured API client.
 func getClient() (*api.Client, string, error) {
+	if clientForTest != nil {
+		return clientForTest, "test", nil
+	}
 	p, name, err := config.Resolve(profileFlag)
 	if err != nil {
 		return nil, "", err
 	}
+	credSource = name
 	c := api.New(p.AuthID, p.AuthToken, time.Duration(timeoutSec)*time.Second)
 	c.AdminBaseURL = adminServer
 	c.Email = p.Email
 	c.Region = p.Region
 	c.AomUUID = p.AomUUID
+	c.TelemetryEnabled = config.TelemetryEnabled()
 	c.DryRun = dryRunFlag
 	if logLevel == "debug" {
 		c.LogRequest = func(method, url string, body []byte) {
@@ -194,6 +220,20 @@ func effectiveFormat() output.Format {
 // handleError is the single place every command error is rendered. It picks
 // JSON (stable schema for AI/scripts when stdout is piped) vs plain (human
 // terminal output), then exits with a category-stable exit code.
+// credentialHint names the source the rejected credentials actually came from.
+// The generic hint used to blame the env vars even when a stored profile was
+// used, sending people to check something the CLI never read.
+func credentialHint() string {
+	switch credSource {
+	case "":
+		return "No credentials resolved. Run `plivo login`, or set PLIVO_AUTH_ID and PLIVO_AUTH_TOKEN."
+	case "env":
+		return "PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN were rejected. Re-check them, or run `plivo login`."
+	default:
+		return fmt.Sprintf("Profile %q was rejected. Run `plivo login --profile %s`, or unset it and use env vars.", credSource, credSource)
+	}
+}
+
 func handleError(err error) {
 	f := output.Resolve(outputFormat, os.Stderr)
 
@@ -202,6 +242,9 @@ func handleError(err error) {
 	apiErr, ok := err.(*api.APIError)
 	if !ok {
 		apiErr = clierr.Wrap(err)
+	}
+	if apiErr.Code == clierr.CodeAuthInvalid {
+		apiErr.Hint = credentialHint()
 	}
 
 	if f == output.FormatJSON {

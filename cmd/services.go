@@ -12,6 +12,8 @@ import "github.com/spf13/cobra"
 var voiceCmd = &cobra.Command{
 	Use:   "voice",
 	Short: "Voice — calls, conferences, multiparty, recordings, endpoints",
+	Args:  cobra.NoArgs,
+	RunE:  groupRunE,
 }
 
 // sms10dlcCmd groups the US A2P 10DLC resources (brands/campaigns/links). It
@@ -19,6 +21,8 @@ var voiceCmd = &cobra.Command{
 var sms10dlcCmd = &cobra.Command{
 	Use:   "10dlc",
 	Short: "US A2P 10DLC registration — brands, campaigns, links",
+	Args:  cobra.NoArgs,
+	RunE:  groupRunE,
 }
 
 func init() {

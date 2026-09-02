@@ -12,9 +12,22 @@ A single static Go binary for provisioning numbers, wiring voice-agent applicati
 - Send messages, run number lookups, manage verify sessions
 - Script everything — table for humans, JSON for pipelines, predictable exit codes for retries
 
-> **Status:** pre-release. Install one-liners activate once the first release is published.
-
 ## Install
+
+**Homebrew (macOS / Linux)** — recommended:
+
+```bash
+brew install plivo/tap/plivo
+```
+
+**Scoop (Windows):**
+
+```powershell
+scoop bucket add plivo https://github.com/plivo/homebrew-tap
+scoop install plivo
+```
+
+Or install the binary directly, no package manager needed.
 
 **macOS / Linux / WSL / Git Bash** — auto-detects OS and architecture:
 
@@ -27,6 +40,35 @@ curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | b
 ```powershell
 irm https://raw.githubusercontent.com/plivo/plivo-cli/main/install.ps1 | iex
 ```
+
+### Verifying a release
+
+Both installers check the SHA-256 checksums, and also verify who signed them
+when [cosign](https://docs.sigstore.dev/cosign/installation/) is present. To
+check by hand:
+
+```bash
+V=v0.3.0
+for f in SHA256SUMS SHA256SUMS.sig SHA256SUMS.pem; do
+  curl -fsSLO "https://github.com/plivo/plivo-cli/releases/download/$V/$f"
+done
+
+cosign verify-blob SHA256SUMS \
+  --signature SHA256SUMS.sig --certificate SHA256SUMS.pem \
+  --certificate-identity cx-tech@plivo.com \
+  --certificate-oidc-issuer https://accounts.google.com
+```
+
+`Verified OK` means the checksums genuinely came from Plivo. Pinning both the
+identity and the issuer is the point — without them, any valid Sigstore
+signature would pass.
+
+Releases before v0.3.0 are unsigned, so verification is skipped rather than
+failed for those.
+
+If you installed with `curl | bash` first and later switch to Homebrew, the
+older copy in `~/.local/bin` stays earlier on your `PATH` and keeps winning.
+Homebrew warns when it spots this — remove `~/.local/bin/plivo` to switch over.
 
 Both installers fetch the matching release binary (`darwin`/`linux`/`windows` × `amd64`/`arm64`). Override with `PLIVO_CLI_VERSION` (a release tag) or `PLIVO_INSTALL_DIR` (target directory).
 
@@ -170,6 +212,27 @@ The skill file lazy-loads on relevance — it only enters your context window wh
 - [`examples/`](examples/) — runnable scripts for common tasks
 - [`CHANGELOG.md`](CHANGELOG.md) — release-by-release changes
 - [plivo.com/docs](https://www.plivo.com/docs) — platform docs (XML grammar, webhooks, REST API reference)
+
+## Privacy & telemetry
+
+Every CLI request carries a small set of `X-Plivo-CLI-*` headers: CLI
+version / OS / arch (used for the upgrade nudge and usage stats), plus,
+when you're logged in, identity headers (email, auth ID, region, AOM
+UUID) so Plivo can attribute usage per account. These headers never
+carry flag values, argument values, or free-text bodies — those only
+travel in the actual Plivo API request you asked the CLI to make.
+
+Turn the identity headers off entirely:
+
+```bash
+plivo config telemetry off      # persists in ~/.plivo/config.toml
+export PLIVO_CLI_TELEMETRY=0    # or, for one shell session / CI job
+```
+
+`plivo config telemetry status` shows the current state. Version/OS/arch
+stay on either way — that's how the CLI knows when to nudge an upgrade.
+See [`docs/cli/feedback.md`](docs/cli/feedback.md) for what `plivo
+feedback` collects specifically.
 
 ## Support
 

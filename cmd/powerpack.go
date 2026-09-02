@@ -16,6 +16,8 @@ var powerpackCmd = &cobra.Command{
 	Use:     "powerpacks",
 	Aliases: []string{"pp", "powerpack"},
 	Short:   "Powerpacks — number pools for high-volume SMS",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (
@@ -76,6 +78,8 @@ var ppNumberCmd = &cobra.Command{
 	Use:     "numbers",
 	Aliases: []string{"number"},
 	Short:   "Manage numbers inside a powerpack",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (
@@ -148,7 +152,7 @@ func runPowerpackList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"UUID", "NAME", "STICKY", "LOCAL", "APP_TYPE", "CREATED"}}
 	for _, p := range resp.Objects {
@@ -175,7 +179,7 @@ func runPowerpackGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, p, nil)
+		return output.JSONRaw(os.Stdout, p.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"uuid", p.UUID},
@@ -210,6 +214,7 @@ func runPowerpackCreate(cmd *cobra.Command, args []string) error {
 		body["number_priority"] = ppCreateNumberPriority
 	}
 	var resp struct {
+		api.RawBody
 		APIID   string `json:"api_id"`
 		UUID    string `json:"uuid"`
 		Message string `json:"message"`
@@ -225,7 +230,7 @@ func runPowerpackCreate(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"uuid", resp.UUID},
@@ -323,7 +328,7 @@ func runPowerpackNumberList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"NUMBER", "COUNTRY", "TYPE", "ADDED"}}
 	for _, n := range resp.Objects {

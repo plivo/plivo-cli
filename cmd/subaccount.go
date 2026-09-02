@@ -16,6 +16,8 @@ var subaccountCmd = &cobra.Command{
 	Use:     "subaccounts",
 	Aliases: []string{"sub", "subaccount"},
 	Short:   "Manage subaccounts under the master account",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (
@@ -101,7 +103,7 @@ func runSubList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"AUTH_ID", "NAME", "ENABLED", "CREATED"}}
 	for _, s := range resp.Objects {
@@ -128,7 +130,7 @@ func runSubGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, s, nil)
+		return output.JSONRaw(os.Stdout, s.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"auth_id", s.AuthID},
@@ -149,6 +151,7 @@ func runSubCreate(cmd *cobra.Command, args []string) error {
 		"enabled": subCreateEnabled,
 	}
 	var resp struct {
+		api.RawBody
 		APIID     string `json:"api_id"`
 		AuthID    string `json:"auth_id"`
 		AuthToken string `json:"auth_token"`
@@ -165,7 +168,7 @@ func runSubCreate(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"auth_id", resp.AuthID},

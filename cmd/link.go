@@ -16,6 +16,8 @@ var linkCmd = &cobra.Command{
 	Use:     "links",
 	Aliases: []string{"link"},
 	Short:   "10DLC number-to-campaign linking",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (
@@ -90,7 +92,7 @@ func runLinkList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"LINK_ID", "NUMBER", "CAMPAIGN_ID", "STATUS", "CREATED"}}
 	for _, l := range resp.Objects {
@@ -109,6 +111,7 @@ func runLinkCreate(cmd *cobra.Command, args []string) error {
 		"campaign_id": linkCreateCampaign,
 	}
 	var resp struct {
+		api.RawBody
 		APIID   string `json:"api_id"`
 		LinkID  string `json:"link_id"`
 		Message string `json:"message"`
@@ -124,7 +127,7 @@ func runLinkCreate(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"link_id", resp.LinkID},

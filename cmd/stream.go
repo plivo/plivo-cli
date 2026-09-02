@@ -14,6 +14,8 @@ var streamCmd = &cobra.Command{
 	Use:     "streams",
 	Aliases: []string{"stream"},
 	Short:   "Live audio streams on a call (WebSocket bridge for transcription / agents)",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var streamListCmd = &cobra.Command{
@@ -88,7 +90,7 @@ func runStreamList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"STREAM_ID", "STATUS", "TRACK", "STARTED"}}
 	for _, s := range resp.Objects {
@@ -115,7 +117,7 @@ func runStreamGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, s, nil)
+		return output.JSONRaw(os.Stdout, s.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"stream_id", s.StreamID},
@@ -156,6 +158,7 @@ func runStreamStart(cmd *cobra.Command, args []string) error {
 	}
 
 	var resp struct {
+		api.RawBody
 		APIID    string `json:"api_id"`
 		Message  string `json:"message"`
 		StreamID string `json:"stream_id"`
@@ -171,7 +174,7 @@ func runStreamStart(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"stream_id", resp.StreamID},

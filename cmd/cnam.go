@@ -47,7 +47,7 @@ func runCnam(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, c, nil)
+		return output.JSONRaw(os.Stdout, c.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"number", c.Number},

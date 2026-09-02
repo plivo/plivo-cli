@@ -23,6 +23,8 @@ itself — they don't act on an existing call-bound stream.
   forward   Temporarily redirect an app's answer_url to a local tunnel
             so a real call's audio streams into your local WebSocket
             handler. Restores the original answer_url on Ctrl+C.`,
+	Args: cobra.NoArgs,
+	RunE: groupRunE,
 }
 
 func init() {

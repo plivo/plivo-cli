@@ -2,6 +2,9 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/plivo/plivo-cli/internal/api"
@@ -129,5 +132,38 @@ func TestBuddySession_reset(t *testing.T) {
 	s.record("user", "c")
 	if len(s.history) != 1 || s.history[0].Text != "c" {
 		t.Errorf("history after reset+record = %+v, want one turn 'c'", s.history)
+	}
+}
+
+// The non-TTY default (no explicit -o) must not block -i — only an EXPLICIT
+// -o json should, since the renderer always prints plain chat text anyway.
+func TestRunInteractiveAsk_nonTTYDefault_notRejected(t *testing.T) {
+	orig := outputFormat
+	outputFormat = ""
+	defer func() { outputFormat = orig }()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	client := &api.Client{BaseURL: srv.URL, HTTP: &http.Client{}}
+
+	var err error
+	stdinTokenFn(t, "", func() { // immediate EOF, like Ctrl-D
+		err = runInteractiveAsk(client, srv.URL+"/chat", "")
+	})
+	if err != nil {
+		t.Errorf("expected nil (clean EOF exit), got: %v", err)
+	}
+}
+
+func TestRunInteractiveAsk_explicitJSON_stillRejected(t *testing.T) {
+	orig := outputFormat
+	outputFormat = "json"
+	defer func() { outputFormat = orig }()
+
+	err := runInteractiveAsk(&api.Client{}, "http://example.invalid/chat", "")
+	if err == nil || !strings.Contains(err.Error(), "can't be combined with -o json") {
+		t.Errorf("expected the -o json rejection, got: %v", err)
 	}
 }

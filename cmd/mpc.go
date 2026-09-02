@@ -16,6 +16,8 @@ var mpcCmd = &cobra.Command{
 	Use:     "multiparty",
 	Aliases: []string{"mpc"},
 	Short:   "Multi-Party Calls (MPC) — group voice rooms with dynamic participants",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (
@@ -61,6 +63,8 @@ var mpcParticipantCmd = &cobra.Command{
 	Use:     "participant",
 	Aliases: []string{"part"},
 	Short:   "Per-participant actions inside an MPC",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (
@@ -171,7 +175,7 @@ func runMPCList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"MPC_UUID", "NAME", "STATUS", "BILLING", "CREATED"}}
 	for _, m := range resp.Objects {
@@ -198,7 +202,7 @@ func runMPCGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, m, nil)
+		return output.JSONRaw(os.Stdout, m.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"mpc_uuid", m.MPCUUID},
@@ -230,6 +234,7 @@ func runMPCCreate(cmd *cobra.Command, args []string) error {
 	applyDryRun(client, dryRun)
 
 	var resp struct {
+		api.RawBody
 		APIID   string `json:"api_id"`
 		MPCUUID string `json:"mpc_uuid"`
 		Message string `json:"message"`
@@ -245,7 +250,7 @@ func runMPCCreate(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"mpc_uuid", resp.MPCUUID},
@@ -297,7 +302,7 @@ func runMPCPartList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"PARTICIPANT_ID", "FROM", "TO", "CALL_UUID", "MUTED", "HOLD", "ROLE"}}
 	for _, p := range resp.Objects {

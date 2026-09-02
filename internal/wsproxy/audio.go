@@ -28,7 +28,7 @@ type StartInner struct {
 }
 
 type MediaFormat struct {
-	Encoding   string `json:"encoding"`   // "audio/x-mulaw" | "audio/l16"
+	Encoding   string `json:"encoding"`   // "audio/x-mulaw" | "audio/x-l16"
 	SampleRate int    `json:"sampleRate"` // 8000 | 16000
 	Channels   int    `json:"channels"`   // 1
 }

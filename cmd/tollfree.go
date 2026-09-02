@@ -15,6 +15,8 @@ var tollfreeCmd = &cobra.Command{
 	Use:     "tollfree",
 	Aliases: []string{"tfv"},
 	Short:   "Toll-free verification (US TFN messaging compliance)",
+	Args:    cobra.NoArgs,
+	RunE:    groupRunE,
 }
 
 var (
@@ -85,7 +87,7 @@ func runTfvList(cmd *cobra.Command, args []string) error {
 		q.Set("status", tfvListStatus)
 	}
 	var resp api.TollFreeVerificationList
-	apiErr, err := client.Do("GET", client.AccountURL("TollFreeVerification"), nil, q, &resp)
+	apiErr, err := client.Do("GET", client.AccountURL("TollfreeVerification"), nil, q, &resp)
 	if err != nil {
 		return err
 	}
@@ -96,7 +98,7 @@ func runTfvList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"PROFILE_UUID", "BUSINESS", "USE_CASE", "VOLUME", "STATUS", "CREATED"}}
 	for _, t := range resp.Objects {
@@ -112,7 +114,7 @@ func runTfvGet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	var t api.TollFreeVerification
-	apiErr, err := client.Do("GET", client.AccountURL("TollFreeVerification", id), nil, nil, &t)
+	apiErr, err := client.Do("GET", client.AccountURL("TollfreeVerification", id), nil, nil, &t)
 	if err != nil {
 		return err
 	}
@@ -123,7 +125,7 @@ func runTfvGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, t, nil)
+		return output.JSONRaw(os.Stdout, t.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"profile_uuid", t.ProfileUUID},
@@ -164,11 +166,12 @@ func runTfvSubmit(cmd *cobra.Command, args []string) error {
 	}
 
 	var resp struct {
+		api.RawBody
 		APIID       string `json:"api_id"`
 		ProfileUUID string `json:"profile_uuid"`
 		Message     string `json:"message"`
 	}
-	apiErr, err := client.Do("POST", client.AccountURL("TollFreeVerification"), body, nil, &resp)
+	apiErr, err := client.Do("POST", client.AccountURL("TollfreeVerification"), body, nil, &resp)
 	if err != nil {
 		return err
 	}
@@ -179,7 +182,7 @@ func runTfvSubmit(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"profile_uuid", resp.ProfileUUID},

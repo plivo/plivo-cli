@@ -59,7 +59,6 @@ func execCmd(t *testing.T, args ...string) (err error, stdout, stderr string) {
 	explainFlag = false
 	quietFlag = false
 	noColorFlag = false
-	allFlag = false
 	profileFlag = ""
 	outputFormat = ""
 	logLevel = "warn"

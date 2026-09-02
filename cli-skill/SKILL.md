@@ -7,13 +7,13 @@ description: Use the `plivo` CLI binary instead of raw curl for any Plivo task �
 
 Single Go binary on PATH (installed as `plivo`). Prefer the CLI over curl — the JSON output is ~10x cheaper to consume than raw REST and the error envelope is stable across commands. For any endpoint the CLI doesn't wrap, use the generic `plivo api` escape hatch (below) rather than curl.
 
-> Compatible with plivo-cli v0.1.2. Run `plivo --version` to detect mismatch; reinstall the CLI to refresh this skill.
+> Compatible with plivo-cli v0.3.0. Run `plivo --version` to detect mismatch; reinstall the CLI to refresh this skill.
 
 ## If you are an AI agent
 
 - `export PLIVO_FEEDBACK_PROMPT=0` and `CI=1` before any command (suppresses the feedback prompt and any TTY-only interactives).
 - Auth headlessly: `export PLIVO_AUTH_ID` + `PLIVO_AUTH_TOKEN` — browser `plivo login` will not work in an agent / CI context.
-- Always pass `-o json`. Success: `{"data": <payload>}` (plus optional `"meta"` for lists) on stdout, exit 0. Error: `{"error": {"code", "message", "hint", "retryable", "status_code", ...}}` on stderr, non-zero exit.
+- Always pass `-o json`. Success: `{"data": <the API response, verbatim>}` on stdout, exit 0 — for lists the rows are at `data.objects`, with paging at `data.meta`. Error: `{"error": {"code", "message", "hint", "retryable", "status_code", ...}}` on stderr, non-zero exit.
 - Never invoke interactive commands: `plivo login` (browser flow), bare `plivo feedback` (prompts).
 - Multiple message recipients use `<` as the separator, **quoted**: `--dst "+14155551111<+14155552222"`. (This is Plivo's native delimiter — the CLI passes `dst` through verbatim. Commas do NOT work.)
 - Preview any spend command with `--dry-run` first; add `--yes` to actually execute.
@@ -42,6 +42,16 @@ Single Go binary on PATH (installed as `plivo`). Prefer the CLI over curl — th
 - Voice streaming developer-loop (`voice streams test`, `voice streams forward`).
 - Login + credential management.
 - About to write a curl against `api.plivo.com` → stop, check `plivo --help` / `plivo api` first.
+
+## Other Plivo skills
+
+This file covers the CLI itself. Three product skills cover the work you do with it, each a separate install:
+
+- `plivo-audio-streaming` — connect a WebSocket voice bot to phone calls with `<Stream>`, and debug one that fails.
+- `plivo-sip-trunking` — connect LiveKit, ElevenLabs, Retell or Vapi to phone calls over SIP trunking.
+- `plivo-voice-xml` — write the XML your answer URL returns: IVRs, call routing, recording, conferences.
+
+Install any of them with `npx skills add https://www.plivo.com/docs --skill <name>`.
 
 ## Installation — if `plivo` is not on PATH
 
@@ -99,15 +109,19 @@ This skill ships with each plivo-cli release; reinstall the CLI to update.
 | `--profile <name>` | string | active profile | invoke against a non-active profile for this call only |
 | `-o, --output <fmt>` | `table\|json` | `table` on TTY, `json` when piped | force JSON for scripts |
 | `--dry-run` | bool | false | (API-backed commands) print the HTTP request and exit 0 — preview without spending |
-| `--explain` | bool | false | (API-backed commands) narrate in plain English before executing |
 | `-y, --yes` | bool | false | confirm spend / destructive verbs (refused otherwise) |
 | `-q, --quiet` | bool | false | suppress non-data output (banners, hints) |
 | `--no-color` | bool | false | strip ANSI from output |
 | `--log-level <level>` | `debug\|info\|warn\|error\|none` | `warn` | `debug` prints outbound URLs to stderr |
 | `--timeout <sec>` | int | 30 | per-request timeout |
-| `--all` | bool | false | auto-paginate list ops |
 
-`--dry-run` and `--explain` apply to API-backed commands — they're no-ops for `login`, `ask`, `upgrade`, `voice streams test`, and similar non-REST flows.
+`--dry-run` applies to API-backed commands — it's a no-op for `login`, `ask`, `upgrade`, `voice streams test`, and similar non-REST flows.
+
+### `--explain` — narrate before executing (not universal)
+
+Unlike the flags above, `--explain` is a **local** flag registered on only these commands; anywhere else it's rejected with `unknown flag: --explain`:
+
+`plivo api`, `plivo account applications create`, `plivo auth whoami`, `plivo voice calls make`, `plivo messaging {sms,mms,whatsapp} send`, `plivo numbers buy`, `plivo numbers release`, `plivo verify sessions create`.
 
 ## Top-level command map
 
@@ -178,11 +192,23 @@ Delete a profile + best-effort remove its token from the keychain. With no arg �
 - **Stable error envelope** on stderr: `{"error":{"code", "message", "hint", "retryable", "status_code", ...}}`. Switch on `code`, never message text.
 - **Verify before inventing**: `plivo <cmd> --help` is the source of truth. The CLI evolves; don't assume from memory.
 - **`--dry-run`** previews the exact HTTP request without sending. Works on every API-backed command.
-- **`--explain`** narrates the action in plain English before running.
+- **`--explain`** narrates the action in plain English before running — only on the commands listed under "Universal flags" above; everywhere else it's `unknown flag: --explain`.
 
 ## JSON output envelopes
 
-All commands with `-o json` emit a success envelope `{"data": <payload>}` (with an optional `"meta": {...}` for paginated lists) on stdout and exit 0. The shape of `payload` matches the command's underlying API resource. Failures emit `{"error": {"code", "message", "hint", "retryable", "status_code", "request_id", "docs_url", "context"}}` on stderr with a non-zero exit — see the [error-envelope cheatsheet](#error-envelope-cheatsheet) below.
+All commands with `-o json` emit `{"data": <the upstream API response, verbatim>}` on stdout and exit 0. Nothing is dropped or reshaped, so `data` matches the API docs exactly.
+
+For list commands that means the rows are nested, not at the top level:
+
+```
+{"data": {"api_id": "...", "meta": {"limit": 20, "offset": 0, ...}, "objects": [ {...} ]}}
+```
+
+So read `data.objects[]` for rows and `data.meta` for paging. Single-resource commands put the object straight at `data`.
+
+**Changed in v0.3.0:** `data` used to be the rows array itself with paging in a sibling `"meta"`, and it only carried the subset of fields the CLI had typed. If you were written against a v0.2.x CLI, `data[0]` is now `data.objects[0]`.
+
+Failures emit `{"error": {"code", "message", "hint", "retryable", "status_code", "request_id", "docs_url", "context"}}` on stderr with a non-zero exit — see the [error-envelope cheatsheet](#error-envelope-cheatsheet) below.
 
 ## Scripted / non-interactive use
 
@@ -253,7 +279,7 @@ plivo voice streams forward --number +1415... --app <APP_UUID> --to ws://localho
 
 **Send your first SMS**
 ```bash
-plivo numbers list --type local -o json | jq '.data[].number'  # pick a src
+plivo numbers list --type local -o json | jq '.data.objects[].number'  # pick a src
 plivo messaging sms send --src +1415... --dst +1415... --text "hi" --dry-run
 plivo messaging sms send --src +1415... --dst +1415... --text "hi" --yes
 ```
@@ -642,10 +668,10 @@ All envelopes carry `hint` + `retryable`. Unknown/unmapped codes exit 1.
 plivo voice calls get <uuid> -o json | jq '.data.duration'
 
 # Filter
-plivo numbers list -o json | jq '.data[] | select(.type=="local")'
+plivo numbers list -o json | jq '.data.objects[] | select(.type=="local")'
 
 # Pipe across calls
-APP_ID=$(plivo account applications list -o json | jq -r '.data[0].app_id')
+APP_ID=$(plivo account applications list -o json | jq -r '.data.objects[0].app_id')
 plivo numbers update +1... --app-id "$APP_ID" -o json
 ```
 

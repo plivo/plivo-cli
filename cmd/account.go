@@ -13,6 +13,8 @@ import (
 var accountCmd = &cobra.Command{
 	Use:   "account",
 	Short: "Inspect and update the active Plivo account",
+	Args:  cobra.NoArgs,
+	RunE:  groupRunE,
 }
 
 var accountGetCmd = &cobra.Command{
@@ -61,7 +63,7 @@ func runAccountGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, a, nil)
+		return output.JSONRaw(os.Stdout, a.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
 		{"auth_id", a.AuthID},

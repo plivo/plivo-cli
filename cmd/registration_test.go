@@ -236,13 +236,72 @@ func TestRequiredFlags(t *testing.T) {
 func TestRootPersistentFlags(t *testing.T) {
 	expected := []string{
 		"profile", "output", "quiet", "no-color", "log-level",
-		"yes", "dry-run", "explain", "timeout", "all",
+		"yes", "dry-run", "timeout",
 		// Additional admin-only persistent flags are verified in internal_registration_test.go.
+		// --explain is deliberately NOT here — see TestExplainFlag_* below.
 	}
 	for _, name := range expected {
 		t.Run(name, func(t *testing.T) {
 			if rootCmd.PersistentFlags().Lookup(name) == nil {
 				t.Errorf("persistent flag --%s missing on rootCmd", name)
+			}
+		})
+	}
+}
+
+// ─── --explain: local flag on exactly the commands that implement it ───────
+//
+// --explain used to be persistent, so all 172 commands silently accepted it
+// whether or not they read it. It's now registered locally (registerExplainFlag)
+// only on the commands below; everything else must reject it as an unknown flag.
+
+func TestExplainFlag_notPersistent(t *testing.T) {
+	if rootCmd.PersistentFlags().Lookup("explain") != nil {
+		t.Fatal("--explain must not be a persistent flag on rootCmd")
+	}
+}
+
+func TestExplainFlag_registeredOnImplementingCommands(t *testing.T) {
+	// Keep in sync with the `if explainFlag {` call sites in cmd/*.go.
+	paths := [][]string{
+		{"api"},
+		{"account", "applications", "create"},
+		{"auth", "whoami"},
+		{"voice", "calls", "make"},
+		{"messaging", "sms", "send"},
+		{"messaging", "mms", "send"},
+		{"messaging", "whatsapp", "send"},
+		{"numbers", "buy"},
+		{"numbers", "release"},
+		{"verify", "sessions", "create"},
+	}
+	for _, path := range paths {
+		t.Run(strings.Join(path, "_"), func(t *testing.T) {
+			cmd := findCmd(t, path...)
+			if cmd.Flags().Lookup("explain") == nil {
+				t.Errorf("plivo %s should register --explain locally", strings.Join(path, " "))
+			}
+		})
+	}
+}
+
+func TestExplainFlag_unsupportedCommandRejectsIt(t *testing.T) {
+	// A sample of commands that never read explainFlag. ParseFlags exercises
+	// the same local+inherited flag resolution cobra uses before RunE, so
+	// this proves --explain isn't silently accepted via inheritance anymore.
+	paths := [][]string{
+		{"numbers", "list"},
+		{"voice", "calls", "list"},
+		{"account", "get"},
+	}
+	for _, path := range paths {
+		t.Run(strings.Join(path, "_"), func(t *testing.T) {
+			cmd := findCmd(t, path...)
+			t.Cleanup(func() { resetAllFlags(rootCmd) })
+			if err := cmd.ParseFlags([]string{"--explain"}); err == nil {
+				t.Errorf("plivo %s should reject --explain (unknown flag)", strings.Join(path, " "))
+			} else if !strings.Contains(err.Error(), "unknown flag") {
+				t.Errorf("plivo %s: expected an unknown-flag error, got: %v", strings.Join(path, " "), err)
 			}
 		})
 	}
@@ -352,6 +411,41 @@ func TestEveryRegisteredCmd_hasShortDescription(t *testing.T) {
 		}
 	}
 	visit(rootCmd)
+}
+
+// ─── Group commands reject an unknown subcommand instead of exiting 0 ───────
+
+// TestGroupCommands_rejectUnknownSubcommand walks the whole tree and, for
+// every command that only groups subcommands, checks that an unrecognized
+// trailing token errors instead of printing help and exiting 0. Cobra's
+// own default (legacyArgs, in the vendored library) only does this check
+// for the true root — every other parent command needs its own Args +
+// RunE. See voice_streams_test.go for the specific case that surfaced
+// this. "help"/"completion" are cobra's own auto-added commands, not ours
+// to fix.
+func TestGroupCommands_rejectUnknownSubcommand(t *testing.T) {
+	setFakeCreds(t)
+
+	var walk func(c *cobra.Command, path []string)
+	walk = func(c *cobra.Command, path []string) {
+		for _, child := range c.Commands() {
+			if child.Name() == "help" || child.Name() == "completion" {
+				continue
+			}
+			childPath := append(append([]string(nil), path...), child.Name())
+			if child.HasSubCommands() {
+				t.Run(strings.Join(childPath, "_"), func(t *testing.T) {
+					args := append(append([]string(nil), childPath...), "this-subcommand-does-not-exist")
+					err, _, _ := execCmd(t, args...)
+					if err == nil {
+						t.Errorf("plivo %s — unknown subcommand accepted silently (help + exit 0) instead of erroring", strings.Join(args, " "))
+					}
+				})
+			}
+			walk(child, childPath)
+		}
+	}
+	walk(rootCmd, nil)
 }
 
 // findCmdNoFail is a non-fatal variant of findCmd for batch checks where we

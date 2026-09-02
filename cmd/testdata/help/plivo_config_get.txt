@@ -1,0 +1,17 @@
+Print a CLI setting
+
+Usage:
+  plivo config get <key> [flags]
+
+Flags:
+  -h, --help   help for get
+
+Global Flags:
+      --dry-run            print the HTTP request without sending
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts
