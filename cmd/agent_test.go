@@ -7,11 +7,12 @@ import (
 	"testing"
 )
 
-// The agents commands talk to the production gateway baked into
-// api.DefaultBaseURL — there is deliberately no way to redirect them at
-// runtime, so HTTP-level behaviour is covered in internal/api (where BaseURL
-// is settable directly) rather than through the command layer. What is
-// asserted here is the argument handling that runs BEFORE any request.
+// This file covers argument handling that runs BEFORE any request — no
+// server involved. HTTP-level behaviour (request shape) is covered in
+// internal/api, where Client.BaseURL is settable directly; end-to-end
+// behaviour against a fake server (e.g. --all's page walk, in
+// agent_pagination_test.go) goes through the cmd-layer clientForTest hook
+// in root.go, same as every other command's httptest-backed test.
 
 func TestAgentsCreate_requiresNameFromFlagOrFile(t *testing.T) {
 	setFakeCreds(t)
