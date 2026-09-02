@@ -1,0 +1,30 @@
+Create a new agent flow.
+
+--name is required unless --file supplies a top-level "name". Flags always
+win over the file's fields when both are set. The server may store a
+different name than requested if it collides with an existing one (it
+silently appends " 1", " 2", etc.) — the stored name is always shown.
+
+Usage:
+  plivo agents create [flags]
+
+Examples:
+  plivo agents create --name "Order Status Agent"
+  plivo agents create --name "Order Status Agent" --file flow.json
+  plivo agents create --file flow.json   # flow.json supplies "name" itself
+
+Flags:
+      --description string   agent description
+      --file string          JSON file with the flow graph ({name, description, nodes, connections}); flags win over its fields
+  -h, --help                 help for create
+      --name string          agent name (required unless --file supplies one)
+
+Global Flags:
+      --dry-run            print the HTTP request without sending
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts

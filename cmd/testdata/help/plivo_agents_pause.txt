@@ -1,10 +1,10 @@
-AI voice agents — coming soon.
+Pause an ACTIVE agent flow so it stops handling traffic
 
 Usage:
-  plivo agent [flags]
+  plivo agents pause <agent_id> [flags]
 
 Flags:
-  -h, --help   help for agent
+  -h, --help   help for pause
 
 Global Flags:
       --dry-run            print the HTTP request without sending

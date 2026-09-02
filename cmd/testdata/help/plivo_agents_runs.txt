@@ -1,14 +1,15 @@
-Manage the plivo-cli agent skill
+Inspect runs (executions) of an agent flow
 
 Usage:
-  plivo skill [flags]
-  plivo skill [command]
+  plivo agents runs [flags]
+  plivo agents runs [command]
 
 Available Commands:
-  install     Install an agent skill so coding agents auto-load the reference
+  get         Get one run of an agent flow (status, logs, goal metrics)
+  list        List runs of an agent flow
 
 Flags:
-  -h, --help   help for skill
+  -h, --help   help for runs
 
 Global Flags:
       --dry-run            print the HTTP request without sending
@@ -20,4 +21,4 @@ Global Flags:
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts
 
-Use "plivo skill [command] --help" for more information about a command.
+Use "plivo agents runs [command] --help" for more information about a command.

@@ -1,0 +1,21 @@
+{
+  "api_id": "a",
+  "meta": {
+    "limit": 1,
+    "offset": 0,
+    "next": "/v1/Account/MANDGYMZNMYWQTZTA4NS/AgentFlow/?limit=1&offset=1",
+    "previous": null,
+    "total_count": 36
+  },
+  "objects": [
+    {
+      "agent_uuid": "9fc4413f-e917-4924-a532-8402168c4974",
+      "name": "demo sms auto-reply - loom",
+      "state": "DRAFT",
+      "flow_type": "incoming_sms",
+      "version": 1,
+      "created_at": "2026-07-28 07:10:51.000000+00:00",
+      "resource_uri": "/v1/Account/MANDGYMZNMYWQTZTA4NS/AgentFlow/9fc4413f-e917-4924-a532-8402168c4974/"
+    }
+  ]
+}

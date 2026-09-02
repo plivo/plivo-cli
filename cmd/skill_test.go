@@ -4,8 +4,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	agentsskill "github.com/plivo/plivo-cli/agents-skill"
 	cliskill "github.com/plivo/plivo-cli/cli-skill"
 )
 
@@ -15,7 +17,7 @@ func TestResolveSkillDir(t *testing.T) {
 	t.Setenv("USERPROFILE", home) // Windows
 
 	t.Run("default lands under ~/.claude/skills/plivo-cli", func(t *testing.T) {
-		got, err := resolveSkillDir("")
+		got, err := resolveSkillDir("", "plivo-cli")
 		if err != nil {
 			t.Fatalf("resolveSkillDir(\"\"): %v", err)
 		}
@@ -27,7 +29,7 @@ func TestResolveSkillDir(t *testing.T) {
 
 	t.Run("absolute override is returned as-is", func(t *testing.T) {
 		override := filepath.Join(t.TempDir(), "agent", "plivo-cli")
-		got, err := resolveSkillDir(override)
+		got, err := resolveSkillDir(override, "plivo-cli")
 		if err != nil {
 			t.Fatalf("resolveSkillDir(%q): %v", override, err)
 		}
@@ -37,7 +39,7 @@ func TestResolveSkillDir(t *testing.T) {
 	})
 
 	t.Run("tilde override expands to home", func(t *testing.T) {
-		got, err := resolveSkillDir("~/agent/plivo-cli")
+		got, err := resolveSkillDir("~/agent/plivo-cli", "plivo-cli")
 		if err != nil {
 			t.Fatalf("resolveSkillDir(tilde): %v", err)
 		}
@@ -124,5 +126,83 @@ func TestSkillInstall_printToStdout(t *testing.T) {
 	// --print must not install.
 	if _, err := os.Stat(filepath.Join(dir, skillFileName)); !os.IsNotExist(err) {
 		t.Errorf("--print wrote a file (stat err = %v), want it absent", err)
+	}
+}
+
+// The agents skill installs into its OWN directory, so it cannot collide with
+// the CLI skill — both files are named SKILL.md and a shared directory would
+// silently leave whichever was written last.
+func TestSkillInstall_agentsSelectorUsesItsOwnDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Cleanup(func() { skillDir = ""; skillPrint = false; dryRunFlag = false })
+
+	if err := runSkillInstall(nil, []string{"agents"}); err != nil {
+		t.Fatalf("install agents: %v", err)
+	}
+	dest := filepath.Join(home, ".claude", "skills", "plivo-cx-agents", skillFileName)
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("read %s: %v", dest, err)
+	}
+	if string(got) != agentsskill.SkillMD {
+		t.Errorf("installed agents skill differs from embedded (%d vs %d bytes)",
+			len(got), len(agentsskill.SkillMD))
+	}
+	// The CLI skill must NOT have been written by an `agents` install.
+	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "plivo-cli", skillFileName)); err == nil {
+		t.Error("install agents also wrote the CLI skill")
+	}
+}
+
+func TestSkillInstall_allWritesBothToSeparateDirs(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Cleanup(func() { skillDir = ""; skillPrint = false; dryRunFlag = false })
+
+	if err := runSkillInstall(nil, []string{"all"}); err != nil {
+		t.Fatalf("install all: %v", err)
+	}
+	for dir, want := range map[string]string{
+		"plivo-cli":       cliskill.SkillMD,
+		"plivo-cx-agents": agentsskill.SkillMD,
+	} {
+		got, err := os.ReadFile(filepath.Join(home, ".claude", "skills", dir, skillFileName))
+		if err != nil {
+			t.Fatalf("read %s: %v", dir, err)
+		}
+		if string(got) != want {
+			t.Errorf("%s: content mismatch (%d vs %d bytes)", dir, len(got), len(want))
+		}
+	}
+}
+
+// --dir names a single destination, so "all" would write both skills over each
+// other. That must be an error, not a silent overwrite.
+func TestSkillInstall_allRejectsDirAndPrint(t *testing.T) {
+	t.Cleanup(func() { skillDir = ""; skillPrint = false; dryRunFlag = false })
+
+	skillDir = t.TempDir()
+	if err := runSkillInstall(nil, []string{"all"}); err == nil {
+		t.Error("all + --dir must error rather than overwrite one skill with the other")
+	}
+	skillDir = ""
+
+	skillPrint = true
+	if err := runSkillInstall(nil, []string{"all"}); err == nil {
+		t.Error("all + --print must error rather than concatenate two skills")
+	}
+}
+
+func TestSkillInstall_unknownSelectorIsRejected(t *testing.T) {
+	t.Cleanup(func() { skillDir = ""; skillPrint = false; dryRunFlag = false })
+	err := runSkillInstall(nil, []string{"nope"})
+	if err == nil {
+		t.Fatal("unknown selector must error")
+	}
+	if !strings.Contains(err.Error(), "agents") {
+		t.Errorf("error should list the available skills, got: %v", err)
 	}
 }

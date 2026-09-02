@@ -1,0 +1,49 @@
+Manage AI agent flows: node-graph-based voice/chat/message agents.
+
+An agent is a graph of typed nodes (see 'agents nodes list' for the
+catalogue) wired together with connections. Build or edit the graph with
+--file, a JSON document shaped like:
+
+  {"name": "...", "description": "...", "nodes": [...], "connections": [...]}
+
+Every node must be referenced by at least one connection or the API
+rejects the request with 422, naming the orphaned node id(s). Connections
+reference "<node_id>.<handle>" (e.g. "start-1.message") — a bare node id
+with no handle is a 400.
+
+Note: subaccount credentials are not supported for this API (403) — use
+master account credentials.
+
+Usage:
+  plivo agents [flags]
+  plivo agents [command]
+
+Aliases:
+  agents, agent
+
+Available Commands:
+  create      Create a new agent flow
+  delete      Delete an agent flow (requires --yes)
+  get         Get an agent flow's full definition (fields, nodes, connections)
+  list        List agent flows
+  nodes       Browse the AI-agent node catalogue (types available for flow graphs)
+  pause       Pause an ACTIVE agent flow so it stops handling traffic
+  publish     Publish an agent flow, moving it from DRAFT to ACTIVE
+  resume      Resume a PAUSED agent flow, returning it to ACTIVE
+  runs        Inspect runs (executions) of an agent flow
+  update      Rename an agent flow, or replace its graph
+
+Flags:
+  -h, --help   help for agents
+
+Global Flags:
+      --dry-run            print the HTTP request without sending
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts
+
+Use "plivo agents [command] --help" for more information about a command.

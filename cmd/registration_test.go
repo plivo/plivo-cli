@@ -42,11 +42,12 @@ func isFlagRequired(cmd *cobra.Command, flagName string) bool {
 
 func TestRootCmd_allTopLevelGroupsRegistered(t *testing.T) {
 	// The public-v1 top-level surface under `plivo` after the three-segment
-	// grammar: service groups (voice/sms) + standalone services. `agent` is a
-	// coming-soon stub; commands not registered in this build are verified
+	// grammar: service groups (voice/sms) + standalone services. `agents`
+	// (alias `agent`, for continuity with the old coming-soon stub) is the
+	// public Agents API. Commands not registered in this build are verified
 	// separately in internal_registration_test.go.
 	groups := []string{
-		"account", "agent", "api", "ask", "auth", "feedback", "login", "logout", "lookup", "messaging", "numbers", "support", "upgrade", "verify", "voice",
+		"account", "agents", "api", "ask", "auth", "feedback", "login", "logout", "lookup", "messaging", "numbers", "support", "upgrade", "verify", "voice",
 	}
 	for _, g := range groups {
 		t.Run(g, func(t *testing.T) {
@@ -94,8 +95,7 @@ func TestSubcommands_registered(t *testing.T) {
 		{"messaging sms 10dlc links", []string{"list", "create", "delete"}},
 		{"messaging sms tollfree", []string{"list", "get", "submit"}},
 		{"messaging sms powerpacks", []string{"list", "get", "create", "update", "delete", "numbers"}},
-		// `agent` subcommands are not registered in this build; the public
-		// build ships a flat coming-soon stub with no subcommands.
+		{"agents", []string{"create", "list", "get", "update", "delete"}},
 	}
 	for _, tc := range cases {
 		t.Run(strings.ReplaceAll(tc.path, " ", "_"), func(t *testing.T) {
@@ -119,7 +119,9 @@ func TestNestedSubcommands_registered(t *testing.T) {
 		"voice conferences member":         {"kick", "mute", "unmute", "deaf", "undeaf", "play", "stop-play", "speak", "stop-speak"},
 		"voice multiparty participant":     {"list", "add", "kick", "mute", "unmute", "hold", "unhold"},
 		"messaging sms powerpacks numbers": {"list", "add", "remove"},
-		// `auth token` + `agent session` are not registered in this build (see internal_registration_test.go).
+		"agents runs":                      {"list", "get"},
+		"agents nodes":                     {"list", "get"},
+		// `auth token` is not registered in this build (see internal_registration_test.go).
 	}
 	for path, verbs := range nests {
 		path := path
@@ -166,6 +168,7 @@ func TestInContextAliases_resolve(t *testing.T) {
 		{[]string{"account", "app"}, "applications"},
 		{[]string{"numbers", "mask"}, "masking"},
 		{[]string{"verify", "session"}, "sessions"},
+		{[]string{"agent"}, "agents"},
 	}
 	for _, tc := range cases {
 		t.Run(strings.Join(tc.path, "_"), func(t *testing.T) {
@@ -353,6 +356,12 @@ func TestArgsValidators(t *testing.T) {
 		{[]string{"voice", "calls", "streams", "get"}, "streams get <call_uuid> <stream_id>", 2, true, false},
 		{[]string{"voice", "conferences", "member", "kick"}, "kick <conf> <member>", 2, true, false},
 		{[]string{"voice", "multiparty", "participant", "kick"}, "participant kick <mpc> <part>", 2, true, false},
+		{[]string{"agents", "get"}, "agents get <agent_id>", 1, true, false},
+		{[]string{"agents", "update"}, "agents update <agent_id>", 1, true, false},
+		{[]string{"agents", "delete"}, "agents delete <agent_id>", 1, true, false},
+		{[]string{"agents", "runs", "list"}, "agents runs list <agent_id>", 1, true, false},
+		{[]string{"agents", "runs", "get"}, "agents runs get <agent_id> <run_id>", 2, true, false},
+		{[]string{"agents", "nodes", "get"}, "agents nodes get <node_type>", 1, true, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.desc, func(t *testing.T) {

@@ -29,6 +29,10 @@ var (
 	explainFlag bool
 	timeoutSec  int
 	adminServer string
+	// allFlag backs --all. Registered locally (not persistent) by
+	// registerAllFlag — see the removal note on that function for why this
+	// is not a persistent flag.
+	allFlag bool
 )
 
 var rootCmd = &cobra.Command{
@@ -173,6 +177,16 @@ func init() {
 // everything else should reject the flag rather than silently ignore it.
 func registerExplainFlag(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&explainFlag, "explain", false, "narrate in plain English before executing")
+}
+
+// registerAllFlag adds a local (non-persistent) --all flag to cmd. Call this
+// only on list commands whose RunE actually walks every page — --all used to
+// be persistent on rootCmd and silently did nothing on the ~172 commands
+// (including every list command) that never read it; it was removed rather
+// than wired up everywhere at once. Wire it back one list command at a time,
+// the same way --explain was scoped down via registerExplainFlag.
+func registerAllFlag(cmd *cobra.Command) {
+	cmd.Flags().BoolVar(&allFlag, "all", false, "auto-paginate through all pages")
 }
 
 // credSource records which source supplied the credentials ("env" or a profile
