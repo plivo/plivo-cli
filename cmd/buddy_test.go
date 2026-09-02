@@ -237,6 +237,45 @@ func TestBuddyRenderer_jsonMode_terminatesOnDone(t *testing.T) {
 	}
 }
 
+// The switch in handle() has no default case, so an event name it doesn't
+// recognize falls through to the final `return true` — the stream keeps
+// going and nothing is printed. Covers both a hypothetical renamed/future
+// server event and any other unexpected event name.
+func TestBuddyRenderer_unknownEvent_gracefulNoErrorNoTerminate(t *testing.T) {
+	var out, err bytes.Buffer
+	r := &buddyRenderer{out: &out, err: &err, startedAt: time.Now()}
+	if !r.handle(api.SSEEvent{Event: "some_future_event", Data: `{"whatever":true}`}) {
+		t.Error("an unrecognized event must not terminate the stream")
+	}
+	if r.errorSeen {
+		t.Error("an unrecognized event must not be treated as an error")
+	}
+	if out.Len() != 0 || err.Len() != 0 {
+		t.Errorf("an unrecognized event should print nothing, got out=%q err=%q", out.String(), err.String())
+	}
+}
+
+// `done` and `final` are alternate terminators for two different contracts
+// (PAI vs legacy) — a stream only ever emits one, never both. Confirm `done`
+// arriving after tokens already streamed live doesn't reprint or drop them.
+func TestBuddyRenderer_doneAfterStreamedTokens_noDoublePrint(t *testing.T) {
+	var out, err bytes.Buffer
+	r := &buddyRenderer{out: &out, err: &err, startedAt: time.Now()}
+	r.handle(api.SSEEvent{Event: "start", Data: `{}`})
+	r.handle(api.SSEEvent{Event: "token", Data: `{"text":"Hello "}`})
+	r.handle(api.SSEEvent{Event: "token", Data: `{"text":"world"}`})
+	if cont := r.handle(api.SSEEvent{Event: "done", Data: `{}`}); cont {
+		t.Error("done should terminate the stream")
+	}
+	o := out.String()
+	if n := strings.Count(o, "Hello world"); n != 1 {
+		t.Errorf("streamed answer should appear exactly once, got %d in:\n%s", n, o)
+	}
+	if !r.streamed {
+		t.Error("streamed should stay true — tokens arrived before done")
+	}
+}
+
 // `support` lists "your" past escalations — that needs a human identity
 // (AomUUID), which only a browser login populates. Env-var / manually
 // entered creds have none, so the command must refuse with a clear error
