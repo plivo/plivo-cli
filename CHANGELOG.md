@@ -5,6 +5,29 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-09-02
+
+### Fixed
+
+- The agent skill file taught the retired JSON shape. Three of its own
+  examples still used `.data[]` for list commands, which v0.3.0 moved to
+  `.data.objects[]` — the same file that documents the change. An agent
+  installing the skill and copying an example got
+  `Cannot index string with string "number"`. A test now runs the file's
+  examples, so this cannot ship again.
+- `--explain` was a global flag that only 7 commands implemented, so on the
+  other 165 it was silently ignored — the same defect that got `--all`
+  removed in v0.3.0. It is now registered only on the commands that support
+  it (`api`, `applications create`, `auth whoami`, `calls make`,
+  `messaging send`, `numbers buy`, `numbers release`); elsewhere it returns
+  `unknown flag: --explain` instead of pretending.
+
+### Added
+
+- The skill file now points at the three product skills
+  (`plivo-audio-streaming`, `plivo-sip-trunking`, `plivo-voice-xml`), which
+  an agent installing the CLI skill previously had no way to discover.
+
 ## [0.4.0] - 2026-08-31
 
 ### Added
@@ -243,7 +266,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   downloads the binary + checksums to a temp dir, compares via
   `Get-FileHash`, and only installs on a match.
 
-[Unreleased]: https://github.com/plivo/plivo-cli/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/plivo/plivo-cli/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/plivo/plivo-cli/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/plivo/plivo-cli/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/plivo/plivo-cli/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/plivo/plivo-cli/releases/tag/v0.2.0
