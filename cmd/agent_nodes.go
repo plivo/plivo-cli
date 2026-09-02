@@ -16,6 +16,8 @@ import (
 var agentNodesCmd = &cobra.Command{
 	Use:   "nodes",
 	Short: "Browse the AI-agent node catalogue (types available for flow graphs)",
+	Args:  cobra.NoArgs,
+	RunE:  groupRunE,
 }
 
 var agentNodesListCmd = &cobra.Command{
@@ -60,7 +62,7 @@ func runAgentFlowNodesList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"NODE_TYPE", "TITLE", "CATEGORY"}}
 	for _, n := range resp.Objects {
@@ -87,7 +89,7 @@ func runAgentFlowNodesGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, n, nil)
+		return output.JSONRaw(os.Stdout, n.Raw())
 	}
 	// json_schema is often large — table view summarises; use -o json for
 	// the full schema, examples, and coverage report.

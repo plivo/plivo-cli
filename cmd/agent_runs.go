@@ -17,6 +17,8 @@ import (
 var agentRunsCmd = &cobra.Command{
 	Use:   "runs",
 	Short: "Inspect runs (executions) of an agent flow",
+	Args:  cobra.NoArgs,
+	RunE:  groupRunE,
 }
 
 var (
@@ -41,6 +43,7 @@ var agentRunsGetCmd = &cobra.Command{
 func init() {
 	agentRunsListCmd.Flags().IntVar(&agentRunsListLimit, "limit", 20, "results per page (max 20)")
 	agentRunsListCmd.Flags().IntVar(&agentRunsListOffset, "offset", 0, "pagination offset")
+	registerAllFlag(agentRunsListCmd)
 
 	agentRunsCmd.AddCommand(agentRunsListCmd, agentRunsGetCmd)
 	agentCmd.AddCommand(agentRunsCmd)
@@ -64,11 +67,38 @@ func runAgentRunsList(cmd *cobra.Command, args []string) error {
 	if apiErr != nil {
 		return apiErr
 	}
+	// Mirrors runAgentList's page walk: the reviewer on this PR flagged
+	// --all working on 'agents list' but not here as "close before merge".
+	// Same server, same clamped-to-20 limit, same silent-truncation risk.
+	if allFlag && !dryRunFlag {
+		offset := agentRunsListOffset + len(resp.Objects)
+		for len(resp.Objects) < resp.Meta.TotalCount {
+			pq := url.Values{}
+			for k, v := range q {
+				pq[k] = v
+			}
+			pq.Set("offset", strconv.Itoa(offset))
+			var page api.AgentRunList
+			apiErr, err = client.Do("GET", client.AccountURL("AgentFlow", agentID, "Run"), nil, pq, &page)
+			if err != nil {
+				return err
+			}
+			if apiErr != nil {
+				return apiErr
+			}
+			if len(page.Objects) == 0 {
+				break
+			}
+			resp.Objects = append(resp.Objects, page.Objects...)
+			accumulateRawObjects(&resp, &page)
+			offset += len(page.Objects)
+		}
+	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"RUN_ID", "STATUS", "STARTED_AT", "ENDED_AT", "PLAYGROUND"}}
 	for _, r := range resp.Objects {
@@ -95,7 +125,7 @@ func runAgentRunsGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, r, nil)
+		return output.JSONRaw(os.Stdout, r.Raw())
 	}
 	// logs/goal_metrics are per-event-type shaped (varies with what the node
 	// emitted) — table view shows a count; use -o json for full detail.

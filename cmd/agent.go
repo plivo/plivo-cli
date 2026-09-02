@@ -36,6 +36,8 @@ with no handle is a 400.
 
 Note: subaccount credentials are not supported for this API (403) — use
 master account credentials.`,
+	Args: cobra.NoArgs,
+	RunE: groupRunE,
 }
 
 var (
@@ -107,7 +109,7 @@ var agentDeleteCmd = &cobra.Command{
 	RunE:  runAgentDelete,
 }
 
-// The three lifecycle verbs. hodor exposes Publish/Pause/Resume and the whole
+// The three lifecycle verbs. The API exposes Publish/Pause/Resume and the whole
 // DRAFT -> ACTIVE workflow pivots on Publish, so without these `agents create`
 // left you stuck in draft and forced a drop to raw curl -- the exact thing this
 // CLI exists to replace.
@@ -146,8 +148,8 @@ func runAgentLifecycle(verb, segment, agentID string) error {
 	if explainFlag {
 		fmt.Fprintf(os.Stderr, "Will POST %s\n", url)
 	}
-	// Deliberately no body: the action is fixed by the route, and core's handler
-	// opts into ALLOW_EMPTY_BODY precisely so these carry none.
+	// Deliberately no body: the action is fixed by the route, and the server
+	// accepts these routes without one.
 	var resp api.AgentActionResponse
 	apiErr, err := client.Do("POST", url, nil, nil, &resp)
 	if err != nil {
@@ -176,6 +178,7 @@ func init() {
 	agentListCmd.Flags().IntVar(&agentListOffset, "offset", 0, "pagination offset")
 	agentListCmd.Flags().StringVar(&agentListName, "name", "", "filter by name (substring match)")
 	agentListCmd.Flags().StringVar(&agentListState, "state", "", "filter by state (e.g. DRAFT, ACTIVE)")
+	registerAllFlag(agentListCmd)
 
 	agentUpdateCmd.Flags().StringVar(&agentUpdateName, "name", "", "rename the agent")
 	agentUpdateCmd.Flags().StringVar(&agentUpdateDescription, "description", "", "new description (must be paired with --file — see above)")
@@ -278,7 +281,7 @@ func runAgentCreate(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "note: name %q was already taken; stored as %q\n", requestedName, resp.Name)
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp, nil)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	if resp.Message != "" {
 		fmt.Fprintf(os.Stderr, "%s\n", resp.Message)
@@ -288,6 +291,44 @@ func runAgentCreate(cmd *cobra.Command, args []string) error {
 		{"name", resp.Name},
 		{"api_id", resp.APIID},
 	})
+}
+
+// accumulateRawObjects folds page's raw "objects" array onto dst's raw
+// envelope. dst.Objects (the typed slice) already has every row --all
+// fetched, which is all table mode needs; but -o json now renders straight
+// from the captured bytes (see RawBody/JSONRaw), so without this a page
+// walk would leave -o json showing only the first page — the exact "claims
+// to paginate, doesn't" defect that got the old --all removed, just moved
+// to the JSON path instead of table.
+//
+// Best-effort: leaves dst's raw body untouched (still valid JSON, just
+// first-page-only) if either side isn't the expected {"objects": [...]}
+// shape.
+func accumulateRawObjects(dst, page api.RawCapturer) {
+	var env map[string]json.RawMessage
+	if err := json.Unmarshal(dst.Raw(), &env); err != nil {
+		return
+	}
+	var objects []json.RawMessage
+	if err := json.Unmarshal(env["objects"], &objects); err != nil {
+		return
+	}
+	var pageEnv map[string]json.RawMessage
+	if err := json.Unmarshal(page.Raw(), &pageEnv); err != nil {
+		return
+	}
+	var pageObjects []json.RawMessage
+	if err := json.Unmarshal(pageEnv["objects"], &pageObjects); err != nil {
+		return
+	}
+	merged, err := json.Marshal(append(objects, pageObjects...))
+	if err != nil {
+		return
+	}
+	env["objects"] = merged
+	if out, err := json.Marshal(env); err == nil {
+		dst.SetRaw(out)
+	}
 }
 
 func runAgentList(cmd *cobra.Command, args []string) error {
@@ -343,6 +384,7 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 				break
 			}
 			resp.Objects = append(resp.Objects, page.Objects...)
+			accumulateRawObjects(&resp, &page)
 			offset += len(page.Objects)
 		}
 	}
@@ -350,7 +392,7 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, resp.Objects, resp.Meta)
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	rows := [][]string{{"AGENT_ID", "NAME", "STATE", "FLOW_TYPE", "VERSION", "UPDATED_AT"}}
 	for _, a := range resp.Objects {
@@ -377,7 +419,7 @@ func runAgentGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONSuccess(os.Stdout, a, nil)
+		return output.JSONRaw(os.Stdout, a.Raw())
 	}
 	// The full graph can be huge (deeply nested per-node config) — the table
 	// view shows counts; use -o json for the full nodes/connections detail.

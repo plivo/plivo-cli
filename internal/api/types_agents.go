@@ -9,6 +9,7 @@ import "encoding/json"
 // APIID, Nodes, and Connections) — mirroring how Application is reused
 // across ApplicationList and the single-get response.
 type Agent struct {
+	RawBody
 	APIID       string                 `json:"api_id,omitempty"`
 	ID          string                 `json:"agent_uuid"`
 	ResourceURI string                 `json:"resource_uri,omitempty"`
@@ -24,6 +25,7 @@ type Agent struct {
 }
 
 type AgentList struct {
+	RawBody
 	APIID   string   `json:"api_id"`
 	Meta    ListMeta `json:"meta"`
 	Objects []Agent  `json:"objects"`
@@ -60,6 +62,7 @@ type AgentGraphConnection struct {
 // appends " 1", " 2", etc. on a name collision. Always show this back to
 // the user rather than echoing what they typed.
 type AgentCreateResponse struct {
+	RawBody
 	APIID       string `json:"api_id"`
 	Message     string `json:"message,omitempty"`
 	AgentID     string `json:"agent_uuid"`
@@ -71,6 +74,7 @@ type AgentCreateResponse struct {
 // (POST AgentFlow/{id}/{Publish,Pause,Resume}). They answer 202 with just an
 // api_id and a message -- no agent body -- so there is nothing else to decode.
 type AgentActionResponse struct {
+	RawBody
 	APIID   string `json:"api_id"`
 	Message string `json:"message,omitempty"`
 }
@@ -83,6 +87,7 @@ type AgentActionResponse struct {
 // instead), so typing them as a fixed struct would silently drop fields
 // instead of just not-labeling them.
 type AgentRun struct {
+	RawBody
 	APIID        string            `json:"api_id,omitempty"`
 	RunID        string            `json:"run_uuid"`
 	AgentID      string            `json:"agent_uuid,omitempty"`
@@ -97,6 +102,7 @@ type AgentRun struct {
 }
 
 type AgentRunList struct {
+	RawBody
 	APIID   string     `json:"api_id"`
 	Meta    ListMeta   `json:"meta"`
 	Objects []AgentRun `json:"objects"`
@@ -107,6 +113,7 @@ type AgentRunList struct {
 // SchemaVersion, JSONSchema, Examples, and Coverage are populated on the
 // detail response only (the catalogue list omits them for size).
 type AgentFlowNode struct {
+	RawBody
 	APIID         string             `json:"api_id,omitempty"`
 	SchemaVersion string             `json:"schema_version,omitempty"`
 	NodeType      string             `json:"node_type"`
@@ -146,6 +153,7 @@ type AgentFlowNodeCoverage struct {
 // list resources in this package it carries no ListMeta — the catalogue is
 // small and unpaginated.
 type AgentFlowNodeList struct {
+	RawBody
 	APIID         string          `json:"api_id"`
 	SchemaVersion string          `json:"schema_version,omitempty"`
 	Objects       []AgentFlowNode `json:"objects"`
