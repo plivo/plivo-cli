@@ -59,23 +59,24 @@ func runAuthList(cmd *cobra.Command, args []string) error {
 	}
 	if effectiveFormat() == output.FormatJSON {
 		type item struct {
-			Name   string `json:"name"`
-			AuthID string `json:"auth_id"`
-			Active bool   `json:"active"`
+			Name    string `json:"name"`
+			AuthID  string `json:"auth_id"`
+			OrgName string `json:"org_name"`
+			Active  bool   `json:"active"`
 		}
 		items := []item{}
 		for name, p := range cfg.Profiles {
-			items = append(items, item{Name: name, AuthID: p.AuthID, Active: name == cfg.Active})
+			items = append(items, item{Name: name, AuthID: p.AuthID, OrgName: p.OrgName, Active: name == cfg.Active})
 		}
 		return output.JSONSuccess(os.Stdout, items, nil)
 	}
-	rows := [][]string{{"ACTIVE", "NAME", "AUTH_ID"}}
+	rows := [][]string{{"ACTIVE", "NAME", "ORG", "AUTH_ID"}}
 	for name, p := range cfg.Profiles {
 		active := ""
 		if name == cfg.Active {
 			active = "*"
 		}
-		rows = append(rows, []string{active, name, p.AuthID})
+		rows = append(rows, []string{active, name, p.OrgName, p.AuthID})
 	}
 	if len(rows) == 1 {
 		fmt.Fprintln(os.Stderr, "no profiles configured. Run `plivo login`.")

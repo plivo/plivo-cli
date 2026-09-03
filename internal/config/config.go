@@ -38,6 +38,18 @@ type Profile struct {
 	// common case) means "use the default prod environment" — we never
 	// write "prod" since that's the implicit default.
 	Env string `toml:"env,omitempty"`
+	// OrgName is the organization's display name, captured at login. Used
+	// to auto-name profiles per org and to label them in `plivo auth
+	// list` / the post-login confirmation line. AuthID (not OrgName) is
+	// what actually decides "same org" for conflict detection — this
+	// field is display-only. Empty on older configs/servers.
+	OrgName string `toml:"org_name,omitempty"`
+	// OrgUUID is the organization's stable identifier, when the auth
+	// server sends one. Not consulted by any logic yet (AuthID already
+	// identifies "which org" — see OrgName above); stored alongside it in
+	// case a future feature needs the org's own id rather than the
+	// credential's.
+	OrgUUID string `toml:"org_uuid,omitempty"`
 }
 
 type Config struct {

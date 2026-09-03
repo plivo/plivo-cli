@@ -35,8 +35,10 @@ type cliTokenEnvelope struct {
 		PlivoAuthToken string `json:"plivo_auth_token"`
 		AomUUID        string `json:"aom_uuid"`
 		Region         string `json:"region"`
-		Email          string `json:"email,omitempty"` // populated by the auth server when the dashboard session has it — may be empty
-		Name           string `json:"name,omitempty"`  // human display name from the user record
+		Email          string `json:"email,omitempty"`    // populated by the auth server when the dashboard session has it — may be empty
+		Name           string `json:"name,omitempty"`     // human display name from the user record
+		OrgName        string `json:"org_name,omitempty"` // organization display name — drives profile auto-naming; may be empty (older server, or an org with no name)
+		OrgUUID        string `json:"org_uuid,omitempty"` // organization's stable identifier; may be empty alongside org_name
 	} `json:"data"`
 }
 
@@ -55,7 +57,7 @@ type cliTokenEnvelope struct {
 //     comfortable headroom for login / 2FA / consent click-through.
 //  5. Validate state; POST /v1/accounts/cli/token with the verifier.
 //  6. Persist the bundle to ~/.plivo/config.toml + OS keychain.
-func runLoginBrowser() error {
+func runLoginBrowser(nameExplicit bool) error {
 	verifier, challenge, err := pkcePair()
 	if err != nil {
 		return fmt.Errorf("generate PKCE pair: %w", err)
@@ -103,12 +105,17 @@ func runLoginBrowser() error {
 	}
 
 	// Redeem the code for the creds bundle, then persist.
-	return redeemAndPersist(client, state, code, verifier, loginName)
+	return redeemAndPersist(client, state, code, verifier, loginName, nameExplicit)
 }
 
 // redeemAndPersist performs the second half of the loopback-OAuth flow: POST
 // /v1/accounts/cli/token with the (state, code, code_verifier) triple, then
 // drop the returned bundle into ~/.plivo/config.toml + the OS keychain.
+//
+// requestedName + nameExplicit carry the -n/--name flag through to
+// persistProfile, which resolves the actual profile name (explicit name,
+// org-derived slug, or "default") and refuses/renames on a conflict — see
+// persistProfile's doc comment.
 //
 // Split out from runLoginBrowser so the wire + persistence half is
 // independently testable against an httptest auth-server mock without
@@ -116,7 +123,7 @@ func runLoginBrowser() error {
 // empty-bundle guard, keychain fallback, "first profile becomes active"
 // rule, stderr confirmation) matches what runLoginBrowser used to do
 // inline — keep them in sync if you touch one.
-func redeemAndPersist(client *api.Client, state, code, verifier, profileName string) error {
+func redeemAndPersist(client *api.Client, state, code, verifier, requestedName string, nameExplicit bool) error {
 	tokenURL := client.BuddyURL("/v1/accounts/cli/token")
 	body := map[string]string{
 		"state":         state,
@@ -141,13 +148,15 @@ func redeemAndPersist(client *api.Client, state, code, verifier, profileName str
 	if err != nil {
 		return err
 	}
-	return persistProfile(cfg, profileName, loginBundle{
+	return persistProfile(cfg, requestedName, nameExplicit, loginBundle{
 		AuthID:    resp.Data.PlivoAuthID,
 		AuthToken: resp.Data.PlivoAuthToken,
 		Email:     resp.Data.Email,
 		Name:      resp.Data.Name,
 		AomUUID:   resp.Data.AomUUID,
 		Region:    resp.Data.Region,
+		OrgName:   resp.Data.OrgName,
+		OrgUUID:   resp.Data.OrgUUID,
 	})
 }
 
