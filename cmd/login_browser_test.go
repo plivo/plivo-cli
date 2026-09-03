@@ -70,6 +70,44 @@ func TestCLITokenEnvelope_emptyDataYieldsBlankBundle(t *testing.T) {
 	}
 }
 
+// TestCLITokenEnvelope_parsesOrgFields locks in org_name/org_uuid — the
+// fields a companion auth-server change adds to this same envelope so the
+// CLI can name a profile after its organization. Both are optional
+// (omitempty on the wire): an older server, or an org with no name, sends
+// neither, and that must unmarshal to blank rather than error.
+func TestCLITokenEnvelope_parsesOrgFields(t *testing.T) {
+	raw := `{
+		"api_id": "abc-123",
+		"data": {
+			"plivo_auth_id":   "MA_TEST_FIXTURE",
+			"plivo_auth_token": "tok-xyz",
+			"aom_uuid":         "aom-uuid-1",
+			"region":           "us-east-1",
+			"org_name":         "Acme, Inc.",
+			"org_uuid":         "org-uuid-1"
+		}
+	}`
+	var got cliTokenEnvelope
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unmarshal envelope: %v", err)
+	}
+	if got.Data.OrgName != "Acme, Inc." {
+		t.Errorf("OrgName = %q", got.Data.OrgName)
+	}
+	if got.Data.OrgUUID != "org-uuid-1" {
+		t.Errorf("OrgUUID = %q", got.Data.OrgUUID)
+	}
+
+	// Degrade gracefully when the server doesn't send them.
+	var noOrg cliTokenEnvelope
+	if err := json.Unmarshal([]byte(`{"api_id":"x","data":{"plivo_auth_id":"MA","plivo_auth_token":"t","aom_uuid":"a","region":"r"}}`), &noOrg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if noOrg.Data.OrgName != "" || noOrg.Data.OrgUUID != "" {
+		t.Errorf("expected blank org fields when absent, got: %+v", noOrg.Data)
+	}
+}
+
 // TestPkcePair_satisfiesS256_relation: the verifier returned must hash
 // (via SHA256 → base64url no-pad) to exactly the challenge. This is what
 // the auth server's PKCE check on /v1/cli/token enforces — if this test
@@ -377,7 +415,7 @@ func TestRedeemAndPersist_happyPath(t *testing.T) {
 	}`)
 	client, profileName := setupBrowserLoginTestEnv(t, mock.srv.URL)
 
-	if err := redeemAndPersist(client, state, code, verifier, profileName); err != nil {
+	if err := redeemAndPersist(client, state, code, verifier, profileName, true); err != nil {
 		t.Fatalf("redeemAndPersist: %v", err)
 	}
 
@@ -437,6 +475,53 @@ func TestRedeemAndPersist_happyPath(t *testing.T) {
 	}
 }
 
+// TestRedeemAndPersist_derivesProfileNameFromOrg drives the full wire →
+// persistence path with no -n passed (nameExplicit=false): the profile
+// should land under a slug of org_name, not the literal "default" flag
+// default, and the org name should be readable back off the saved
+// profile (it feeds `plivo auth list` + the login confirmation line).
+func TestRedeemAndPersist_derivesProfileNameFromOrg(t *testing.T) {
+	mock := newTokenServerMock(t, http.StatusOK, `{
+		"api_id": "req-id-org",
+		"data": {
+			"plivo_auth_id":    "MA_ACME_FIXTURE",
+			"plivo_auth_token": "fake_token_for_testing",
+			"aom_uuid":         "aom-uuid-9",
+			"region":           "us-east-1",
+			"org_name":         "Acme, Inc.",
+			"org_uuid":         "org-uuid-9"
+		},
+		"errors": null,
+		"message": ""
+	}`)
+	client, _ := setupBrowserLoginTestEnv(t, mock.srv.URL)
+
+	// "default" is exactly what loginName's cobra flag default is — the
+	// point of nameExplicit=false is that this requested value is
+	// overridden by the org-derived slug instead of being taken literally.
+	if err := redeemAndPersist(client, "s", "c", "v", "default", false); err != nil {
+		t.Fatalf("redeemAndPersist: %v", err)
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+	if _, ok := cfg.Profiles["default"]; ok {
+		t.Errorf(`profile landed on the literal "default" instead of the org-derived slug, got profiles: %v`, cfg.Profiles)
+	}
+	prof, ok := cfg.Profiles["acme-inc"]
+	if !ok {
+		t.Fatalf(`expected profile "acme-inc", got profiles: %v`, cfg.Profiles)
+	}
+	if prof.OrgName != "Acme, Inc." {
+		t.Errorf("Profile.OrgName = %q, want %q", prof.OrgName, "Acme, Inc.")
+	}
+	if prof.OrgUUID != "org-uuid-9" {
+		t.Errorf("Profile.OrgUUID = %q, want %q", prof.OrgUUID, "org-uuid-9")
+	}
+}
+
 // TestRedeemAndPersist_brokenEnvelopeShape_returnsEmptyBundle is a regression
 // test for the auth-server envelope-shape bug: the success payload landed
 // under `errors` instead of `data`. The CLI must NOT silently persist a
@@ -458,7 +543,7 @@ func TestRedeemAndPersist_brokenEnvelopeShape_returnsEmptyBundle(t *testing.T) {
 	}`)
 	client, profileName := setupBrowserLoginTestEnv(t, mock.srv.URL)
 
-	err := redeemAndPersist(client, "s", "c", "v", profileName)
+	err := redeemAndPersist(client, "s", "c", "v", profileName, true)
 	if err == nil {
 		t.Fatal("want error on broken envelope shape, got nil (would have silently saved a blank profile)")
 	}
@@ -496,7 +581,7 @@ func TestRedeemAndPersist_4xxWithGlobalError(t *testing.T) {
 	}`)
 	client, profileName := setupBrowserLoginTestEnv(t, mock.srv.URL)
 
-	err := redeemAndPersist(client, "s", "c", "v", profileName)
+	err := redeemAndPersist(client, "s", "c", "v", profileName, true)
 	if err == nil {
 		t.Fatal("want error from auth-server 4xx, got nil")
 	}
