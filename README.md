@@ -86,7 +86,7 @@ The CLI also prints a one-line "newer version available" hint on stderr when a T
 Wire up a voice agent in a few minutes:
 
 ```bash
-# 1. Authenticate (stores a profile in ~/.plivo/config.toml, with the token in the OS keychain)
+# 1. Authenticate — saves a profile per org in ~/.plivo/config.toml, token in the OS keychain
 plivo login
 
 # 2. Confirm your account and see your numbers
@@ -110,6 +110,8 @@ plivo voice calls get <call_uuid>
 ```
 
 Once you have a working setup, the same flow scripts cleanly into CI, integration tests, and AI-agent-driven workflows.
+
+Logging in again for a different organization saves a second profile (named after that org) instead of overwriting the first — `plivo auth list` shows every saved profile, `plivo auth use <name>` switches between them, and `--profile <name>` overrides per-command.
 
 ## Ask the assistant
 

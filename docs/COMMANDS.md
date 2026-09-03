@@ -1120,6 +1120,12 @@ The flow:
      back to writing it inline in ~/.plivo/config.toml (chmod 0600) only
      when no keychain is available.
 
+Multiple organizations:
+  Logging in again for a different org saves a second profile (named
+  after that org) instead of overwriting the first. Run `plivo auth list`
+  to see every saved profile, and `plivo auth use <name>` to switch. Pass
+  -n/--name to choose the profile name yourself.
+
 Headless / CI use:
   Set PLIVO_AUTH_ID + PLIVO_AUTH_TOKEN environment variables and skip
   `plivo login` entirely — every command picks creds up from the env.
@@ -1141,7 +1147,7 @@ Examples:
 Flags:
 
 ```
-  -n, --name string   profile name to save under (default "default")
+  -n, --name string   profile name to save under; auto-derived from the org when omitted (default "default")
       --no-verify     skip the GET /Account/ validation hit (offline / mock use only)
 ```
 
