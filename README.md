@@ -48,9 +48,10 @@ when [cosign](https://docs.sigstore.dev/cosign/installation/) is present. To
 check by hand:
 
 ```bash
-V=v0.3.0
+# /releases/latest/ resolves to the newest release, so this cannot go stale.
+# For a specific release swap `latest` for `download/vX.Y.Z`.
 for f in SHA256SUMS SHA256SUMS.sig SHA256SUMS.pem; do
-  curl -fsSLO "https://github.com/plivo/plivo-cli/releases/download/$V/$f"
+  curl -fsSLO "https://github.com/plivo/plivo-cli/releases/latest/download/$f"
 done
 
 cosign verify-blob SHA256SUMS \
