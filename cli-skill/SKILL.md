@@ -151,15 +151,17 @@ Many groups have short aliases (e.g. `account application`/`app`, `voice call`, 
 
 Browser PKCE OAuth — opens default browser, captures the callback over a local loopback listener, persists creds. **Recommended** for interactive sessions; for agents/CI use `PLIVO_AUTH_ID` + `PLIVO_AUTH_TOKEN` (see Headless authentication above). There is no flag to pass credentials inline — login is browser-only.
 
+One profile is saved per organization: with no `-n`, the profile name is derived from the org (slug of its name, e.g. `acme-inc`), falling back to `default` when the org has no name. Logging into a second org saves a second profile instead of overwriting the first; re-authorizing the *same* org updates its profile in place.
+
 | Flag | Type | Default | When |
 |---|---|---|---|
-| `-n, --name <name>` | string | `default` | save under a non-default profile name |
+| `-n, --name <name>` | string | derived from the org, or `default` | save under an explicit profile name instead of the org-derived one |
 | `--no-verify` | bool | false | skip the post-login `GET /Account/` validation (offline / mock use) |
 
 Examples:
 ```bash
-plivo login                     # default flow
-plivo login --name staging      # alternate profile
+plivo login                     # profile named after the org (or "default")
+plivo login --name staging      # explicit profile name
 ```
 
 After login: auth_id + email in `~/.plivo/config.toml`; auth_token in OS keychain (macOS Keychain / Windows Credential Manager / Linux Secret Service), with an inline `~/.plivo/config.toml` (chmod 0600) fallback when no keychain is available.
@@ -170,7 +172,7 @@ Verify creds + show the active account.
 
 ### `plivo auth list`
 
-List all configured profiles + show which is active.
+List all configured profiles (name, org when known, auth_id) + show which is active.
 
 ### `plivo auth use <name>`
 
