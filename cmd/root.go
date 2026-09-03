@@ -42,8 +42,8 @@ var rootCmd = &cobra.Command{
 
 Credentials resolve in order:
   1. --profile flag
-  2. active profile in ~/.plivo/config.toml
-  3. PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN env vars`,
+  2. PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN env vars
+  3. active profile in ~/.plivo/config.toml`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	Version:       version.Value,

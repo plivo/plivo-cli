@@ -202,8 +202,8 @@ plivo is a command-line interface for the Plivo REST API.
 
 Credentials resolve in order:
   1. --profile flag
-  2. active profile in ~/.plivo/config.toml
-  3. PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN env vars
+  2. PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN env vars
+  3. active profile in ~/.plivo/config.toml
 
 ```
 plivo
@@ -780,7 +780,7 @@ the CLI). Use --dry-run to preview without sending. GET and HEAD pass through.
 
 Examples:
 
-  plivo api GET /Account/
+  plivo api GET /v1/Account/MA…/            # absolute: the account itself
   plivo api GET /Message/ --query "limit=10"
   plivo api POST /Message/ --body @msg.json --yes
   cat msg.json | plivo api --method POST /Message/ --body @- --yes
