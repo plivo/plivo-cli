@@ -5,6 +5,35 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-09-03
+
+First stable release. The command grammar, JSON envelope, exit codes and
+config layout are now considered stable; breaking changes to them will come
+with a major version bump.
+
+### Added
+
+- `plivo agents` — manage AI agent flows against the public Agents API:
+  `create`, `get`, `list`, `update`, `delete`, the `publish`/`pause`/`resume`
+  lifecycle verbs, plus `agents runs` for executions and `agents nodes` for
+  the node catalogue. `--all` auto-paginates `agents list` and
+  `agents runs list`, and is registered only on the commands that implement
+  it rather than globally.
+- Multi-organization login. `plivo login` now names the saved profile after
+  the organization instead of always `default`, so authorizing a second
+  organization no longer overwrites the first. `-n/--name` still overrides,
+  re-authorizing the same organization updates it in place, and a different
+  organization gets its own profile rather than clobbering one. `plivo auth
+  list` shows the organization per profile.
+- `plivo ask` sends a client-minted conversation id, so the turns of one
+  conversation group together instead of appearing unrelated.
+
+### Fixed
+
+- `plivo ask` no longer treats a handful of event names as stream
+  terminators that the server does not send; they are retained as
+  forward-compatible no-ops and documented as such.
+
 ## [0.4.1] - 2026-09-02
 
 ### Fixed
@@ -266,7 +295,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   downloads the binary + checksums to a temp dir, compares via
   `Get-FileHash`, and only installs on a match.
 
-[Unreleased]: https://github.com/plivo/plivo-cli/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/plivo/plivo-cli/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/plivo/plivo-cli/compare/v0.4.1...v1.0.0
 [0.4.1]: https://github.com/plivo/plivo-cli/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/plivo/plivo-cli/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/plivo/plivo-cli/compare/v0.2.0...v0.3.0
