@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	agentsskill "github.com/plivo/plivo-cli/agents-skill"
 	cliskill "github.com/plivo/plivo-cli/cli-skill"
 )
 
@@ -129,52 +128,39 @@ func TestSkillInstall_printToStdout(t *testing.T) {
 	}
 }
 
-// The agents skill installs into its OWN directory, so it cannot collide with
-// the CLI skill — both files are named SKILL.md and a shared directory would
-// silently leave whichever was written last.
-func TestSkillInstall_agentsSelectorUsesItsOwnDir(t *testing.T) {
+// The CX agents skill is embedded but deliberately NOT listed: the code stays
+// in the repo while the feature is not live. This guards that decision, so
+// re-listing it has to be an intentional edit that updates this test too,
+// rather than a silent reappearance in a user-facing list.
+func TestSkillInstall_cxAgentsSkillIsNotOffered(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Cleanup(func() { skillDir = ""; skillPrint = false; dryRunFlag = false })
 
-	if err := runSkillInstall(nil, []string{"agents"}); err != nil {
-		t.Fatalf("install agents: %v", err)
+	for _, s := range bundledSkills {
+		if s.selector == "agents" || s.dirName == "plivo-cx-agents" {
+			t.Fatalf("the CX agents skill is listed again (%q -> %q)", s.selector, s.dirName)
+		}
 	}
-	dest := filepath.Join(home, ".claude", "skills", "plivo-cx-agents", skillFileName)
-	got, err := os.ReadFile(dest)
-	if err != nil {
-		t.Fatalf("read %s: %v", dest, err)
-	}
-	if string(got) != agentsskill.SkillMD {
-		t.Errorf("installed agents skill differs from embedded (%d vs %d bytes)",
-			len(got), len(agentsskill.SkillMD))
-	}
-	// The CLI skill must NOT have been written by an `agents` install.
-	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "plivo-cli", skillFileName)); err == nil {
-		t.Error("install agents also wrote the CLI skill")
-	}
-}
 
-func TestSkillInstall_allWritesBothToSeparateDirs(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	t.Cleanup(func() { skillDir = ""; skillPrint = false; dryRunFlag = false })
+	if err := runSkillInstall(nil, []string{"agents"}); err == nil {
+		t.Error("`skill install agents` succeeded; it must not install while unlisted")
+	}
 
+	// `all` fans out over bundledSkills, so it must not reach the CX skill either.
 	if err := runSkillInstall(nil, []string{"all"}); err != nil {
 		t.Fatalf("install all: %v", err)
 	}
-	for dir, want := range map[string]string{
-		"plivo-cli":       cliskill.SkillMD,
-		"plivo-cx-agents": agentsskill.SkillMD,
-	} {
-		got, err := os.ReadFile(filepath.Join(home, ".claude", "skills", dir, skillFileName))
-		if err != nil {
-			t.Fatalf("read %s: %v", dir, err)
-		}
-		if string(got) != want {
-			t.Errorf("%s: content mismatch (%d vs %d bytes)", dir, len(got), len(want))
+	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "plivo-cx-agents", skillFileName)); err == nil {
+		t.Error("`skill install all` wrote the CX agents skill despite it being unlisted")
+	}
+
+	// Match the selector and install dir, not the bare word "agents" — that
+	// appears legitimately in "LLM coding agents".
+	for _, txt := range []string{skillInstallCmd.Use, skillInstallCmd.Long, skillInstallCmd.Example} {
+		if strings.Contains(txt, "install agents") || strings.Contains(txt, "plivo-cx-agents") {
+			t.Errorf("help text still advertises the CX agents skill: %q", txt)
 		}
 	}
 }
@@ -202,7 +188,7 @@ func TestSkillInstall_unknownSelectorIsRejected(t *testing.T) {
 	if err == nil {
 		t.Fatal("unknown selector must error")
 	}
-	if !strings.Contains(err.Error(), "agents") {
+	if !strings.Contains(err.Error(), "cli") {
 		t.Errorf("error should list the available skills, got: %v", err)
 	}
 }

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	agentsskill "github.com/plivo/plivo-cli/agents-skill"
 	cliskill "github.com/plivo/plivo-cli/cli-skill"
 	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/spf13/cobra"
@@ -14,7 +13,7 @@ import (
 
 // bundledSkill is one skill embedded in the binary. dirName is the directory it
 // installs into under the agent skills root, and doubles as the selector a user
-// types (`plivo skill install agents`).
+// types (`plivo skill install cli`).
 type bundledSkill struct {
 	selector string // what the user types
 	dirName  string // ~/.claude/skills/<dirName>/SKILL.md
@@ -30,12 +29,6 @@ var bundledSkills = []bundledSkill{
 		dirName:  "plivo-cli",
 		content:  cliskill.SkillMD,
 		summary:  "the CLI reference — use `plivo` instead of raw curl",
-	},
-	{
-		selector: "agents",
-		dirName:  "plivo-cx-agents",
-		content:  agentsskill.SkillMD,
-		summary:  "build CX agent flows through the public Agents API",
 	},
 }
 
@@ -79,29 +72,25 @@ var skillCmd = &cobra.Command{
 // skillInstallCmd writes the embedded SKILL.md into the agent skills directory
 // (default ~/.claude/skills/plivo-cli; override with --dir, or --print to stdout).
 var skillInstallCmd = &cobra.Command{
-	Use:   "install [cli|agents|all]",
+	Use:   "install [cli|all]",
 	Short: "Install an agent skill so coding agents auto-load the reference",
 	Long: `Install a Plivo agent skill.
 
 A skill is a single-file reference (SKILL.md) written for LLM coding agents.
-Both are bundled in the binary, so this writes them out without a network call.
+They are bundled in the binary, so this writes them out without a network call.
 
   cli      the CLI reference — use ` + "`plivo`" + ` instead of raw curl
-  agents   build CX agent flows through the public Agents API
-  all      both of the above
+  all      every listed skill
 
 With no argument, installs the CLI skill (unchanged from previous releases).
 Each skill lands at ~/.claude/skills/<skill>/SKILL.md by default. Use --dir to
 target another agent's skills directory, or --print to write the content to
 stdout so any other tool can capture it; both act on a single skill.`,
 	Example: `  plivo skill install                    # CLI skill -> ~/.claude/skills/plivo-cli/
-  plivo skill install agents             # Agents skill -> ~/.claude/skills/plivo-cx-agents/
-  plivo skill install all                # both
-  plivo skill install agents --print > plivo-agents.md   # capture for any agent
-  plivo skill install agents --dir ~/.config/agent/skills/plivo-cx-agents
+  plivo skill install all                # every listed skill
   plivo skill install all --dry-run      # show destinations, write nothing`,
 	Args:      cobra.MaximumNArgs(1),
-	ValidArgs: []string{"cli", "agents", "all"},
+	ValidArgs: []string{"cli", "all"},
 	RunE:      runSkillInstall,
 }
 
@@ -146,12 +135,6 @@ func runSkillInstall(cmd *cobra.Command, args []string) error {
 
 	if err := installSkill(s); err != nil {
 		return err
-	}
-
-	// Only nudge when the user took the default, so an explicit choice stays quiet.
-	if selector == "" && !dryRunFlag {
-		fmt.Fprintf(os.Stderr, "Also available: plivo skill install agents  (%s)\n",
-			bundledSkills[1].summary)
 	}
 	return nil
 }
