@@ -16,7 +16,7 @@ the CLI). Use --dry-run to preview without sending. GET and HEAD pass through.
 
 Examples:
 
-  plivo api GET /Account/
+  plivo api GET /v1/Account/MA…/            # absolute: the account itself
   plivo api GET /Message/ --query "limit=10"
   plivo api POST /Message/ --body @msg.json --yes
   cat msg.json | plivo api --method POST /Message/ --body @- --yes
