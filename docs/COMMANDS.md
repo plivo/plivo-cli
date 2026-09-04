@@ -2450,11 +2450,10 @@ Install an agent skill so coding agents auto-load the reference
 Install a Plivo agent skill.
 
 A skill is a single-file reference (SKILL.md) written for LLM coding agents.
-Both are bundled in the binary, so this writes them out without a network call.
+They are bundled in the binary, so this writes them out without a network call.
 
   cli      the CLI reference — use `plivo` instead of raw curl
-  agents   build CX agent flows through the public Agents API
-  all      both of the above
+  all      every listed skill
 
 With no argument, installs the CLI skill (unchanged from previous releases).
 Each skill lands at ~/.claude/skills/<skill>/SKILL.md by default. Use --dir to
@@ -2462,17 +2461,14 @@ target another agent's skills directory, or --print to write the content to
 stdout so any other tool can capture it; both act on a single skill.
 
 ```
-plivo skill install [cli|agents|all] [flags]
+plivo skill install [cli|all] [flags]
 ```
 
 Examples:
 
 ```
   plivo skill install                    # CLI skill -> ~/.claude/skills/plivo-cli/
-  plivo skill install agents             # Agents skill -> ~/.claude/skills/plivo-cx-agents/
-  plivo skill install all                # both
-  plivo skill install agents --print > plivo-agents.md   # capture for any agent
-  plivo skill install agents --dir ~/.config/agent/skills/plivo-cx-agents
+  plivo skill install all                # every listed skill
   plivo skill install all --dry-run      # show destinations, write nothing
 ```
 
