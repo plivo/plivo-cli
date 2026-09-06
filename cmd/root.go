@@ -248,6 +248,21 @@ func credentialHint() string {
 	}
 }
 
+// nonCredentialAuthHint returns a hint for a 401 that is NOT about the
+// credential, or "" to fall back to credentialHint.
+//
+// Some 401s mean the account could not be resolved server-side rather than
+// that the credential was wrong. Telling the user to re-run `plivo login`
+// there sends them in a circle: the credential is fine and logging in again
+// changes nothing.
+func nonCredentialAuthHint(msg string) string {
+	if strings.Contains(strings.ToLower(msg), "region resolution") {
+		return "Not a credential problem: the account's region could not be resolved server-side. " +
+			"Re-running `plivo login` will not change this — quote the request id above to support."
+	}
+	return ""
+}
+
 func handleError(err error) {
 	f := output.Resolve(outputFormat, os.Stderr)
 
@@ -258,7 +273,11 @@ func handleError(err error) {
 		apiErr = clierr.Wrap(err)
 	}
 	if apiErr.Code == clierr.CodeAuthInvalid {
-		apiErr.Hint = credentialHint()
+		if h := nonCredentialAuthHint(apiErr.Message); h != "" {
+			apiErr.Hint = h
+		} else {
+			apiErr.Hint = credentialHint()
+		}
 	}
 
 	if f == output.FormatJSON {
