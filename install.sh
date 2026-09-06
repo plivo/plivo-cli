@@ -17,6 +17,12 @@
 #
 # Env overrides:
 #   PLIVO_CLI_VERSION   tag to install (default: latest)
+#
+# Flags (work with `curl ... | bash -s -- <flag>`):
+#   --version <tag>     same as PLIVO_CLI_VERSION. Prefer this over the env
+#                       var when piping: `VAR=x curl ... | bash` sets VAR on
+#                       curl, not on the bash that runs this script, so the
+#                       env var is silently ignored and you get `latest`.
 #   PLIVO_INSTALL_DIR   where to drop the binary
 #                       (default: first user-owned dir on PATH —
 #                        ~/.local/bin / ~/bin / /opt/homebrew/bin —
@@ -28,6 +34,28 @@ set -euo pipefail
 
 REPO="plivo/plivo-cli"
 VERSION="${PLIVO_CLI_VERSION:-latest}"
+
+# Flags override the env var. These exist because the natural way to pin a
+# version through a pipe -- `PLIVO_CLI_VERSION=v1.0.0 curl ... | bash` --
+# puts the variable on curl rather than on bash, so it never reaches this
+# script and the user silently gets the latest release instead.
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --version)
+      [ $# -ge 2 ] || { echo "✗ --version needs a tag, e.g. --version v1.0.0" >&2; exit 2; }
+      VERSION="$2"; shift 2 ;;
+    --version=*) VERSION="${1#*=}"; shift ;;
+    --dir)
+      [ $# -ge 2 ] || { echo "✗ --dir needs a path" >&2; exit 2; }
+      PLIVO_INSTALL_DIR="$2"; shift 2 ;;
+    --dir=*) PLIVO_INSTALL_DIR="${1#*=}"; shift ;;
+    -h|--help)
+      echo "usage: install.sh [--version <tag>] [--dir <path>]"
+      echo "  piping: curl -fsSL <url> | bash -s -- --version v1.0.0"
+      exit 0 ;;
+    *) echo "✗ unknown option: $1 (try --help)" >&2; exit 2 ;;
+  esac
+done
 
 # ─── Detect OS (+ executable extension) ──────────────────────────────────────
 raw_os=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -187,7 +215,7 @@ else
   echo "    1. Re-run with sudo:" >&2
   echo "         curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | sudo bash" >&2
   echo "    2. Install into a user-owned dir on PATH (no sudo):" >&2
-  echo "         PLIVO_INSTALL_DIR=\"\$HOME/.local/bin\" curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash" >&2
+  echo "         curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash -s -- --dir \"\$HOME/.local/bin\"" >&2
   exit 1
 fi
 trap - EXIT
