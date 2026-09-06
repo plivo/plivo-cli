@@ -48,7 +48,7 @@ type Response struct {
 func (c *Client) Do(ctx context.Context, method, path string, body any) (*Response, error) {
 	base := c.Profile.RegionalGatewayURL()
 	if base == "" {
-		return nil, errors.New("Contacto profile has no region; re-run `plivo contacto login`")
+		return nil, errors.New("saved session has no region, so the regional gateway URL cannot be built")
 	}
 	urlStr := base + path
 

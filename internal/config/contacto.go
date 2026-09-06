@@ -13,7 +13,7 @@ import (
 )
 
 // ContactoProfile holds a Contacto session credentials bundle obtained via
-// `plivo contacto login` against a hodor /v1/accounts/login-cli endpoint.
+// an internal login flow that is not implemented in the CLI today.
 //
 // The CLI uses it to authenticate against the regional Contacto auth-api
 // gateway for agent CRUD (PHLO config service) and vibe-agent SSE generation.
@@ -29,7 +29,7 @@ type ContactoProfile struct {
 	LoggedInAt       string `toml:"logged_in_at"`
 }
 
-var ErrNoContactoSession = errors.New("no Contacto session: run `plivo contacto login` first")
+var ErrNoContactoSession = errors.New("no session for the internal token surface: nothing in the CLI creates one yet, so `plivo auth token` cannot be used")
 
 func ContactoPath() (string, error) {
 	home, err := os.UserHomeDir()
