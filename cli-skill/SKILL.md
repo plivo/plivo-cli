@@ -128,16 +128,19 @@ Unlike the flags above, `--explain` is a **local** flag registered on only these
 
 ```
 account     applications | get | subaccounts | update
-agent       (coming soon — no subcommands yet)
+agents      list | get | create | update | publish | pause | resume | delete | nodes | runs
 api         generic REST escape hatch (any api.plivo.com path)
+config      get | set | telemetry            (CLI settings, incl. telemetry opt-out)
 ask         one-shot question to Plivo's AI assistant (SSE stream)
 auth        list | use | remove | whoami
+docs        list | search | show                (read Plivo's docs in the shell)
 feedback    rate the CLI (interactive or one-shot)
 login       browser PKCE OAuth login
 logout      remove a profile + its keychain token
 lookup      carrier/format lookup for an E.164 number
 messaging   get | sms | mms | whatsapp        (aliases: message, msg, sms)
 numbers     buy | cnam | compliance | get | list | masking | release | search | update   (alias: number)
+skill       install | list                      (manage the bundled agent skills)
 support     list past support escalations (filed via `plivo ask`)
 upgrade     self-update the binary
 verify      sessions (create | get | list | validate)
