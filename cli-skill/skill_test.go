@@ -2,6 +2,7 @@ package cliskill
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -143,47 +144,41 @@ func staleListEnvelopeErrorsByBlock(md string) []string {
 // docs/errors.md both carried the retired `.data[` form. A checker scoped to
 // one file only protects that file; the README is the example most people copy.
 func TestRepoDocs_useObjectsEnvelope(t *testing.T) {
-	root := ".."
+	// Ask git for the file list rather than walking the filesystem. A walk
+	// picks up whatever happens to sit on disk — nested worktrees, vendored
+	// copies, scratch files — so this test passed in a clean checkout and
+	// failed on a maintainer's, reporting a stale copy of the repo under
+	// .claude/worktrees as a live defect.
+	out, err := exec.Command("git", "-C", "..", "ls-files", "-z", "--", "*.md").Output()
+	if err != nil {
+		t.Skipf("git ls-files unavailable: %v", err)
+	}
 	var checked int
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			switch info.Name() {
-			case ".git", "node_modules", "dist":
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if filepath.Ext(path) != ".md" {
-			return nil
+	for _, rel := range strings.Split(strings.TrimRight(string(out), "\x00"), "\x00") {
+		if rel == "" {
+			continue
 		}
 		// COMMANDS.md is generated from the command tree, and CHANGELOG.md
-		// documents the old shape on purpose when describing the v0.3.0 break.
-		switch filepath.Base(path) {
+		// describes the retired shape on purpose when documenting the break.
+		switch filepath.Base(rel) {
 		case "COMMANDS.md", "CHANGELOG.md":
-			return nil
+			continue
 		}
-		b, err := os.ReadFile(path)
+		b, err := os.ReadFile(filepath.Join("..", rel))
 		if err != nil {
-			return err
+			t.Fatal(err)
 		}
 		checked++
 		for _, errMsg := range staleListEnvelopeErrors(string(b)) {
-			t.Errorf("%s: %s", path, errMsg)
+			t.Errorf("%s: %s", rel, errMsg)
 		}
 		for _, errMsg := range staleListEnvelopeErrorsByBlock(string(b)) {
-			t.Errorf("%s: %s", path, errMsg)
+			t.Errorf("%s: %s", rel, errMsg)
 		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
 	}
-	// A path or extension typo would silently check nothing and pass.
+	// A bad pathspec would check nothing and pass.
 	if checked < 8 {
-		t.Fatalf("only walked %d markdown files; expected the whole repo — check the walk root", checked)
+		t.Fatalf("only checked %d tracked markdown files; expected the whole repo", checked)
 	}
-	t.Logf("checked %d markdown files", checked)
+	t.Logf("checked %d tracked markdown files", checked)
 }

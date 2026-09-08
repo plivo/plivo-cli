@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capture-then-filter form it previously could not see.
 - Dead documentation links: the cosign install page, and the `<Conference>`
   XML page referenced twice by the Voice XML skill.
+- The CLI skill's top-level command map still listed `agent` as "coming soon"
+  and omitted `config`, `docs`, and `skill` — including `plivo skill`, which
+  is how the skill is installed. The map is now checked against the real
+  command tree, and the repo-wide doc check reads git's file list rather than
+  walking the filesystem, which reported a stale nested checkout as a defect.
 
 ## [1.0.1] - 2026-09-08
 
