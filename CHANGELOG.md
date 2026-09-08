@@ -5,6 +5,48 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-09-08
+
+### Added
+
+- Three product skills are now bundled in the binary, alongside the CLI
+  skill: `plivo skill install audio-streaming | sip-trunking | voice-xml`.
+  They cover connecting a WebSocket voice bot with `<Stream>`, connecting an
+  AI voice platform over SIP trunking, and writing Voice XML. Embedded, so
+  they install with no network.
+- `plivo skill list` shows every bundled skill, where it installs, and
+  whether the copy on disk still matches this binary. A skill written by an
+  older binary reports `installed (differs from bundled)`; re-running
+  `skill install` refreshes it.
+- `install.sh` accepts `--version` and `--dir`, which work through a pipe:
+  `curl -fsSL … | bash -s -- --version v1.0.1`. `PLIVO_CLI_VERSION` could
+  not be used as documented — in `PLIVO_CLI_VERSION=x curl … | bash` the
+  variable is set on curl, not on the bash running the script, so it was
+  silently ignored and you got the latest release instead.
+
+### Changed
+
+- The CX agents skill is no longer offered. Its files stay in the repo but
+  nothing imports them, so the content is not in the binary and
+  `skill install all` does not write it.
+
+### Fixed
+
+- A 401 that is not about your credentials no longer tells you to log in
+  again. When the server cannot resolve an account's region, re-running
+  `plivo login` cannot help, and the old hint sent people through repeated
+  logouts and reinstalls while their credential was valid the whole time.
+- `plivo --help` listed credential precedence with the active profile above
+  the environment variables. Environment variables have won since v0.3.0;
+  the text had been wrong for three releases.
+- The `plivo api` examples included `GET /Account/`, which expands to
+  `/v1/Account/<auth_id>/Account/` and 404s. Published documentation had
+  copied that example from this help text.
+- `plivo auth token` (internal builds) pointed at `plivo contacto login`, a
+  command that exists in no build, for a session nothing can create.
+- The permission-denied path in `install.sh` suggested the same
+  `VAR=… curl | bash` form that does not work.
+
 ## [1.0.0] - 2026-09-03
 
 First stable release. The command grammar, JSON envelope, exit codes and
@@ -295,7 +337,8 @@ with a major version bump.
   downloads the binary + checksums to a temp dir, compares via
   `Get-FileHash`, and only installs on a match.
 
-[Unreleased]: https://github.com/plivo/plivo-cli/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/plivo/plivo-cli/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/plivo/plivo-cli/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/plivo/plivo-cli/compare/v0.4.1...v1.0.0
 [0.4.1]: https://github.com/plivo/plivo-cli/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/plivo/plivo-cli/compare/v0.3.0...v0.4.0
