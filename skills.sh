@@ -2,19 +2,22 @@
 # install the plivo-cli agent skill — one-line installer (no binary required)
 #
 # Usage:
-#   curl -fsSL .../skills.sh | sh              # the CLI skill (default)
-#   curl -fsSL .../skills.sh | sh -s agents    # the CX Agents skill
-#   curl -fsSL .../skills.sh | sh -s all       # both
+#   curl -fsSL .../skills.sh | sh                      # the CLI skill (default)
+#   curl -fsSL .../skills.sh | sh -s voice-xml         # one named skill
+#   curl -fsSL .../skills.sh | sh -s all               # every skill
 #
 #   (full URL: https://raw.githubusercontent.com/plivo/plivo-cli/main/skills.sh)
 #
 # Fetches SKILL.md — a single-file reference written for LLM coding agents — and
 # drops it where the agent auto-loads it. If you already have the binary,
-# `plivo skill install [cli|agents|all]` does the same thing offline.
+# `plivo skill install [cli|audio-streaming|sip-trunking|voice-xml|all]` does
+# the same thing offline.
 #
 # Available skills:
-#   cli      use the `plivo` CLI instead of raw curl
-#   agents   build Plivo CX agent flows through the public Agents API
+#   cli               use the `plivo` CLI instead of raw curl
+#   audio-streaming   connect a WebSocket voice bot to calls with <Stream>
+#   sip-trunking      connect an AI voice platform over SIP trunking
+#   voice-xml         write and fix Plivo Voice XML
 #
 # This is POSIX sh and works anywhere curl + sh are available (macOS / Linux /
 # WSL / Git Bash). Requires the repo to be public.
@@ -32,15 +35,19 @@ RAW="https://raw.githubusercontent.com/${REPO}/main"
 # ─── Resolve which skill(s) ──────────────────────────────────────────────────
 # Each entry is "selector:source-dir:install-dir".
 CLI_SKILL="cli:cli-skill:plivo-cli"
-AGENTS_SKILL="agents:agents-skill:plivo-cx-agents"
+STREAM_SKILL="audio-streaming:audio-streaming-skill:plivo-audio-streaming"
+SIP_SKILL="sip-trunking:sip-trunking-skill:plivo-sip-trunking"
+XML_SKILL="voice-xml:voice-xml-skill:plivo-voice-xml"
 
 case "${1:-cli}" in
-  cli)    WANTED="$CLI_SKILL" ;;
-  agents) WANTED="$AGENTS_SKILL" ;;
-  all)    WANTED="$CLI_SKILL $AGENTS_SKILL" ;;
+  cli)             WANTED="$CLI_SKILL" ;;
+  audio-streaming) WANTED="$STREAM_SKILL" ;;
+  sip-trunking)    WANTED="$SIP_SKILL" ;;
+  voice-xml)       WANTED="$XML_SKILL" ;;
+  all)             WANTED="$CLI_SKILL $STREAM_SKILL $SIP_SKILL $XML_SKILL" ;;
   *)
     echo "✗ Unknown skill: $1" >&2
-    echo "  Available: cli, agents, all" >&2
+    echo "  Available: cli, audio-streaming, sip-trunking, voice-xml, all" >&2
     exit 1
     ;;
 esac

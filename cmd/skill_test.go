@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -191,4 +193,121 @@ func TestSkillInstall_unknownSelectorIsRejected(t *testing.T) {
 	if !strings.Contains(err.Error(), "cli") {
 		t.Errorf("error should list the available skills, got: %v", err)
 	}
+}
+
+// Every bundled skill must install byte-identically to what is embedded. A
+// broken //go:embed yields an empty string rather than a build failure, so
+// this is the check that a skill actually shipped.
+func TestSkillInstall_allBundledSkillsInstallByteIdentical(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Cleanup(func() { skillDir = ""; skillPrint = false; dryRunFlag = false })
+
+	if err := runSkillInstall(nil, []string{"all"}); err != nil {
+		t.Fatalf("install all: %v", err)
+	}
+	for _, sk := range bundledSkills {
+		got, err := os.ReadFile(filepath.Join(home, ".claude", "skills", sk.dirName, skillFileName))
+		if err != nil {
+			t.Errorf("%s: not installed by `all`: %v", sk.selector, err)
+			continue
+		}
+		if string(got) != sk.content {
+			t.Errorf("%s: installed %d bytes, embedded %d — content differs", sk.selector, len(got), len(sk.content))
+		}
+		if !strings.HasPrefix(string(got), "---") {
+			t.Errorf("%s: installed file lost its YAML frontmatter; agents parse that to discover the skill", sk.selector)
+		}
+	}
+}
+
+func TestSkillList_reportsEverySkillAndItsState(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Cleanup(func() { skillDir = ""; skillPrint = false; dryRunFlag = false; outputFormat = "" })
+
+	outputFormat = "json"
+	var buf bytes.Buffer
+
+	// Nothing installed yet.
+	rows := skillListRows(t)
+	if len(rows) != len(bundledSkills) {
+		t.Fatalf("listed %d skills, want %d", len(rows), len(bundledSkills))
+	}
+	for _, r := range rows {
+		if r.State != skillStateAbsent {
+			t.Errorf("%s: state %q before any install, want %q", r.Selector, r.State, skillStateAbsent)
+		}
+	}
+
+	// Install one, then it reports installed.
+	if err := runSkillInstall(nil, nil); err != nil {
+		t.Fatalf("default install: %v", err)
+	}
+	for _, r := range skillListRows(t) {
+		if r.Selector == bundledSkills[0].selector && r.State != skillStateCurrent {
+			t.Errorf("after installing %s, state = %q, want %q", r.Selector, r.State, skillStateCurrent)
+		}
+	}
+
+	// Tamper with it: that is the drift embedding creates, and the state that
+	// tells a user to re-run install.
+	p := filepath.Join(home, ".claude", "skills", bundledSkills[0].dirName, skillFileName)
+	if err := os.WriteFile(p, []byte("--- \nstale content from an older binary\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, r := range skillListRows(t) {
+		if r.Selector == bundledSkills[0].selector {
+			found = true
+			if r.State != skillStateStale {
+				t.Errorf("a modified skill reports %q, want %q", r.State, skillStateStale)
+			}
+		}
+	}
+	if !found {
+		t.Error("the tampered skill vanished from the listing")
+	}
+	_ = buf
+}
+
+// The CX agents skill must not appear in the listing either.
+func TestSkillList_omitsTheUnlistedCXAgentsSkill(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Cleanup(func() { outputFormat = "" })
+	outputFormat = "json"
+
+	for _, r := range skillListRows(t) {
+		if r.Selector == "agents" || r.InstallsTo == "plivo-cx-agents" {
+			t.Errorf("the CX agents skill appeared in `skill list`: %+v", r)
+		}
+	}
+}
+
+// skillListRows runs `skill list` in JSON mode and decodes the envelope.
+func skillListRows(t *testing.T) []skillListEntry {
+	t.Helper()
+	prev := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	runErr := runSkillList(nil, nil)
+	w.Close()
+	os.Stdout = prev
+	if runErr != nil {
+		t.Fatalf("skill list: %v", runErr)
+	}
+	var env struct {
+		Data []skillListEntry `json:"data"`
+	}
+	if err := json.NewDecoder(r).Decode(&env); err != nil {
+		t.Fatalf("decode skill list envelope: %v", err)
+	}
+	return env.Data
 }
