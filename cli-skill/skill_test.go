@@ -1,6 +1,8 @@
 package cliskill
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -91,4 +93,97 @@ func TestStaleListEnvelopeErrors_detection(t *testing.T) {
 			}
 		})
 	}
+}
+
+// fencedBlocks returns the contents of each ``` fenced code block.
+func fencedBlocks(md string) []string {
+	var out []string
+	var cur []string
+	in := false
+	for _, ln := range strings.Split(md, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(ln), "```") {
+			if in {
+				out = append(out, strings.Join(cur, "\n"))
+				cur = nil
+			}
+			in = !in
+			continue
+		}
+		if in {
+			cur = append(cur, ln)
+		}
+	}
+	return out
+}
+
+var jqDataIndex = regexp.MustCompile(`\bjq\b[^\n']*'[^']*\.data\[`)
+
+// staleListEnvelopeErrorsByBlock catches the multi-line form that the
+// line-scoped check cannot see: a list command whose output is captured into a
+// variable on one line and filtered by jq several lines later. docs/errors.md
+// carried exactly that shape, and the line-scoped checker read it as clean.
+func staleListEnvelopeErrorsByBlock(md string) []string {
+	var errs []string
+	for _, b := range fencedBlocks(md) {
+		if !strings.Contains(b, "plivo ") || !strings.Contains(b, "list") {
+			continue
+		}
+		if m := jqDataIndex.FindString(b); m != "" {
+			errs = append(errs, "code block runs a list command and filters `.data[` ("+
+				strings.TrimSpace(m)+"…); list rows nest under `data.objects`, so use `.data.objects[`")
+		}
+	}
+	return errs
+}
+
+// TestRepoDocs_useObjectsEnvelope runs the same check across every markdown
+// file in the repo, not just the embedded skill.
+//
+// The narrow version of this test passed for four releases while README.md and
+// docs/errors.md both carried the retired `.data[` form. A checker scoped to
+// one file only protects that file; the README is the example most people copy.
+func TestRepoDocs_useObjectsEnvelope(t *testing.T) {
+	root := ".."
+	var checked int
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			switch info.Name() {
+			case ".git", "node_modules", "dist":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".md" {
+			return nil
+		}
+		// COMMANDS.md is generated from the command tree, and CHANGELOG.md
+		// documents the old shape on purpose when describing the v0.3.0 break.
+		switch filepath.Base(path) {
+		case "COMMANDS.md", "CHANGELOG.md":
+			return nil
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		checked++
+		for _, errMsg := range staleListEnvelopeErrors(string(b)) {
+			t.Errorf("%s: %s", path, errMsg)
+		}
+		for _, errMsg := range staleListEnvelopeErrorsByBlock(string(b)) {
+			t.Errorf("%s: %s", path, errMsg)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A path or extension typo would silently check nothing and pass.
+	if checked < 8 {
+		t.Fatalf("only walked %d markdown files; expected the whole repo — check the walk root", checked)
+	}
+	t.Logf("checked %d markdown files", checked)
 }

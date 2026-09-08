@@ -7,7 +7,8 @@ description: Use the `plivo` CLI binary instead of raw curl for any Plivo task �
 
 Single Go binary on PATH (installed as `plivo`). Prefer the CLI over curl — the JSON output is ~10x cheaper to consume than raw REST and the error envelope is stable across commands. For any endpoint the CLI doesn't wrap, use the generic `plivo api` escape hatch (below) rather than curl.
 
-> Compatible with plivo-cli v0.3.0. Run `plivo --version` to detect mismatch; reinstall the CLI to refresh this skill.
+> Ships inside the plivo-cli binary. `plivo skill list` reports whether this
+> copy still matches your binary; `plivo skill install cli` refreshes it.
 
 ## If you are an AI agent
 
@@ -371,7 +372,7 @@ Phone-number masking session lifecycle: `create` (spend, `--yes`), `get`, `list`
 
 ## Messaging
 
-Channel-split CLI: SMS / WhatsApp / MMS each have their own subgroup. Universal `plivo messaging get <uuid>` works across channels. The `messaging` group aliases to `message`, `msg`, and `sms` (so `plivo sms send ...` == `plivo messaging sms send ...`).
+Channel-split CLI: SMS / WhatsApp / MMS each have their own subgroup. Universal `plivo messaging get <uuid>` works across channels. The `messaging` group aliases to `message`, `msg`, and `sms`, so `plivo sms sms send ...` == `plivo messaging sms send ...`. The alias replaces only the group name; `plivo sms send` is not a command.
 
 ### `plivo messaging sms send` (spend)
 
@@ -636,9 +637,24 @@ List your past support escalations (the ones filed via `plivo ask`). Read-only; 
 
 Self-update the CLI binary (see "Keeping the CLI up to date").
 
-### `plivo agent`
+### `plivo agents`
 
-AI voice agents — **coming soon**; no subcommands yet.
+AI agent flows: node-graph voice/chat/message agents. Aliases to `agent`.
+
+| Command | What it does |
+| --- | --- |
+| `agents list` / `get <id>` | list flows; fetch one flow's full definition (fields, nodes, connections) |
+| `agents create` / `update` | create or edit a flow |
+| `agents publish` / `pause` / `resume` | move a flow between DRAFT and ACTIVE, or stop it handling traffic |
+| `agents delete` | delete a flow (**requires `--yes`**) |
+| `agents nodes list` / `get <type>` | browse the node catalogue available to a graph |
+| `agents runs list` / `get <id>` | inspect executions of a flow |
+
+```bash
+plivo agents list -o json | jq '.data.objects[] | {agent_id, name, status}'
+plivo agents nodes list
+plivo agents runs list <agent_id>
+```
 
 ## Error-envelope cheatsheet
 

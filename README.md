@@ -44,7 +44,7 @@ irm https://raw.githubusercontent.com/plivo/plivo-cli/main/install.ps1 | iex
 ### Verifying a release
 
 Both installers check the SHA-256 checksums, and also verify who signed them
-when [cosign](https://docs.sigstore.dev/cosign/installation/) is present. To
+when [cosign](https://docs.sigstore.dev/cosign/system_config/installation/) is present. To
 check by hand:
 
 ```bash
@@ -176,7 +176,7 @@ command -v plivo || echo "Install instructions: cli-skill/SKILL.md → Installat
 plivo auth whoami    # exit 2 + AUTH_MISSING means no creds — point user at `plivo login`
 
 # 3. Force JSON output for parsing (default on non-TTY, explicit for safety)
-plivo voice calls list -o json | jq '.data[] | {call_uuid, duration}'
+plivo voice calls list -o json | jq '.data.objects[] | {call_uuid, duration}'
 
 # 4. NEVER spend money without --yes — the CLI refuses with exit 5 anyway,
 #    but check with --dry-run first to confirm the request shape.
