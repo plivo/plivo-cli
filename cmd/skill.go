@@ -5,9 +5,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"text/tabwriter"
 
+	audiostreamingskill "github.com/plivo/plivo-cli/audio-streaming-skill"
 	cliskill "github.com/plivo/plivo-cli/cli-skill"
 	"github.com/plivo/plivo-cli/internal/clierr"
+	"github.com/plivo/plivo-cli/internal/output"
+	siptrunkingskill "github.com/plivo/plivo-cli/sip-trunking-skill"
+	voicexmlskill "github.com/plivo/plivo-cli/voice-xml-skill"
 	"github.com/spf13/cobra"
 )
 
@@ -30,7 +35,15 @@ var bundledSkills = []bundledSkill{
 		content:  cliskill.SkillMD,
 		summary:  "the CLI reference — use `plivo` instead of raw curl",
 	},
+	{selector: "audio-streaming", dirName: "plivo-audio-streaming", content: audiostreamingskill.SkillMD, summary: "connect a WebSocket voice bot to calls with <Stream>"},
+	{selector: "sip-trunking", dirName: "plivo-sip-trunking", content: siptrunkingskill.SkillMD, summary: "connect an AI voice platform over SIP trunking"},
+	{selector: "voice-xml", dirName: "plivo-voice-xml", content: voicexmlskill.SkillMD, summary: "write and fix Plivo Voice XML"},
 }
+
+// The CX agents skill (agents-skill/) stays in the repo, keeping its own
+// embed file and tests, but nothing imports it here. So it reaches neither
+// bundledSkills, ValidArgs and the help text, nor the binary itself, while
+// the feature isn't live. See TestSkillInstall_cxAgentsSkillIsNotOffered.
 
 // lookupSkill resolves a user-typed selector. An empty selector means the
 // default (first) skill.
@@ -72,32 +85,46 @@ var skillCmd = &cobra.Command{
 // skillInstallCmd writes the embedded SKILL.md into the agent skills directory
 // (default ~/.claude/skills/plivo-cli; override with --dir, or --print to stdout).
 var skillInstallCmd = &cobra.Command{
-	Use:   "install [cli|all]",
+	Use:   "install [cli|audio-streaming|sip-trunking|voice-xml|all]",
 	Short: "Install an agent skill so coding agents auto-load the reference",
 	Long: `Install a Plivo agent skill.
 
 A skill is a single-file reference (SKILL.md) written for LLM coding agents.
 They are bundled in the binary, so this writes them out without a network call.
 
-  cli      the CLI reference — use ` + "`plivo`" + ` instead of raw curl
-  all      every listed skill
+  cli              the CLI reference — use ` + "`plivo`" + ` instead of raw curl
+  audio-streaming  connect a WebSocket voice bot to calls with <Stream>
+  sip-trunking     connect an AI voice platform over SIP trunking
+  voice-xml        write and fix Plivo Voice XML
+  all              every listed skill
 
 With no argument, installs the CLI skill (unchanged from previous releases).
 Each skill lands at ~/.claude/skills/<skill>/SKILL.md by default. Use --dir to
 target another agent's skills directory, or --print to write the content to
 stdout so any other tool can capture it; both act on a single skill.`,
 	Example: `  plivo skill install                    # CLI skill -> ~/.claude/skills/plivo-cli/
+  plivo skill install voice-xml          # -> ~/.claude/skills/plivo-voice-xml/
   plivo skill install all                # every listed skill
   plivo skill install all --dry-run      # show destinations, write nothing`,
 	Args:      cobra.MaximumNArgs(1),
-	ValidArgs: []string{"cli", "all"},
+	ValidArgs: []string{"cli", "audio-streaming", "sip-trunking", "voice-xml", "all"},
 	RunE:      runSkillInstall,
+}
+
+// skillListCmd shows every bundled skill and whether it's installed. Needs
+// no network and no credentials — everything it reports comes from the
+// embedded content and the local filesystem.
+var skillListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "Show bundled skills and whether each is installed",
+	Args:  cobra.NoArgs,
+	RunE:  runSkillList,
 }
 
 func init() {
 	skillInstallCmd.Flags().StringVar(&skillDir, "dir", "", "destination directory (default: ~/.claude/skills/<skill>)")
 	skillInstallCmd.Flags().BoolVar(&skillPrint, "print", false, "write the skill content to stdout instead of installing")
-	skillCmd.AddCommand(skillInstallCmd)
+	skillCmd.AddCommand(skillInstallCmd, skillListCmd)
 	rootCmd.AddCommand(skillCmd)
 }
 
@@ -141,6 +168,64 @@ func runSkillInstall(cmd *cobra.Command, args []string) error {
 
 // installSkill writes one skill to its resolved directory, honouring --dir and
 // --dry-run.
+// skillState describes whether a bundled skill is on disk and current.
+// "differs from bundled" is the useful one: it catches a skill written by an
+// older binary, which is the drift embedding the content creates.
+const (
+	skillStateAbsent  = "not installed"
+	skillStateCurrent = "installed"
+	skillStateStale   = "installed (differs from bundled)"
+)
+
+// skillListEntry is one row of `plivo skill list`, and the JSON shape.
+type skillListEntry struct {
+	Selector   string `json:"selector"`
+	InstallsTo string `json:"installs_to"`
+	State      string `json:"state"`
+	Summary    string `json:"summary"`
+	Path       string `json:"path,omitempty"`
+}
+
+func runSkillList(cmd *cobra.Command, _ []string) error {
+	rows := make([]skillListEntry, 0, len(bundledSkills))
+	for _, sk := range bundledSkills {
+		row := skillListEntry{
+			Selector:   sk.selector,
+			InstallsTo: sk.dirName,
+			State:      skillStateAbsent,
+			Summary:    sk.summary,
+		}
+		// A directory we cannot resolve is reported as absent rather than
+		// failing the whole listing.
+		if dir, err := resolveSkillDir("", sk.dirName); err == nil {
+			path := filepath.Join(dir, skillFileName)
+			row.Path = path
+			if b, rerr := os.ReadFile(path); rerr == nil {
+				row.State = skillStateCurrent
+				if string(b) != sk.content {
+					row.State = skillStateStale
+				}
+			}
+		}
+		rows = append(rows, row)
+	}
+
+	if effectiveFormat() == output.FormatJSON {
+		return output.JSONSuccess(os.Stdout, rows, nil)
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+	fmt.Fprintln(w, "SELECTOR\tINSTALLS TO\tSTATE\tWHAT IT IS")
+	for _, r := range rows {
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", r.Selector, r.InstallsTo, r.State, r.Summary)
+	}
+	if err := w.Flush(); err != nil {
+		return clierr.Wrap(err)
+	}
+	fmt.Fprintf(os.Stderr, "\nInstall one with: plivo skill install <selector>  (or \"all\")\n")
+	return nil
+}
+
 func installSkill(s bundledSkill) error {
 	dir, err := resolveSkillDir(skillDir, s.dirName)
 	if err != nil {

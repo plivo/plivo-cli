@@ -3,8 +3,11 @@ Install a Plivo agent skill.
 A skill is a single-file reference (SKILL.md) written for LLM coding agents.
 They are bundled in the binary, so this writes them out without a network call.
 
-  cli      the CLI reference — use `plivo` instead of raw curl
-  all      every listed skill
+  cli              the CLI reference — use `plivo` instead of raw curl
+  audio-streaming  connect a WebSocket voice bot to calls with <Stream>
+  sip-trunking     connect an AI voice platform over SIP trunking
+  voice-xml        write and fix Plivo Voice XML
+  all              every listed skill
 
 With no argument, installs the CLI skill (unchanged from previous releases).
 Each skill lands at ~/.claude/skills/<skill>/SKILL.md by default. Use --dir to
@@ -12,10 +15,11 @@ target another agent's skills directory, or --print to write the content to
 stdout so any other tool can capture it; both act on a single skill.
 
 Usage:
-  plivo skill install [cli|all] [flags]
+  plivo skill install [cli|audio-streaming|sip-trunking|voice-xml|all] [flags]
 
 Examples:
   plivo skill install                    # CLI skill -> ~/.claude/skills/plivo-cli/
+  plivo skill install voice-xml          # -> ~/.claude/skills/plivo-voice-xml/
   plivo skill install all                # every listed skill
   plivo skill install all --dry-run      # show destinations, write nothing
 
