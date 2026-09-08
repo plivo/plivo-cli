@@ -171,18 +171,24 @@ jobs:
           fi
           echo "✓ Embedded version matches: $GOT"
 
+      # The body comes from CHANGELOG.md, not from GitHub's auto-generated
+      # commit list. `generate_release_notes: true` regenerates the body on
+      # every run, so a re-run against an existing tag would replace curated
+      # notes with a list of commit subjects.
+      - name: Render release notes
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: scripts/release-notes.sh "$VERSION" > /tmp/release-notes.md
+
       # ─── Publish the release with all assets ─────────────────────────────
-      #
-      # `generate_release_notes: true` lets GitHub auto-build the
-      # since-last-tag changelog. softprops/action-gh-release is the
-      # de-facto standard for this and is well-maintained.
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3.0.3
         with:
           tag_name: ${{ steps.ver.outputs.version }}
           name: ${{ steps.ver.outputs.version }}
           prerelease: ${{ steps.ver.outputs.prerelease == 'true' }}
-          generate_release_notes: true
+          generate_release_notes: false
+          body_path: /tmp/release-notes.md
           fail_on_unmatched_files: true
           files: |
             dist/plivo_darwin_amd64
