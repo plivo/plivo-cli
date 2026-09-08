@@ -18,7 +18,7 @@ Clear, reproducible issues are the most valuable contribution you can make. Incl
 
 Issues are triaged weekly. Critical bug fixes ship as patch releases as needed; accepted features ship in the next minor release.
 
-Releases follow [Semantic Versioning](https://semver.org). Until v1.0, the surface may change without deprecation cycles (see [CHANGELOG.md](CHANGELOG.md) for what changed in each release). Release artifacts are built from `main` via GitHub Actions and published to GitHub Releases.
+Releases follow [Semantic Versioning](https://semver.org); see [CHANGELOG.md](CHANGELOG.md) for what changed in each one. Now that v1.0 has shipped, breaking changes to the command surface wait for a major version. Release artifacts are built from `main`, signed, and published to GitHub Releases; maintainers cutting one should follow [RELEASING.md](RELEASING.md).
 
 ## Development (for Plivo maintainers)
 

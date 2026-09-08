@@ -66,6 +66,12 @@ release-tap: ## Render the Homebrew formula + Scoop manifest into $(TAP) (run af
 test-tap: ## Check gen-tap.sh still renders the golden output
 	scripts/gen-tap-test.sh
 
+release-notes: ## Print the release notes for VERSION (the GitHub release body)
+	@scripts/release-notes.sh "$(VERSION)"
+
+test-release-notes: ## Check release-notes.sh extracts the right CHANGELOG section
+	scripts/release-notes-test.sh
+
 check-tap-fresh: ## Warn if the Homebrew tap is behind the latest release
 	scripts/check-tap-fresh.sh
 
