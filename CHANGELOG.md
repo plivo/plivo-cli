@@ -5,6 +5,28 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- The bundled CLI skill said `plivo agents` was "coming soon; no subcommands
+  yet". It has a full surface — list, get, create, update, publish, pause,
+  resume, delete, plus the node catalogue and run history — so an assistant
+  reading the skill would decline to use commands that work. Documented.
+- The bundled CLI skill claimed `plivo sms send` is equivalent to
+  `plivo messaging sms send`. The alias replaces the group name only, so
+  `plivo sms send` is not a command and exits 1.
+- The bundled CLI skill pinned itself to "plivo-cli v0.3.0", four releases
+  behind. It now points at `plivo skill list`, which reports drift directly,
+  instead of naming a version that goes stale every release.
+- The README and `docs/errors.md` still used the pre-v0.3.0 `.data[]` shape in
+  jq examples, which is a hard jq error against the current envelope, not a
+  near miss. The regression guard for this existed but only ever read the
+  skill file; it now covers every doc in the repo, including the multi-line
+  capture-then-filter form it previously could not see.
+- Dead documentation links: the cosign install page, and the `<Conference>`
+  XML page referenced twice by the Voice XML skill.
+
 ## [1.0.1] - 2026-09-08
 
 ### Added
