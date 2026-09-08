@@ -100,7 +100,7 @@ Stable strings — switch on these, not on the message text.
 out=$(plivo agent list -o json 2>&1)
 exit_code=$?
 case "$exit_code" in
-  0) echo "$out" | jq '.data[] | .name' ;;
+  0) echo "$out" | jq '.data.objects[] | .name' ;;
   2) plivo login && retry ;;
   4) sleep 6 && retry ;;
   *)

@@ -82,7 +82,7 @@ Then copy the closest document from "Patterns and the documents to copy" below a
 | `<Message>` | Send an SMS from inside the call flow |
 | `<Stream>` | Open a WebSocket audio stream. Its own attributes and the WebSocket protocol are in `plivo-audio-streaming`, a separate install |
 
-Pages: <https://www.plivo.com/docs/voice/xml/audio-output> (Speak, Play, DTMF), <https://www.plivo.com/docs/voice/xml/input> (GetDigits, GetInput), <https://www.plivo.com/docs/voice/xml/routing> (Dial, Redirect, Hangup, Wait, PreAnswer), <https://www.plivo.com/docs/voice/xml/record>, <https://www.plivo.com/docs/voice/xml/conference>, <https://www.plivo.com/docs/voice/xml/multiparty-call>, <https://www.plivo.com/docs/messaging/xml/message>, <https://www.plivo.com/docs/voice/xml/audio-streaming>.
+Pages: <https://www.plivo.com/docs/voice/xml/audio-output> (Speak, Play, DTMF), <https://www.plivo.com/docs/voice/xml/input> (GetDigits, GetInput), <https://www.plivo.com/docs/voice/xml/routing> (Dial, Redirect, Hangup, Wait, PreAnswer), <https://www.plivo.com/docs/voice/xml/record>, <https://www.plivo.com/docs/voice/api/conferences>, <https://www.plivo.com/docs/voice/xml/multiparty-call>, <https://www.plivo.com/docs/messaging/xml/message>, <https://www.plivo.com/docs/voice/xml/audio-streaming>.
 
 Full attribute tables, defaults and allowed values are in "Element reference" below.
 
@@ -483,7 +483,7 @@ Recordings are deleted after 30 days, so download what you need.
 
 ### Conference
 
-Joins a named room. The room name goes in the element body. Maximum 20 participants. Docs: <https://www.plivo.com/docs/voice/xml/conference>.
+Joins a named room. The room name goes in the element body. Maximum 20 participants. Docs: <https://www.plivo.com/docs/voice/api/conferences>.
 
 Basic:
 
