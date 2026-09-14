@@ -376,6 +376,11 @@ func doAPIRequest(c *api.Client, method, fullURL string, body []byte, extraHeade
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", version.UserAgent())
+	// The X-Plivo-CLI-* set every other command sends via Client.Do. This
+	// request is hand-built, so it has to ask for them explicitly; without
+	// them the server sees cli_command "unknown" and no version, which also
+	// disables the upgrade nudge for anyone working through `plivo api`.
+	c.ApplyCLIHeaders(req)
 
 	// Layer caller-supplied headers last so they win over the defaults.
 	for k, vs := range extraHeaders {

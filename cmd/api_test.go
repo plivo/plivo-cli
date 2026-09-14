@@ -645,3 +645,105 @@ func TestAPICmd_UpstreamErrorBodyPreservedInEnvelope(t *testing.T) {
 		t.Errorf("envelope JSON missing upstream context: %s", string(js))
 	}
 }
+
+// TestAPICmd_sendsCLITelemetryHeaders guards a gap found in prod telemetry:
+// 46 of 543 requests since v1.0.0 arrived with no X-Plivo-CLI-Command and no
+// X-Plivo-CLI-Version, recorded server-side as cli_command="unknown" with a
+// blank version, while the User-Agent still read Plivo-CLI/v1.0.1.
+//
+// The cause is that `plivo api` builds its own *http.Request and calls
+// c.HTTP.Do directly, so it never reaches Client.addCLIHeaders. Beyond losing
+// attribution, the server drives the upgrade nudge off X-Plivo-CLI-Version,
+// so a user living in `plivo api` is never told their CLI is out of date.
+func TestAPICmd_sendsCLITelemetryHeaders(t *testing.T) {
+	setFakeCreds(t)
+	srv, hits := startAPIServer(t, 200, "application/json", `{"ok":true}`)
+	pointAPIAtTestServer(t, srv)
+
+	if err, _, _ := execCmd(t, "api", "GET", "/Account/"); err != nil {
+		t.Fatalf("api GET failed: %v", err)
+	}
+	got := hits()
+	if len(got) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(got))
+	}
+	h := got[0].Header
+
+	// Version is what the server's upgrade nudge keys on.
+	if h.Get("X-Plivo-CLI-Version") == "" {
+		t.Error("X-Plivo-CLI-Version is missing; the server cannot drive the upgrade nudge for `plivo api`")
+	}
+	// Command is what makes the request attributable in analytics.
+	if h.Get("X-Plivo-CLI-Command") != "api" {
+		t.Errorf("X-Plivo-CLI-Command = %q, want \"api\" (blank is recorded as \"unknown\")", h.Get("X-Plivo-CLI-Command"))
+	}
+	for _, k := range []string{"X-Plivo-CLI-OS", "X-Plivo-CLI-Arch"} {
+		if h.Get(k) == "" {
+			t.Errorf("%s is missing", k)
+		}
+	}
+	// The User-Agent was never the problem; assert it still survives.
+	if ua := h.Get("User-Agent"); !strings.HasPrefix(ua, "Plivo-CLI/") {
+		t.Errorf("User-Agent = %q, want a Plivo-CLI/ prefix", ua)
+	}
+}
+
+// TestAPICmd_userHeaderStillOverridesCLIHeaders guards the ordering: the
+// CLI headers are applied before caller-supplied ones, so --header keeps
+// winning. Applying them after would silently ignore an explicit override.
+func TestAPICmd_userHeaderStillOverridesCLIHeaders(t *testing.T) {
+	setFakeCreds(t)
+	srv, hits := startAPIServer(t, 200, "application/json", `{"ok":true}`)
+	pointAPIAtTestServer(t, srv)
+
+	if err, _, _ := execCmd(t, "api", "GET", "/Account/",
+		"--header", "X-Plivo-CLI-Command: custom-value",
+		"--header", "User-Agent: my-own-agent"); err != nil {
+		t.Fatalf("api GET failed: %v", err)
+	}
+	got := hits()
+	if len(got) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(got))
+	}
+	if v := got[0].Header.Get("X-Plivo-CLI-Command"); v != "custom-value" {
+		t.Errorf("X-Plivo-CLI-Command = %q, want the caller's \"custom-value\"", v)
+	}
+	if v := got[0].Header.Get("User-Agent"); v != "my-own-agent" {
+		t.Errorf("User-Agent = %q, want the caller's \"my-own-agent\"", v)
+	}
+}
+
+// TestAPICmd_telemetryOptOutDropsIdentityHeaders keeps `plivo api` on the same
+// privacy contract as every other command: with telemetry off the four
+// identity headers must be ABSENT (not blank), while Version/OS/Arch/Command
+// still go out because the server needs Version for the upgrade nudge.
+func TestAPICmd_telemetryOptOutDropsIdentityHeaders(t *testing.T) {
+	setFakeCreds(t)
+	srv, hits := startAPIServer(t, 200, "application/json", `{"ok":true}`)
+
+	c := &api.Client{
+		BaseURL: srv.URL, AuthID: "MAFAKEFORTEST", AuthToken: "fake-token",
+		Email: "someone@example.com", Region: "us-east-1", AomUUID: "aom-1",
+		TelemetryEnabled: false,
+		HTTP:             &http.Client{},
+	}
+	apiClientForTest = c
+	t.Cleanup(func() { apiClientForTest = nil })
+
+	if err, _, _ := execCmd(t, "api", "GET", "/Account/"); err != nil {
+		t.Fatalf("api GET failed: %v", err)
+	}
+	got := hits()
+	if len(got) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(got))
+	}
+	h := got[0].Header
+	for _, k := range []string{"X-Plivo-CLI-Email", "X-Plivo-CLI-Auth-ID", "X-Plivo-CLI-Region", "X-Plivo-CLI-AOM-UUID"} {
+		if _, present := h[http.CanonicalHeaderKey(k)]; present {
+			t.Errorf("%s present with telemetry off; it must be omitted entirely, not blank", k)
+		}
+	}
+	if h.Get("X-Plivo-CLI-Version") == "" {
+		t.Error("X-Plivo-CLI-Version must survive telemetry opt-out; the upgrade nudge depends on it")
+	}
+}

@@ -57,6 +57,20 @@ func (c *Client) addCLIHeaders(req *http.Request) {
 	}
 }
 
+// ApplyCLIHeaders sets the standard X-Plivo-CLI-* headers on a request that
+// was built outside Do / DoMultipart / StreamSSE.
+//
+// `plivo api` constructs its own *http.Request so it can pass an arbitrary
+// method, path and body straight through, which means it does not get these
+// for free. Without them the server records the request as cli_command
+// "unknown" with a blank version, and — because the upgrade nudge is driven
+// off X-Plivo-CLI-Version — never tells that user their CLI is out of date.
+//
+// Call this BEFORE layering caller-supplied headers, so `--header` still wins.
+func (c *Client) ApplyCLIHeaders(req *http.Request) {
+	c.addCLIHeaders(req)
+}
+
 // checkUpgradeWarn inspects response headers for the server-driven
 // upgrade nudge. The print itself fires after rootCmd.Execute() returns.
 func checkUpgradeWarn(resp *http.Response) {
