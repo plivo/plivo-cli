@@ -14,6 +14,7 @@ import (
 	"github.com/plivo/plivo-cli/internal/version"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
+	"regexp"
 )
 
 var (
@@ -193,6 +194,12 @@ func registerAllFlag(cmd *cobra.Command) {
 // name), so a rejected-credentials error can point at the right thing.
 var credSource string
 
+// credAuthID records the auth ID those credentials carried, so a rejected
+// credential can be checked for the shape mistakes that look identical to a
+// wrong password in the server's reply. Not a secret: the auth ID is the
+// username half and already appears in every request URL.
+var credAuthID string
+
 // clientForTest is a package-level test hook, mirroring apiClientForTest in
 // api.go. When non-nil every command gets this client, so tests can point a
 // command at an httptest server without real credentials.
@@ -208,6 +215,7 @@ func getClient() (*api.Client, string, error) {
 		return nil, "", err
 	}
 	credSource = name
+	credAuthID = p.AuthID
 	c := api.New(p.AuthID, p.AuthToken, time.Duration(timeoutSec)*time.Second)
 	c.AdminBaseURL = adminServer
 	c.Email = p.Email
@@ -263,6 +271,60 @@ func nonCredentialAuthHint(msg string) string {
 	return ""
 }
 
+// authIDShape is the format of a Plivo auth ID: MA (account) or SA
+// (subaccount) followed by 18 uppercase alphanumerics. Same shape the
+// feedback sanitiser already redacts on.
+var authIDShape = regexp.MustCompile(`^[MS]A[A-Z0-9]{18}$`)
+
+// allSameChar reports whether s is one character repeated, which is the shape
+// of the MAXXXXXXXXXXXXXXXXXX placeholders documentation uses. Written out
+// rather than as a regex because Go's RE2 has no backreferences.
+func allSameChar(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		if s[i] != s[0] {
+			return false
+		}
+	}
+	return true
+}
+
+// malformedAuthIDHint returns a hint when a rejected auth ID is visibly the
+// wrong shape, or "" when it looks real and the password is simply wrong.
+//
+// The server answers every one of these with the same "invalid credentials",
+// so a typo, a truncated paste and a genuinely wrong token are indistinguishable
+// to the user. Prod logs for the CLI's first fortnight show every auth failure
+// was a shape problem, not a wrong secret: a lowercased auth ID, and two
+// placeholder IDs copied out of documentation.
+//
+// Hint only. This runs after the server has already rejected the credential,
+// so it can never block a valid one that simply looks unusual.
+func malformedAuthIDHint(authID string) string {
+	if authID == "" {
+		return ""
+	}
+	if !authIDShape.MatchString(authID) {
+		if authIDShape.MatchString(strings.ToUpper(authID)) {
+			return "Auth IDs are uppercase; this one is not. Try " + strings.ToUpper(authID) + "."
+		}
+		if n := len(authID); n != 20 {
+			return fmt.Sprintf("That auth ID is %d characters; Plivo auth IDs are 20 (MA followed by 18). "+
+				"Check for a truncated or partly-pasted value.", n)
+		}
+		return "That auth ID is not in Plivo's format (MA followed by 18 uppercase letters or digits)."
+	}
+	// Right shape, but the well-known documentation fillers.
+	body := authID[2:]
+	if allSameChar(body) || strings.HasPrefix("ABCDEFGHIJKLMNOPQRSTUVWXYZ", body) {
+		return "That looks like a placeholder auth ID from documentation rather than a real one. " +
+			"Copy yours from the Plivo console, or run `plivo login`."
+	}
+	return ""
+}
+
 func handleError(err error) {
 	f := output.Resolve(outputFormat, os.Stderr)
 
@@ -273,9 +335,12 @@ func handleError(err error) {
 		apiErr = clierr.Wrap(err)
 	}
 	if apiErr.Code == clierr.CodeAuthInvalid {
-		if h := nonCredentialAuthHint(apiErr.Message); h != "" {
-			apiErr.Hint = h
-		} else {
+		switch {
+		case nonCredentialAuthHint(apiErr.Message) != "":
+			apiErr.Hint = nonCredentialAuthHint(apiErr.Message)
+		case malformedAuthIDHint(credAuthID) != "":
+			apiErr.Hint = malformedAuthIDHint(credAuthID)
+		default:
 			apiErr.Hint = credentialHint()
 		}
 	}
