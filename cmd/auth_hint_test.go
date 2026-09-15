@@ -60,3 +60,63 @@ func TestCredentialHint_namesTheSource(t *testing.T) {
 		t.Error("profile hint should name the profile")
 	}
 }
+
+// TestMalformedAuthIDHint covers the shape mistakes the server cannot
+// distinguish from a wrong password: it answers all of them with the same
+// "invalid credentials". Every auth failure in the CLI's first fortnight in
+// prod was one of these, not a wrong secret.
+func TestMalformedAuthIDHint(t *testing.T) {
+	cases := []struct {
+		name    string
+		authID  string
+		wantSub string // "" means: looks real, fall through to credentialHint
+	}{
+		// Seen in prod logs.
+		{"lowercase", "mamze3oteymtqtnzyync", "uppercase"},
+		{"docs placeholder X", "MAXXXXXXXXXXXXXXXXXX", "placeholder"},
+		{"docs placeholder alphabet", "MAABCDEFGHIJKLMNOPQR", "placeholder"},
+		// Other shape mistakes.
+		{"truncated", "MAMZE3OTEY", "10 characters"},
+		{"too long", "MAMZE3OTEYMTQTNZYYNCXX", "22 characters"},
+		{"mixed case", "MaMzE3OtEyMtQtNzYyNc", "uppercase"},
+		{"wrong prefix", "XYMZE3OTEYMTQTNZYYNC", "not in Plivo's format"},
+		{"has punctuation", "MAMZE3OTEY-MTQTNZYYN", "not in Plivo's format"},
+		// Must NOT fire.
+		{"real account id", "MAMZE3OTEYMTQTNZYYNC", ""},
+		{"real subaccount id", "SAMZE3OTEYMTQTNZYYNC", ""},
+		{"empty", "", ""},
+		// Guards against over-eager placeholder matching: a real ID that
+		// merely starts with a few sequential letters is not a placeholder.
+		{"starts ABC but real", "MAABCZE3OTEYMTQTNZYY", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := malformedAuthIDHint(tc.authID)
+			if tc.wantSub == "" {
+				if got != "" {
+					t.Fatalf("expected no hint for %q, got %q", tc.authID, got)
+				}
+				return
+			}
+			if !strings.Contains(got, tc.wantSub) {
+				t.Fatalf("hint for %q = %q, want it to mention %q", tc.authID, got, tc.wantSub)
+			}
+		})
+	}
+}
+
+// The lowercase hint is only useful if it shows the corrected value.
+func TestMalformedAuthIDHint_lowercaseSuggestsTheFix(t *testing.T) {
+	got := malformedAuthIDHint("mamze3oteymtqtnzyync")
+	if !strings.Contains(got, "MAMZE3OTEYMTQTNZYYNC") {
+		t.Errorf("hint should name the uppercased ID, got %q", got)
+	}
+}
+
+// A region-resolution 401 must keep its own hint: it is not a credential
+// problem at all, and the shape check must not shadow it.
+func TestMalformedAuthIDHint_doesNotShadowRegionHint(t *testing.T) {
+	if h := nonCredentialAuthHint("region resolution failed"); h == "" {
+		t.Fatal("region hint regressed")
+	}
+}
