@@ -31,12 +31,15 @@ var CLICommand string
 // on the profile) is forwarded so per-user attribution works inside an
 // org — auth_id alone is org-level.
 //
-// Email/Auth-ID/Region/AOM-UUID are gated on TelemetryEnabled; Version/OS/
-// Arch/Command always go out (the server needs Version for the upgrade nudge).
+// Email/Auth-ID/Region/AOM-UUID are gated on TelemetryEnabled. Version/OS/
+// Arch/Command and Client-Type/Client-Version always go out: none identify a
+// person, and the server needs Version for the upgrade nudge.
 func (c *Client) addCLIHeaders(req *http.Request) {
 	req.Header.Set(headerCLIVersion, version.Value)
 	req.Header.Set(headerCLIOS, runtime.GOOS)
 	req.Header.Set(headerCLIArch, runtime.GOARCH)
+	req.Header.Set(headerClientType, ClientTypeCLI)
+	req.Header.Set(headerClientVersion, version.Value)
 	if CLICommand != "" {
 		req.Header.Set(headerCLICommand, CLICommand)
 	}
@@ -107,6 +110,19 @@ const (
 	headerCLIAuthID  = "X-Plivo-CLI-Auth-ID"
 	headerCLIRegion  = "X-Plivo-CLI-Region"
 	headerCLIAomUUID = "X-Plivo-CLI-AOM-UUID"
+	// Client-Type / Client-Version are hodor's own client-identification
+	// headers, not CLI-specific ones: the console sends web_app. Without them
+	// every CLI request is logged as client_type "undefined" with an empty
+	// version, so CLI traffic can only be picked out of logs by knowing the
+	// /v1/cli route prefix. Sent alongside the X-Plivo-CLI-* set rather than
+	// replacing it, which feeds a different consumer (PostHog + the upgrade gate).
+	headerClientType    = "Client-Type"
+	headerClientVersion = "Client-Version"
+	// ClientTypeCLI is the value hodor's ValidClientTypes allow-list accepts
+	// for this client. An unrecognised value is normalised to "undefined"
+	// rather than rejected on the /v1/cli group, so this is safe to send
+	// before the server side knows about it.
+	ClientTypeCLI = "cli"
 	// Headers the server may return — version gate signals.
 	headerUpgradeRequired = "X-Plivo-CLI-Upgrade-Required"
 	headerMinVersion      = "X-Plivo-CLI-Min-Version"

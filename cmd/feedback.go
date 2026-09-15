@@ -162,6 +162,11 @@ func resolveFeedbackTransport(authID string) (string, map[string]string) {
 		"X-Plivo-CLI-Version": versionValue(),
 		"X-Plivo-CLI-OS":      runtimeOS(),
 		"X-Plivo-CLI-Arch":    runtimeArch(),
+		// hodor's own client-identification headers, same as every other CLI
+		// request sends. Feedback goes through hodor too, so without these it
+		// is logged as client_type "undefined" like the rest used to be.
+		"Client-Type":    api.ClientTypeCLI,
+		"Client-Version": versionValue(),
 	}
 	if !config.TelemetryEnabled() {
 		return base, headers

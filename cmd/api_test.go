@@ -747,3 +747,23 @@ func TestAPICmd_telemetryOptOutDropsIdentityHeaders(t *testing.T) {
 		t.Error("X-Plivo-CLI-Version must survive telemetry opt-out; the upgrade nudge depends on it")
 	}
 }
+
+// TestAPICmd_sendsClientTypeHeaders checks the hand-built `plivo api` request
+// picks up hodor's client-identification headers too. It reaches them via
+// ApplyCLIHeaders, so this is really a guard that the two fixes compose.
+func TestAPICmd_sendsClientTypeHeaders(t *testing.T) {
+	setFakeCreds(t)
+	srv, hits := startAPIServer(t, 200, "application/json", `{"ok":true}`)
+	pointAPIAtTestServer(t, srv)
+
+	if err, _, _ := execCmd(t, "api", "GET", "/Account/"); err != nil {
+		t.Fatalf("api GET failed: %v", err)
+	}
+	h := hits()[0].Header
+	if got := h.Get("Client-Type"); got != "cli" {
+		t.Errorf("Client-Type = %q on `plivo api`, want \"cli\"", got)
+	}
+	if h.Get("Client-Version") == "" {
+		t.Error("Client-Version missing on `plivo api`")
+	}
+}
