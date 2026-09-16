@@ -87,21 +87,47 @@ try {
     Write-Host "OK Checksum verified"
 
     # Provenance: the checksum above proves the bytes are intact, this proves
-    # they came from us. Best-effort -- releases predating signing carry no
-    # signature, and we will not block an install over a tool the user never
-    # installed. A signature that IS present and fails is fatal.
+    # they came from us.
+    #
+    # Releases from $FirstSignedRelease onward MUST carry a verifiable signature.
+    # Previously the broad catch below set $haveSig = $false and installation
+    # continued, so an attacker who could serve a modified binary and its
+    # matching manifest only had to break the signature download to remove the
+    # signer check. What the attacker controls is now fatal; whether cosign is
+    # installed is not something they control, so that stays a warning.
+    $FirstSignedRelease = 'v0.3.0'
     $TrustedIdentity = 'cx-tech@plivo.com'
     $TrustedIssuers  = @('https://accounts.google.com', 'https://github.com/login/oauth')
     $SigUrl  = "$SumsUrl.sig"
     $CertUrl = "$SumsUrl.pem"
     $TmpSig  = Join-Path $TmpDir 'SHA256SUMS.sig'
     $TmpCert = Join-Path $TmpDir 'SHA256SUMS.pem'
+    # Signature required unless this version predates signing. An unparseable
+    # version fails closed.
+    $MustVerify = $true
+    # Only an explicit truthy value overrides: in PowerShell a non-empty "0"
+    # is truthy, so a plain `if ($env:...)` would treat =0 as "skip the check".
+    if ($env:PLIVO_ALLOW_UNSIGNED -and
+        @('1','true','yes','on') -contains $env:PLIVO_ALLOW_UNSIGNED.Trim().ToLower()) {
+        $MustVerify = $false
+    } elseif ($Version -ne 'latest' -and $Version -match '^v?(\d+)\.(\d+)\.') {
+        $maj = [int]$Matches[1]; $min = [int]$Matches[2]
+        if ($maj -eq 0 -and $min -lt 3) { $MustVerify = $false }
+    }
+
     $haveSig = $false
     try {
         Invoke-WebRequest -Uri $SigUrl  -OutFile $TmpSig  -UseBasicParsing -ErrorAction Stop
         Invoke-WebRequest -Uri $CertUrl -OutFile $TmpCert -UseBasicParsing -ErrorAction Stop
         $haveSig = $true
     } catch { $haveSig = $false }
+
+    if (-not $haveSig -and $MustVerify) {
+        Write-Error ("Could not download the signature for $Version.`n" +
+            "  Releases from $FirstSignedRelease onward must be signed. Refusing to install unverified code.`n" +
+            "  Set PLIVO_ALLOW_UNSIGNED=1 to override if you accept the risk.")
+        exit 1
+    }
 
     if ($haveSig) {
         $cosign = Get-Command cosign -ErrorAction SilentlyContinue
@@ -122,8 +148,10 @@ try {
                 exit 1
             }
         } else {
+            # Not fatal: an attacker cannot uninstall the user's cosign, and the
+            # checksum still binds the binary to its manifest.
             Write-Host "-- Signature published but cosign is not installed; provenance not checked."
-            Write-Host "   Install it from https://docs.sigstore.dev/cosign/installation/"
+            Write-Host "   Install it from https://docs.sigstore.dev/cosign/system_config/installation/"
         }
     }
 
