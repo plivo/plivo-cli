@@ -79,3 +79,22 @@ func TestTableAndKVEscapeRemoteText(t *testing.T) {
 		t.Error("PlainError passed a live escape sequence through")
 	}
 }
+
+// TestSafeTextEscapesC1 closes a gap found by attacking SafeText: 0x9b is a
+// single-byte CSI, equivalent to ESC [, and terminals honouring 8-bit controls
+// in UTF-8 mode act on it. Escaping only C0 left that open.
+func TestSafeTextEscapesC1(t *testing.T) {
+	for _, r := range []rune{0x80, 0x84, 0x9b, 0x9f} {
+		in := "a" + string(r) + "2J"
+		got := SafeText(in)
+		if strings.ContainsRune(got, r) {
+			t.Errorf("C1 %#x survived: %q", r, got)
+		}
+	}
+	// The boundary above C1 must still pass: 0xa0 onward is printable text.
+	for _, s := range []string{"café", " nbsp", "ÿ"} {
+		if got := SafeText(s); got != s {
+			t.Errorf("escaped printable text %q -> %q", s, got)
+		}
+	}
+}

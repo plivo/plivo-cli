@@ -170,6 +170,27 @@ func PlainError(w io.Writer, code, message, hint, requestID, docsURL string, ret
 }
 
 // Table writes a tab-aligned table. rows[0] should be the header row.
+// isControl reports whether r is a terminal control character.
+//
+// Covers C0 (0x00-0x1f) and DEL, plus C1 (0x80-0x9f). C1 matters because
+// 0x9b is a single-byte CSI, exactly equivalent to ESC [, and terminals that
+// honour 8-bit controls in UTF-8 mode will act on it. Escaping only C0 left
+// that door open; found by attacking SafeText rather than testing it.
+//
+// Tab and newline are excluded: the renderers use them for layout.
+//
+// Deliberately NOT covered: bidi overrides and zero-width characters. They
+// can mislead visually, but they also appear in legitimate right-to-left text,
+// and mangling real customer names to defend against a cosmetic trick is the
+// worse trade. That is a content-rendering question, not a control-character
+// one.
+func isControl(r rune) bool {
+	if r == '\t' || r == '\n' {
+		return false
+	}
+	return r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f)
+}
+
 // SafeText neutralises terminal control sequences in text that came from the
 // API.
 //
@@ -186,7 +207,7 @@ func PlainError(w io.Writer, code, message, hint, requestID, docsURL string, ret
 func SafeText(s string) string {
 	needsEscape := false
 	for _, r := range s {
-		if (r < 0x20 && r != '\t' && r != '\n') || r == 0x7f {
+		if isControl(r) {
 			needsEscape = true
 			break
 		}
@@ -200,7 +221,7 @@ func SafeText(s string) string {
 		switch {
 		case r == '\t' || r == '\n':
 			b.WriteRune(r)
-		case r < 0x20 || r == 0x7f:
+		case isControl(r):
 			// Visible and inert: \x1b rather than a live ESC.
 			fmt.Fprintf(&b, "\\x%02x", r)
 		default:
