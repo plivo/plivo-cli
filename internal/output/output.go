@@ -147,22 +147,22 @@ func JSONError(w io.Writer, code, message, hint, requestID, docsURL string, retr
 //	  request_id:  abc123
 //	  retryable:   yes
 func PlainError(w io.Writer, code, message, hint, requestID, docsURL string, retryable bool, statusCode int) {
-	fmt.Fprintf(w, "✗ %s\n", message)
+	fmt.Fprintf(w, "✗ %s\n", SafeText(message))
 	fmt.Fprintln(w)
 	if code != "" {
-		fmt.Fprintf(w, "  code:        %s\n", code)
+		fmt.Fprintf(w, "  code:        %s\n", SafeText(code))
 	}
 	if statusCode != 0 {
 		fmt.Fprintf(w, "  http:        %d\n", statusCode)
 	}
 	if hint != "" {
-		fmt.Fprintf(w, "  hint:        %s\n", hint)
+		fmt.Fprintf(w, "  hint:        %s\n", SafeText(hint))
 	}
 	if docsURL != "" {
-		fmt.Fprintf(w, "  docs:        %s\n", docsURL)
+		fmt.Fprintf(w, "  docs:        %s\n", SafeText(docsURL))
 	}
 	if requestID != "" {
-		fmt.Fprintf(w, "  request_id:  %s\n", requestID)
+		fmt.Fprintf(w, "  request_id:  %s\n", SafeText(requestID))
 	}
 	if retryable {
 		fmt.Fprintf(w, "  retryable:   yes\n")
@@ -170,6 +170,46 @@ func PlainError(w io.Writer, code, message, hint, requestID, docsURL string, ret
 }
 
 // Table writes a tab-aligned table. rows[0] should be the header row.
+// SafeText neutralises terminal control sequences in text that came from the
+// API.
+//
+// SA-07: API-provided escape sequences survived into human tables, key-value
+// output and errors. A backend that stores hostile text (an agent name, an
+// alias, a caller ID) could then repaint the terminal, hide or fake output, or
+// drive sequences some terminals act on. Code execution is not established;
+// misleading output is.
+//
+// Only C0 controls plus DEL are escaped, and tab/newline are kept because the
+// renderers use them for layout. Printable text, including every non-ASCII
+// script, passes through untouched: this is about control characters, not
+// about restricting content.
+func SafeText(s string) string {
+	needsEscape := false
+	for _, r := range s {
+		if (r < 0x20 && r != '\t' && r != '\n') || r == 0x7f {
+			needsEscape = true
+			break
+		}
+	}
+	if !needsEscape {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s) + 8)
+	for _, r := range s {
+		switch {
+		case r == '\t' || r == '\n':
+			b.WriteRune(r)
+		case r < 0x20 || r == 0x7f:
+			// Visible and inert: \x1b rather than a live ESC.
+			fmt.Fprintf(&b, "\\x%02x", r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 func Table(w io.Writer, rows [][]string) error {
 	if len(rows) == 0 {
 		fmt.Fprintln(w, "(no results)")
@@ -177,7 +217,11 @@ func Table(w io.Writer, rows [][]string) error {
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	for _, r := range rows {
-		fmt.Fprintln(tw, strings.Join(r, "\t"))
+		safe := make([]string, len(r))
+		for i, cell := range r {
+			safe[i] = SafeText(cell)
+		}
+		fmt.Fprintln(tw, strings.Join(safe, "\t"))
 	}
 	return tw.Flush()
 }
@@ -186,7 +230,7 @@ func Table(w io.Writer, rows [][]string) error {
 func KV(w io.Writer, pairs [][2]string) error {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	for _, p := range pairs {
-		fmt.Fprintf(tw, "%s:\t%s\n", p[0], p[1])
+		fmt.Fprintf(tw, "%s:\t%s\n", SafeText(p[0]), SafeText(p[1]))
 	}
 	return tw.Flush()
 }
