@@ -54,16 +54,6 @@ var redactionPatterns = []struct {
 		re:          regexp.MustCompile(`\bstk_[A-Za-z0-9]+\b`),
 		replacement: "[REDACTED-TOKEN]",
 	},
-	// Plivo auth tokens: ~40-char opaque base64url-ish strings. We
-	// scope this narrowly — require at least one digit AND at least
-	// one letter AND total length 32-80 chars — so prose words and
-	// long URLs don't trigger false-positives. The server-side
-	// redaction pipeline catches anything we miss (defence in depth).
-	{
-		name:        "long-token-digit-letter-mix",
-		re:          regexp.MustCompile(`\b(?:[A-Za-z][A-Za-z0-9_\-]*[0-9]|[0-9][A-Za-z0-9_\-]*[A-Za-z])[A-Za-z0-9_\-]{30,80}\b`),
-		replacement: "[REDACTED-TOKEN]",
-	},
 	// E.164 phone numbers and common dialled formats.
 	{
 		name:        "phone-e164",
@@ -89,6 +79,49 @@ var redactionPatterns = []struct {
 // to type PII into feedback?").
 //
 // The cleaned comment is what gets shipped. The count is metadata.
+// tokenCandidate matches anything with a token's SHAPE. Whether it really is
+// one is decided separately by hasLetterAndDigit.
+//
+// SA-06: this used to be a single regex that required 30-80 characters AFTER a
+// prefix proving both character classes were present. That conflates length
+// with arrangement, so a 40-character token whose only digit sat near the end
+// needed 60+ characters to match and survived redaction. Go's RE2 has no
+// lookahead, so the two conditions cannot be expressed in one pattern; they are
+// now checked independently, which is what the shape actually requires.
+var tokenCandidate = regexp.MustCompile(`\b[A-Za-z0-9_\-]{32,80}\b`)
+
+// hasLetterAndDigit keeps prose and long URL slugs out of the redactor: a
+// credential mixes both classes, an English word does not.
+func hasLetterAndDigit(s string) bool {
+	var letter, digit bool
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+			digit = true
+		case (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z'):
+			letter = true
+		}
+		if letter && digit {
+			return true
+		}
+	}
+	return false
+}
+
+// redactLongTokens replaces every token-shaped run that carries both a letter
+// and a digit, regardless of where in the string they fall.
+func redactLongTokens(in string) (string, int) {
+	count := 0
+	out := tokenCandidate.ReplaceAllStringFunc(in, func(m string) string {
+		if !hasLetterAndDigit(m) {
+			return m
+		}
+		count++
+		return "[REDACTED-TOKEN]"
+	})
+	return out, count
+}
+
 func Sanitize(comment string) (cleaned string, redactionCount int) {
 	cleaned = strings.TrimSpace(comment)
 	if cleaned == "" {
@@ -99,6 +132,13 @@ func Sanitize(comment string) (cleaned string, redactionCount int) {
 		redactionCount += len(matches)
 		cleaned = p.re.ReplaceAllString(cleaned, p.replacement)
 	}
+	// Long opaque tokens: shape by regex, classes in code. See SA-06 above.
+	{
+		cleanedTokens, n := redactLongTokens(cleaned)
+		cleaned = cleanedTokens
+		redactionCount += n
+	}
+
 	// Length cap goes last so we don't truncate halfway through a
 	// redaction placeholder, leaving "[REDACTED-A" in the wild.
 	if len(cleaned) > MaxCommentChars {
