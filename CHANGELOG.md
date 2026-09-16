@@ -34,6 +34,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Terminal control sequences in API-provided text are now neutralised before
+  they reach human output (SA-07). A backend storing hostile text in an agent
+  name, alias or caller ID could repaint the terminal, hide or fake output, or
+  drive sequences some terminals act on. Applies to tables, key-value output
+  and the plain error renderer. Printable text, including every non-ASCII
+  script, is untouched; only C0 controls and DEL are escaped, and tab and
+  newline are kept because the renderers use them for layout.
 - Saving credentials now tightens permissions that already exist (SA-09).
   `MkdirAll` and `OpenFile` only apply their mode when they create, so a
   `~/.plivo` left at 0755 or a `config.toml` left at 0644 kept those modes and
