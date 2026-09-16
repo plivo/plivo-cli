@@ -32,6 +32,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   command tree, and the repo-wide doc check reads git's file list rather than
   walking the filesystem, which reported a stale nested checkout as a defect.
 
+## [Unreleased]
+
+### Security
+
+- Go toolchain baseline moved from 1.26.3 to 1.26.8 (SA-08). Every workflow
+  pins its toolchain with `go-version-file: go.mod`, so the stale `go`
+  directive was the build baseline, and the audit found symbol-level paths to
+  eight standard-library advisories from it.
+- CI now runs `govulncheck` over both the public and internal builds, so the
+  baseline cannot drift unnoticed again. Nothing was watching it before.
+
 ## [1.0.1] - 2026-09-08
 
 ### Added
