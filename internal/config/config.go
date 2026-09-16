@@ -139,15 +139,47 @@ func Save(c *Config) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(p), 0700); err != nil {
+	dir := filepath.Dir(p)
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	// SA-09: MkdirAll and OpenFile only apply their mode when they CREATE.
+	// A ~/.plivo left at 0755 by an older version, a permissive umask or a
+	// restored backup kept that mode, and the auth token was written into it.
+	// Chmod unconditionally so the directory is private whatever it was.
+	if err := os.Chmod(dir, 0700); err != nil {
+		return err
+	}
+
+	// Write a fresh 0600 temp file and rename over the target, rather than
+	// truncating whatever is already there. A new file cannot inherit a
+	// pre-existing 0644, and the replace is atomic, so an interrupted save
+	// cannot leave a half-written config holding a partial token.
+	tmp, err := os.CreateTemp(dir, ".config-*.toml")
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	return toml.NewEncoder(f).Encode(c)
+	tmpName := tmp.Name()
+	defer func() {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName) // no-op once the rename has succeeded
+	}()
+
+	if err := tmp.Chmod(0600); err != nil {
+		return err
+	}
+	if err := toml.NewEncoder(tmp).Encode(c); err != nil {
+		return err
+	}
+	// Flush before the rename: a crash between the two would otherwise leave
+	// an empty file in place of the real config.
+	if err := tmp.Sync(); err != nil {
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, p)
 }
 
 // Resolve returns the credentials to use.

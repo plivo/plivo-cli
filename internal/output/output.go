@@ -147,22 +147,22 @@ func JSONError(w io.Writer, code, message, hint, requestID, docsURL string, retr
 //	  request_id:  abc123
 //	  retryable:   yes
 func PlainError(w io.Writer, code, message, hint, requestID, docsURL string, retryable bool, statusCode int) {
-	fmt.Fprintf(w, "✗ %s\n", message)
+	fmt.Fprintf(w, "✗ %s\n", SafeText(message))
 	fmt.Fprintln(w)
 	if code != "" {
-		fmt.Fprintf(w, "  code:        %s\n", code)
+		fmt.Fprintf(w, "  code:        %s\n", SafeText(code))
 	}
 	if statusCode != 0 {
 		fmt.Fprintf(w, "  http:        %d\n", statusCode)
 	}
 	if hint != "" {
-		fmt.Fprintf(w, "  hint:        %s\n", hint)
+		fmt.Fprintf(w, "  hint:        %s\n", SafeText(hint))
 	}
 	if docsURL != "" {
-		fmt.Fprintf(w, "  docs:        %s\n", docsURL)
+		fmt.Fprintf(w, "  docs:        %s\n", SafeText(docsURL))
 	}
 	if requestID != "" {
-		fmt.Fprintf(w, "  request_id:  %s\n", requestID)
+		fmt.Fprintf(w, "  request_id:  %s\n", SafeText(requestID))
 	}
 	if retryable {
 		fmt.Fprintf(w, "  retryable:   yes\n")
@@ -170,6 +170,67 @@ func PlainError(w io.Writer, code, message, hint, requestID, docsURL string, ret
 }
 
 // Table writes a tab-aligned table. rows[0] should be the header row.
+// isControl reports whether r is a terminal control character.
+//
+// Covers C0 (0x00-0x1f) and DEL, plus C1 (0x80-0x9f). C1 matters because
+// 0x9b is a single-byte CSI, exactly equivalent to ESC [, and terminals that
+// honour 8-bit controls in UTF-8 mode will act on it. Escaping only C0 left
+// that door open; found by attacking SafeText rather than testing it.
+//
+// Tab and newline are excluded: the renderers use them for layout.
+//
+// Deliberately NOT covered: bidi overrides and zero-width characters. They
+// can mislead visually, but they also appear in legitimate right-to-left text,
+// and mangling real customer names to defend against a cosmetic trick is the
+// worse trade. That is a content-rendering question, not a control-character
+// one.
+func isControl(r rune) bool {
+	if r == '\t' || r == '\n' {
+		return false
+	}
+	return r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f)
+}
+
+// SafeText neutralises terminal control sequences in text that came from the
+// API.
+//
+// SA-07: API-provided escape sequences survived into human tables, key-value
+// output and errors. A backend that stores hostile text (an agent name, an
+// alias, a caller ID) could then repaint the terminal, hide or fake output, or
+// drive sequences some terminals act on. Code execution is not established;
+// misleading output is.
+//
+// Only C0 controls plus DEL are escaped, and tab/newline are kept because the
+// renderers use them for layout. Printable text, including every non-ASCII
+// script, passes through untouched: this is about control characters, not
+// about restricting content.
+func SafeText(s string) string {
+	needsEscape := false
+	for _, r := range s {
+		if isControl(r) {
+			needsEscape = true
+			break
+		}
+	}
+	if !needsEscape {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s) + 8)
+	for _, r := range s {
+		switch {
+		case r == '\t' || r == '\n':
+			b.WriteRune(r)
+		case isControl(r):
+			// Visible and inert: \x1b rather than a live ESC.
+			fmt.Fprintf(&b, "\\x%02x", r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 func Table(w io.Writer, rows [][]string) error {
 	if len(rows) == 0 {
 		fmt.Fprintln(w, "(no results)")
@@ -177,7 +238,11 @@ func Table(w io.Writer, rows [][]string) error {
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	for _, r := range rows {
-		fmt.Fprintln(tw, strings.Join(r, "\t"))
+		safe := make([]string, len(r))
+		for i, cell := range r {
+			safe[i] = SafeText(cell)
+		}
+		fmt.Fprintln(tw, strings.Join(safe, "\t"))
 	}
 	return tw.Flush()
 }
@@ -186,7 +251,7 @@ func Table(w io.Writer, rows [][]string) error {
 func KV(w io.Writer, pairs [][2]string) error {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	for _, p := range pairs {
-		fmt.Fprintf(tw, "%s:\t%s\n", p[0], p[1])
+		fmt.Fprintf(tw, "%s:\t%s\n", SafeText(p[0]), SafeText(p[1]))
 	}
 	return tw.Flush()
 }

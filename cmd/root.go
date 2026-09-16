@@ -11,6 +11,7 @@ import (
 	"github.com/plivo/plivo-cli/internal/cliupgrade"
 	"github.com/plivo/plivo-cli/internal/config"
 	"github.com/plivo/plivo-cli/internal/output"
+	"github.com/plivo/plivo-cli/internal/redact"
 	"github.com/plivo/plivo-cli/internal/version"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -227,7 +228,9 @@ func getClient() (*api.Client, string, error) {
 		c.LogRequest = func(method, url string, body []byte) {
 			fmt.Fprintf(os.Stderr, "[%s] %s\n", method, url)
 			if len(body) > 0 {
-				fmt.Fprintf(os.Stderr, "  body: %s\n", string(body))
+				// Redacted: debug output lands in terminal recordings,
+				// CI logs, support attachments and agent transcripts.
+				fmt.Fprintf(os.Stderr, "  body: %s\n", string(redact.Body(body)))
 			}
 		}
 	}

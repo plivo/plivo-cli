@@ -17,6 +17,8 @@ import (
 
 	"github.com/plivo/plivo-cli/internal/cliupgrade"
 	"github.com/plivo/plivo-cli/internal/version"
+
+	"github.com/plivo/plivo-cli/internal/redact"
 )
 
 // CLICommand is process-global; cmd/root.go sets it at command-start so
@@ -213,11 +215,13 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 	if c.DryRun {
 		fmt.Fprintf(os.Stderr, "[dry-run] %s %s\n", method, fullURL)
 		if len(bodyBytes) > 0 {
+			// Redacted: --dry-run is routinely pasted into tickets and chat.
+			safe := redact.Body(bodyBytes)
 			var pretty bytes.Buffer
-			if json.Indent(&pretty, bodyBytes, "  ", "  ") == nil {
+			if json.Indent(&pretty, safe, "  ", "  ") == nil {
 				fmt.Fprintf(os.Stderr, "  body:\n  %s\n", pretty.String())
 			} else {
-				fmt.Fprintf(os.Stderr, "  body: %s\n", string(bodyBytes))
+				fmt.Fprintf(os.Stderr, "  body: %s\n", string(safe))
 			}
 		}
 		return nil, nil
