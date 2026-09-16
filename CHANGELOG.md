@@ -34,6 +34,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- ngrok tunnel discovery is now bound to the tunnel we actually started
+  (SA-04). It returned the first HTTPS tunnel advertised on
+  127.0.0.1:4040, but that port belongs to whichever ngrok started first, so
+  an unrelated instance could hand us its URL, which is then written into the
+  Plivo application's `answer_url` and routes the account's calls to a tunnel
+  we do not own.
+- The tunnel must now forward to the port we requested, and polling aborts if
+  our own ngrok exits rather than waiting out the timeout against somebody
+  else's.
 - Terminal control sequences in API-provided text are now neutralised before
   they reach human output (SA-07). A backend storing hostile text in an agent
   name, alias or caller ID could repaint the terminal, hide or fake output, or
