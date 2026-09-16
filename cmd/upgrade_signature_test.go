@@ -97,3 +97,29 @@ func TestAllowUnsignedOverride(t *testing.T) {
 		t.Fatalf("override should permit the install, got: %v", err)
 	}
 }
+
+// TestAllowUnsignedRequiresExplicitTruthy guards a footgun found by attacking
+// this fix rather than testing it: the override was a non-empty check, so
+// PLIVO_ALLOW_UNSIGNED=0 DISABLED signature enforcement. Someone hardening CI
+// would have opened the hole they meant to close.
+func TestAllowUnsignedRequiresExplicitTruthy(t *testing.T) {
+	mustStillVerify := []string{"0", "false", "no", "off", "", "  ", "maybe", "2"}
+	for _, v := range mustStillVerify {
+		t.Run("blocks_"+v, func(t *testing.T) {
+			t.Setenv(allowUnsignedEnv, v)
+			rel := releaseWithSigs("v1.0.1", "", false)
+			if _, err := verifyManifestSignature(context.Background(), rel, "sums"); err == nil {
+				t.Errorf("PLIVO_ALLOW_UNSIGNED=%q disabled enforcement", v)
+			}
+		})
+	}
+	for _, v := range []string{"1", "true", "TRUE", "yes", "on", " 1 "} {
+		t.Run("allows_"+strings.TrimSpace(v), func(t *testing.T) {
+			t.Setenv(allowUnsignedEnv, v)
+			rel := releaseWithSigs("v1.0.1", "", false)
+			if _, err := verifyManifestSignature(context.Background(), rel, "sums"); err != nil {
+				t.Errorf("PLIVO_ALLOW_UNSIGNED=%q should override, got: %v", v, err)
+			}
+		})
+	}
+}

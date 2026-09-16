@@ -222,6 +222,21 @@ func verifyDownload(ctx context.Context, rel *release.Release, asset *release.As
 // the risk. It has to be set deliberately; nothing sets it by accident.
 const allowUnsignedEnv = "PLIVO_ALLOW_UNSIGNED"
 
+// unsignedAllowed reports whether the override is explicitly switched ON.
+//
+// Deliberately NOT `!= ""`. This variable is named positively, so
+// PLIVO_ALLOW_UNSIGNED=0 reads as "do not allow unsigned" — and under a
+// non-empty test it would have done the exact opposite and disabled signature
+// enforcement. Someone hardening CI would have opened the hole they were
+// trying to close. Only an explicit truthy value counts.
+func unsignedAllowed() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(allowUnsignedEnv))) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
+}
+
 // verifyManifestSignature checks the signature over SHA256SUMS.
 //
 // SA-03: every failure here used to return a nil error, so "could not download
@@ -241,7 +256,7 @@ const allowUnsignedEnv = "PLIVO_ALLOW_UNSIGNED"
 // Releases predating FirstSignedRelease have no signature to check and are
 // still allowed through on the checksum.
 func verifyManifestSignature(ctx context.Context, rel *release.Release, sums string) (string, error) {
-	mustVerify := release.SigningRequired(rel.TagName) && os.Getenv(allowUnsignedEnv) == ""
+	mustVerify := release.SigningRequired(rel.TagName) && !unsignedAllowed()
 
 	// fatal reports a verification failure as an error when the release must be
 	// signed, and as a skip otherwise.

@@ -105,7 +105,10 @@ try {
     # Signature required unless this version predates signing. An unparseable
     # version fails closed.
     $MustVerify = $true
-    if ($env:PLIVO_ALLOW_UNSIGNED) {
+    # Only an explicit truthy value overrides: in PowerShell a non-empty "0"
+    # is truthy, so a plain `if ($env:...)` would treat =0 as "skip the check".
+    if ($env:PLIVO_ALLOW_UNSIGNED -and
+        @('1','true','yes','on') -contains $env:PLIVO_ALLOW_UNSIGNED.Trim().ToLower()) {
         $MustVerify = $false
     } elseif ($Version -ne 'latest' -and $Version -match '^v?(\d+)\.(\d+)\.') {
         $maj = [int]$Matches[1]; $min = [int]$Matches[2]

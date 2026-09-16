@@ -194,7 +194,11 @@ signing_required() {
 
 MUST_VERIFY=1
 if ! signing_required "$VERSION"; then MUST_VERIFY=0; fi
-if [ -n "${PLIVO_ALLOW_UNSIGNED:-}" ]; then MUST_VERIFY=0; fi
+# Only an explicit truthy value overrides. PLIVO_ALLOW_UNSIGNED=0 must mean
+# "do not allow unsigned", not "skip the check".
+case "$(printf '%s' "${PLIVO_ALLOW_UNSIGNED:-}" | tr '[:upper:]' '[:lower:]')" in
+  1|true|yes|on) MUST_VERIFY=0 ;;
+esac
 
 refuse_unsigned() {
   echo "✗ $1" >&2
