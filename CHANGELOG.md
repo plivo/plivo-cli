@@ -32,6 +32,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   command tree, and the repo-wide doc check reads git's file list rather than
   walking the filesystem, which reported a stale nested checkout as a defect.
 
+## [Unreleased]
+
+### Security
+
+- Credentials no longer appear in `--dry-run` or `--log-level debug` output
+  (SA-05). Both printed the request body verbatim, so
+  `voice endpoints create --password ...` put the SIP password in the
+  terminal, and from there into terminal recordings, CI logs, support
+  attachments and agent transcripts. A shared recursive redactor now covers
+  every path that prints a body, at any nesting depth, for JSON and
+  urlencoded forms.
+- Feedback redaction no longer depends on where a token's digits fall
+  (SA-06). The pattern required 30-80 characters *after* a prefix proving both
+  character classes were present, so a 40-character token whose only digit sat
+  near the end needed 60+ characters to match and reached the collector
+  intact. Length and character classes are now checked independently.
+
 ## [1.0.1] - 2026-09-08
 
 ### Added
