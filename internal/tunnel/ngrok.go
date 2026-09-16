@@ -96,6 +96,14 @@ func findNgrok() (string, error) {
 //
 // Two conditions now bind discovery to our own process: the tunnel must
 // forward to the port we asked for, and our child must still be running.
+//
+// Scope, stated plainly: this defends against ACCIDENTAL adoption, which is
+// the realistic case — a colleague's ngrok, a leftover from an earlier run,
+// another tool. It does NOT defend against a hostile local process, which can
+// simply report our port alongside its own URL. Closing that means not
+// trusting the shared 4040 API at all and reading the URL from our own
+// child's stdout instead. That is the right fix and is not attempted here
+// because ngrok is not available to verify the log format against.
 func waitForNgrokTunnel(ctx context.Context, timeout time.Duration, wantPort int, cmd *exec.Cmd) (string, error) {
 	deadline := time.Now().Add(timeout)
 	httpClient := &http.Client{Timeout: 500 * time.Millisecond}
