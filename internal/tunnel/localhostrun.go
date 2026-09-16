@@ -46,13 +46,34 @@ func knownHostsPath() (string, error) {
 }
 
 // hostIsKnown reports whether path already records a key for localhost.run.
+//
+// Matches on the host field of an entry rather than anywhere in the file, so a
+// commented-out mention does not suppress the first-use warning. Only affects
+// whether that warning prints; ssh does the real check against real entries.
 func hostIsKnown(path string) bool {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return false
 	}
 	host := strings.TrimPrefix(lhrHost, "nokey@")
-	return strings.Contains(string(b), host)
+	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		// known_hosts host field may be "host", "host,alias" or "[host]:port".
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		for _, h := range strings.Split(fields[0], ",") {
+			h = strings.TrimPrefix(strings.TrimSuffix(h, "]"), "[")
+			if h == host || strings.HasPrefix(h, host+":") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // startLocalhostRun opens a reverse SSH forward and returns once localhost.run

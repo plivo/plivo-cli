@@ -84,3 +84,34 @@ func TestHostIsKnown(t *testing.T) {
 		t.Error("a recorded localhost.run key should be recognised")
 	}
 }
+
+// A commented-out mention must not read as a recorded key, or the first-use
+// warning silently stops appearing. Found by attacking hostIsKnown.
+func TestHostIsKnownIgnoresComments(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "known_hosts_tunnel")
+	for _, content := range []string{
+		"# localhost.run was here\n",
+		"\n\n# nothing\n",
+		"other.example ssh-ed25519 AAA\n",
+	} {
+		if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if hostIsKnown(p) {
+			t.Errorf("treated as known: %q", content)
+		}
+	}
+	for _, content := range []string{
+		"localhost.run ssh-ed25519 AAA\n",
+		"localhost.run,alias ssh-ed25519 AAA\n",
+		"[localhost.run]:22 ssh-ed25519 AAA\n",
+	} {
+		if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if !hostIsKnown(p) {
+			t.Errorf("real entry not recognised: %q", content)
+		}
+	}
+}
