@@ -32,8 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   command tree, and the repo-wide doc check reads git's file list rather than
   walking the filesystem, which reported a stale nested checkout as a defect.
 
-## [Unreleased]
-
 ### Security
 
 - Terminal control sequences in API-provided text are now neutralised before
@@ -43,6 +41,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the plain error renderer. Printable text, including every non-ASCII
   script, is untouched; only C0 controls and DEL are escaped, and tab and
   newline are kept because the renderers use them for layout.
+- Release signature verification no longer fails open (SA-03). Every failure
+  path returned a nil error, so a signature that could not be downloaded, or
+  assets that were simply absent, meant "install anyway". A checksum proves the
+  binary matches its manifest, not who published either, so an attacker able to
+  serve both only had to break the signature fetch to remove the signer check.
+- Releases from v0.3.0 onward must now carry a verifiable signature. That
+  boundary was described in comments but never enforced, so a brand-new release
+  with its signature assets removed verified as "skipped" and installed.
+  Genuinely older releases still install on the checksum alone.
+- Missing assets, download failures and staging errors are fatal on a release
+  that must be signed, in `plivo upgrade`, `install.sh` and `install.ps1`.
+  `PLIVO_ALLOW_UNSIGNED=1` overrides deliberately.
+- cosign not being installed stays a warning rather than an error. An attacker
+  cannot uninstall the user's cosign, so it is not a path they control, and
+  blocking upgrades over a tool the user never installed would cost more than
+  it buys.
+- Go toolchain baseline moved from 1.26.3 to 1.26.8 (SA-08). Every workflow
+  pins its toolchain with `go-version-file: go.mod`, so the stale `go`
+  directive was the build baseline, and the audit found symbol-level paths to
+  eight standard-library advisories from it.
+- CI now runs `govulncheck` over both the public and internal builds, so the
+  baseline cannot drift unnoticed again. Nothing was watching it before.
 
 ## [1.0.1] - 2026-09-08
 

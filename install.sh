@@ -161,15 +161,51 @@ if [ "$EXPECTED" != "$ACTUAL" ]; then
 fi
 echo "✓ Checksum verified"
 
-# ─── Provenance: verify the signature over SHA256SUMS when we can ────────────
+# ─── Provenance: verify the signature over SHA256SUMS ───────────────────────
 # The checksum above proves the bytes are intact; this proves they came from us.
-# Best-effort by design — releases predating signing carry no signature, and we
-# will not block an install over a tool the user never installed. But a
-# signature that IS present and fails to verify is fatal.
+#
+# Releases from FIRST_SIGNED_RELEASE onward MUST carry a verifiable signature.
+# Previously a failed signature download skipped this whole block silently, so
+# an attacker who could serve a modified binary and its matching manifest only
+# had to break the signature fetch to remove the signer check. What the attacker
+# controls (assets present, downloadable, verifying) is now fatal; what only the
+# user controls (cosign installed) stays a warning.
+FIRST_SIGNED_RELEASE="v0.3.0"
 TRUSTED_IDENTITY="cx-tech@plivo.com"
 TRUSTED_ISSUERS="https://accounts.google.com https://github.com/login/oauth"
 SIG_URL="${SUMS_URL}.sig"
 CERT_URL="${SUMS_URL%SHA256SUMS}SHA256SUMS.pem"
+
+# signing_required: 0 when this version predates signing, else 1. "latest"
+# always requires it, and an unparseable version fails closed.
+signing_required() {
+  case "$1" in
+    latest|"") return 0 ;;
+  esac
+  v="${1#v}"
+  major="${v%%.*}"; rest="${v#*.}"; minor="${rest%%.*}"
+  case "$major$minor" in
+    *[!0-9]*|"") return 0 ;;          # unparseable: require a signature
+  esac
+  if [ "$major" -gt 0 ]; then return 0; fi
+  if [ "$major" -eq 0 ] && [ "$minor" -ge 3 ]; then return 0; fi
+  return 1
+}
+
+MUST_VERIFY=1
+if ! signing_required "$VERSION"; then MUST_VERIFY=0; fi
+# Only an explicit truthy value overrides. PLIVO_ALLOW_UNSIGNED=0 must mean
+# "do not allow unsigned", not "skip the check".
+case "$(printf '%s' "${PLIVO_ALLOW_UNSIGNED:-}" | tr '[:upper:]' '[:lower:]')" in
+  1|true|yes|on) MUST_VERIFY=0 ;;
+esac
+
+refuse_unsigned() {
+  echo "✗ $1" >&2
+  echo "  Releases from ${FIRST_SIGNED_RELEASE} onward must be signed. Refusing to install unverified code." >&2
+  echo "  Set PLIVO_ALLOW_UNSIGNED=1 to override if you accept the risk." >&2
+  exit 1
+}
 
 if curl -fLs -o "${TMPDIR}/SHA256SUMS.sig" "$SIG_URL" 2>/dev/null \
    && curl -fLs -o "${TMPDIR}/SHA256SUMS.pem" "$CERT_URL" 2>/dev/null; then
@@ -193,9 +229,13 @@ if curl -fLs -o "${TMPDIR}/SHA256SUMS.sig" "$SIG_URL" 2>/dev/null \
       exit 1
     fi
   else
+    # Not fatal: an attacker cannot uninstall the user's cosign, and the
+    # checksum still binds the binary to its manifest.
     echo "• Signature published but cosign is not installed — provenance not checked."
     echo "  Install it with: brew install cosign"
   fi
+elif [ "$MUST_VERIFY" = "1" ]; then
+  refuse_unsigned "Could not download the signature for ${VERSION}."
 fi
 
 chmod +x "$TMP_BIN" 2>/dev/null || true
