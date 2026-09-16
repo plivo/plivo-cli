@@ -32,6 +32,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   command tree, and the repo-wide doc check reads git's file list rather than
   walking the filesystem, which reported a stale nested checkout as a defect.
 
+## [Unreleased]
+
+### Security
+
+- Saving credentials now tightens permissions that already exist (SA-09).
+  `MkdirAll` and `OpenFile` only apply their mode when they create, so a
+  `~/.plivo` left at 0755 or a `config.toml` left at 0644 kept those modes and
+  the auth token was written into a file other local users could read.
+- The config is now written to a fresh 0600 temp file and renamed into place.
+  A new file cannot inherit a permissive mode, and the replace is atomic, so
+  an interrupted save can no longer leave a half-written config holding a
+  partial token.
+
 ## [1.0.1] - 2026-09-08
 
 ### Added
