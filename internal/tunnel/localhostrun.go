@@ -5,7 +5,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -26,26 +28,82 @@ const (
 //	abc123.lhr.life tunneled with tls termination, https://abc123.lhr.life
 var lhrURL = regexp.MustCompile(`https://[a-z0-9-]+\.lhr\.life`)
 
+// knownHostsPath returns the dedicated known-hosts file for tunnel providers.
+//
+// Deliberately separate from ~/.ssh/known_hosts: this is the CLI's trust
+// record, and it must not add entries to, or be confused with, the user's own
+// SSH trust store.
+func knownHostsPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(home, ".plivo")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "known_hosts_tunnel"), nil
+}
+
+// hostIsKnown reports whether path already records a key for localhost.run.
+func hostIsKnown(path string) bool {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	host := strings.TrimPrefix(lhrHost, "nokey@")
+	return strings.Contains(string(b), host)
+}
+
 // startLocalhostRun opens a reverse SSH forward and returns once localhost.run
 // has announced the public URL.
 //
-// StrictHostKeyChecking is disabled deliberately: the host key rotates and
-// there is nothing secret in the tunnel to protect. The audio path itself is
-// TLS-terminated by localhost.run.
+// SA-02: this used to pass StrictHostKeyChecking=no with
+// UserKnownHostsFile=/dev/null, on the reasoning that "there is nothing secret
+// in the tunnel to protect". That reasons about confidentiality and misses
+// integrity. The server's stdout supplies the URL the CLI then writes into the
+// Plivo application's answer_url, so a server that can impersonate
+// localhost.run redirects the account's live call handling.
+//
+// localhost.run publishes no host key fingerprint, so there is nothing to pin
+// through an authenticated channel, and ssh-keyscan would just re-learn the key
+// from the same party we are trying to authenticate. What is achievable is
+// trust on first use with a persisted record: accept-new records an unknown
+// host once and REFUSES a changed key thereafter. An attacker must now be
+// present at the very first connection rather than at any connection, and any
+// later substitution fails loudly instead of silently.
+//
+// This narrows SA-02 rather than closing it. Prefer ngrok, whose client
+// authenticates its own service; Start() already does when it is installed.
 func startLocalhostRun(ctx context.Context, localPort int) (*Tunnel, error) {
 	if _, err := exec.LookPath("ssh"); err != nil {
 		return nil, fmt.Errorf("ssh not found, needed for the localhost.run tunnel: %w", err)
 	}
 
+	kh, err := knownHostsPath()
+	if err != nil {
+		return nil, fmt.Errorf("resolve tunnel known-hosts file: %w", err)
+	}
+	firstUse := !hostIsKnown(kh)
+
 	cmd := exec.CommandContext(ctx, "ssh",
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
+		// accept-new: record an unknown host once, refuse a CHANGED key.
+		"-o", "StrictHostKeyChecking=accept-new",
+		"-o", "UserKnownHostsFile="+kh,
 		"-o", "ServerAliveInterval=30",
 		"-o", "ExitOnForwardFailure=yes",
 		"-T", // no pty; we only want the announcement on stdout
 		"-R", fmt.Sprintf("80:localhost:%d", localPort),
 		lhrHost,
 	)
+	if firstUse {
+		fmt.Fprintf(os.Stderr,
+			"  first connection to %s: its host key will be recorded and any later change refused.\n",
+			strings.TrimPrefix(lhrHost, "nokey@"))
+		fmt.Fprintln(os.Stderr,
+			"  this provider publishes no fingerprint to check it against; install ngrok for a verified tunnel.")
+	}
+
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
