@@ -67,8 +67,14 @@ func hostIsKnown(path string) bool {
 			continue
 		}
 		for _, h := range strings.Split(fields[0], ",") {
-			h = strings.TrimPrefix(strings.TrimSuffix(h, "]"), "[")
-			if h == host || strings.HasPrefix(h, host+":") {
+			// "[host]:port" -> "host"; "host:port" is not a known_hosts form,
+			// the brackets are what signal a non-default port.
+			if strings.HasPrefix(h, "[") {
+				if end := strings.Index(h, "]"); end > 0 {
+					h = h[1:end]
+				}
+			}
+			if h == host {
 				return true
 			}
 		}
