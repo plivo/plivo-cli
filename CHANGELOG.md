@@ -34,6 +34,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- The localhost.run SSH fallback now verifies the tunnel host (SA-02). It ran
+  with `StrictHostKeyChecking=no` and `UserKnownHostsFile=/dev/null`, so it
+  accepted any server without authenticating it and discarded the user's
+  stored trust. The justification in the code reasoned about confidentiality
+  ("nothing secret in the tunnel") and missed integrity: the server's output
+  supplies the URL the CLI writes into the application's `answer_url`, so an
+  impersonator redirects live call handling.
+- Uses `accept-new` against a dedicated `~/.plivo/known_hosts_tunnel`: an
+  unknown host is recorded once, a changed key is refused. An attacker now has
+  to be present at the first connection rather than at any connection.
+- This narrows SA-02 rather than closing it. localhost.run publishes no
+  fingerprint to pin, and re-reading the key on each run would just re-learn it
+  from the party being authenticated. First use prints that the provider's
+  identity cannot be checked and points at ngrok, whose client authenticates
+  its own service.
 - Credentials no longer appear in `--dry-run` or `--log-level debug` output
   (SA-05). Both printed the request body verbatim, so
   `voice endpoints create --password ...` put the SIP password in the
