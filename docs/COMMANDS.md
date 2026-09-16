@@ -3611,16 +3611,17 @@ Examples:
 Flags:
 
 ```
-      --app string      Plivo Application UUID whose answer_url will be temporarily redirected (required)
-      --bidirectional   allow bot to send audio back to the caller (default true)
-      --codec string    audio codec advertised to Plivo: mulaw | l16 (default "mulaw")
-      --keep            do NOT restore the original answer_url on exit (advanced)
-      --number string   E.164 number attached to --app (required)
-      --print-payload   dump full webhook bodies to terminal (verbose)
-      --rate int        sample rate in Hz (mulaw: 8000; l16: 8000 or 16000) (default 8000)
-      --to string       local WebSocket URL to forward call audio to, e.g. ws://localhost:7860/ws (required)
-      --tunnel string   tunnel provider: auto | ngrok | localhost.run (default "auto")
-  -y, --yes             skip the confirmation prompt
+      --app string                Plivo Application UUID whose answer_url will be temporarily redirected (required)
+      --bidirectional             allow bot to send audio back to the caller (default true)
+      --codec string              audio codec advertised to Plivo: mulaw | l16 (default "mulaw")
+      --insecure-skip-signature   accept unsigned requests on the tunnel (anyone with the URL can drive your handler)
+      --keep                      do NOT restore the original answer_url on exit (advanced)
+      --number string             E.164 number attached to --app (required)
+      --print-payload             dump full webhook bodies to terminal (verbose)
+      --rate int                  sample rate in Hz (mulaw: 8000; l16: 8000 or 16000) (default 8000)
+      --to string                 local WebSocket URL to forward call audio to, e.g. ws://localhost:7860/ws (required)
+      --tunnel string             tunnel provider: auto | ngrok | localhost.run (default "auto")
+  -y, --yes                       skip the confirmation prompt
 ```
 
 ---
