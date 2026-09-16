@@ -34,6 +34,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Saving credentials now tightens permissions that already exist (SA-09).
+  `MkdirAll` and `OpenFile` only apply their mode when they create, so a
+  `~/.plivo` left at 0755 or a `config.toml` left at 0644 kept those modes and
+  the auth token was written into a file other local users could read.
+- The config is now written to a fresh 0600 temp file and renamed into place.
+  A new file cannot inherit a permissive mode, and the replace is atomic, so
+  an interrupted save can no longer leave a half-written config holding a
+  partial token.
 - Release signature verification no longer fails open (SA-03). Every failure
   path returned a nil error, so a signature that could not be downloaded, or
   assets that were simply absent, meant "install anyway". A checksum proves the
