@@ -12,6 +12,7 @@ package redact
 import (
 	"bytes"
 	"encoding/json"
+	"net/url"
 	"regexp"
 	"strings"
 )
@@ -23,7 +24,13 @@ const Placeholder = "[REDACTED]"
 // Substring matching on a lowercased key, so password / Password /
 // sip_password / new_password are all covered without enumerating them.
 func sensitiveKey(k string) bool {
-	k = strings.ToLower(k)
+	// Decode first: a urlencoded body can spell the key as pass%77ord, which
+	// would otherwise slip past a literal match. Undecodable keys fall back to
+	// the raw text rather than being skipped.
+	if dec, err := url.QueryUnescape(k); err == nil {
+		k = dec
+	}
+	k = strings.ToLower(strings.TrimSpace(k))
 	for _, needle := range []string{
 		"password", "passwd", "pwd",
 		"auth_token", "authtoken",
@@ -61,7 +68,7 @@ func walk(v any) any {
 }
 
 // formValue matches key=value pairs in a urlencoded body.
-var formValue = regexp.MustCompile(`([A-Za-z0-9_\-.]+)=([^&\s]*)`)
+var formValue = regexp.MustCompile(`([A-Za-z0-9_%\-.]+)=([^&\s]*)`)
 
 // Body returns body with credential values replaced.
 //

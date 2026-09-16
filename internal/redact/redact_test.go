@@ -52,3 +52,18 @@ func TestBodyLeavesUnknownShapesAlone(t *testing.T) {
 		}
 	}
 }
+
+// TestBodyRedactsEncodedKeys closes a gap found by attacking this redactor: a
+// urlencoded form can spell the key as pass%77ord, which a literal match
+// missed. Low practical reach, since the CLI builds its own bodies, but
+// `plivo api` forwards whatever the caller supplies.
+func TestBodyRedactsEncodedKeys(t *testing.T) {
+	for _, in := range []string{
+		`pass%77ord=SuperSecret123`,
+		`auth%5Ftoken=SuperSecret123`,
+	} {
+		if got := String(in); strings.Contains(got, "SuperSecret123") {
+			t.Errorf("secret survived an encoded key: %s", got)
+		}
+	}
+}
