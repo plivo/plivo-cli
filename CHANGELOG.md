@@ -32,7 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   command tree, and the repo-wide doc check reads git's file list rather than
   walking the filesystem, which reported a stale nested checkout as a defect.
 
-## [Unreleased]
+
+
+- Cancelling sign-in in the browser now ends `plivo login` immediately. The
+  Cancel button only closed the browser tab, so the CLI kept listening and
+  failed five minutes later with a timeout telling the user to go and approve
+  the thing they had just refused. An `error` in the loopback callback is now
+  handled; previously it fell through to "missing code in callback URL".
 
 ### Security
 
@@ -118,16 +124,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   eight standard-library advisories from it.
 - CI now runs `govulncheck` over both the public and internal builds, so the
   baseline cannot drift unnoticed again. Nothing was watching it before.
-
-## [Unreleased]
-
-### Fixed
-
-- Cancelling sign-in in the browser now ends `plivo login` immediately. The
-  Cancel button only closed the browser tab, so the CLI kept listening and
-  failed five minutes later with a timeout telling the user to go and approve
-  the thing they had just refused. An `error` in the loopback callback is now
-  handled; previously it fell through to "missing code in callback URL".
 
 ## [1.0.1] - 2026-09-08
 
