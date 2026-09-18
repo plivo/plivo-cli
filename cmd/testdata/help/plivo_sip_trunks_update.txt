@@ -13,6 +13,7 @@ Examples:
 
 Flags:
       --credential string     credential uuid
+      --direction string      inbound|outbound (read from the trunk when omitted)
       --fallback-uri string   fallback origination URI uuid
   -h, --help                  help for update
       --ip-acl string         IP access control list uuid

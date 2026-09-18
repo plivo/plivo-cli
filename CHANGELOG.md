@@ -5,6 +5,38 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `sip * delete` ran its dependency check only when refusing. With `--yes` there
+  was no pre-flight read at all, so a delete that detached other objects printed
+  nothing. Deleting an in-use URI **cascade-deletes the trunks pointing at it**,
+  which is exactly the case the check exists to surface. The read now always
+  runs; `--yes` skips the confirmation only.
+- `sip trunks update` 400'd on every flag except `--status` and `--secure`: the
+  API requires `trunk_direction` on each update and the CLI never sent it. It is
+  now read from the trunk, with `--direction` as an override.
+- `sip calls diagnose` exited 0 when the assistant failed to analyse the call,
+  so a script could not tell success from failure. It now exits non-zero when
+  the turn ends in an escalation rather than an answer.
+- `diagnose` told terminal users to reload the Plivo Console, and filed support
+  tickets on its own initiative. Both are now ruled out in the request.
+- `-o json` was ignored by every `update` and `delete`: stdout was empty, prose
+  went to stderr and the exit code was 0, which a jq pipeline reads as success
+  with no data.
+- `sip trunks create -o json` omitted `trunk_domain`, the one value a customer
+  pastes into their platform. Table mode read it back; JSON did not.
+- `sip credentials update` presented `--password-stdin` as optional, but the API
+  rewrites the password on every update, so an update without one blanks it.
+  The flag is now required.
+- `sip uris create` took `--password` on the command line, where it lands in
+  shell history, `ps` output and CI logs. Passwords are stdin-only, matching
+  credentials, and a URI password can now be rotated on update.
+- `numbers update --trunk-id` skipped the outbound-trunk check under `--dry-run`,
+  so the preview showed a request the real run refuses. Pre-flight reads now run
+  under `--dry-run`; it suppresses writes, and a GET is not a write.
+
 ## [1.1.0] - 2026-09-18
 
 ### Added

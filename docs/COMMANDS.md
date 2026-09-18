@@ -2682,7 +2682,7 @@ Flags:
 
 ```
       --name string       credential name
-      --password-stdin    read a new password from stdin
+      --password-stdin    read the password from stdin (required: every update rewrites it)
       --username string   SIP username
 ```
 
@@ -2929,6 +2929,7 @@ Flags:
 
 ```
       --credential string     credential uuid
+      --direction string      inbound|outbound (read from the trunk when omitted)
       --fallback-uri string   fallback origination URI uuid
       --ip-acl string         IP access control list uuid
       --name string           trunk name
@@ -2984,7 +2985,7 @@ Flags:
 ```
       --authentication-needed   require authentication
       --name string             URI name
-      --password string         password when authentication is needed
+      --password-stdin          read the URI password from stdin
       --uri string              host, host:port, host;transport=…, or sip:user@host
       --username string         username when authentication is needed
 ```
@@ -3045,6 +3046,7 @@ Flags:
 ```
       --authentication-needed   require authentication (takes a value)
       --name string             URI name
+      --password-stdin          read a new URI password from stdin
       --uri string              origination URI
       --username string         username
 ```

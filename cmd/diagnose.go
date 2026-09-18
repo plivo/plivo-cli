@@ -107,8 +107,12 @@ func runDiagnoseVoiceCall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	askCallUUID = callUUID // runAsk auto-appends "(call_uuid: X)" + populates userContext
-	prompt := "Help me debug this call. What happened, and was there anything unusual?"
-	return runAsk(cmd, []string{prompt})
+	prompt := "Help me debug this call. What happened, and was there anything unusual?" +
+		diagnoseClientConstraints
+	if err := runAsk(cmd, []string{prompt}); err != nil {
+		return err
+	}
+	return diagnoseOutcome(callUUID)
 }
 
 // requireResourceExists confirms the uuid is on this account before handing the
@@ -185,7 +189,8 @@ func runDiagnoseMessaging(channelLabel string) func(*cobra.Command, []string) er
 		if err := requireResourceExists(cmd, "Message", messageUUID, "message"); err != nil {
 			return err
 		}
-		prompt := fmt.Sprintf("Help me debug this %s message: %s. Why did it fail / what's the status?", channelLabel, messageUUID)
+		prompt := fmt.Sprintf("Help me debug this %s message: %s. Why did it fail / what's the status?",
+			channelLabel, messageUUID) + diagnoseClientConstraints
 		return runAsk(cmd, []string{prompt})
 	}
 }

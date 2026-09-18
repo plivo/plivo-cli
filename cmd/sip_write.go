@@ -96,16 +96,23 @@ func confirmDestructive(action string, affected []string, extra string) error {
 	if yesFlag {
 		return nil
 	}
-	if len(affected) > 0 {
-		fmt.Fprintf(os.Stderr, "In use by %d trunk(s):\n", len(affected))
-		for _, a := range affected {
-			fmt.Fprintf(os.Stderr, "  - %s\n", a)
-		}
-	}
+	reportDependents(affected)
 	if extra != "" {
 		fmt.Fprintf(os.Stderr, "%s\n", extra)
 	}
 	return clierr.DestructiveRefused(action)
+}
+
+// reportDependents names what a delete would detach. Printed on every delete,
+// confirmed or not: with --yes there is no prompt to carry the warning.
+func reportDependents(affected []string) {
+	if len(affected) == 0 {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "In use by %d trunk(s):\n", len(affected))
+	for _, a := range affected {
+		fmt.Fprintf(os.Stderr, "  - %s\n", a)
+	}
 }
 
 // boolFlagPatch adds a boolean only when the user actually passed it, so an
@@ -140,6 +147,17 @@ func deleteSIP(client *api.Client, parts ...string) error {
 	return nil
 }
 
+// emitWrite renders the result of an update or delete. These used to print
+// prose on stderr and nothing on stdout, so `-o json` produced an empty stream
+// and exit 0 — indistinguishable from success with no data to a jq pipeline.
+func emitWrite(human string, fields map[string]any) error {
+	if effectiveFormat() == output.FormatJSON {
+		return output.JSONRaw(os.Stdout, mustJSON(fields))
+	}
+	fmt.Fprintf(os.Stderr, "%s\n", human)
+	return nil
+}
+
 // ─── trunks: create / update / delete ────────────────────────────────────────
 
 var (
@@ -151,6 +169,7 @@ var (
 	trunkUpdateURI, trunkUpdateFallbackURI  string
 	trunkUpdateCredential, trunkUpdateIPACL string
 	trunkUpdateSecure                       bool
+	trunkUpdateDirection                    string
 )
 
 var sipTrunksCreateCmd = &cobra.Command{
@@ -241,6 +260,21 @@ func runSIPTrunksCreate(cmd *cobra.Command, args []string) error {
 	if apiErr, derr := client.Do("GET", client.AccountURL("Zentrunk", "Trunk", id), nil, nil, &t); derr == nil && apiErr == nil {
 		t = unwrapSIPTrunk(t)
 	}
+	// Merge the read-back into BOTH renderings. Returning the create response
+	// alone left -o json without trunk_domain while the table showed it.
+	for k, v := range map[string]string{
+		"trunk_domain":     t.TrunkDomain,
+		"trunk_direction":  t.TrunkDirection,
+		"trunk_status":     t.TrunkStatus,
+		"name":             t.Name,
+		"primary_uri_uuid": t.PrimaryURIUUID,
+		"credential_uuid":  t.CredentialUUID,
+		"ipacl_uuid":       t.IPACLUUID,
+	} {
+		if v != "" {
+			created[k] = v
+		}
+	}
 	if effectiveFormat() == output.FormatJSON {
 		return output.JSONRaw(os.Stdout, mustJSON(created))
 	}
@@ -276,14 +310,24 @@ func runSIPTrunksUpdate(cmd *cobra.Command, args []string) error {
 	if len(body) == 0 {
 		return clierr.BadInput("nothing to update — pass at least one flag")
 	}
+	// The API rejects any update without trunk_direction, including one that
+	// does not touch it. Carry the stored value rather than 400 on every flag.
+	dir := trunkUpdateDirection
+	if dir == "" {
+		var derr error
+		if dir, derr = trunkDirectionOf(client, args[0]); derr != nil {
+			return derr
+		}
+	}
+	body["trunk_direction"] = dir
 	if _, err := postSIP(client, body, "Zentrunk", "Trunk", args[0]); err != nil {
 		return err
 	}
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Updated trunk %s\n", args[0])
-	return nil
+	return emitWrite(fmt.Sprintf("Updated trunk %s", args[0]),
+		map[string]any{"trunk_id": args[0], "updated": true})
 }
 
 func runSIPTrunksDelete(cmd *cobra.Command, args []string) error {
@@ -292,11 +336,12 @@ func runSIPTrunksDelete(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	extra := ""
+	if n := numbersOnTrunk(client, id); n > 0 {
+		extra = fmt.Sprintf("%d number(s) are routed to this trunk and will be detached.", n)
+		fmt.Fprintf(os.Stderr, "%s\n", extra)
+	}
 	if !yesFlag {
-		extra := ""
-		if n := numbersOnTrunk(client, id); n > 0 {
-			extra = fmt.Sprintf("%d number(s) are routed to this trunk and will be detached.", n)
-		}
 		return confirmDestructive("delete trunk "+id, nil, extra)
 	}
 	if err := deleteSIP(client, "Zentrunk", "Trunk", id); err != nil {
@@ -305,18 +350,19 @@ func runSIPTrunksDelete(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Deleted trunk %s\n", id)
-	return nil
+	return emitWrite(fmt.Sprintf("Deleted trunk %s", id),
+		map[string]any{"trunk_id": id, "deleted": true})
 }
 
 // ─── uris: create / list / get / update / delete ─────────────────────────────
 
 var (
-	uriCreateName, uriCreateURI, uriCreateUsername, uriCreatePassword string
-	uriCreateAuthNeeded                                               bool
-	uriUpdateName, uriUpdateURI, uriUpdateUsername                    string
-	uriUpdateAuthNeeded                                               bool
-	uriListLimit, uriListOffset                                       int
+	uriCreateName, uriCreateURI, uriCreateUsername string
+	uriCreateAuthNeeded, uriCreatePasswordStdin    bool
+	uriUpdatePasswordStdin                         bool
+	uriUpdateName, uriUpdateURI, uriUpdateUsername string
+	uriUpdateAuthNeeded                            bool
+	uriListLimit, uriListOffset                    int
 )
 
 var sipURIsCmd = &cobra.Command{
@@ -377,8 +423,12 @@ func runSIPURIsCreate(cmd *cobra.Command, args []string) error {
 	if uriCreateUsername != "" {
 		body["username"] = uriCreateUsername
 	}
-	if uriCreatePassword != "" {
-		body["password"] = uriCreatePassword
+	if uriCreatePasswordStdin {
+		pw, perr := readPasswordStdin()
+		if perr != nil {
+			return perr
+		}
+		body["password"] = pw
 	}
 	created, err := postSIP(client, body, "Zentrunk", "URI")
 	if err != nil {
@@ -463,6 +513,13 @@ func runSIPURIsUpdate(cmd *cobra.Command, args []string) error {
 	if cmd.Flags().Changed("username") {
 		body["username"] = uriUpdateUsername
 	}
+	if uriUpdatePasswordStdin {
+		pw, perr := readPasswordStdin()
+		if perr != nil {
+			return perr
+		}
+		body["password"] = pw
+	}
 	boolFlagPatch(cmd, "authentication-needed", "authentication_needed", uriUpdateAuthNeeded, body)
 	if uriUpdateAuthNeeded && cmd.Flags().Changed("authentication-needed") && uriUpdateUsername == "" {
 		return errAuthNeedsUsername
@@ -476,8 +533,8 @@ func runSIPURIsUpdate(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Updated URI %s\n", args[0])
-	return nil
+	return emitWrite(fmt.Sprintf("Updated URI %s", args[0]),
+		map[string]any{"uri_uuid": args[0], "updated": true})
 }
 
 func runSIPURIsDelete(cmd *cobra.Command, args []string) error {
@@ -491,8 +548,13 @@ func deleteSIPObject(cmd *cobra.Command, uuid, segment, action string) error {
 	if err != nil {
 		return err
 	}
+	// Always read the dependents. --yes skips the confirmation, never the check:
+	// the whole point is to know what a delete detaches, and that matters most
+	// when nobody is there to be asked.
+	used := trunksReferencing(listTrunks(client), uuid)
+	reportDependents(used)
 	if !yesFlag {
-		return confirmDestructive(action+uuid, trunksReferencing(listTrunks(client), uuid), "")
+		return confirmDestructive(action+uuid, nil, "")
 	}
 	if err := deleteSIP(client, "Zentrunk", segment, uuid); err != nil {
 		return err
@@ -500,8 +562,8 @@ func deleteSIPObject(cmd *cobra.Command, uuid, segment, action string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Deleted %s %s\n", segment, uuid)
-	return nil
+	return emitWrite(fmt.Sprintf("Deleted %s %s", segment, uuid),
+		map[string]any{"uuid": uuid, "resource": segment, "deleted": true})
 }
 
 func printCreated(created map[string]any, idField, label string) error {
@@ -699,14 +761,19 @@ func runSIPCredsUpdate(cmd *cobra.Command, args []string) error {
 	if len(body) == 0 {
 		return clierr.BadInput("nothing to update — pass at least one flag")
 	}
+	if !credUpdatePasswordStdin {
+		return clierr.BadInput(
+			"--password-stdin is required: the API rewrites the password on every credential update, " +
+				"so an update without one would blank it")
+	}
 	if _, err := postSIP(client, body, "Zentrunk", "Credential", args[0]); err != nil {
 		return err
 	}
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Updated credential %s\n", args[0])
-	return nil
+	return emitWrite(fmt.Sprintf("Updated credential %s", args[0]),
+		map[string]any{"credential_uuid": args[0], "updated": true})
 }
 
 func runSIPCredsDelete(cmd *cobra.Command, args []string) error {
@@ -823,8 +890,8 @@ func runSIPACLUpdate(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Updated IP access control list %s\n", args[0])
-	return nil
+	return emitWrite(fmt.Sprintf("Updated IP access control list %s", args[0]),
+		map[string]any{"ipacl_uuid": args[0], "updated": true})
 }
 
 func runSIPACLDelete(cmd *cobra.Command, args []string) error {
@@ -849,12 +916,13 @@ func init() {
 	uf.StringVar(&trunkUpdateCredential, "credential", "", "credential uuid")
 	uf.StringVar(&trunkUpdateIPACL, "ip-acl", "", "IP access control list uuid")
 	uf.BoolVar(&trunkUpdateSecure, "secure", false, "enable TLS/SRTP (takes a value: --secure=false)")
+	uf.StringVar(&trunkUpdateDirection, "direction", "", "inbound|outbound (read from the trunk when omitted)")
 
 	ucf := sipURIsCreateCmd.Flags()
 	ucf.StringVar(&uriCreateName, "name", "", "URI name")
 	ucf.StringVar(&uriCreateURI, "uri", "", "host, host:port, host;transport=…, or sip:user@host")
 	ucf.StringVar(&uriCreateUsername, "username", "", "username when authentication is needed")
-	ucf.StringVar(&uriCreatePassword, "password", "", "password when authentication is needed")
+	ucf.BoolVar(&uriCreatePasswordStdin, "password-stdin", false, "read the URI password from stdin")
 	ucf.BoolVar(&uriCreateAuthNeeded, "authentication-needed", false, "require authentication")
 	sipURIsListCmd.Flags().IntVar(&uriListLimit, "limit", 20, "rows to return")
 	sipURIsListCmd.Flags().IntVar(&uriListOffset, "offset", 0, "rows to skip")
@@ -863,6 +931,7 @@ func init() {
 	uuf.StringVar(&uriUpdateURI, "uri", "", "origination URI")
 	uuf.StringVar(&uriUpdateUsername, "username", "", "username")
 	uuf.BoolVar(&uriUpdateAuthNeeded, "authentication-needed", false, "require authentication (takes a value)")
+	uuf.BoolVar(&uriUpdatePasswordStdin, "password-stdin", false, "read a new URI password from stdin")
 
 	ccf := sipCredsCreateCmd.Flags()
 	ccf.StringVar(&credCreateName, "name", "", "credential name")
@@ -873,7 +942,7 @@ func init() {
 	cuf := sipCredsUpdateCmd.Flags()
 	cuf.StringVar(&credUpdateName, "name", "", "credential name")
 	cuf.StringVar(&credUpdateUsername, "username", "", "SIP username")
-	cuf.BoolVar(&credUpdatePasswordStdin, "password-stdin", false, "read a new password from stdin")
+	cuf.BoolVar(&credUpdatePasswordStdin, "password-stdin", false, "read the password from stdin (required: every update rewrites it)")
 
 	acf := sipACLCreateCmd.Flags()
 	acf.StringVar(&aclCreateName, "name", "", "list name")
@@ -909,3 +978,38 @@ var readAllStdin = defaultReadAllStdin
 // the round trip, and its message names the field rather than the flag.
 var errAuthNeedsUsername = clierr.BadInput(
 	"--authentication-needed=true also needs --username")
+
+// trunkDirectionOf reads a trunk's direction. Several write paths need it: the
+// update API demands it on every call, and a number may only attach inbound.
+func trunkDirectionOf(client *api.Client, trunkID string) (string, error) {
+	var t api.SIPTrunk
+	var apiErr *api.APIError
+	err := readThrough(client, func() error {
+		var e error
+		apiErr, e = client.Do("GET", client.AccountURL("Zentrunk", "Trunk", trunkID), nil, nil, &t)
+		return e
+	})
+	if err != nil {
+		return "", err
+	}
+	if apiErr != nil {
+		return "", apiErr
+	}
+	if t = unwrapSIPTrunk(t); t.TrunkDirection == "" {
+		return "", clierr.BadInput("could not read the trunk's direction — pass --direction")
+	}
+	return t.TrunkDirection, nil
+}
+
+// readThrough runs a pre-flight GET even under --dry-run.
+//
+// client.Do short-circuits every request when DryRun is set, which silently
+// disabled the guards built on top of a read: the preview then showed a POST
+// that the real run would refuse. --dry-run means "send no writes", and a GET
+// is not a write, so reads must still happen or the preview is a lie.
+func readThrough(client *api.Client, fn func() error) error {
+	was := client.DryRun
+	client.DryRun = false
+	defer func() { client.DryRun = was }()
+	return fn()
+}

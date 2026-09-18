@@ -497,6 +497,31 @@ func runSIPCallsDiagnose(cmd *cobra.Command, args []string) error {
 	}
 	askCallUUID = callUUID
 	prompt := "Help me debug this SIP Trunking call. Walk the SIP ladder and the trunk " +
-		"configuration, and tell me what happened and whether anything is wrong."
-	return runAsk(cmd, []string{prompt})
+		"configuration, and tell me what happened and whether anything is wrong." +
+		diagnoseClientConstraints
+	if err := runAsk(cmd, []string{prompt}); err != nil {
+		return err
+	}
+	return diagnoseOutcome(callUUID)
+}
+
+// diagnoseClientConstraints is appended to every diagnose turn. The assistant
+// otherwise offers console-only remedies to a terminal user, and files support
+// tickets on its own initiative — `diagnose` is a read, and a command that
+// opens a ticket every time it cannot answer is worse than one that says so.
+const diagnoseClientConstraints = " The caller is a terminal, not the Plivo Console: never suggest reloading a page or clicking anything in a browser. Do not raise a support ticket; if you cannot complete the analysis, say so plainly and stop."
+
+// diagnoseOutcome turns a failed investigation into a non-zero exit. The stream
+// itself succeeds, so without this the command reported success while telling
+// the user it had learned nothing — and a script could not tell the difference.
+func diagnoseOutcome(uuid string) error {
+	if !lastAskEscalated {
+		return nil
+	}
+	return &clierr.Error{
+		Code:       clierr.CodeUpstreamError,
+		Message:    fmt.Sprintf("the assistant could not analyse call %s and escalated instead", uuid),
+		Hint:       "`plivo sip calls get " + uuid + "` shows the hangup cause and SIP details directly.",
+		StatusCode: http.StatusBadGateway,
+	}
 }

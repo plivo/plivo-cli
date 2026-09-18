@@ -71,8 +71,9 @@ func resetWriteFlags(t *testing.T) {
 		trunkUpdateName, trunkUpdateStatus, trunkUpdateURI = "", "", ""
 		trunkUpdateFallbackURI, trunkUpdateCredential, trunkUpdateIPACL = "", "", ""
 		trunkUpdateSecure = false
-		uriCreateName, uriCreateURI, uriCreateUsername, uriCreatePassword = "", "", "", ""
+		uriCreateName, uriCreateURI, uriCreateUsername = "", "", ""
 		uriCreateAuthNeeded, uriUpdateAuthNeeded = false, false
+		uriCreatePasswordStdin, uriUpdatePasswordStdin = false, false
 		uriUpdateName, uriUpdateURI, uriUpdateUsername = "", "", ""
 		credCreateName, credCreateUsername = "", ""
 		credUpdateName, credUpdateUsername = "", ""
@@ -519,5 +520,166 @@ func TestSIPCredentialsUpdate_passwordOnlyRotationCarriesTheUsername(t *testing.
 	}
 	if body["username"] != "stored-user" {
 		t.Errorf("stored username not carried across, so the API would reject this: %v", body)
+	}
+}
+
+// ── QA blockers and highs ────────────────────────────────────────────────────
+
+// --yes skips the confirmation, never the dependency read. Deleting an in-use
+// URI cascade-deletes the trunks pointing at it, so the read is the only thing
+// that tells anyone what just happened — and with --yes there is no prompt to
+// carry it.
+func TestSIPDelete_readsDependentsEvenWithYes(t *testing.T) {
+	setFakeCreds(t)
+	resetWriteFlags(t)
+	yesFlag = true
+	t.Cleanup(func() { yesFlag = false })
+	reqs := sipWriteServer(t, trunksUsingU1)
+
+	err, _, stderr := execCmd(t, "sip", "uris", "delete", "U1", "--yes")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stderr, "primary URI") {
+		t.Errorf("dependents were not reported on the --yes path:\n%s", stderr)
+	}
+	var sawList bool
+	for _, r := range reqs() {
+		if r.method == "GET" && strings.HasSuffix(r.path, "/Zentrunk/Trunk/") {
+			sawList = true
+		}
+	}
+	if !sawList {
+		t.Error("no dependency read was performed")
+	}
+}
+
+// The API rejects any trunk update that omits trunk_direction, so every flag
+// except --status and --secure used to 400.
+func TestSIPTrunksUpdate_alwaysSendsTrunkDirection(t *testing.T) {
+	setFakeCreds(t)
+	resetWriteFlags(t)
+	reqs := sipWriteServer(t, trunksUsingU1)
+
+	if err, _, _ := execCmd(t, "sip", "trunks", "update", "T1", "--uri", "U9"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	p := post(reqs(), "/Zentrunk/Trunk/T1/")
+	if p == nil {
+		t.Fatal("no update request")
+	}
+	if p.body["trunk_direction"] != "inbound" {
+		t.Errorf("trunk_direction missing or wrong, so the API would 400: %v", p.body)
+	}
+	if p.body["primary_uri_uuid"] != "U9" {
+		t.Errorf("the actual change was lost: %v", p.body)
+	}
+}
+
+// -o json on a write used to print nothing at all and exit 0, which a jq
+// pipeline cannot tell apart from an empty result.
+func TestSIPWrites_emitJSONOnStdout(t *testing.T) {
+	for _, tc := range []struct {
+		name, want string
+		args       []string
+	}{
+		{"update", `"updated"`, []string{"sip", "trunks", "update", "T1", "--status", "disabled", "-o", "json"}},
+		{"delete", `"deleted"`, []string{"sip", "uris", "delete", "U1", "--yes", "-o", "json"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setFakeCreds(t)
+			resetWriteFlags(t)
+			sipWriteServer(t, trunksUsingU1)
+			err, stdout, _ := execCmd(t, tc.args...)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !strings.Contains(stdout, tc.want) {
+				t.Errorf("stdout carried no JSON envelope:\n%s", stdout)
+			}
+		})
+	}
+}
+
+// trunk_domain is the value the customer pastes into their platform. The table
+// path read it back; -o json returned only the create response without it.
+func TestSIPTrunksCreate_jsonCarriesTrunkDomain(t *testing.T) {
+	setFakeCreds(t)
+	resetWriteFlags(t)
+	sipWriteServer(t, trunksUsingU1)
+
+	err, stdout, _ := execCmd(t, "sip", "trunks", "create", "--name", "x", "--direction", "inbound", "--uri", "U1", "-o", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout, "T1.zt.plivo.com") {
+		t.Errorf("trunk_domain absent from -o json:\n%s", stdout)
+	}
+}
+
+// Every credential update rewrites the password, so one without a password
+// blanks it. The flag is required, not optional.
+func TestSIPCredentialsUpdate_requiresThePasswordFlag(t *testing.T) {
+	setFakeCreds(t)
+	resetWriteFlags(t)
+	reqs := sipWriteServer(t, trunksUsingU1)
+
+	err, _, _ := execCmd(t, "sip", "credentials", "update", "C1", "--name", "renamed")
+	if err == nil || !strings.Contains(err.Error(), "--password-stdin is required") {
+		t.Fatalf("expected the required-flag refusal, got: %v", err)
+	}
+	if post(reqs(), "/Zentrunk/Credential/") != nil {
+		t.Error("must not send an update that would blank the password")
+	}
+}
+
+// A URI password must never be an argument, exactly as for credentials.
+func TestSIPURIs_passwordIsStdinOnly(t *testing.T) {
+	if f := sipURIsCreateCmd.Flags().Lookup("password"); f != nil {
+		t.Error("uris create has a --password flag; it lands in shell history and ps")
+	}
+	if f := sipURIsUpdateCmd.Flags().Lookup("password"); f != nil {
+		t.Error("uris update has a --password flag")
+	}
+	if f := sipURIsCreateCmd.Flags().Lookup("password-stdin"); f == nil {
+		t.Error("uris create cannot set a password at all")
+	}
+	if f := sipURIsUpdateCmd.Flags().Lookup("password-stdin"); f == nil {
+		t.Error("a URI password cannot be rotated")
+	}
+}
+
+// --dry-run means "send no writes". A GET is not a write, so the guards built
+// on a pre-flight read must still run, or the preview shows a request the real
+// run refuses.
+func TestNumbersUpdate_dryRunStillRunsTheOutboundGuard(t *testing.T) {
+	setFakeCreds(t)
+	resetWriteFlags(t)
+	var mu sync.Mutex
+	var posted bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			mu.Lock()
+			posted = true
+			mu.Unlock()
+		}
+		if strings.Contains(r.URL.Path, "/Zentrunk/Trunk/") {
+			_, _ = w.Write([]byte(`{"api_id":"x","object":{"trunk_id":"T2","trunk_direction":"outbound"}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(srv.Close)
+	clientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
+	t.Cleanup(func() { clientForTest = nil })
+
+	err, _, _ := execCmd(t, "numbers", "update", "15551234567", "--trunk-id", "T2", "--dry-run")
+	if err == nil || !strings.Contains(err.Error(), "outbound") {
+		t.Fatalf("--dry-run skipped the guard, so the preview lies: %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if posted {
+		t.Error("dry-run sent a write")
 	}
 }

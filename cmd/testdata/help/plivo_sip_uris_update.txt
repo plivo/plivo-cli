@@ -7,6 +7,7 @@ Flags:
       --authentication-needed   require authentication (takes a value)
   -h, --help                    help for update
       --name string             URI name
+      --password-stdin          read a new URI password from stdin
       --uri string              origination URI
       --username string         username
 

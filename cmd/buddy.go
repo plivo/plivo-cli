@@ -213,8 +213,17 @@ func runAsk(cmd *cobra.Command, args []string) error {
 		// A server-emitted error event is a service-side error, not bad user input.
 		return clierr.Upstream(r.errorMsg)
 	}
+	lastAskEscalated = r.escalated
 	return nil
 }
+
+// escalateToolName is the assistant tool that files a support ticket.
+const escalateToolName = "escalate_to_support"
+
+// lastAskEscalated reports whether the last assistant turn ended by filing a
+// support ticket. `ask` treats that as a normal outcome; `diagnose` does not,
+// because an investigation that ends in a ticket did not diagnose anything.
+var lastAskEscalated bool
 
 // buildBuddyUserContext fetches best-effort account context (balance). Failure
 // is non-fatal — an empty userContext is valid. The server's BuddyUserContext
@@ -485,6 +494,7 @@ type buddyRenderer struct {
 	streamed     bool
 	hadNarration bool
 	errorSeen    bool
+	escalated    bool
 	errorMsg     string
 	// sessionID is captured from a `session` event, if one ever arrives (the
 	// current server contract never sends one — see newBuddySessionID, which
@@ -560,13 +570,19 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		}
 
 	case "tool_call":
-		if !r.verbose {
-			return true
-		}
 		var d struct {
 			Name string `json:"name"`
 		}
 		_ = json.Unmarshal(buddyInner(ev.Data), &d)
+		if d.Name == escalateToolName {
+			// The assistant gave up and filed a ticket. That is a failed
+			// investigation however cheerful the prose reads, and `diagnose`
+			// checks this to decide its exit code.
+			r.escalated = true
+		}
+		if !r.verbose {
+			return true
+		}
 		// Clear the spinner/narration line under the lock so this print doesn't
 		// garble; the spinner redraws itself on the next tick.
 		r.withSpinnerCleared(func() {
