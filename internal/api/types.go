@@ -824,3 +824,38 @@ type SIPTrunkACLList struct {
 	Meta    ListMeta      `json:"meta"`
 	Objects []SIPTrunkACL `json:"objects"`
 }
+
+// SIPTrunkURI is one origination URI — /Account/{id}/Zentrunk/URI/
+// sip_user is returned by the API today even though it is not in the public docs.
+type SIPTrunkURI struct {
+	RawBody
+	URIUUID              string `json:"uri_uuid"`
+	Name                 string `json:"name,omitempty"`
+	URI                  string `json:"uri,omitempty"`
+	AuthenticationNeeded bool   `json:"authentication_needed"`
+	Username             string `json:"username,omitempty"`
+	SipUser              string `json:"sip_user,omitempty"`
+}
+
+type SIPTrunkURIList struct {
+	RawBody
+	APIID   string        `json:"api_id"`
+	Meta    ListMeta      `json:"meta"`
+	Objects []SIPTrunkURI `json:"objects"`
+}
+
+// SIPTrunkCredential is one credential — /Account/{id}/Zentrunk/Credential/
+// The API never returns the password, so neither does this.
+type SIPTrunkCredential struct {
+	RawBody
+	CredentialUUID string `json:"credential_uuid"`
+	Name           string `json:"name,omitempty"`
+	Username       string `json:"username,omitempty"`
+}
+
+type SIPTrunkCredentialList struct {
+	RawBody
+	APIID   string               `json:"api_id"`
+	Meta    ListMeta             `json:"meta"`
+	Objects []SIPTrunkCredential `json:"objects"`
+}

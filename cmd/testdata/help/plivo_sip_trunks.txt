@@ -8,8 +8,11 @@ Aliases:
   trunks, trunk
 
 Available Commands:
+  create      Create a trunk
+  delete      Delete a trunk (requires --yes)
   get         Get one trunk by ID
   list        List trunks
+  update      Update a trunk
 
 Flags:
   -h, --help   help for trunks

@@ -1,14 +1,13 @@
-Update settings on a rented number
+Delete a trunk.
+
+Reports how many numbers are routed to it first: deleting a trunk detaches every
+one of them, and inbound calls to those numbers stop.
 
 Usage:
-  plivo numbers update <number> [flags]
+  plivo sip trunks delete <trunk_id> [flags]
 
 Flags:
-      --alias string        set alias
-      --app-id string       associate an application
-  -h, --help                help for update
-      --subaccount string   move under subaccount
-      --trunk-id string     route the number to an inbound SIP trunk
+  -h, --help   help for delete
 
 Global Flags:
       --dry-run            print the HTTP request without sending

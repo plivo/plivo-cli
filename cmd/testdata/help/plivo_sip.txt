@@ -12,8 +12,10 @@ Aliases:
 
 Available Commands:
   calls       Inspect SIP Trunking calls (CDRs)
+  credentials Trunk credentials
   ip-acl      IP access control lists
   trunks      Inbound and outbound trunks
+  uris        Origination URIs
 
 Flags:
   -h, --help   help for sip

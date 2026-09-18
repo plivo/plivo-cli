@@ -8,8 +8,11 @@ Aliases:
   ip-acl, acl, ipacl
 
 Available Commands:
+  create      Create an IP access control list
+  delete      Delete an IP access control list (requires --yes)
   get         Get one IP access control list by UUID
   list        List IP access control lists
+  update      Update an IP access control list
 
 Flags:
   -h, --help   help for ip-acl

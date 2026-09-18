@@ -10,8 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `plivo sip` — SIP Trunking was the only Plivo product with no CLI surface at
-  all. `sip calls list|get` reads trunk CDRs, `sip trunks list|get` and
-  `sip acl list|get` read trunk and IP-access-control configuration.
+  all. Typed CRUD over trunks, origination URIs, credentials and IP access
+  control lists, plus reading trunk CDRs and `sip calls diagnose`.
+- `numbers update --trunk-id` routes a number to an inbound trunk. The API takes
+  a trunk in `app_id`, so until now you had to know a trunk goes in a flag named
+  after applications. An outbound trunk is refused: a number attached to one
+  quietly stops answering.
+- Credential passwords are read from stdin only. There is no `--password` flag,
+  because an argument lands in shell history, `ps` output and CI logs.
+- Deleting a URI, credential or IP ACL first names every trunk pointing at it,
+  and deleting a trunk reports how many numbers it would detach.
 - `sip calls list` filters cover exactly what the API accepts, so a flag that
   would 400 upstream does not exist. `--limit` is bounded and `--since`/`--until`
   are parsed locally, and `--until` widens a bare date to the end of that day so

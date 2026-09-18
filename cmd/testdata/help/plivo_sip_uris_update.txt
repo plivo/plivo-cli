@@ -1,14 +1,14 @@
-Update settings on a rented number
+--authentication-needed takes a value so it reverses: --authentication-needed=false turns it off.
 
 Usage:
-  plivo numbers update <number> [flags]
+  plivo sip uris update <uri_uuid> [flags]
 
 Flags:
-      --alias string        set alias
-      --app-id string       associate an application
-  -h, --help                help for update
-      --subaccount string   move under subaccount
-      --trunk-id string     route the number to an inbound SIP trunk
+      --authentication-needed   require authentication (takes a value)
+  -h, --help                    help for update
+      --name string             URI name
+      --uri string              origination URI
+      --username string         username
 
 Global Flags:
       --dry-run            print the HTTP request without sending
