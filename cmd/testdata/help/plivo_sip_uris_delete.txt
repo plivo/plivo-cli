@@ -1,14 +1,10 @@
-Update settings on a rented number
+Names any trunk using it as a primary or fallback URI before deleting.
 
 Usage:
-  plivo numbers update <number> [flags]
+  plivo sip uris delete <uri_uuid> [flags]
 
 Flags:
-      --alias string        set alias
-      --app-id string       associate an application
-  -h, --help                help for update
-      --subaccount string   move under subaccount
-      --trunk-id string     route the number to an inbound SIP trunk
+  -h, --help   help for delete
 
 Global Flags:
       --dry-run            print the HTTP request without sending

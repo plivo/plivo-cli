@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"strconv"
@@ -45,6 +46,7 @@ var numberGetCmd = &cobra.Command{
 
 var (
 	numberUpdateAppID      string
+	numberUpdateTrunkID    string
 	numberUpdateAlias      string
 	numberUpdateSubaccount string
 )
@@ -97,6 +99,7 @@ func init() {
 	numberListCmd.Flags().IntVar(&numberListOffset, "offset", 0, "pagination offset")
 
 	numberUpdateCmd.Flags().StringVar(&numberUpdateAppID, "app-id", "", "associate an application")
+	numberUpdateCmd.Flags().StringVar(&numberUpdateTrunkID, "trunk-id", "", "route the number to an inbound SIP trunk")
 	numberUpdateCmd.Flags().StringVar(&numberUpdateAlias, "alias", "", "set alias")
 	numberUpdateCmd.Flags().StringVar(&numberUpdateSubaccount, "subaccount", "", "move under subaccount")
 
@@ -231,9 +234,20 @@ func runNumberUpdate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if numberUpdateAppID != "" && numberUpdateTrunkID != "" {
+		return clierr.BadInput("--app-id and --trunk-id both set the same field; pass one")
+	}
 	body := map[string]any{}
 	if numberUpdateAppID != "" {
 		body["app_id"] = numberUpdateAppID
+	}
+	if numberUpdateTrunkID != "" {
+		// The API takes a trunk in app_id. --trunk-id exists so nobody has to
+		// know that a trunk goes in a flag named after applications.
+		if err := requireInboundTrunk(client, numberUpdateTrunkID); err != nil {
+			return err
+		}
+		body["app_id"] = numberUpdateTrunkID
 	}
 	if numberUpdateAlias != "" {
 		body["alias"] = numberUpdateAlias
@@ -242,7 +256,7 @@ func runNumberUpdate(cmd *cobra.Command, args []string) error {
 		body["subaccount"] = numberUpdateSubaccount
 	}
 	if len(body) == 0 {
-		return fmt.Errorf("at least one of --app-id, --alias, --subaccount required")
+		return clierr.BadInput("pass at least one of --app-id, --trunk-id, --alias, --subaccount")
 	}
 	var resp api.GenericResponse
 	apiErr, err := client.Do("POST", client.AccountURL("Number", number), body, nil, &resp)
@@ -339,4 +353,31 @@ func runNumberSearch(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	return renderNumberList(resp)
+}
+
+// requireInboundTrunk refuses an outbound trunk. Numbers receive calls, and an
+// outbound trunk has no origination URI to send them to, so the attach would
+// succeed and the number would simply stop answering.
+func requireInboundTrunk(client *api.Client, trunkID string) error {
+	var t api.SIPTrunk
+	apiErr, err := client.Do("GET", client.AccountURL("Zentrunk", "Trunk", trunkID), nil, nil, &t)
+	if err != nil {
+		return nil // transport trouble: let the API have the final say
+	}
+	if apiErr != nil {
+		if apiErr.StatusCode == http.StatusNotFound {
+			return &clierr.Error{
+				Code:       clierr.CodeResourceNotFound,
+				Message:    fmt.Sprintf("trunk %s not found on this account", trunkID),
+				Hint:       "`plivo sip trunks list` shows the trunks you have.",
+				StatusCode: http.StatusNotFound,
+			}
+		}
+		return apiErr
+	}
+	if t = unwrapSIPTrunk(t); t.TrunkDirection == dirOutbound {
+		return clierr.BadInput(fmt.Sprintf(
+			"trunk %s is outbound; a number can only be routed to an inbound trunk", trunkID))
+	}
+	return nil
 }

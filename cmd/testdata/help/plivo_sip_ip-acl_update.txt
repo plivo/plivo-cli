@@ -1,14 +1,12 @@
-Update settings on a rented number
+--ip replaces the whole list rather than appending, so pass every address you want kept.
 
 Usage:
-  plivo numbers update <number> [flags]
+  plivo sip ip-acl update <ipacl_uuid> [flags]
 
 Flags:
-      --alias string        set alias
-      --app-id string       associate an application
-  -h, --help                help for update
-      --subaccount string   move under subaccount
-      --trunk-id string     route the number to an inbound SIP trunk
+  -h, --help             help for update
+      --ip stringArray   IP or CIDR (repeatable; replaces the list)
+      --name string      list name
 
 Global Flags:
       --dry-run            print the HTTP request without sending

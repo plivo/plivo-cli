@@ -134,6 +134,16 @@ func requireResourceExists(cmd *cobra.Command, segment, uuid, label string) erro
 		return nil // transport trouble: fall through rather than block the diagnose
 	}
 	if apiErr != nil && apiErr.StatusCode == http.StatusNotFound {
+		// A trunk call lives in a different store and a different debugger reads
+		// it, so name the right command instead of reporting a bare not-found.
+		if segment == "Call" && resourceExists(client, "Zentrunk", "Call", uuid) {
+			return &clierr.Error{
+				Code:       clierr.CodeBadInput,
+				Message:    fmt.Sprintf("%s is a SIP Trunking call, not a Voice call", uuid),
+				Hint:       fmt.Sprintf("Run `plivo sip calls diagnose %s`.", uuid),
+				StatusCode: http.StatusNotFound,
+			}
+		}
 		return &clierr.Error{
 			Code:       clierr.CodeResourceNotFound,
 			Message:    fmt.Sprintf("%s %s not found on this account", label, uuid),
@@ -142,6 +152,18 @@ func requireResourceExists(cmd *cobra.Command, segment, uuid, label string) erro
 		}
 	}
 	return nil
+}
+
+// resourceExists reports whether a GET on the path returns anything but 404.
+// Used only to tell one kind of call from another, so a transport failure
+// answers false and the caller falls back to its ordinary not-found.
+func resourceExists(client *api.Client, parts ...string) bool {
+	var probe api.GenericResponse
+	apiErr, err := client.Do("GET", client.AccountURL(parts...), nil, nil, &probe)
+	if err != nil {
+		return false
+	}
+	return apiErr == nil || apiErr.StatusCode != http.StatusNotFound
 }
 
 // listHintFor names the command that lists the resource, for the not-found hint.

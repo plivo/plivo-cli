@@ -1,14 +1,10 @@
-Update settings on a rented number
+Get one IP access control list by UUID
 
 Usage:
-  plivo numbers update <number> [flags]
+  plivo sip ip-acl get <ipacl_uuid> [flags]
 
 Flags:
-      --alias string        set alias
-      --app-id string       associate an application
-  -h, --help                help for update
-      --subaccount string   move under subaccount
-      --trunk-id string     route the number to an inbound SIP trunk
+  -h, --help   help for get
 
 Global Flags:
       --dry-run            print the HTTP request without sending

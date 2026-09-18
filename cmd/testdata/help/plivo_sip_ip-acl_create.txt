@@ -1,14 +1,19 @@
-Update settings on a rented number
+Create an IP access control list.
+
+--ip is repeatable. A range that allows the whole internet is reported but not
+blocked: it is occasionally deliberate, and refusing it outright would push
+people to the console instead.
 
 Usage:
-  plivo numbers update <number> [flags]
+  plivo sip ip-acl create [flags]
+
+Examples:
+  plivo sip ip-acl create --name platform --ip 203.0.113.4 --ip 198.51.100.0/24
 
 Flags:
-      --alias string        set alias
-      --app-id string       associate an application
-  -h, --help                help for update
-      --subaccount string   move under subaccount
-      --trunk-id string     route the number to an inbound SIP trunk
+  -h, --help             help for create
+      --ip stringArray   IP or CIDR (repeatable)
+      --name string      list name
 
 Global Flags:
       --dry-run            print the HTTP request without sending
