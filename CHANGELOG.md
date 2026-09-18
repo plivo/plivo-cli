@@ -32,8 +32,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   command tree, and the repo-wide doc check reads git's file list rather than
   walking the filesystem, which reported a stale nested checkout as a defect.
 
+## [Unreleased]
+
 ### Security
 
+- `voice streams forward` now validates Plivo's V3 signature on `/answer` and
+  on the `/ws` upgrade (SA-01). Both were reachable by anyone who learned the
+  tunnel URL, and after any successful upgrade the CLI dialled `--to` and
+  forwarded frames both ways, so an unauthenticated caller could drive the
+  local handler and read its replies. Origin checking does not help: a
+  non-browser caller simply omits `Origin`.
+- Verification uses the public tunnel URL rather than the request's `Host`,
+  which is the local listener once the request has come through the tunnel.
+- `--insecure-skip-signature` restores the old behaviour deliberately.
 - The localhost.run SSH fallback now verifies the tunnel host (SA-02). It ran
   with `StrictHostKeyChecking=no` and `UserKnownHostsFile=/dev/null`, so it
   accepted any server without authenticating it and discarded the user's
@@ -107,6 +118,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   eight standard-library advisories from it.
 - CI now runs `govulncheck` over both the public and internal builds, so the
   baseline cannot drift unnoticed again. Nothing was watching it before.
+
+## [Unreleased]
+
+### Fixed
+
+- Cancelling sign-in in the browser now ends `plivo login` immediately. The
+  Cancel button only closed the browser tab, so the CLI kept listening and
+  failed five minutes later with a timeout telling the user to go and approve
+  the thing they had just refused. An `error` in the loopback callback is now
+  handled; previously it fell through to "missing code in callback URL".
 
 ## [1.0.1] - 2026-09-08
 

@@ -22,6 +22,8 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/spf13/cobra"
+
+	"github.com/plivo/plivo-cli/internal/plivosig"
 )
 
 var (
@@ -34,6 +36,7 @@ var (
 	streamsFwdRate          int
 	streamsFwdBidirectional bool
 	streamsFwdPrintPayload  bool
+	streamsFwdSkipSignature bool
 	streamsFwdTunnel        string
 
 	// streamsFwdClientForTest is a package-level test hook, mirroring
@@ -88,6 +91,8 @@ func init() {
 	voiceStreamsForwardCmd.Flags().IntVar(&streamsFwdRate, "rate", 8000, "sample rate in Hz (mulaw: 8000; l16: 8000 or 16000)")
 	voiceStreamsForwardCmd.Flags().BoolVar(&streamsFwdBidirectional, "bidirectional", true, "allow bot to send audio back to the caller")
 	voiceStreamsForwardCmd.Flags().BoolVar(&streamsFwdPrintPayload, "print-payload", false, "dump full webhook bodies to terminal (verbose)")
+	voiceStreamsForwardCmd.Flags().BoolVar(&streamsFwdSkipSignature, "insecure-skip-signature", false,
+		"accept unsigned requests on the tunnel (anyone with the URL can drive your handler)")
 	voiceStreamsForwardCmd.Flags().StringVar(&streamsFwdTunnel, "tunnel", "auto", "tunnel provider: auto | ngrok | localhost.run")
 	_ = voiceStreamsForwardCmd.MarkFlagRequired("number")
 	_ = voiceStreamsForwardCmd.MarkFlagRequired("app")
@@ -207,7 +212,16 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	// --- Start serving (HTTP for answer webhook, /ws for streaming) ---
 	var events atomic.Int64
 	wsTunnelURL := strings.Replace(tn.PublicURL, "https://", "wss://", 1) + "/ws"
-	srv := buildLocalStreamServer(out, wsTunnelURL, streamsFwdTo, streamsFwdBidirectional, streamsFwdCodec, streamsFwdRate, streamsFwdPrintPayload, jsonOut, &events)
+	auth := &streamAuth{
+		authToken: client.AuthToken,
+		answerURL: tunnelAnswerURL,
+		wsURL:     wsTunnelURL,
+		skip:      streamsFwdSkipSignature,
+	}
+	if streamsFwdSkipSignature && !jsonOut {
+		fmt.Fprintln(out, "⚠ --insecure-skip-signature: anyone with this tunnel URL can drive your handler.")
+	}
+	srv := buildLocalStreamServer(out, wsTunnelURL, streamsFwdTo, streamsFwdBidirectional, streamsFwdCodec, streamsFwdRate, streamsFwdPrintPayload, jsonOut, &events, auth)
 	srvErrCh := make(chan error, 1)
 	go func() {
 		err := srv.Serve(listener)
@@ -283,6 +297,59 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
+// streamAuth validates Plivo's V3 signature on the tunnel-exposed handlers.
+//
+// SA-01: /answer and /ws were reachable by anyone who learned the tunnel URL.
+// Neither checked a signature, and after any successful WebSocket upgrade the
+// CLI dialled --to and forwarded frames both ways, so an unauthenticated caller
+// could drive the configured local handler and read its replies. Origin
+// checking does not help: a non-browser caller simply omits Origin.
+//
+// The URL matters. The request arrives through the tunnel, so r.Host is the
+// local listener, not the address Plivo signed. Verification therefore uses the
+// public tunnel URL the application's answer_url was set to.
+type streamAuth struct {
+	authToken string
+	answerURL string // public https URL Plivo POSTs the answer webhook to
+	wsURL     string // public wss URL Plivo opens the stream against
+	skip      bool   // --insecure-skip-signature
+}
+
+// ok reports whether r carries a valid signature for publicURL.
+func (a *streamAuth) ok(r *http.Request, publicURL string) bool {
+	if a.skip {
+		return true
+	}
+	sig := r.Header.Get(plivosig.HeaderSignature)
+	if sig == "" {
+		sig = r.Header.Get(plivosig.HeaderSignatureMA)
+	}
+	nonce := r.Header.Get(plivosig.HeaderNonce)
+
+	params := map[string]string{}
+	if r.Method == http.MethodPost {
+		// ParseForm consumes the body; these handlers do not read it again.
+		if err := r.ParseForm(); err == nil {
+			for k, v := range r.PostForm {
+				if len(v) > 0 {
+					params[k] = v[0]
+				}
+			}
+		}
+	}
+	return plivosig.Validate(a.authToken, publicURL, r.Method, nonce, sig, params)
+}
+
+// reject writes the 403 and records the event.
+func (a *streamAuth) reject(w http.ResponseWriter, out io.Writer, jsonOut bool, events *atomic.Int64, route string) {
+	events.Add(1)
+	if !jsonOut {
+		fmt.Fprintf(out, "[%s] %s ✗ rejected: bad or missing Plivo signature\n",
+			time.Now().Format("15:04:05"), route)
+	}
+	http.Error(w, "forbidden: invalid Plivo signature", http.StatusForbidden)
+}
+
 // buildLocalStreamServer returns an http.Server handling two routes:
 //
 //	POST /answer  → returns PlivoXML with <Stream url="wssTunnel"/>
@@ -292,11 +359,15 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 // printed to out, unless jsonOut suppresses them for a clean summary at
 // the end of the run; events is incremented on each one regardless so the
 // summary can still report an events_observed count.
-func buildLocalStreamServer(out io.Writer, wssTunnelURL, customerWS string, bidir bool, codec string, rate int, printPayload, jsonOut bool, events *atomic.Int64) *http.Server {
+func buildLocalStreamServer(out io.Writer, wssTunnelURL, customerWS string, bidir bool, codec string, rate int, printPayload, jsonOut bool, events *atomic.Int64, auth *streamAuth) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/answer", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost && r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !auth.ok(r, auth.answerURL) {
+			auth.reject(w, out, jsonOut, events, "/answer")
 			return
 		}
 		events.Add(1)
@@ -320,6 +391,12 @@ func buildLocalStreamServer(out io.Writer, wssTunnelURL, customerWS string, bidi
 	})
 
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		// Before the upgrade: once accepted, this bridges straight through to
+		// --to in both directions.
+		if !auth.ok(r, auth.wsURL) {
+			auth.reject(w, out, jsonOut, events, "/ws")
+			return
+		}
 		events.Add(1)
 		if !jsonOut {
 			fmt.Fprintf(out, "[%s] StreamConnect ← Plivo\n", time.Now().Format("15:04:05"))
