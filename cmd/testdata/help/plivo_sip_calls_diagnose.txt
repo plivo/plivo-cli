@@ -1,12 +1,20 @@
-List IP access control lists
+Diagnose a SIP Trunking call by UUID. Asks Plivo's AI assistant to pull the
+SIP ladder and trunk configuration and explain what happened.
+
+Only SIP Trunking calls. For a Voice call use `plivo voice calls diagnose`:
+the two read different stores, so neither can answer for the other.
 
 Usage:
-  plivo sip acl list [flags]
+  plivo sip calls diagnose <call_uuid> [flags]
+
+Aliases:
+  diagnose, diag
+
+Examples:
+  plivo sip calls diagnose 8f3c1a2e-0d44-4a6f-9c31-2b7e5a90d1f7
 
 Flags:
-  -h, --help         help for list
-      --limit int    rows to return (default 20)
-      --offset int   rows to skip
+  -h, --help   help for diagnose
 
 Global Flags:
       --dry-run            print the HTTP request without sending

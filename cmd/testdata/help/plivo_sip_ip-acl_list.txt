@@ -1,18 +1,12 @@
-IP access control lists
+List IP access control lists
 
 Usage:
-  plivo sip acl [flags]
-  plivo sip acl [command]
-
-Aliases:
-  acl, ipacl
-
-Available Commands:
-  get         Get one IP access control list by UUID
-  list        List IP access control lists
+  plivo sip ip-acl list [flags]
 
 Flags:
-  -h, --help   help for acl
+  -h, --help         help for list
+      --limit int    rows to return (default 20)
+      --offset int   rows to skip
 
 Global Flags:
       --dry-run            print the HTTP request without sending
@@ -23,5 +17,3 @@ Global Flags:
   -q, --quiet              suppress non-data output
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts
-
-Use "plivo sip acl [command] --help" for more information about a command.

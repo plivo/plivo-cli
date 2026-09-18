@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/plivo/plivo-cli/internal/api"
+	"github.com/plivo/plivo-cli/internal/clierr"
 )
 
 // sipServer records full request URLs (query string included, unlike the
@@ -426,4 +428,100 @@ func TestSIPCallsGet_pointsAtHangupCodesNotVoiceDiagnose(t *testing.T) {
 	if strings.Contains(stdout, "voice calls diagnose") {
 		t.Errorf("must not point at voice calls diagnose:\n%s", stdout)
 	}
+}
+
+// diagnoseRouter answers 200 for whichever call store owns the uuid and 404 for
+// the other, so a test can assert each command refuses the other's call type.
+func diagnoseRouter(t *testing.T, trunkKnown, voiceKnown bool) func() []string {
+	t.Helper()
+	var mu sync.Mutex
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+		isTrunk := strings.Contains(r.URL.Path, "/Zentrunk/Call/")
+		switch {
+		case strings.Contains(r.URL.Path, "/chat"):
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = w.Write([]byte("event: final\ndata: {\"answer\":\"ok\",\"latency_ms\":1}\n\n"))
+		case isTrunk && trunkKnown, !isTrunk && voiceKnown:
+			_, _ = w.Write([]byte(`{"call_uuid":"abc"}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":"not found"}`))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	clientForTest = &api.Client{
+		BaseURL: srv.URL, BuddyBaseURL: srv.URL,
+		AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{},
+	}
+	t.Cleanup(func() { clientForTest = nil })
+	return func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		out := make([]string, len(paths))
+		copy(out, paths)
+		return out
+	}
+}
+
+// The two debuggers read different stores, so each must refuse the other's call
+// rather than forward it and get a confident answer about nothing.
+func TestDiagnose_eachCommandRefusesTheOtherCallType(t *testing.T) {
+	t.Run("voice diagnose refuses a trunk call and names sip", func(t *testing.T) {
+		setFakeCreds(t)
+		resetSIPFlags(t)
+		paths := diagnoseRouter(t, true, false)
+
+		err, _, _ := execCmd(t, "voice", "calls", "diagnose", "8f3c1a2e")
+		if err == nil {
+			t.Fatal("expected a refusal")
+		}
+		if !strings.Contains(err.Error(), "SIP Trunking call") {
+			t.Errorf("should say what it actually is, got: %v", err)
+		}
+		var ce *clierr.Error
+		if errors.As(err, &ce) && !strings.Contains(ce.Hint, "sip calls diagnose") {
+			t.Errorf("hint should name the right command, got: %q", ce.Hint)
+		}
+		if hitChat(paths()) {
+			t.Error("a trunk call must not reach the assistant through the voice command")
+		}
+	})
+
+	t.Run("sip diagnose refuses a voice call and names voice", func(t *testing.T) {
+		setFakeCreds(t)
+		resetSIPFlags(t)
+		paths := diagnoseRouter(t, false, true)
+
+		err, _, _ := execCmd(t, "sip", "calls", "diagnose", "8f3c1a2e")
+		if err == nil {
+			t.Fatal("expected a refusal")
+		}
+		if !strings.Contains(err.Error(), "Voice call") {
+			t.Errorf("should say what it actually is, got: %v", err)
+		}
+		var ce *clierr.Error
+		if errors.As(err, &ce) && !strings.Contains(ce.Hint, "voice calls diagnose") {
+			t.Errorf("hint should name the right command, got: %q", ce.Hint)
+		}
+		if hitChat(paths()) {
+			t.Error("a voice call must not reach the assistant through the sip command")
+		}
+	})
+
+	t.Run("sip diagnose forwards a real trunk call", func(t *testing.T) {
+		setFakeCreds(t)
+		resetSIPFlags(t)
+		paths := diagnoseRouter(t, true, false)
+
+		if err, _, _ := execCmd(t, "sip", "calls", "diagnose", "8f3c1a2e"); err != nil {
+			t.Fatalf("a genuine trunk call must reach the assistant: %v", err)
+		}
+		if !hitChat(paths()) {
+			t.Error("expected the assistant to be called")
+		}
+	})
 }

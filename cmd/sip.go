@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"strconv"
@@ -88,6 +89,20 @@ var sipCallsListCmd = &cobra.Command{
 	RunE: runSIPCallsList,
 }
 
+var sipCallsDiagnoseCmd = &cobra.Command{
+	Use:     "diagnose <call_uuid>",
+	Aliases: []string{"diag"},
+	Short:   "Diagnose what happened on a SIP Trunking call (AI-powered)",
+	Long: `Diagnose a SIP Trunking call by UUID. Asks Plivo's AI assistant to pull the
+SIP ladder and trunk configuration and explain what happened.
+
+Only SIP Trunking calls. For a Voice call use ` + "`plivo voice calls diagnose`" + `:
+the two read different stores, so neither can answer for the other.`,
+	Example: `  plivo sip calls diagnose 8f3c1a2e-0d44-4a6f-9c31-2b7e5a90d1f7`,
+	Args:    cobra.ExactArgs(1),
+	RunE:    runSIPCallsDiagnose,
+}
+
 var sipCallsGetCmd = &cobra.Command{
 	Use:     "get <call_uuid>",
 	Short:   "Get one SIP Trunking call by UUID",
@@ -145,7 +160,7 @@ func init() {
 	af.IntVar(&sipACLLimit, "limit", 20, "rows to return")
 	af.IntVar(&sipACLOffset, "offset", 0, "rows to skip")
 
-	sipCallsCmd.AddCommand(sipCallsListCmd, sipCallsGetCmd)
+	sipCallsCmd.AddCommand(sipCallsListCmd, sipCallsGetCmd, sipCallsDiagnoseCmd)
 	sipTrunksCmd.AddCommand(sipTrunksListCmd, sipTrunksGetCmd)
 	sipACLCmd.AddCommand(sipACLListCmd, sipACLGetCmd)
 	sipCmd.AddCommand(sipCallsCmd, sipTrunksCmd, sipACLCmd)
@@ -451,4 +466,37 @@ func runSIPACLGet(cmd *cobra.Command, args []string) error {
 		{"name", a.Name},
 		{"ip_addresses", strings.Join(a.IPAddresses, ", ")},
 	})
+}
+
+// runSIPCallsDiagnose confirms the uuid really is a trunk call, then hands the
+// turn to the assistant. A Voice uuid is refused by name rather than forwarded:
+// the trunk debugger reads a different store and would answer about nothing.
+func runSIPCallsDiagnose(cmd *cobra.Command, args []string) error {
+	callUUID := args[0]
+	if !dryRunFlag {
+		client, _, err := getClient()
+		if err != nil {
+			return err
+		}
+		if !resourceExists(client, "Zentrunk", "Call", callUUID) {
+			if resourceExists(client, "Call", callUUID) {
+				return &clierr.Error{
+					Code:       clierr.CodeBadInput,
+					Message:    fmt.Sprintf("%s is a Voice call, not a SIP Trunking call", callUUID),
+					Hint:       fmt.Sprintf("Run `plivo voice calls diagnose %s`.", callUUID),
+					StatusCode: http.StatusNotFound,
+				}
+			}
+			return &clierr.Error{
+				Code:       clierr.CodeResourceNotFound,
+				Message:    fmt.Sprintf("SIP Trunking call %s not found on this account", callUUID),
+				Hint:       "Check the call id. `plivo sip calls list` lists recent ones.",
+				StatusCode: http.StatusNotFound,
+			}
+		}
+	}
+	askCallUUID = callUUID
+	prompt := "Help me debug this SIP Trunking call. Walk the SIP ladder and the trunk " +
+		"configuration, and tell me what happened and whether anything is wrong."
+	return runAsk(cmd, []string{prompt})
 }
