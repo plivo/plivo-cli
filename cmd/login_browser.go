@@ -224,6 +224,18 @@ func deviceHint() string {
 	}
 }
 
+// errLoginRejected turns an OAuth error parameter into the message the user
+// sees. Cancelling is a deliberate act, not a failure, so it does not tell them
+// to retry the thing they just declined.
+func errLoginRejected(code string) error {
+	if code == "access_denied" {
+		return clierr.BadInput("Sign-in was cancelled in the browser. Nothing was granted. " +
+			"Run `plivo login` again when you want to sign in.")
+	}
+	return clierr.BadInput(fmt.Sprintf(
+		"Sign-in did not complete: the browser returned %q. Run `plivo login` again to retry.", code))
+}
+
 // awaitLoopbackCallback serves one HTTP request on listener and returns
 // the `code` query param, after validating that `state` matches. Times
 // out via the context. The browser tab sees a tiny "you can close this"
@@ -244,9 +256,25 @@ func awaitLoopbackCallback(ctx context.Context, listener net.Listener, expectedS
 		}
 		gotState := r.URL.Query().Get("state")
 		code := r.URL.Query().Get("code")
+		authErr := r.URL.Query().Get("error")
 		if gotState != expectedState {
 			http.Error(w, "state mismatch — possible CSRF; close this tab and retry", http.StatusBadRequest)
 			done <- result{err: fmt.Errorf("state mismatch on loopback callback")}
+			return
+		}
+		// The user said no in the browser. Without this branch a declined
+		// login fell through to "missing code in callback URL" after the full
+		// five-minute wait, telling someone who had just refused to go and
+		// approve it. access_denied is OAuth's own denial code (RFC 6749
+		// §4.1.2.1); any other value is surfaced as-is rather than guessed at.
+		if authErr != "" {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte(`<!DOCTYPE html><html><head><title>Plivo CLI</title></head>` +
+				`<body style="font-family: -apple-system, system-ui, sans-serif; padding: 2rem; max-width: 480px; margin: 4rem auto; line-height: 1.5;">` +
+				`<h1 style="font-size: 1.5rem;">Sign-in cancelled</h1>` +
+				`<p>Nothing was granted. You can close this tab.</p>` +
+				`</body></html>`))
+			done <- result{err: errLoginRejected(authErr)}
 			return
 		}
 		if code == "" {
