@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `plivo sip` — SIP Trunking was the only Plivo product with no CLI surface at
+  all. `sip calls list|get` reads trunk CDRs, `sip trunks list|get` and
+  `sip acl list|get` read trunk and IP-access-control configuration.
+- `sip calls list` filters cover exactly what the API accepts, so a flag that
+  would 400 upstream does not exist. `--limit` is bounded and `--since`/`--until`
+  are parsed locally, and `--until` widens a bare date to the end of that day so
+  the day you name is included.
+
 ### Fixed
 
 - The bundled CLI skill said `plivo agents` was "coming soon; no subcommands
