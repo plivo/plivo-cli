@@ -247,7 +247,7 @@ func TestSIPACLList_joinsAddressesIntoOneCell(t *testing.T) {
 		"ipacl_uuid":"f19c4773","name":"production-servers",
 		"ip_addresses":["192.168.1.1","192.168.1.2"]}]}`)
 
-	err, stdout, _ := execCmd(t, "sip", "acl", "list", "-o", "table")
+	err, stdout, _ := execCmd(t, "sip", "ip-acl", "list", "-o", "table")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -405,5 +405,25 @@ func TestSIPCallsList_untilWithoutSinceIsRefusedLocally(t *testing.T) {
 	}
 	if n := count(); n != 0 {
 		t.Errorf("should not have spent a request, but made %d", n)
+	}
+}
+
+// The spec is explicit that `sip calls get` points at the hangup-code reference
+// and NOT at `voice calls diagnose`: a trunk CDR is not a Voice CDR, so that
+// command cannot read it and suggesting it sends the user somewhere broken.
+func TestSIPCallsGet_pointsAtHangupCodesNotVoiceDiagnose(t *testing.T) {
+	setFakeCreds(t)
+	resetSIPFlags(t)
+	sipServer(t, http.StatusOK, realSIPTrunkCDR)
+
+	err, stdout, _ := execCmd(t, "sip", "calls", "get", "f3f74402", "-o", "table")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout, sipHangupCodesDocsURL) {
+		t.Errorf("no hangup-code reference in output:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "voice calls diagnose") {
+		t.Errorf("must not point at voice calls diagnose:\n%s", stdout)
 	}
 }

@@ -22,6 +22,9 @@ import (
 // --limit fails immediately instead of costing a round-trip to learn the same.
 const maxSIPCallLimit = 20
 
+// sipHangupCodesDocsURL is the Zentrunk hangup-code reference.
+const sipHangupCodesDocsURL = "https://www.plivo.com/docs/sip-trunking/troubleshooting/zentrunk-hangup-codes"
+
 var sipCmd = &cobra.Command{
 	Use:     "sip",
 	Aliases: []string{"sip-trunking"},
@@ -51,8 +54,8 @@ var sipTrunksCmd = &cobra.Command{
 }
 
 var sipACLCmd = &cobra.Command{
-	Use:     "acl",
-	Aliases: []string{"ipacl"},
+	Use:     "ip-acl",
+	Aliases: []string{"acl", "ipacl"},
 	Short:   "IP access control lists",
 	Args:    cobra.NoArgs,
 	RunE:    groupRunE,
@@ -270,7 +273,15 @@ func runSIPCallsGet(cmd *cobra.Command, args []string) error {
 	if effectiveFormat() == output.FormatJSON {
 		return output.JSONRaw(os.Stdout, c.Raw())
 	}
-	return output.KV(os.Stdout, sipCallKV(c))
+	if err := output.KV(os.Stdout, sipCallKV(c)); err != nil {
+		return err
+	}
+	// Point at the hangup-code reference rather than at `voice calls diagnose`:
+	// a trunk CDR is not a Voice CDR and that command cannot read it.
+	if !quietFlag && c.HangupCauseName != "" {
+		fmt.Fprintf(os.Stdout, "\nWhat %s means: %s\n", c.HangupCauseName, sipHangupCodesDocsURL)
+	}
+	return nil
 }
 
 func sipCallKV(c api.SIPTrunkCall) [][2]string {
@@ -328,11 +339,11 @@ func runSIPTrunksList(cmd *cobra.Command, args []string) error {
 	if effectiveFormat() == output.FormatJSON {
 		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
-	rows := [][]string{{"TRUNK_ID", "NAME", "DIR", "STATUS", "SECURE", "DOMAIN"}}
+	rows := [][]string{{"TRUNK_ID", "NAME", "TRUNK_DIRECTION", "TRUNK_STATUS", "TRUNK_DOMAIN", "PRIMARY_URI_UUID"}}
 	for _, t := range resp.Objects {
 		rows = append(rows, []string{
 			t.TrunkID, t.Name, t.TrunkDirection, t.TrunkStatus,
-			strconv.FormatBool(t.Secure), t.TrunkDomain,
+			t.TrunkDomain, t.PrimaryURIUUID,
 		})
 	}
 	return output.Table(os.Stdout, rows)

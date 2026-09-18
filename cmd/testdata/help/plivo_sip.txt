@@ -11,8 +11,8 @@ Aliases:
   sip, sip-trunking
 
 Available Commands:
-  acl         IP access control lists
   calls       Inspect SIP Trunking calls (CDRs)
+  ip-acl      IP access control lists
   trunks      Inbound and outbound trunks
 
 Flags:
