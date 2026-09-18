@@ -140,6 +140,7 @@ logout      remove a profile + its keychain token
 lookup      carrier/format lookup for an E.164 number
 messaging   get | sms | mms | whatsapp        (aliases: message, msg, sms)
 numbers     buy | cnam | compliance | get | list | masking | release | search | update   (alias: number)
+sip         calls | trunks | acl                 (SIP Trunking; alias: sip-trunking)
 skill       install | list                      (manage the bundled agent skills)
 support     list past support escalations (filed via `plivo ask`)
 upgrade     self-update the binary

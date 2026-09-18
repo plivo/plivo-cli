@@ -743,3 +743,81 @@ type BuddyEscalationsResponse struct {
 		Escalations []BuddyEscalation `json:"escalations"`
 	} `json:"data"`
 }
+
+// SIPTrunkCall is one SIP Trunking CDR — /Account/{id}/Zentrunk/Call/
+//
+// Field names follow the public API, which differs from the console's internal
+// view: the cause is `hangup_cause_name` (plus a numeric `hangup_cause_code`),
+// and there is no SIP-response or codec field here.
+type SIPTrunkCall struct {
+	RawBody
+	CallUUID             string `json:"call_uuid"`
+	FromNumber           string `json:"from_number,omitempty"`
+	ToNumber             string `json:"to_number,omitempty"`
+	CallDirection        string `json:"call_direction,omitempty"`
+	CallDuration         int    `json:"call_duration"`
+	BillDuration         int    `json:"bill_duration"`
+	BilledDuration       int    `json:"billed_duration"`
+	InitiationTime       string `json:"initiation_time,omitempty"`
+	AnswerTime           string `json:"answer_time,omitempty"`
+	EndTime              string `json:"end_time,omitempty"`
+	HangupCauseName      string `json:"hangup_cause_name,omitempty"`
+	HangupCauseCode      int    `json:"hangup_cause_code"`
+	HangupSource         string `json:"hangup_source,omitempty"`
+	TrunkDomain          string `json:"trunk_domain,omitempty"`
+	FromCountry          string `json:"from_country,omitempty"`
+	ToCountry            string `json:"to_country,omitempty"`
+	TransportProtocol    string `json:"transport_protocol,omitempty"`
+	SRTP                 bool   `json:"srtp"`
+	SecureTrunking       bool   `json:"secure_trunking"`
+	SecureTrunkingRate   string `json:"secure_trunking_rate,omitempty"`
+	STIRVerification     string `json:"stir_verification,omitempty"`
+	AttestationIndicator string `json:"attestation_indicator,omitempty"`
+	TotalRate            string `json:"total_rate,omitempty"`
+	TotalAmount          string `json:"total_amount,omitempty"`
+}
+
+type SIPTrunkCallList struct {
+	RawBody
+	APIID   string         `json:"api_id"`
+	Meta    ListMeta       `json:"meta"`
+	Objects []SIPTrunkCall `json:"objects"`
+}
+
+// SIPTrunk is one trunk — /Account/{id}/Zentrunk/Trunk/
+type SIPTrunk struct {
+	RawBody
+	TrunkID         string `json:"trunk_id"`
+	Name            string `json:"name,omitempty"`
+	TrunkDomain     string `json:"trunk_domain,omitempty"`
+	TrunkStatus     string `json:"trunk_status,omitempty"`
+	TrunkDirection  string `json:"trunk_direction,omitempty"`
+	Secure          bool   `json:"secure"`
+	IPACLUUID       string `json:"ipacl_uuid,omitempty"`
+	CredentialUUID  string `json:"credential_uuid,omitempty"`
+	PrimaryURIUUID  string `json:"primary_uri_uuid,omitempty"`
+	FallbackURIUUID string `json:"fallback_uri_uuid,omitempty"`
+}
+
+type SIPTrunkList struct {
+	RawBody
+	APIID   string     `json:"api_id"`
+	Meta    ListMeta   `json:"meta"`
+	Objects []SIPTrunk `json:"objects"`
+}
+
+// SIPTrunkACL is one IP access control list —
+// /Account/{id}/Zentrunk/IPAccessControlList/
+type SIPTrunkACL struct {
+	RawBody
+	IPACLUUID   string   `json:"ipacl_uuid"`
+	Name        string   `json:"name,omitempty"`
+	IPAddresses []string `json:"ip_addresses,omitempty"`
+}
+
+type SIPTrunkACLList struct {
+	RawBody
+	APIID   string        `json:"api_id"`
+	Meta    ListMeta      `json:"meta"`
+	Objects []SIPTrunkACL `json:"objects"`
+}
