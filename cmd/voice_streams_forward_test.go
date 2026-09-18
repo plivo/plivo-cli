@@ -52,7 +52,7 @@ func TestBuildLocalStreamServer_answerXML(t *testing.T) {
 			var out bytes.Buffer
 			var events atomic.Int64
 			srv := buildLocalStreamServer(&out, "wss://abc.ngrok.dev/ws", "ws://localhost:7860/ws",
-				c.bidi, c.codec, c.rate, false, false, &events)
+				c.bidi, c.codec, c.rate, false, false, &events, &streamAuth{skip: true})
 			// Stand up a transient httptest server with our mux. Hitting /answer
 			// from a real client is the only way to verify the response shape.
 			ts := httptest.NewServer(srv.Handler)
@@ -89,7 +89,7 @@ func TestBuildLocalStreamServer_answerXML(t *testing.T) {
 func TestBuildLocalStreamServer_answerRejectsBadMethod(t *testing.T) {
 	var out bytes.Buffer
 	var events atomic.Int64
-	srv := buildLocalStreamServer(&out, "wss://x/ws", "ws://x/ws", true, "mulaw", 8000, false, false, &events)
+	srv := buildLocalStreamServer(&out, "wss://x/ws", "ws://x/ws", true, "mulaw", 8000, false, false, &events, &streamAuth{skip: true})
 	ts := httptest.NewServer(srv.Handler)
 	defer ts.Close()
 
@@ -111,7 +111,7 @@ func TestBuildLocalStreamServer_wsBridgeUnreachableCustomer(t *testing.T) {
 	var logBuf bytes.Buffer
 	var events atomic.Int64
 	// Customer URL points at an unbound port; dial will fail.
-	srv := buildLocalStreamServer(&logBuf, "wss://x/ws", "ws://127.0.0.1:1/ws", true, "mulaw", 8000, false, false, &events)
+	srv := buildLocalStreamServer(&logBuf, "wss://x/ws", "ws://127.0.0.1:1/ws", true, "mulaw", 8000, false, false, &events, &streamAuth{skip: true})
 	ts := httptest.NewServer(srv.Handler)
 	defer ts.Close()
 
@@ -163,7 +163,7 @@ func TestBuildLocalStreamServer_wsBridgeBidirectional(t *testing.T) {
 
 	var logBuf bytes.Buffer
 	var events atomic.Int64
-	srv := buildLocalStreamServer(&logBuf, "wss://x/ws", botWS, true, "mulaw", 8000, false, false, &events)
+	srv := buildLocalStreamServer(&logBuf, "wss://x/ws", botWS, true, "mulaw", 8000, false, false, &events, &streamAuth{skip: true})
 	ts := httptest.NewServer(srv.Handler)
 	defer ts.Close()
 
@@ -196,7 +196,7 @@ func TestBuildLocalStreamServer_jsonOutSuppressesLogsButCountsEvents(t *testing.
 	var events atomic.Int64
 	// Customer URL points at an unbound port; dial will fail, exercising
 	// the StreamConnect + dial-failed pair without needing a real bot.
-	srv := buildLocalStreamServer(&logBuf, "wss://x/ws", "ws://127.0.0.1:1/ws", true, "mulaw", 8000, false, true, &events)
+	srv := buildLocalStreamServer(&logBuf, "wss://x/ws", "ws://127.0.0.1:1/ws", true, "mulaw", 8000, false, true, &events, &streamAuth{skip: true})
 	ts := httptest.NewServer(srv.Handler)
 	defer ts.Close()
 
