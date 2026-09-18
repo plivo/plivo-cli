@@ -25,8 +25,9 @@ const (
 	HeaderNonce       = "X-Plivo-Signature-V3-Nonce"
 )
 
-// sortedParams renders params either as a query string (k=v&k=v) or as the
-// bare concatenation (kv kv) the POST form of the signature uses.
+// sortedParams renders params as the bare concatenation (kv kv) the POST form
+// of the signature uses. asQuery is kept for the GET-shaped rendering used by
+// sortedQuery's single-valued callers.
 func sortedParams(params map[string]string, asQuery bool) string {
 	keys := make([]string, 0, len(params))
 	for k := range params {
@@ -49,14 +50,39 @@ func sortedParams(params map[string]string, asQuery bool) string {
 	return out
 }
 
-func queryToMap(q url.Values) map[string]string {
-	m := make(map[string]string, len(q))
-	for k, v := range q {
-		if len(v) > 0 {
-			m[k] = v[0]
+// mergeForSignature combines the URL's own query with the supplied params.
+// The query wins on a key collision, matching the reference implementation
+// (which updates the params map FROM the query, not the other way round).
+func mergeForSignature(q url.Values, params map[string]string) url.Values {
+	merged := make(url.Values, len(q)+len(params))
+	for k, v := range params {
+		merged[k] = []string{v}
+	}
+	for k, vs := range q {
+		merged[k] = append([]string(nil), vs...)
+	}
+	return merged
+}
+
+// sortedQuery renders k=v pairs sorted by key. A key carrying several values
+// renders one pair per value, values sorted — dropping the repeats would change
+// the signed string and reject a legitimate request.
+func sortedQuery(v url.Values) string {
+	keys := make([]string, 0, len(v))
+	for k := range v {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		vals := append([]string(nil), v[k]...)
+		sort.Strings(vals)
+		for _, val := range vals {
+			parts = append(parts, k+"="+val)
 		}
 	}
-	return m
+	return strings.Join(parts, "&")
 }
 
 // generateURL rebuilds the exact string Plivo signed.
@@ -65,25 +91,29 @@ func generateURL(uri string, params map[string]string, method string) (string, e
 	if err != nil {
 		return "", err
 	}
-	out := p.Scheme + "://" + p.Host + p.Path
-	if len(params) > 0 || len(p.RawQuery) > 0 {
-		out += "?"
-	}
-	if len(p.RawQuery) > 0 {
-		if method == "GET" {
-			merged := queryToMap(p.Query())
-			for k, v := range params {
-				merged[k] = v
-			}
-			out += sortedParams(merged, true)
-		} else {
-			out += sortedParams(queryToMap(p.Query()), true) + "." + sortedParams(params, false)
-			out = strings.TrimRight(out, ".")
+	base := p.Scheme + "://" + p.Host + p.Path
+	q := p.Query()
+
+	if method == "GET" {
+		if qs := sortedQuery(mergeForSignature(q, params)); qs != "" {
+			return base + "?" + qs, nil
 		}
-	} else {
-		out += sortedParams(params, method == "GET")
+		return base, nil
 	}
-	return out, nil
+
+	// POST signs the query as a query string and the body params as a bare
+	// concatenation. The "?" appears when either side is non-empty; the "."
+	// separator only when BOTH are.
+	qs := sortedQuery(q)
+	hasParams := len(params) > 0
+	out := base
+	if qs != "" || hasParams {
+		out += "?" + qs
+	}
+	if qs != "" && hasParams {
+		out += "."
+	}
+	return out + sortedParams(params, false), nil
 }
 
 // Compute returns the V3 signature for a request.

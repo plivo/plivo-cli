@@ -94,3 +94,68 @@ func TestValidateAcceptsAnyOfMultipleSignatures(t *testing.T) {
 		}
 	}
 }
+
+// Cases where an earlier version of this port diverged from the reference
+// implementation. Both produced a different signed string for a legitimate
+// request, so a real callback was rejected. Expected values are taken from
+// plivo-python's signature_v3.py run over the same inputs.
+func TestGenerateURL_matchesReferenceOnQueryEdgeCases(t *testing.T) {
+	cases := []struct {
+		name, uri, method, want string
+		params                  map[string]string
+	}{
+		{
+			name:   "repeated query key keeps every value",
+			uri:    "https://example.com/answer?a=1&a=2",
+			method: "POST",
+			params: map[string]string{"K": "v"},
+			want:   "https://example.com/answer?a=1&a=2.Kv",
+		},
+		{
+			name:   "repeated query key survives merging on GET",
+			uri:    "https://example.com/answer?a=1&a=2",
+			method: "GET",
+			params: map[string]string{"b": "3"},
+			want:   "https://example.com/answer?a=1&a=2&b=3",
+		},
+		{
+			name:   "url query wins over a colliding param",
+			uri:    "https://example.com/answer?a=1",
+			method: "GET",
+			params: map[string]string{"a": "2"},
+			want:   "https://example.com/answer?a=1",
+		},
+		{
+			name:   "post with params and no query gets ? but no dot",
+			uri:    "https://example.com/answer",
+			method: "POST",
+			params: map[string]string{"CallUUID": "abc", "From": "+14155551234"},
+			want:   "https://example.com/answer?CallUUIDabcFrom+14155551234",
+		},
+		{
+			name:   "post with neither query nor params gets no ?",
+			uri:    "https://example.com/answer",
+			method: "POST",
+			params: map[string]string{},
+			want:   "https://example.com/answer",
+		},
+		{
+			name:   "post with query but no params gets no dot",
+			uri:    "https://example.com/answer?x=1",
+			method: "POST",
+			params: map[string]string{},
+			want:   "https://example.com/answer?x=1",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := generateURL(tc.uri, tc.params, tc.method)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("generateURL mismatch\n got: %s\nwant: %s", got, tc.want)
+			}
+		})
+	}
+}
