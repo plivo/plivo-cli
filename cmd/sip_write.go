@@ -365,6 +365,9 @@ func runSIPURIsCreate(cmd *cobra.Command, args []string) error {
 	if normalizeSIPURI(uriCreateURI) == "" {
 		return clierr.BadInput("--uri is required (host, host:port, host;transport=…, or sip:user@host)")
 	}
+	if uriCreateAuthNeeded && uriCreateUsername == "" {
+		return errAuthNeedsUsername
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -461,6 +464,9 @@ func runSIPURIsUpdate(cmd *cobra.Command, args []string) error {
 		body["username"] = uriUpdateUsername
 	}
 	boolFlagPatch(cmd, "authentication-needed", "authentication_needed", uriUpdateAuthNeeded, body)
+	if uriUpdateAuthNeeded && cmd.Flags().Changed("authentication-needed") && uriUpdateUsername == "" {
+		return errAuthNeedsUsername
+	}
 	if len(body) == 0 {
 		return clierr.BadInput("nothing to update — pass at least one flag")
 	}
@@ -677,6 +683,18 @@ func runSIPCredsUpdate(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		body["password"] = pw
+		// The API rejects a password with no username, so rotating a password
+		// alone is impossible on the wire. Carry the stored username across
+		// rather than making the user restate something that is not changing.
+		if _, ok := body["username"]; !ok {
+			var cur api.SIPTrunkCredential
+			apiErr, gerr := client.Do("GET", client.AccountURL("Zentrunk", "Credential", args[0]), nil, nil, &cur)
+			if gerr != nil || apiErr != nil || cur.Username == "" {
+				return clierr.BadInput(
+					"could not read the current username, which the API requires alongside a password — pass --username too")
+			}
+			body["username"] = cur.Username
+		}
 	}
 	if len(body) == 0 {
 		return clierr.BadInput("nothing to update — pass at least one flag")
@@ -886,3 +904,8 @@ func mustJSON(v map[string]any) json.RawMessage {
 func defaultReadAllStdin() ([]byte, error) { return io.ReadAll(os.Stdin) }
 
 var readAllStdin = defaultReadAllStdin
+
+// errAuthNeedsUsername mirrors a rule the API enforces but only reports after
+// the round trip, and its message names the field rather than the flag.
+var errAuthNeedsUsername = clierr.BadInput(
+	"--authentication-needed=true also needs --username")

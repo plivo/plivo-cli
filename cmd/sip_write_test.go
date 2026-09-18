@@ -458,3 +458,66 @@ func TestNumbersUpdate_refusesAnOutboundTrunk(t *testing.T) {
 		t.Error("must not attach a number to an outbound trunk")
 	}
 }
+
+// The API rejects authentication_needed without a username, but only after the
+// round trip and naming the field rather than the flag.
+func TestSIPURIs_authenticationNeedsAUsername(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{"create", []string{"sip", "uris", "create", "--name", "n", "--uri", "example.com", "--authentication-needed=true"}},
+		{"update", []string{"sip", "uris", "update", "U1", "--authentication-needed=true"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setFakeCreds(t)
+			resetWriteFlags(t)
+			reqs := sipWriteServer(t, trunksUsingU1)
+			err, _, _ := execCmd(t, tc.args...)
+			if err == nil || !strings.Contains(err.Error(), "--username") {
+				t.Fatalf("expected a refusal naming --username, got: %v", err)
+			}
+			if post(reqs(), "/Zentrunk/URI/") != nil {
+				t.Error("must not spend a request on a body the API will reject")
+			}
+		})
+	}
+}
+
+// Rotating a password is the common case, and the API refuses a password with
+// no username — so a password-only update is impossible on the wire. The stored
+// username is carried across rather than demanded again.
+func TestSIPCredentialsUpdate_passwordOnlyRotationCarriesTheUsername(t *testing.T) {
+	setFakeCreds(t)
+	resetWriteFlags(t)
+	var mu sync.Mutex
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(`{"credential_uuid":"C1","name":"c","username":"stored-user"}`))
+			return
+		}
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		mu.Lock()
+		body = b
+		mu.Unlock()
+		_, _ = w.Write([]byte(`{"message":"ok"}`))
+	}))
+	t.Cleanup(srv.Close)
+	clientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
+	t.Cleanup(func() { clientForTest = nil })
+	readAllStdin = func() ([]byte, error) { return []byte("newpw"), nil }
+
+	if err, _, _ := execCmd(t, "sip", "credentials", "update", "C1", "--password-stdin"); err != nil {
+		t.Fatalf("a password-only rotation must work: %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if body["password"] != "newpw" {
+		t.Errorf("password not sent: %v", body)
+	}
+	if body["username"] != "stored-user" {
+		t.Errorf("stored username not carried across, so the API would reject this: %v", body)
+	}
+}
