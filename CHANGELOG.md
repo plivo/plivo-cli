@@ -5,7 +5,7 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.0] - 2026-09-18
 
 ### Added
 
@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   because an argument lands in shell history, `ps` output and CI logs.
 - Deleting a URI, credential or IP ACL first names every trunk pointing at it,
   and deleting a trunk reports how many numbers it would detach.
+- **Known limitation:** `sip calls diagnose` needs server-side support that is
+  not live yet, so it currently reports that the call could not be retrieved.
+  Everything else under `plivo sip` works today; use `sip calls get` for the
+  hangup cause, durations and SIP details in the meantime.
 - `sip calls list` filters cover exactly what the API accepts, so a flag that
   would 400 upstream does not exist. `--limit` is bounded and `--since`/`--until`
   are parsed locally, and `--until` widens a bare date to the end of that day so
