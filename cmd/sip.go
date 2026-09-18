@@ -264,6 +264,7 @@ func runSIPCallsGet(cmd *cobra.Command, args []string) error {
 func sipCallKV(c api.SIPTrunkCall) [][2]string {
 	return [][2]string{
 		{"call_uuid", c.CallUUID},
+		{"call_id", c.CallID},
 		{"from_number", c.FromNumber},
 		{"to_number", c.ToNumber},
 		{"call_direction", c.CallDirection},
@@ -285,6 +286,8 @@ func sipCallKV(c api.SIPTrunkCall) [][2]string {
 		{"attestation_indicator", c.AttestationIndicator},
 		{"total_rate", c.TotalRate},
 		{"total_amount", c.TotalAmount},
+		{"cnam_lookup", strconv.FormatBool(c.CnamLookup)},
+		{"cnam_lookup_rate", c.CnamLookupRate},
 	}
 }
 

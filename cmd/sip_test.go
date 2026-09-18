@@ -289,3 +289,64 @@ func TestUnwrapSIPTrunk(t *testing.T) {
 		}
 	})
 }
+
+// A verbatim prod response. Types here are guesswork-prone and a single wrong
+// one fails the WHOLE command with "decode response", not just that field —
+// cnam_lookup is a bool, which an earlier version of this modelled as a string.
+const realSIPTrunkCDR = `{"call_uuid": "f3f74402-59af-40b3-909c-80c50a4b063f",
+"call_id": "459580122_124515270@206.146.101.14", "from_number": "+919902443540",
+"to_number": "+17322179088", "call_direction": "inbound", "call_duration": 32,
+"bill_duration": 60, "end_time": "2026-09-18 08:52:26",
+"hangup_cause_name": "normal_hangup", "hangup_source": "carrier",
+"total_rate": "0.00280", "total_amount": "0.00280",
+"initiation_time": "2026-09-18 08:51:53", "answer_time": "2026-09-18 08:51:54",
+"trunk_domain": "42741122632602585.zt.plivo.com", "from_country": "IN",
+"to_country": "US", "transport_protocol": "tcp", "srtp": false,
+"hangup_cause_code": 3000, "secure_trunking": false,
+"secure_trunking_rate": "0.00000", "cnam_lookup": false,
+"cnam_lookup_rate": "0.00000", "stir_verification": "Not Verified",
+"attestation_indicator": "C", "billed_duration": 60}`
+
+func TestSIPCallsGet_decodesARealResponse(t *testing.T) {
+	setFakeCreds(t)
+	resetSIPFlags(t)
+	sipServer(t, http.StatusOK, realSIPTrunkCDR)
+
+	err, stdout, _ := execCmd(t, "sip", "calls", "get", "f3f74402", "-o", "table")
+	if err != nil {
+		t.Fatalf("real response failed to decode: %v", err)
+	}
+	for _, want := range []string{
+		"459580122_124515270@206.146.101.14", // call_id, the SIP-level identifier
+		"normal_hangup", "carrier", "3000",
+		"Not Verified", "tcp", "0.00280",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("missing %q in rendered detail:\n%s", want, stdout)
+		}
+	}
+}
+
+// The trunk detail endpoint really does nest the record under `object` (the CDR
+// endpoint does not), so the unwrap is load-bearing: without it the table is
+// blank. This body is a verbatim prod response.
+func TestSIPTrunksGet_decodesTheRealNestedResponse(t *testing.T) {
+	setFakeCreds(t)
+	resetSIPFlags(t)
+	sipServer(t, http.StatusOK, `{"api_id":"db10e2de-f016-43de-a4ed-2eb8abc78beb","object":{
+		"trunk_id":"42741122632602585","name":"Trunk-e9dda2","trunk_status":"enabled",
+		"secure":false,"trunk_domain":"42741122632602585.zt.plivo.com",
+		"trunk_direction":"inbound","ipacl_uuid":null,"credential_uuid":null,
+		"primary_uri_uuid":"8fde2db4-e7e0-43ce-a6ea-5690fe402e38","fallback_uri_uuid":null,
+		"created_at":"2026-08-23T19:57:52Z","updated_at":"2026-08-23T19:57:52Z"}}`)
+
+	err, stdout, _ := execCmd(t, "sip", "trunks", "get", "42741122632602585", "-o", "table")
+	if err != nil {
+		t.Fatalf("real nested response failed: %v", err)
+	}
+	for _, want := range []string{"42741122632602585", "Trunk-e9dda2", "inbound", "enabled"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("missing %q — the nested record did not render:\n%s", want, stdout)
+		}
+	}
+}

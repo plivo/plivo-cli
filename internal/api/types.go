@@ -752,6 +752,7 @@ type BuddyEscalationsResponse struct {
 type SIPTrunkCall struct {
 	RawBody
 	CallUUID             string `json:"call_uuid"`
+	CallID               string `json:"call_id,omitempty"` // SIP Call-ID
 	FromNumber           string `json:"from_number,omitempty"`
 	ToNumber             string `json:"to_number,omitempty"`
 	CallDirection        string `json:"call_direction,omitempty"`
@@ -775,6 +776,8 @@ type SIPTrunkCall struct {
 	AttestationIndicator string `json:"attestation_indicator,omitempty"`
 	TotalRate            string `json:"total_rate,omitempty"`
 	TotalAmount          string `json:"total_amount,omitempty"`
+	CnamLookup           bool   `json:"cnam_lookup"`
+	CnamLookupRate       string `json:"cnam_lookup_rate,omitempty"`
 }
 
 type SIPTrunkCallList struct {
