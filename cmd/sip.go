@@ -178,9 +178,21 @@ func normalizeSIPTime(v string, endOfDay bool) (string, error) {
 		"could not read %q as a time — use YYYY-MM-DD, YYYY-MM-DD HH:MM, or YYYY-MM-DD HH:MM:SS (UTC)", v))
 }
 
+// trimPlus drops a leading "+" from a number filter. The CDR carries the number
+// in +E.164, but the filter only matches it without the "+", so pasting a number
+// straight out of `sip calls list` would silently return nothing.
+func trimPlus(number string) string {
+	return strings.TrimPrefix(strings.TrimSpace(number), "+")
+}
+
 func runSIPCallsList(cmd *cobra.Command, args []string) error {
 	if sipCallsLimit < 1 || sipCallsLimit > maxSIPCallLimit {
 		return clierr.BadInput(fmt.Sprintf("--limit must be between 1 and %d", maxSIPCallLimit))
+	}
+	// The API refuses an upper time bound without a lower one. Say so here
+	// rather than let it come back as a 400 naming raw filter names.
+	if sipCallsUntil != "" && sipCallsSince == "" {
+		return clierr.BadInput("--until needs --since: the API rejects an end-time upper bound without a lower one")
 	}
 	since, err := normalizeSIPTime(sipCallsSince, false)
 	if err != nil {
@@ -199,8 +211,8 @@ func runSIPCallsList(cmd *cobra.Command, args []string) error {
 	q.Set("limit", strconv.Itoa(sipCallsLimit))
 	q.Set("offset", strconv.Itoa(sipCallsOffset))
 	for key, val := range map[string]string{
-		"from_number":       sipCallsFrom,
-		"to_number":         sipCallsTo,
+		"from_number":       trimPlus(sipCallsFrom),
+		"to_number":         trimPlus(sipCallsTo),
 		"call_direction":    sipCallsDirection,
 		"end_time__gte":     since,
 		"end_time__lte":     until,

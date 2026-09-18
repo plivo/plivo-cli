@@ -98,7 +98,7 @@ func TestSIPCallsList_untilIncludesTheNamedDay(t *testing.T) {
 	resetSIPFlags(t)
 	urls, _ := sipServer(t, http.StatusOK, `{"meta":{},"objects":[]}`)
 
-	if err, _, _ := execCmd(t, "sip", "calls", "list", "--until", "2026-09-15"); err != nil {
+	if err, _, _ := execCmd(t, "sip", "calls", "list", "--since", "2026-09-01", "--until", "2026-09-15"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := urls()
@@ -127,7 +127,7 @@ func TestSIPCallsList_mapsEveryFilterToItsQueryParam(t *testing.T) {
 	got := urls()[0]
 	for _, want := range []string{
 		"limit=5", "offset=10",
-		"from_number=%2B14155551234", "to_number=%2B13125551234",
+		"from_number=14155551234", "to_number=13125551234",
 		"call_direction=outbound", "end_time__gte=2026-09-01+00%3A00%3A00",
 		"hangup_cause_code=3000", "hangup_source=carrier",
 		"stir_verification=Verified",
@@ -348,5 +348,62 @@ func TestSIPTrunksGet_decodesTheRealNestedResponse(t *testing.T) {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("missing %q — the nested record did not render:\n%s", want, stdout)
 		}
+	}
+}
+
+// The CDR carries +E.164 but the filter only matches the number WITHOUT the
+// "+", so pasting a number straight out of `sip calls list` returned zero rows
+// and looked like "no such calls" rather than a broken filter.
+func TestSIPCallsList_stripsPlusFromNumberFilters(t *testing.T) {
+	setFakeCreds(t)
+	resetSIPFlags(t)
+	urls, _ := sipServer(t, http.StatusOK, `{"meta":{},"objects":[]}`)
+
+	err, _, _ := execCmd(t, "sip", "calls", "list",
+		"--from-number", "+919902443540", "--to-number", "+17322179088")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := urls()[0]
+	for _, want := range []string{"from_number=919902443540", "to_number=17322179088"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("query missing %s\n  got: %s", want, got)
+		}
+	}
+	if strings.Contains(got, "%2B") {
+		t.Errorf("a + survived into the filter, which matches nothing: %s", got)
+	}
+}
+
+// A number given without the + must still work.
+func TestSIPCallsList_acceptsANumberWithoutAPlus(t *testing.T) {
+	setFakeCreds(t)
+	resetSIPFlags(t)
+	urls, _ := sipServer(t, http.StatusOK, `{"meta":{},"objects":[]}`)
+
+	if err, _, _ := execCmd(t, "sip", "calls", "list", "--from-number", "919902443540"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(urls()[0], "from_number=919902443540") {
+		t.Errorf("unexpected query: %s", urls()[0])
+	}
+}
+
+// The API rejects an end-time upper bound with no lower bound. Catch it here so
+// the user gets the flag names they typed rather than a 400 naming end_time__lte.
+func TestSIPCallsList_untilWithoutSinceIsRefusedLocally(t *testing.T) {
+	setFakeCreds(t)
+	resetSIPFlags(t)
+	_, count := sipServer(t, http.StatusOK, `{"meta":{},"objects":[]}`)
+
+	err, _, _ := execCmd(t, "sip", "calls", "list", "--until", "2026-08-31")
+	if err == nil {
+		t.Fatal("expected --until without --since to be refused")
+	}
+	if !strings.Contains(err.Error(), "--since") {
+		t.Errorf("the error should name the flag to add, got: %v", err)
+	}
+	if n := count(); n != 0 {
+		t.Errorf("should not have spent a request, but made %d", n)
 	}
 }
