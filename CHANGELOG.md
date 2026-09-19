@@ -32,7 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The flag is now required.
 - `sip uris create` took `--password` on the command line, where it lands in
   shell history, `ps` output and CI logs. Passwords are stdin-only, matching
-  credentials, and a URI password can now be rotated on update.
+  credentials, and a URI password can now be rotated on update. Rotation also
+  restates `authentication_needed` and the stored username, which the API
+  demands alongside a password and which made rotation impossible on the wire.
 - `numbers update --trunk-id` skipped the outbound-trunk check under `--dry-run`,
   so the preview showed a request the real run refuses. Pre-flight reads now run
   under `--dry-run`; it suppresses writes, and a GET is not a write.

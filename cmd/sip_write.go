@@ -520,6 +520,25 @@ func runSIPURIsUpdate(cmd *cobra.Command, args []string) error {
 		}
 		body["password"] = pw
 	}
+	// The API refuses a username or password unless authentication_needed is
+	// true in the same call, so rotating a password without restating it fails.
+	// Those fields are only legal in that state, so imply it.
+	if _, hasPw := body["password"]; hasPw || body["username"] != nil {
+		if !cmd.Flags().Changed("authentication-needed") {
+			body["authentication_needed"] = true
+		}
+		// With authentication_needed true the API also demands a username, so a
+		// password-only rotation is impossible on the wire. Carry the stored one.
+		if body["username"] == nil {
+			var cur api.SIPTrunkURI
+			apiErr, gerr := client.Do("GET", client.AccountURL("Zentrunk", "URI", args[0]), nil, nil, &cur)
+			if gerr != nil || apiErr != nil || cur.Username == "" {
+				return clierr.BadInput(
+					"could not read the current username, which the API requires alongside a password — pass --username too")
+			}
+			body["username"] = cur.Username
+		}
+	}
 	boolFlagPatch(cmd, "authentication-needed", "authentication_needed", uriUpdateAuthNeeded, body)
 	if uriUpdateAuthNeeded && cmd.Flags().Changed("authentication-needed") && uriUpdateUsername == "" {
 		return errAuthNeedsUsername

@@ -683,3 +683,45 @@ func TestNumbersUpdate_dryRunStillRunsTheOutboundGuard(t *testing.T) {
 		t.Error("dry-run sent a write")
 	}
 }
+
+// Third instance of one API shape: a write is refused unless it restates a
+// field it is not changing. trunk_direction on trunks, username on credentials,
+// and both authentication_needed AND username on URIs. Rotating a URI password
+// is impossible on the wire without them.
+func TestSIPURIsUpdate_passwordRotationRestatesWhatTheAPIDemands(t *testing.T) {
+	setFakeCreds(t)
+	resetWriteFlags(t)
+	var mu sync.Mutex
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(`{"uri_uuid":"U1","name":"n","uri":"example.com","authentication_needed":true,"username":"stored-user"}`))
+			return
+		}
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		mu.Lock()
+		body = b
+		mu.Unlock()
+		_, _ = w.Write([]byte(`{"message":"ok"}`))
+	}))
+	t.Cleanup(srv.Close)
+	clientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
+	t.Cleanup(func() { clientForTest = nil })
+	readAllStdin = func() ([]byte, error) { return []byte("newpw"), nil }
+
+	if err, _, _ := execCmd(t, "sip", "uris", "update", "U1", "--password-stdin"); err != nil {
+		t.Fatalf("a password-only rotation must work: %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if body["password"] != "newpw" {
+		t.Errorf("password not sent: %v", body)
+	}
+	if body["authentication_needed"] != true {
+		t.Errorf("authentication_needed not restated, so the API would refuse: %v", body)
+	}
+	if body["username"] != "stored-user" {
+		t.Errorf("stored username not carried across: %v", body)
+	}
+}
