@@ -360,8 +360,14 @@ func runNumberSearch(cmd *cobra.Command, args []string) error {
 // succeed and the number would simply stop answering.
 func requireInboundTrunk(client *api.Client, trunkID string) error {
 	var t api.SIPTrunk
-	apiErr, err := client.Do("GET", client.AccountURL("Zentrunk", "Trunk", trunkID), nil, nil, &t)
-	if err != nil {
+	var apiErr *api.APIError
+	// Must read even under --dry-run, or the preview shows a POST the real run
+	// refuses. A GET is not a write.
+	if err := readThrough(client, func() error {
+		var e error
+		apiErr, e = client.Do("GET", client.AccountURL("Zentrunk", "Trunk", trunkID), nil, nil, &t)
+		return e
+	}); err != nil {
 		return nil // transport trouble: let the API have the final say
 	}
 	if apiErr != nil {

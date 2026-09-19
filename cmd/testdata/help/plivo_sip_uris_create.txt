@@ -13,7 +13,7 @@ Flags:
       --authentication-needed   require authentication
   -h, --help                    help for create
       --name string             URI name
-      --password string         password when authentication is needed
+      --password-stdin          read the URI password from stdin
       --uri string              host, host:port, host;transport=…, or sip:user@host
       --username string         username when authentication is needed
 
