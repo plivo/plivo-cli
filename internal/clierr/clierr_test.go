@@ -3,6 +3,7 @@ package clierr
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -409,5 +410,37 @@ func TestWrap_genericError(t *testing.T) {
 	}
 	if got.Message != "some random error" {
 		t.Errorf("Message = %q", got.Message)
+	}
+}
+
+// The hint used to hardcode the general API limit (300 req / 5 s) onto every
+// 429, including assistant ones where the real limit is 5 per 60 seconds. It
+// contradicted the server's own message on the same error, so a user following
+// it backed off by the wrong order of magnitude.
+func TestFromHTTP_rateLimitHintNeverContradictsTheServer(t *testing.T) {
+	assistantBody := []byte(`{"error":{"message":"Rate limit exceeded: 5 requests per 60 seconds. Retry in 8 seconds."}}`)
+	e := FromHTTP(http.StatusTooManyRequests, "", assistantBody)
+
+	if e.Code != CodeRateLimited || !e.Retryable {
+		t.Fatalf("classification changed: code=%s retryable=%v", e.Code, e.Retryable)
+	}
+	for _, wrong := range []string{"300", "5 s", "5 /", "req / 5"} {
+		if strings.Contains(e.Hint, wrong) {
+			t.Errorf("hint states a limit the CLI cannot know (%q): %q", wrong, e.Hint)
+		}
+	}
+	if !strings.Contains(strings.ToLower(e.Hint), "above") {
+		t.Errorf("hint should defer to the server's own numbers, got: %q", e.Hint)
+	}
+}
+
+// With no numbers from the server, the hint must still not invent any.
+func TestFromHTTP_rateLimitHintWithoutServerDetail(t *testing.T) {
+	e := FromHTTP(http.StatusTooManyRequests, "", []byte(`{"error":{"message":"Too many requests"}}`))
+	if strings.Contains(e.Hint, "300") {
+		t.Errorf("hint invented a limit: %q", e.Hint)
+	}
+	if !strings.Contains(e.Hint, "Retry-After") {
+		t.Errorf("hint should point at the authoritative source, got: %q", e.Hint)
 	}
 }
