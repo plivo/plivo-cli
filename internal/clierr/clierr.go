@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 )
 
@@ -232,7 +233,7 @@ func FromHTTP(statusCode int, requestID string, body []byte) *Error {
 		e.Hint = "List available resources with the matching `... list` command."
 	case statusCode == http.StatusTooManyRequests:
 		e.Code = CodeRateLimited
-		e.Hint = "Plivo rate-limit is 300 req / 5 s. Back off and retry."
+		e.Hint = rateLimitHint(msg)
 		e.Retryable = true
 	case statusCode == http.StatusRequestTimeout, statusCode == http.StatusGatewayTimeout:
 		e.Code = CodeUpstreamTimeout
@@ -358,4 +359,21 @@ func upgradeHintFromBody(body []byte) string {
 	}
 	return "Your Plivo CLI is below the minimum supported " + b.MinVersion +
 		". Run `" + b.UpgradeCommand + "`."
+}
+
+// rateLimitStated matches a server message that already gives the limit or the
+// wait, so the hint can defer to it instead of guessing.
+var rateLimitStated = regexp.MustCompile(`(?i)retry in |requests per |rate.?limit`)
+
+// rateLimitHint avoids restating a number the CLI cannot know.
+//
+// Limits differ by orders of magnitude across endpoints: the assistant allows a
+// handful of requests per minute where the general API allows hundreds per
+// second. A hardcoded figure contradicted the server's own message on the same
+// error, so a user following the hint backed off by the wrong amount.
+func rateLimitHint(serverMsg string) string {
+	if rateLimitStated.MatchString(serverMsg) {
+		return "Wait the interval given in the message above, then retry."
+	}
+	return "Back off and retry; the response's Retry-After header gives the wait."
 }
