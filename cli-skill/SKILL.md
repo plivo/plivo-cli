@@ -13,7 +13,7 @@ Single Go binary on PATH (installed as `plivo`). Prefer the CLI over curl — th
 ## If you are an AI agent
 
 - `export PLIVO_FEEDBACK_PROMPT=0` and `CI=1` before any command (suppresses the feedback prompt and any TTY-only interactives).
-- Auth headlessly: `export PLIVO_AUTH_ID` + `PLIVO_AUTH_TOKEN` — browser `plivo login` will not work in an agent / CI context.
+- Auth: the machine must already have a profile from `plivo login`. There is no headless credential path — see Authentication below.
 - Always pass `-o json`. Success: `{"data": <the API response, verbatim>}` on stdout, exit 0 — for lists the rows are at `data.objects`, with paging at `data.meta`. Error: `{"error": {"code", "message", "hint", "retryable", "status_code", ...}}` on stderr, non-zero exit.
 - Never invoke interactive commands: `plivo login` (browser flow), bare `plivo feedback` (prompts).
 - Multiple message recipients use `<` as the separator, **quoted**: `--dst "+14155551111<+14155552222"`. (This is Plivo's native delimiter — the CLI passes `dst` through verbatim. Commas do NOT work.)
@@ -22,19 +22,17 @@ Single Go binary on PATH (installed as `plivo`). Prefer the CLI over curl — th
 ## 60-second quickstart
 
 1. Install: `curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | bash`
-2. Log in: `plivo login` (opens browser) OR set `PLIVO_AUTH_ID` + `PLIVO_AUTH_TOKEN`.
+2. Log in: `plivo login` (opens browser).
 3. Verify: `plivo auth whoami`.
 4. First command: `plivo voice calls list --limit 5`.
 5. Anything that spends money: add `--dry-run` first, then `--yes` to confirm.
 
-## Headless authentication (agents/CI)
+## Authentication
 
-- `plivo login` requires a browser — DO NOT call it from an agent or CI.
-- Set credentials via environment instead:
-  - `export PLIVO_AUTH_ID=MA...`
-  - `export PLIVO_AUTH_TOKEN=<token>`
-- Resolution precedence: `--profile <name>` flag → active profile in `~/.plivo/config.toml` → environment variables.
-- The CLI does not prompt or read stdin for credentials when env creds are present.
+- Browser OAuth (PKCE) via `plivo login` is the only credential source. There is no env var and no flag that accepts a raw `auth_id` / `auth_token`.
+- Resolution precedence: `--profile <name>` flag → active profile in `~/.plivo/config.toml`.
+- Headless (agents/CI): `plivo login` needs a browser, so DO NOT call it. The machine must already hold a profile. If `plivo auth whoami` fails, stop and ask a human to run `plivo login` there — you cannot supply credentials yourself.
+- The CLI never prompts or reads stdin for credentials.
 
 ## When to invoke
 
@@ -81,7 +79,7 @@ curl -fL -o /tmp/plivo "https://github.com/plivo/plivo-cli/releases/latest/downl
 chmod +x /tmp/plivo && mv /tmp/plivo ~/.local/bin/plivo
 ```
 
-Verify: `plivo --version`. Then run `plivo login` to bootstrap credentials (or set `PLIVO_AUTH_ID` + `PLIVO_AUTH_TOKEN` — see Headless authentication above).
+Verify: `plivo --version`. Then run `plivo login` to bootstrap credentials (see Authentication above).
 
 ## Keeping the CLI up to date
 
@@ -154,7 +152,7 @@ Many groups have short aliases (e.g. `account application`/`app`, `voice call`, 
 
 ### `plivo login`
 
-Browser PKCE OAuth — opens default browser, captures the callback over a local loopback listener, persists creds. **Recommended** for interactive sessions; for agents/CI use `PLIVO_AUTH_ID` + `PLIVO_AUTH_TOKEN` (see Headless authentication above). There is no flag to pass credentials inline — login is browser-only.
+Browser PKCE OAuth — opens default browser, captures the callback over a local loopback listener, persists creds. This is the **only** way to authenticate: there is no flag and no environment variable that accepts credentials inline, so an agent/CI host needs a profile logged in beforehand (see Authentication above).
 
 One profile is saved per organization: with no `-n`, the profile name is derived from the org (slug of its name, e.g. `acme-inc`), falling back to `default` when the org has no name. Logging into a second org saves a second profile instead of overwriting the first; re-authorizing the *same* org updates its profile in place.
 
@@ -666,7 +664,7 @@ Switch on `code` (string), never message text. `code` → exit-code mapping (sta
 
 | Code | Exit | Likely cause |
 |---|---|---|
-| `AUTH_MISSING` | 2 | no creds — run `plivo login` or set `PLIVO_AUTH_ID`/`PLIVO_AUTH_TOKEN` |
+| `AUTH_MISSING` | 2 | no creds — run `plivo login` |
 | `AUTH_INVALID` | 2 | wrong auth_id/token — re-login |
 | `AUTH_FORBIDDEN` | 2 | authenticated but not permitted |
 | `AUTH_EXPIRED` | 2 | session/token expired — re-login |
