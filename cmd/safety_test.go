@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -109,8 +110,8 @@ func execCmd(t *testing.T, args ...string) (err error, stdout, stderr string) {
 	return err, outBuf.String(), errBuf.String()
 }
 
-// setFakeCreds populates env vars + redirects HOME so the dev's
-// ~/.plivo/config.toml doesn't override the test env.
+// setFakeCreds redirects HOME and writes a fake profile there, so the dev's
+// real ~/.plivo/config.toml can't leak into the test.
 //
 // Also swaps the OS keychain for an in-memory mock — the underlying
 // go-keyring library talks to the system keychain regardless of HOME,
@@ -119,13 +120,30 @@ func execCmd(t *testing.T, args ...string) (err error, stdout, stderr string) {
 // is a no-op when not running under tests.
 func setFakeCreds(t *testing.T) {
 	t.Helper()
+	// Non-MA-prefixed so the gitleaks rule doesn't flag it.
+	writeProfile(t, setEmptyHome(t),
+		"active = \"test\"\n\n[profiles.test]\nauth_id = \"CIFAKEPLACEHOLDER001\"\nauth_token = \"ci-only-not-a-real-token\"\n")
+}
+
+// setEmptyHome redirects HOME to a temp dir holding no profile at all.
+func setEmptyHome(t *testing.T) string {
+	t.Helper()
 	keyring.MockInit()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	t.Setenv("USERPROFILE", tmp)
-	// Non-MA-prefixed so the gitleaks rule doesn't flag it.
-	t.Setenv("PLIVO_AUTH_ID", "CIFAKEPLACEHOLDER001")
-	t.Setenv("PLIVO_AUTH_TOKEN", "ci-only-not-a-real-token")
+	return tmp
+}
+
+func writeProfile(t *testing.T, home, toml string) {
+	t.Helper()
+	dir := filepath.Join(home, ".plivo")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("creating %s: %v", dir, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(toml), 0o600); err != nil {
+		t.Fatalf("writing config.toml: %v", err)
+	}
 }
 
 // startCapturingHTTPServer returns an httptest server that records URLs hit

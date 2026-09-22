@@ -15,10 +15,22 @@ if [ ! -x "$BIN" ]; then
   exit 2
 fi
 
-# Not a real-shaped auth_id, so secret scanners don't flag this file. Any
-# non-empty value is enough for dry-run prints.
-export PLIVO_AUTH_ID="${PLIVO_AUTH_ID:-CIFAKEPLACEHOLDER001}"
-export PLIVO_AUTH_TOKEN="${PLIVO_AUTH_TOKEN:-ci-only-not-a-real-token}"
+# A profile is the only credential source, so point the binary at a throwaway
+# home. Values are not real-shaped so secret scanners don't flag this file.
+# USERPROFILE too: os.UserHomeDir() reads it instead of HOME on Windows.
+SMOKE_HOME="$(mktemp -d)"
+trap 'rm -rf "$SMOKE_HOME"' EXIT
+mkdir -p "$SMOKE_HOME/.plivo"
+cat > "$SMOKE_HOME/.plivo/config.toml" <<'TOML'
+active = "smoke"
+
+[profiles.smoke]
+auth_id = "CIFAKEPLACEHOLDER001"
+auth_token = "ci-only-not-a-real-token"
+TOML
+chmod 600 "$SMOKE_HOME/.plivo/config.toml"
+export HOME="$SMOKE_HOME"
+export USERPROFILE="$SMOKE_HOME"
 
 # Keep the run hermetic.
 export PLIVO_NO_UPDATE_CHECK=1

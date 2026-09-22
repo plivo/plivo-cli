@@ -941,15 +941,15 @@ func runSupport(cmd *cobra.Command, args []string) error {
 		}
 		client = c
 	}
-	// "Your past escalations" needs a human identity to scope by — only a
-	// browser `plivo login` populates one. PLIVO_AUTH_ID/TOKEN env auth (and
-	// older manually-entered profiles) can't be attributed to a person.
+	// "Your past escalations" needs a human identity to scope by, and only a
+	// browser `plivo login` populates one. Older manually-entered profiles
+	// can't be attributed to a person.
 	// --dry-run sends nothing, so it still previews the request.
 	if client.AomUUID == "" && !dryRunFlag {
 		return &clierr.Error{
 			Code:    clierr.CodeAuthForbidden,
 			Message: "support needs a browser-login profile to scope escalations to you",
-			Hint:    "Run `plivo login` — env var or manually-entered credentials have no per-user identity to filter by.",
+			Hint:    "Run `plivo login` — a manually-entered profile has no per-user identity to filter by.",
 		}
 	}
 	applyBuddyURL(client)

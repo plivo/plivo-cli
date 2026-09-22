@@ -230,10 +230,11 @@ Plivo CLI — manage messaging, voice, numbers, applications
 
 plivo is a command-line interface for the Plivo REST API.
 
-Credentials resolve in order:
+Credentials come from browser OAuth/PKCE login and resolve in order:
   1. --profile flag
-  2. PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN env vars
-  3. active profile in ~/.plivo/config.toml
+  2. active profile in ~/.plivo/config.toml
+
+Run "plivo login" if you have no profile yet.
 
 ```
 plivo
@@ -1158,8 +1159,8 @@ Multiple organizations:
   -n/--name to choose the profile name yourself.
 
 Headless / CI use:
-  Set PLIVO_AUTH_ID + PLIVO_AUTH_TOKEN environment variables and skip
-  `plivo login` entirely — every command picks creds up from the env.
+  Not supported. Browser OAuth (PKCE) is the only credential source, so a
+  machine with no browser needs a profile that was logged in on it already.
 
 By default the CLI validates credentials with GET /Account/ before
 saving. Pass --no-verify to skip (offline / mock use only).

@@ -1,9 +1,10 @@
 plivo is a command-line interface for the Plivo REST API.
 
-Credentials resolve in order:
+Credentials come from browser OAuth/PKCE login and resolve in order:
   1. --profile flag
-  2. PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN env vars
-  3. active profile in ~/.plivo/config.toml
+  2. active profile in ~/.plivo/config.toml
+
+Run "plivo login" if you have no profile yet.
 
 Usage:
   plivo [command]

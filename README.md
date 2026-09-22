@@ -126,12 +126,9 @@ plivo support           # list your past support escalations
 
 Tokens stream as they arrive; long voice-debug runs (2–5 min) print live status until the root cause lands. Ctrl-C cancels cleanly. `-o json` emits one JSONL event per SSE frame for scripting and AI agents.
 
-You can also pass credentials via environment variables instead of `plivo login`:
-
-```bash
-export PLIVO_AUTH_ID=MAxxxxxxxxxxxxxxxxxxxx
-export PLIVO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
+`plivo login` is the only way to authenticate. There is no environment
+variable or flag that accepts a raw `auth_id` / `auth_token`, so a headless
+machine needs a profile that was logged in on it already.
 
 ## Output
 

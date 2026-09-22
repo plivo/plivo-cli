@@ -377,9 +377,6 @@ func setupBrowserLoginTestEnv(t *testing.T, mockURL string) (*api.Client, string
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	t.Setenv("USERPROFILE", tmp)
-	// Make sure no stray env-var-creds short-circuit Resolve elsewhere.
-	t.Setenv("PLIVO_AUTH_ID", "")
-	t.Setenv("PLIVO_AUTH_TOKEN", "")
 
 	client := api.New("", "", 5*time.Second)
 	client.BuddyBaseURL = mockURL

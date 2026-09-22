@@ -42,10 +42,11 @@ var rootCmd = &cobra.Command{
 	Short: "Plivo CLI — manage messaging, voice, numbers, applications",
 	Long: `plivo is a command-line interface for the Plivo REST API.
 
-Credentials resolve in order:
+Credentials come from browser OAuth/PKCE login and resolve in order:
   1. --profile flag
-  2. PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN env vars
-  3. active profile in ~/.plivo/config.toml`,
+  2. active profile in ~/.plivo/config.toml
+
+Run "plivo login" if you have no profile yet.`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	Version:       version.Value,
@@ -245,18 +246,13 @@ func effectiveFormat() output.Format {
 // handleError is the single place every command error is rendered. It picks
 // JSON (stable schema for AI/scripts when stdout is piped) vs plain (human
 // terminal output), then exits with a category-stable exit code.
-// credentialHint names the source the rejected credentials actually came from.
-// The generic hint used to blame the env vars even when a stored profile was
-// used, sending people to check something the CLI never read.
+// credentialHint names the profile the rejected credentials came from, so the
+// user is sent to the one the CLI actually read.
 func credentialHint() string {
-	switch credSource {
-	case "":
-		return "No credentials resolved. Run `plivo login`, or set PLIVO_AUTH_ID and PLIVO_AUTH_TOKEN."
-	case "env":
-		return "PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN were rejected. Re-check them, or run `plivo login`."
-	default:
-		return fmt.Sprintf("Profile %q was rejected. Run `plivo login --profile %s`, or unset it and use env vars.", credSource, credSource)
+	if credSource == "" {
+		return "No credentials resolved. Run `plivo login`."
 	}
+	return fmt.Sprintf("Profile %q was rejected. Run `plivo login --name %s` to re-authenticate it.", credSource, credSource)
 }
 
 // nonCredentialAuthHint returns a hint for a 401 that is NOT about the

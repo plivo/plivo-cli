@@ -3,12 +3,10 @@
 Runnable scripts for common Plivo CLI tasks. Each uses the
 `plivo <service> <resource> <verb>` grammar.
 
-Authenticate first — either:
+Authenticate first:
 
 ```bash
-export PLIVO_AUTH_ID=MAxxxxxxxxxxxxxxxxxxxx
-export PLIVO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-# or: plivo login
+plivo login
 ```
 
 Then run a script (override the defaults with env vars):

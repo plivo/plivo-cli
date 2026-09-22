@@ -10,10 +10,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// login flags — kept intentionally small. Browser PKCE is the only
-// supported login method on main; headless callers (CI, agents) set
-// PLIVO_AUTH_ID + PLIVO_AUTH_TOKEN env vars instead of running
-// `plivo login`.
+// login flags — kept intentionally small. Browser PKCE is the only way a
+// credential enters the CLI.
 var (
 	loginName     string
 	loginNoVerify bool
@@ -46,8 +44,8 @@ Multiple organizations:
   -n/--name to choose the profile name yourself.
 
 Headless / CI use:
-  Set PLIVO_AUTH_ID + PLIVO_AUTH_TOKEN environment variables and skip
-  ` + "`plivo login`" + ` entirely — every command picks creds up from the env.
+  Not supported. Browser OAuth (PKCE) is the only credential source, so a
+  machine with no browser needs a profile that was logged in on it already.
 
 By default the CLI validates credentials with GET /Account/ before
 saving. Pass --no-verify to skip (offline / mock use only).`,
