@@ -37,8 +37,7 @@ func stdinTokenFn(t *testing.T, in string, fn func()) {
 // below stay because they're cheap, fast, and independently useful.
 
 func TestLogout_noArg_noActive_errors(t *testing.T) {
-	setFakeCreds(t)
-	// Brand-new HOME → no profiles → no active.
+	setEmptyHome(t)
 	err, _, _ := execCmd(t, "logout")
 	if err == nil || !strings.Contains(err.Error(), "no active profile") {
 		t.Errorf("expected 'no active profile' error, got: %v", err)

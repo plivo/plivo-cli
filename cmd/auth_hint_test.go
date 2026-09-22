@@ -51,10 +51,6 @@ func TestCredentialHint_namesTheSource(t *testing.T) {
 	if !strings.Contains(credentialHint(), "plivo login") {
 		t.Error("no-credentials hint should point at login")
 	}
-	credSource = "env"
-	if !strings.Contains(credentialHint(), "PLIVO_AUTH_ID") {
-		t.Error("env hint should name the env vars")
-	}
 	credSource = "acme"
 	if !strings.Contains(credentialHint(), `"acme"`) {
 		t.Error("profile hint should name the profile")

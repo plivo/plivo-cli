@@ -1,5 +1,5 @@
 // Package config manages CLI credential profiles in ~/.plivo/config.toml,
-// with fallback to PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN env vars.
+// written by `plivo login` (browser PKCE) and nothing else.
 package config
 
 import (
@@ -101,7 +101,7 @@ func TelemetryEnabled() bool {
 	return cfg.Telemetry.Enabled == nil || *cfg.Telemetry.Enabled
 }
 
-var ErrNoCredentials = errors.New("no credentials: set PLIVO_AUTH_ID/PLIVO_AUTH_TOKEN or run `plivo login`")
+var ErrNoCredentials = errors.New("no credentials: run `plivo login`")
 
 // Path returns the config file path: ~/.plivo/config.toml.
 func Path() (string, error) {
@@ -183,12 +183,10 @@ func Save(c *Config) error {
 }
 
 // Resolve returns the credentials to use.
-// Order: explicit --profile → PLIVO_AUTH_ID/TOKEN env vars → active profile.
-// The second return value is the source label ("profile-name" or "env").
-//
-// Env vars beat the *active* profile so that exporting credentials works even
-// when a profile is already stored — matching the aws, stripe and twilio CLIs.
-// An explicit --profile still beats env: naming a profile is explicit intent.
+// Order: explicit --profile → active profile. Both read a profile written by
+// `plivo login`; there is deliberately no env-var or flag route for a raw
+// auth_id/auth_token.
+// The second return value is the source label (the profile name).
 func Resolve(profileName string) (Profile, string, error) {
 	cfg, err := Load()
 	if err != nil {
@@ -204,10 +202,6 @@ func Resolve(profileName string) (Profile, string, error) {
 			return p, profileName, nil
 		}
 		return Profile{}, "", fmt.Errorf("profile %q not found or has no stored token in %s", profileName, mustPath())
-	}
-
-	if authID, authToken := os.Getenv("PLIVO_AUTH_ID"), os.Getenv("PLIVO_AUTH_TOKEN"); authID != "" && authToken != "" {
-		return Profile{AuthID: authID, AuthToken: authToken}, "env", nil
 	}
 
 	if cfg.Active != "" {

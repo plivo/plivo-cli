@@ -39,16 +39,17 @@ func TestAPIHelpExamples_resolveWithoutDoubledAccount(t *testing.T) {
 }
 
 // The root help lists credential precedence; it must match config.Resolve.
-// Env vars were made to beat a stored profile in v0.3.0 and this text kept
-// claiming the opposite for three releases.
 func TestRootHelp_credentialPrecedenceMatchesResolveOrder(t *testing.T) {
 	long := rootCmd.Long
-	envAt := strings.Index(long, "PLIVO_AUTH_ID")
-	profAt := strings.Index(long, "active profile")
-	if envAt < 0 || profAt < 0 {
-		t.Fatal("root help no longer lists both env vars and the active profile")
+	if strings.Contains(long, "PLIVO_AUTH_ID") || strings.Contains(long, "PLIVO_AUTH_TOKEN") {
+		t.Error("root help still advertises env-var credentials, but config.Resolve never reads them")
 	}
-	if envAt > profAt {
-		t.Error("root help lists the active profile above the env vars, but config.Resolve checks env FIRST")
+	flagAt := strings.Index(long, "--profile")
+	profAt := strings.Index(long, "active profile")
+	if flagAt < 0 || profAt < 0 {
+		t.Fatal("root help no longer lists both --profile and the active profile")
+	}
+	if flagAt > profAt {
+		t.Error("root help lists the active profile above --profile, but config.Resolve checks the flag FIRST")
 	}
 }

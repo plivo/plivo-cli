@@ -127,8 +127,8 @@ func TestAuthMissing(t *testing.T) {
 	if e.Code != CodeAuthMissing {
 		t.Errorf("Code = %s", e.Code)
 	}
-	if !strings.Contains(e.Hint, "plivo login") || !strings.Contains(e.Hint, "PLIVO_AUTH_ID") {
-		t.Errorf("hint should suggest login + env vars: %q", e.Hint)
+	if !strings.Contains(e.Hint, "plivo login") {
+		t.Errorf("hint should suggest login: %q", e.Hint)
 	}
 }
 
