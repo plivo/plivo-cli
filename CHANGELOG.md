@@ -5,6 +5,22 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-09-22
+
+### Changed
+
+- `PLIVO_AUTH_ID` / `PLIVO_AUTH_TOKEN` are no longer read. `plivo login`
+  (browser OAuth/PKCE) is now the only way a credential enters the CLI, and
+  credentials resolve `--profile` then active profile. The env vars previously
+  outranked a stored profile, so a long-lived `auth_token` pasted into a shell
+  profile or held as a CI secret bypassed the PKCE handshake entirely. **If you
+  authenticate a headless host or CI job by exporting those two variables, it
+  will stop working on upgrade** — that machine now needs a profile logged in on
+  it beforehand. There is no headless alternative; `plivo login` needs a browser.
+- A rejected profile's hint pointed at `plivo login --profile <name>`, which
+  only *selects* a profile and does not name one at login, so following it
+  changed nothing. It now says `--name`.
+
 ## [1.1.1] - 2026-09-19
 
 ### Fixed
