@@ -617,6 +617,16 @@ func TestSIPTrunksCreate_jsonCarriesTrunkDomain(t *testing.T) {
 	}
 }
 
+// mustJSON builds the -o json body of the SIP writes, so it must not
+// HTML-escape: a URI's & and an alias's <, > come out as the API sent them.
+func TestMustJSON_keepsHTMLCharactersLiteral(t *testing.T) {
+	got := string(mustJSON(map[string]any{"alias": "<desk>", "uri": "sip:bob@example.com?subject=a&b"}))
+	want := `{"alias":"<desk>","uri":"sip:bob@example.com?subject=a&b"}`
+	if got != want {
+		t.Errorf("mustJSON = %s, want %s", got, want)
+	}
+}
+
 // Every credential update rewrites the password, so one without a password
 // blanks it. The flag is required, not optional.
 func TestSIPCredentialsUpdate_requiresThePasswordFlag(t *testing.T) {

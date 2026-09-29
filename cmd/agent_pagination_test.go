@@ -94,7 +94,8 @@ func TestAgentsList_withoutAll_fetchesOnlyFirstPage(t *testing.T) {
 
 func TestAgentsList_withAll_walksEveryPage(t *testing.T) {
 	setFakeCreds(t)
-	hits := agentsPageServer(t, map[string]string{"0": agentListPage1, "1": agentListPage2})
+	page2 := strings.Replace(agentListPage2, `"Agent Two"`, `"Agent <Two> & Co"`, 1)
+	hits := agentsPageServer(t, map[string]string{"0": agentListPage1, "1": page2})
 
 	err, stdout, _ := execCmd(t, "agents", "list", "--limit", "1", "--all", "-o", "json")
 	if err != nil {
@@ -116,6 +117,13 @@ func TestAgentsList_withAll_walksEveryPage(t *testing.T) {
 	}
 	if !ids["agent-1"] || !ids["agent-2"] {
 		t.Errorf("expected both agent-1 and agent-2 in the merged -o json output, got %v", objs)
+	}
+	// The merge re-encodes both pages; page 2's name and page 1's meta.next
+	// URL must come out byte for byte, not HTML-escaped.
+	for _, want := range []string{`"name": "Agent <Two> & Co"`, "?limit=1&offset=1"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("merged -o json output should keep %q as sent, got: %s", want, stdout)
+		}
 	}
 }
 

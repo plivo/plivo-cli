@@ -156,7 +156,7 @@ func runAsk(cmd *cobra.Command, args []string) error {
 
 	// --dry-run: print what would be sent, don't open the SSE stream.
 	if dryRunFlag {
-		pretty, _ := json.MarshalIndent(body, "  ", "  ")
+		pretty, _ := output.MarshalIndent(body, "  ", "  ")
 		fmt.Fprintf(os.Stderr, "[dry-run] POST %s (SSE)\n  body:\n  %s\n", url, pretty)
 		return nil
 	}
@@ -515,10 +515,12 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		if !json.Valid(raw) {
 			raw = json.RawMessage(`null`)
 		}
-		_ = json.NewEncoder(r.out).Encode(map[string]any{
+		if b, err := output.Marshal(map[string]any{
 			"event": ev.Event,
 			"data":  raw,
-		})
+		}); err == nil {
+			_, _ = r.out.Write(append(b, '\n'))
+		}
 		// `final`/`error` end the legacy stream; `done` ends the PAI stream.
 		return ev.Event != "final" && ev.Event != "error" && ev.Event != "done"
 	}

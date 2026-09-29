@@ -981,7 +981,7 @@ func init() {
 // responses are small and already parsed, so a failure here is not possible in
 // practice; an empty object is still valid JSON if it ever were.
 func mustJSON(v map[string]any) json.RawMessage {
-	b, err := json.Marshal(v)
+	b, err := output.Marshal(v)
 	if err != nil {
 		return json.RawMessage("{}")
 	}

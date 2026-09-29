@@ -13,6 +13,7 @@ import (
 
 	"github.com/plivo/plivo-cli/internal/config"
 	"github.com/plivo/plivo-cli/internal/contacto"
+	"github.com/plivo/plivo-cli/internal/output"
 )
 
 // writeJSONStdout pretty-prints a JSON response body to stdout. Falls back to
@@ -24,7 +25,7 @@ func writeJSONStdout(body []byte) {
 		fmt.Fprintln(os.Stdout)
 		return
 	}
-	pretty, err := json.MarshalIndent(v, "", "  ")
+	pretty, err := output.MarshalIndent(v, "", "  ")
 	if err != nil {
 		_, _ = os.Stdout.Write(body)
 		fmt.Fprintln(os.Stdout)

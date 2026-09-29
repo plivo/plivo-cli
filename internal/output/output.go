@@ -3,6 +3,7 @@
 package output
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -79,6 +80,31 @@ func newEncoder(w io.Writer) *json.Encoder {
 	enc.SetIndent("", "  ")
 	enc.SetEscapeHTML(false)
 	return enc
+}
+
+// Marshal is json.Marshal without HTML escaping, for JSON built outside the
+// writers above that still ends up in front of the user.
+func Marshal(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
+}
+
+// MarshalIndent is json.MarshalIndent without HTML escaping.
+func MarshalIndent(v any, prefix, indent string) ([]byte, error) {
+	b, err := Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, b, prefix, indent); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // JSONSuccess writes {"data": data, "meta": meta?} pretty-printed to w.
