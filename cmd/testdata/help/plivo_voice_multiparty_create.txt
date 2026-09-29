@@ -1,13 +1,13 @@
-Create a multi-party call (spends money — requires --yes)
+Retired: `plivo voice multiparty participant add` starts an MPC
 
 Usage:
   plivo voice multiparty create [flags]
 
 Flags:
   -h, --help                   help for create
-      --max-participants int   cap on simultaneous participants
-      --name string            friendly_name for the MPC (required)
-      --record                 auto-record the MPC
+      --max-participants int   ignored
+      --name string            ignored
+      --record                 ignored
 
 Global Flags:
       --dry-run            print the HTTP request without sending

@@ -39,16 +39,17 @@ var mpcGetCmd = &cobra.Command{
 	RunE:  runMPCGet,
 }
 
-var (
-	mpcCreateName     string
-	mpcCreateMaxParts int
-	mpcCreateRecord   bool
-)
-
+// mpcCreateCmd is retired. Plivo has no create-MPC endpoint (the collection is
+// GET-only, so the old POST always got a 405): an MPC starts when its first
+// participant is added, which `participant add <name>` does by posting to
+// name_<name>/Participant/. Hidden, but still registered with its old flags,
+// none required, so existing scripts and agents get that guidance instead of
+// an "unknown command", "unknown flag" or "required flag" error.
 var mpcCreateCmd = &cobra.Command{
-	Use:   "create",
-	Short: "Create a multi-party call (spends money — requires --yes)",
-	RunE:  runMPCCreate,
+	Use:    "create",
+	Short:  "Retired: `plivo voice multiparty participant add` starts an MPC",
+	Hidden: true,
+	RunE:   runMPCCreate,
 }
 
 var mpcEndCmd = &cobra.Command{
@@ -132,10 +133,9 @@ func init() {
 	mpcListCmd.Flags().IntVar(&mpcListOffset, "offset", 0, "pagination offset")
 	mpcListCmd.Flags().StringVar(&mpcListStatus, "status", "", "filter by status: active|initialized|ended")
 
-	mpcCreateCmd.Flags().StringVar(&mpcCreateName, "name", "", "friendly_name for the MPC (required)")
-	_ = mpcCreateCmd.MarkFlagRequired("name")
-	mpcCreateCmd.Flags().IntVar(&mpcCreateMaxParts, "max-participants", 0, "cap on simultaneous participants")
-	mpcCreateCmd.Flags().BoolVar(&mpcCreateRecord, "record", false, "auto-record the MPC")
+	mpcCreateCmd.Flags().String("name", "", "ignored")
+	mpcCreateCmd.Flags().Int("max-participants", 0, "ignored")
+	mpcCreateCmd.Flags().Bool("record", false, "ignored")
 
 	mpcPartListCmd.Flags().IntVar(&mpcPartListLimit, "limit", 20, "results per page")
 	mpcPartListCmd.Flags().IntVar(&mpcPartListOffset, "offset", 0, "pagination offset")
@@ -215,47 +215,11 @@ func runMPCGet(cmd *cobra.Command, args []string) error {
 }
 
 func runMPCCreate(cmd *cobra.Command, args []string) error {
-	client, _, err := getClient()
-	if err != nil {
-		return err
+	return &clierr.Error{
+		Code:    clierr.CodeBadInput,
+		Message: "Plivo has no API to create an MPC; it starts when its first participant is added",
+		Hint:    "Run `plivo voice multiparty participant add <name> --from <number> --to <number> --role agent --yes`.",
 	}
-	body := map[string]any{"friendly_name": mpcCreateName}
-	if mpcCreateMaxParts > 0 {
-		body["max_participants"] = mpcCreateMaxParts
-	}
-	if mpcCreateRecord {
-		body["record"] = true
-	}
-
-	proceed, dryRun, gerr := guardSpend("create multi-party call " + mpcCreateName)
-	if !proceed {
-		return gerr
-	}
-	applyDryRun(client, dryRun)
-
-	var resp struct {
-		api.RawBody
-		APIID   string `json:"api_id"`
-		MPCUUID string `json:"mpc_uuid"`
-		Message string `json:"message"`
-	}
-	apiErr, err := client.Do("POST", client.AccountURL("MultiPartyCall"), body, nil, &resp)
-	if err != nil {
-		return err
-	}
-	if apiErr != nil {
-		return apiErr
-	}
-	if dryRun {
-		return nil
-	}
-	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
-	}
-	return output.KV(os.Stdout, [][2]string{
-		{"mpc_uuid", resp.MPCUUID},
-		{"message", resp.Message},
-	})
 }
 
 func runMPCEnd(cmd *cobra.Command, args []string) error {

@@ -8,7 +8,6 @@ Aliases:
   multiparty, mpc
 
 Available Commands:
-  create      Create a multi-party call (spends money — requires --yes)
   end         End the MPC and hang up all participants (requires --yes)
   get         Get an MPC by uuid or friendly_name
   list        List multi-party calls

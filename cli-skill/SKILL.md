@@ -192,7 +192,7 @@ Delete a profile + best-effort remove its token from the keychain. With no arg �
 ## Core invariants (read once)
 
 - **Output**: TTY → table, pipe → JSON. Force JSON anywhere with `-o json`.
-- **Spend verbs require `--yes`** or refuse with exit 5 + `code: DESTRUCTIVE_REFUSED`. Verified list (commands that gate on `--yes`): `messaging {sms,mms,whatsapp} send`, `voice calls make`, `voice calls hangup`, `numbers buy`, `numbers cnam`, `numbers release`, `numbers masking sessions create`/`delete`, `messaging sms 10dlc brands create`, `messaging sms 10dlc campaigns create`, `messaging sms 10dlc links delete`, `messaging sms powerpacks delete`, `voice multiparty create`, `voice multiparty end`, `voice multiparty participant add`/`kick`, `voice conferences hangup`, `voice conferences member kick`, `verify sessions create`, `account applications delete`, `account subaccounts delete`, `voice endpoints delete`, `voice recordings delete`, `numbers compliance delete`, and mutating verbs of `plivo api` (POST/PUT/PATCH/DELETE).
+- **Spend verbs require `--yes`** or refuse with exit 5 + `code: DESTRUCTIVE_REFUSED`. Verified list (commands that gate on `--yes`): `messaging {sms,mms,whatsapp} send`, `voice calls make`, `voice calls hangup`, `numbers buy`, `numbers cnam`, `numbers release`, `numbers masking sessions create`/`delete`, `messaging sms 10dlc brands create`, `messaging sms 10dlc campaigns create`, `messaging sms 10dlc links delete`, `messaging sms powerpacks delete`, `voice multiparty end`, `voice multiparty participant add`/`kick`, `voice conferences hangup`, `voice conferences member kick`, `verify sessions create`, `account applications delete`, `account subaccounts delete`, `voice endpoints delete`, `voice recordings delete`, `numbers compliance delete`, and mutating verbs of `plivo api` (POST/PUT/PATCH/DELETE).
   - NOTE: live-call control verbs `voice calls play`, `speak`, `record`, `dtmf`, `transfer`, `stop-*` do **NOT** require `--yes` — they act on an already-established call.
 - **Stable error envelope** on stderr: `{"error":{"code", "message", "hint", "retryable", "status_code", ...}}`. Switch on `code`, never message text.
 - **Verify before inventing**: `plivo <cmd> --help` is the source of truth. The CLI evolves; don't assume from memory.
@@ -559,14 +559,13 @@ Requires ngrok in PATH or at `~/.plivo/bin/ngrok`. Saves the app's current `answ
 
 ```bash
 plivo voice conferences  list | get | hangup | record | stop-record | member ...
-plivo voice multiparty   list | get | create | end | participant ...
+plivo voice multiparty   list | get | end | participant ...
 plivo voice endpoints    list | get | create | update | delete
 plivo voice recordings   list | get | delete
 ```
 
 - `voice conferences member`: `mute`/`unmute`, `deaf`/`undeaf`, `kick` (`--yes`), `play`/`stop-play` (`--urls` required), `speak`/`stop-speak` (`--text` required).
-- `voice multiparty create` requires `--name` (spend, `--yes`); optional `--max-participants`, `--record`.
-- `voice multiparty participant add` requires `--from` + `--to` (spend, `--yes`); optional `--role <agent\|supervisor\|customer>`. Also: `list`, `mute`/`unmute`, `hold`/`unhold`, `kick` (`--yes`).
+- `voice multiparty participant add <mpc_uuid_or_name>` requires `--from` + `--to` (spend, `--yes`); optional `--role <agent\|supervisor\|customer>`. Given a name, it starts the MPC if none by that name is ongoing; there is no `voice multiparty create`. Also: `list`, `mute`/`unmute`, `hold`/`unhold`, `kick` (`--yes`).
 - `voice multiparty end` and `voice conferences hangup` require `--yes`.
 - `voice endpoints` / `voice recordings` `delete` require `--yes`.
 
