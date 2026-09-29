@@ -181,7 +181,7 @@ func runAuthTokenMint(cmd *cobra.Command, args []string) error {
 
 	if dryRunFlag {
 		fmt.Fprintf(os.Stderr, "[dry-run] POST %s\n", authTokenPath)
-		b, _ := json.MarshalIndent(body, "  ", "  ")
+		b, _ := output.MarshalIndent(body, "  ", "  ")
 		fmt.Fprintf(os.Stderr, "  body:\n  %s\n", string(b))
 		return nil
 	}

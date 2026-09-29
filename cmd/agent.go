@@ -321,12 +321,12 @@ func accumulateRawObjects(dst, page api.RawCapturer) {
 	if err := json.Unmarshal(pageEnv["objects"], &pageObjects); err != nil {
 		return
 	}
-	merged, err := json.Marshal(append(objects, pageObjects...))
+	merged, err := output.Marshal(append(objects, pageObjects...))
 	if err != nil {
 		return
 	}
 	env["objects"] = merged
-	if out, err := json.Marshal(env); err == nil {
+	if out, err := output.Marshal(env); err == nil {
 		dst.SetRaw(out)
 	}
 }
