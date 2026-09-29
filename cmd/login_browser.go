@@ -95,7 +95,7 @@ func runLoginBrowser(nameExplicit bool) error {
 		// Non-fatal — the URL is printed above so the user can paste it.
 		fmt.Fprintf(os.Stderr, "(could not auto-open the browser: %v)\n", err)
 	}
-	stdinTTY := isTTY(os.Stdin)
+	stdinTTY := isTTY(os.Stdin) && inForeground(os.Stdin)
 	if stdinTTY {
 		fmt.Fprintln(os.Stderr, "If the browser can't reach this terminal (SSH, WSL, containers), copy the full URL from its address bar after approving and paste it here.")
 	}
