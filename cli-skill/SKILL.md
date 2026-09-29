@@ -154,6 +154,8 @@ Many groups have short aliases (e.g. `account application`/`app`, `voice call`, 
 
 Browser PKCE OAuth — opens default browser, captures the callback over a local loopback listener, persists creds. This is the **only** way to authenticate: there is no flag and no environment variable that accepts credentials inline, so an agent/CI host needs a profile logged in beforehand (see Authentication above).
 
+If the browser can't reach that listener (container, WSL, VM, SSH), the human pastes the full URL from the browser's address bar into the terminal after approving; this needs an interactive terminal.
+
 One profile is saved per organization: with no `-n`, the profile name is derived from the org (slug of its name, e.g. `acme-inc`), falling back to `default` when the org has no name. Logging into a second org saves a second profile instead of overwriting the first; re-authorizing the *same* org updates its profile in place.
 
 | Flag | Type | Default | When |

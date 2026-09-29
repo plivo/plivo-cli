@@ -1157,9 +1157,15 @@ Multiple organizations:
   to see every saved profile, and `plivo auth use <name>` to switch. Pass
   -n/--name to choose the profile name yourself.
 
+Browser can't reach this terminal:
+  When the CLI runs in a container, WSL, a VM or over SSH, the page the
+  browser opens after you approve may fail to load. Copy the full URL from
+  its address bar and paste it into the terminal; the CLI accepts only
+  this login's URL.
+
 Headless / CI use:
-  Not supported. Browser OAuth (PKCE) is the only credential source, so a
-  machine with no browser needs a profile that was logged in on it already.
+  Not supported. Browser OAuth (PKCE) is the only credential source, so
+  scripts and CI need a profile that was logged in on that machine already.
 
 By default the CLI validates credentials with GET /Account/ before
 saving. Pass --no-verify to skip (offline / mock use only).
