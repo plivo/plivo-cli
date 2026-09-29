@@ -70,15 +70,24 @@ func Validate(format string) string {
 	return "unsupported output format '" + format + "'; supported: " + strings.Join(SupportedFormats, ", ")
 }
 
+// newEncoder returns the encoder every JSON writer here uses: two-space
+// indent and no HTML escaping. The output goes to terminals, pipes and
+// parsers, never into an HTML page, so escaping <, > and & only garbles
+// hints like `<name>` and the query strings of URLs from the API.
+func newEncoder(w io.Writer) *json.Encoder {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	enc.SetEscapeHTML(false)
+	return enc
+}
+
 // JSONSuccess writes {"data": data, "meta": meta?} pretty-printed to w.
 func JSONSuccess(w io.Writer, data any, meta any) error {
 	env := map[string]any{"data": data}
 	if meta != nil {
 		env["meta"] = meta
 	}
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(env)
+	return newEncoder(w).Encode(env)
 }
 
 // JSONRaw writes the upstream response verbatim under "data". json.RawMessage
@@ -130,9 +139,7 @@ func JSONError(w io.Writer, code, message, hint, requestID, docsURL string, retr
 		errObj["context"] = context
 	}
 	env := map[string]any{"error": errObj}
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	_ = enc.Encode(env)
+	_ = newEncoder(w).Encode(env)
 }
 
 // PlainError writes a human-friendly error to w (usually stderr).
