@@ -12,16 +12,16 @@ Single Go binary on PATH (installed as `plivo`). Prefer the CLI over curl — th
 
 ## If you are an AI agent
 
-- `export PLIVO_FEEDBACK_PROMPT=0` and `CI=1` before any command (suppresses the feedback prompt and any TTY-only interactives).
+- `export PLIVO_FEEDBACK_PROMPT=0 CI=1 PLIVO_NO_UPDATE_CHECK=1` before any command. The first two silence the feedback prompt; the last silences the newer-version hint.
 - Auth: the machine must already have a profile from `plivo login`. There is no headless credential path — see Authentication below.
-- Always pass `-o json`. Success: `{"data": <the API response, verbatim>}` on stdout, exit 0 — for lists the rows are at `data.objects`, with paging at `data.meta`. Error: `{"error": {"code", "message", "hint", "retryable", "status_code", ...}}` on stderr, non-zero exit.
-- Never invoke interactive commands: `plivo login` (browser flow), bare `plivo feedback` (prompts).
+- Always pass `-o json`. Reads and creates print `{"data": <the API response, verbatim>}` on stdout and exit 0 — for lists the rows are at `data.objects`, with paging at `data.meta`. Many other writes print nothing on stdout, so check the exit code (see "JSON output envelopes"). Error: `{"error": {"code", "message", "hint", "retryable", "status_code", ...}}` on stderr, non-zero exit.
+- Never invoke interactive commands: `plivo login` (browser flow), bare `plivo feedback` (prompts), `plivo ask -i` (chat mode), and `plivo voice streams forward` without `-y` (it asks for confirmation).
 - Multiple message recipients use `<` as the separator, **quoted**: `--dst "+14155551111<+14155552222"`. (This is Plivo's native delimiter — the CLI passes `dst` through verbatim. Commas do NOT work.)
-- Preview any spend command with `--dry-run` first; add `--yes` to actually execute.
+- Preview before you change anything, and pass `--yes` for real only when the human asked for that spend or deletion. Spend commands (`calls make`, `messaging * send`, `numbers buy`, `numbers cnam`, `masking sessions create`, `10dlc brands|campaigns create`, `verify sessions create`, `multiparty participant add`, mutating `plivo api`) preview with `--dry-run` alone. Destructive commands (`numbers release`, `calls hangup`, `conferences hangup`, `calls streams stop`, `powerpacks numbers remove`, and every `delete`, `kick` and `end`) refuse `--dry-run` alone with exit 5, although the error hint suggests it: preview them with `--yes --dry-run` (`--dry-run` wins; nothing is sent). For `sip … delete`, run it without `--yes` instead: it names what it would detach, then refuses.
 
 ## 60-second quickstart
 
-1. Install: `curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | bash`
+1. Install: `brew install plivo/tap/plivo` (macOS, Linux), or `curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | bash`
 2. Log in: `plivo login` (opens browser).
 3. Verify: `plivo auth whoami`.
 4. First command: `plivo voice calls list --limit 5`.
@@ -44,13 +44,14 @@ Single Go binary on PATH (installed as `plivo`). Prefer the CLI over curl — th
 
 ## Other Plivo skills
 
-This file covers the CLI itself. Three product skills cover the work you do with it, each a separate install:
+This file covers the CLI itself. Four product skills cover the work you do with it, each a separate install:
 
+- `plivo-first-agent` — take a new user to a first AI voice agent on a real call: an echo bot, then an OpenAI bot.
 - `plivo-audio-streaming` — connect a WebSocket voice bot to phone calls with `<Stream>`, and debug one that fails.
-- `plivo-sip-trunking` — connect LiveKit, ElevenLabs, Retell or Vapi to phone calls over SIP trunking.
+- `plivo-sip-trunking` — connect LiveKit, ElevenLabs, Retell, Vapi or xAI to phone calls over SIP trunking.
 - `plivo-voice-xml` — write the XML your answer URL returns: IVRs, call routing, recording, conferences.
 
-Install one with `plivo skill install audio-streaming` (or `sip-trunking`, `voice-xml`, `all`). The skills ship inside the binary, so this needs no network.
+Install one with `plivo skill install first-agent` (or `audio-streaming`, `sip-trunking`, `voice-xml`, `all`). The skills ship inside the binary, so this needs no network. For another agent, pass the skill's own folder, one skill at a time: `--dir ~/.cursor/skills/plivo-first-agent`.
 
 ## Installation — if `plivo` is not on PATH
 
@@ -62,9 +63,10 @@ command -v plivo || echo "not installed"
 If missing, pick whichever option fits the environment:
 
 ```bash
-# (1) install.sh — one-line installer (preferred). Verifies SHA256SUMS, then
+# (0) Homebrew (macOS / Linux):  brew install plivo/tap/plivo
+# (1) install.sh — one-line installer. Verifies SHA256SUMS, then
 #     drops the binary in the first user-owned dir on PATH; no sudo.
-#     Override the target dir with PLIVO_INSTALL_DIR. Windows: install.ps1.
+#     Choose the target dir with: curl … | bash -s -- --dir <path>. Windows: install.ps1.
 curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | bash
 
 # (2) Build from source
@@ -86,13 +88,13 @@ Verify: `plivo --version`. Then run `plivo login` to bootstrap credentials (see 
 ```bash
 plivo upgrade --check            # report only — is a newer release available?
 plivo upgrade                    # install latest
-plivo upgrade --version v0.2.0   # pin a specific release tag
+plivo upgrade --version v1.1.2   # install a specific release tag (an older tag also needs --force)
 plivo upgrade --force            # reinstall even if already on latest
 ```
 
 If installed via Homebrew, `plivo upgrade` refuses — use `brew upgrade plivo` instead. The CLI also auto-checks GitHub for newer releases once a day on success and prints a one-line nudge. **Set `PLIVO_NO_UPDATE_CHECK=1`** to suppress in CI / scripted use. The server may also return HTTP 426 to flag the build as below the supported minimum — surfaced as `code: CLI_TOO_OLD` (exit 6) with a recommendation to upgrade.
 
-This skill ships with each plivo-cli release; reinstall the CLI to update.
+This skill ships inside each plivo-cli release. After `plivo upgrade`, run `plivo skill install` to refresh the installed copy; `plivo skill list` shows whether it is stale.
 
 ## Notation in this file
 
@@ -107,14 +109,14 @@ This skill ships with each plivo-cli release; reinstall the CLI to update.
 |---|---|---|---|
 | `--profile <name>` | string | active profile | invoke against a non-active profile for this call only |
 | `-o, --output <fmt>` | `table\|json` | `table` on TTY, `json` when piped | force JSON for scripts |
-| `--dry-run` | bool | false | (API-backed commands) print the HTTP request and exit 0 — preview without spending |
+| `--dry-run` | bool | false | (API-backed commands) print the HTTP request and exit 0 — preview without spending; destructive commands need `--yes --dry-run` |
 | `-y, --yes` | bool | false | confirm spend / destructive verbs (refused otherwise) |
 | `-q, --quiet` | bool | false | suppress non-data output (banners, hints) |
 | `--no-color` | bool | false | strip ANSI from output |
 | `--log-level <level>` | `debug\|info\|warn\|error\|none` | `warn` | `debug` prints outbound URLs to stderr |
 | `--timeout <sec>` | int | 30 | per-request timeout |
 
-`--dry-run` applies to API-backed commands — it's a no-op for `login`, `ask`, `upgrade`, `voice streams test`, and similar non-REST flows.
+`--dry-run` applies to API-backed commands. `login`, `voice streams test` and `feedback` ignore it (`feedback --dry-run` sends for real), and so does `upgrade`: `plivo upgrade --dry-run` installs for real, so use `plivo upgrade --check` to look. `ask --dry-run` prints the request and does not stream.
 
 ### `--explain` — narrate before executing (not universal)
 
@@ -138,7 +140,7 @@ logout      remove a profile + its keychain token
 lookup      carrier/format lookup for an E.164 number
 messaging   get | sms | mms | whatsapp        (aliases: message, msg, sms)
 numbers     buy | cnam | compliance | get | list | masking | release | search | update   (alias: number)
-sip         calls | trunks | acl                 (SIP Trunking; alias: sip-trunking)
+sip         calls | credentials | ip-acl | trunks | uris   (SIP Trunking; alias: sip-trunking)
 skill       install | list                      (manage the bundled agent skills)
 support     list past support escalations (filed via `plivo ask`)
 upgrade     self-update the binary
@@ -161,7 +163,7 @@ One profile is saved per organization: with no `-n`, the profile name is derived
 | Flag | Type | Default | When |
 |---|---|---|---|
 | `-n, --name <name>` | string | derived from the org, or `default` | save under an explicit profile name instead of the org-derived one |
-| `--no-verify` | bool | false | skip the post-login `GET /Account/` validation (offline / mock use) |
+| `--no-verify` | bool | false | accepted, but has no effect in this version: login makes no validation request |
 
 Examples:
 ```bash
@@ -185,7 +187,7 @@ Switch the active profile. Used after `plivo login --name X` to flip default.
 
 ### `plivo auth remove <name>`
 
-Remove a non-active profile. (For the active profile use `plivo logout`.)
+Remove any saved profile and its token. Removing the active profile leaves none active; pick another with `plivo auth use <name>`.
 
 ### `plivo logout [name]`
 
@@ -194,16 +196,16 @@ Delete a profile + best-effort remove its token from the keychain. With no arg �
 ## Core invariants (read once)
 
 - **Output**: TTY → table, pipe → JSON. Force JSON anywhere with `-o json`.
-- **Spend verbs require `--yes`** or refuse with exit 5 + `code: DESTRUCTIVE_REFUSED`. Verified list (commands that gate on `--yes`): `messaging {sms,mms,whatsapp} send`, `voice calls make`, `voice calls hangup`, `numbers buy`, `numbers cnam`, `numbers release`, `numbers masking sessions create`/`delete`, `messaging sms 10dlc brands create`, `messaging sms 10dlc campaigns create`, `messaging sms 10dlc links delete`, `messaging sms powerpacks delete`, `voice multiparty end`, `voice multiparty participant add`/`kick`, `voice conferences hangup`, `voice conferences member kick`, `verify sessions create`, `account applications delete`, `account subaccounts delete`, `voice endpoints delete`, `voice recordings delete`, `numbers compliance delete`, and mutating verbs of `plivo api` (POST/PUT/PATCH/DELETE).
-  - NOTE: live-call control verbs `voice calls play`, `speak`, `record`, `dtmf`, `transfer`, `stop-*` do **NOT** require `--yes` — they act on an already-established call.
+- **Spend verbs require `--yes`** or refuse with exit 5 + `code: DESTRUCTIVE_REFUSED`. Verified list (commands that gate on `--yes`): `messaging {sms,mms,whatsapp} send`, `voice calls make`, `voice calls hangup`, `numbers buy`, `numbers cnam`, `numbers release`, `numbers masking sessions create`/`delete`, `messaging sms 10dlc brands create`, `messaging sms 10dlc campaigns create`, `messaging sms 10dlc links delete`, `messaging sms powerpacks delete`, `voice multiparty end`, `voice multiparty participant add`/`kick`, `voice conferences hangup`, `voice conferences member kick`, `verify sessions create`, `account applications delete`, `account subaccounts delete`, `voice endpoints delete`, `voice recordings delete`, `numbers compliance delete`, `voice calls streams stop`, `messaging sms powerpacks numbers remove`, `agents delete`, `sip trunks|uris|credentials|ip-acl delete`, and mutating verbs of `plivo api` (POST/PUT/PATCH/DELETE).
+  - NOTE: live-call control verbs `voice calls play`, `speak`, `record`, `dtmf`, `transfer`, `stop-*` do **NOT** require `--yes` — they act on an already-established call. `voice calls streams stop` is the exception: it does.
 - **Stable error envelope** on stderr: `{"error":{"code", "message", "hint", "retryable", "status_code", ...}}`. Switch on `code`, never message text.
 - **Verify before inventing**: `plivo <cmd> --help` is the source of truth. The CLI evolves; don't assume from memory.
-- **`--dry-run`** previews the exact HTTP request without sending. Works on every API-backed command.
+- **`--dry-run`** previews the exact HTTP request without sending; destructive verbs need `--yes --dry-run` (see "If you are an AI agent"). `numbers update --trunk-id`, `sip trunks update` without `--direction`, and `voice streams forward` still make read-only GETs under it.
 - **`--explain`** narrates the action in plain English before running — only on the commands listed under "Universal flags" above; everywhere else it's `unknown flag: --explain`.
 
 ## JSON output envelopes
 
-All commands with `-o json` emit `{"data": <the upstream API response, verbatim>}` on stdout and exit 0. Nothing is dropped or reshaped, so `data` matches the API docs exactly.
+API-backed list, get and create commands with `-o json` emit `{"data": <the upstream API response, verbatim>}` on stdout and exit 0, so `data` matches the API docs. Many other write commands (for example `numbers update`, `numbers release`, `calls hangup`, `calls transfer`, `account applications update`, `multiparty participant add`) print **nothing on stdout**, even with `-o json`: one line goes to stderr and the exit code is 0. Check the exit code and read the result back with a `get`; never retry a spend command because its stdout was empty. Other shapes: `sip trunks create` adds the read-back `trunk_domain`, and `sip` updates and deletes print a CLI-made summary object; `auth whoami` adds a sibling `meta.source`; `docs list` and `docs search` put rows at `data` with `meta.count`; `ask` and `diagnose` stream JSON lines.
 
 For list commands that means the rows are nested, not at the top level:
 
@@ -221,7 +223,8 @@ Failures emit `{"error": {"code", "message", "hint", "retryable", "status_code",
 
 ```bash
 export PLIVO_FEEDBACK_PROMPT=0    # silence the post-success "rate the CLI?" prompt
-export CI=1                       # gates TTY-only nudges
+export CI=1                       # also silences the feedback prompt
+export PLIVO_NO_UPDATE_CHECK=1    # silence the newer-version hint
 plivo voice calls list -o json | jq ...
 ```
 
@@ -247,10 +250,10 @@ Env vars:
 
 ## Generic REST escape hatch — `plivo api`
 
-For any endpoint the CLI doesn't yet wrap. Profile resolution, `--dry-run`, structured error envelopes, and the same exit codes as the rest of the CLI.
+For any endpoint the CLI doesn't yet wrap. Profile resolution, `--dry-run` and the same error envelope, but every HTTP error comes back as `UPSTREAM_ERROR` (exit 3) with the real status in `status_code` and `context.upstream`: a 401 is not `AUTH_INVALID` and a 404 is not `RESOURCE_NOT_FOUND` here, so switch on `status_code`. Its `--dry-run`, `--explain` and `--log-level debug` print the request body without redaction, so never send a body that holds a secret this way.
 
 ```bash
-plivo api GET /Account/                              # account-scoped path → /v1/Account/<auth_id>/...
+plivo api GET /                                      # the account itself: /v1/Account/<auth_id>/; other paths are appended after it
 plivo api GET /Message/ --query "limit=10"
 plivo api POST /Message/ --body @msg.json --yes      # mutating verbs require --yes
 cat msg.json | plivo api --method POST /Message/ --body @- --yes
@@ -271,17 +274,17 @@ Paths: absolute (`/v1/Account/MA…/Message/`) used as-is; account-scoped (`/Mes
 **Provision a phone number end-to-end**
 ```bash
 plivo numbers search --country US --type local --limit 5 -o json
-plivo numbers buy +1415... --dry-run                       # preview spend
-plivo numbers buy +1415... --yes                           # rent it
+plivo numbers buy 1415... --dry-run                        # preview spend; number arguments are digits without +
+plivo numbers buy 1415... --yes                            # rent it
 plivo account applications create --app-name "my-app" --answer-url https://my.app/answer -o json
-plivo numbers update +1415... --app-id <APP_UUID>          # attach the app
+plivo numbers update 1415... --app-id <APP_UUID>           # attach the app
 ```
 
 **Test an inbound webhook locally**
 ```bash
 plivo voice streams test --to ws://localhost:7860/ws --duration 5 --bidirectional
 # If the bot replies correctly, bridge a real call:
-plivo voice streams forward --number +1415... --app <APP_UUID> --to ws://localhost:7860/ws
+plivo voice streams forward --number +1415... --app <APP_UUID> --to ws://localhost:7860/ws -y   # a dedicated test app: every number on it is redirected
 ```
 
 **Send your first SMS**
@@ -293,7 +296,7 @@ plivo messaging sms send --src +1415... --dst +1415... --text "hi" --yes
 
 **Debug a failed call**
 ```bash
-plivo voice calls get <call-uuid> -o json | jq '.data | {state, hangup_cause, end_time}'
+plivo voice calls get <call-uuid> -o json | jq '.data | {hangup_cause_name, hangup_cause_code, hangup_source, end_time}'
 plivo voice calls diagnose <call-uuid>          # AI lifecycle walk-through
 plivo ask "why did call <call-uuid> fail?" --call-uuid <call-uuid>
 ```
@@ -356,6 +359,7 @@ Update metadata on a rented number.
 |---|---|
 | `--alias "..."` | set alias |
 | `--app-id <id>` | associate an Application |
+| `--trunk-id <id>` | route the number to an inbound SIP trunk (refuses an outbound trunk; not with `--app-id`) |
 | `--subaccount <auth_id>` | move under a subaccount |
 
 ### `plivo numbers release <e164>` (spend)
@@ -390,7 +394,7 @@ Send an SMS. **Requires `--yes`**.
 | `--url <url>` | string | delivery-status callback URL |
 | `--method <GET\|POST>` | string | callback method (default POST) |
 
-(`messaging mms send` and `messaging whatsapp send` take the **same five flags** — there are no extra `--type`, `--powerpack`, `--trackable`, `--log`, `--urls`, `--template` flags on these commands in this version.)
+(`messaging mms send` adds `--media-url <url>` (repeatable, up to 10) for attachments. `messaging whatsapp send` takes the same five flags and sends free text only, which WhatsApp allows only inside a conversation the user opened; to start one, send a template with `plivo api POST /Message/` and a `template` body. There are no `--type`, `--powerpack`, `--trackable`, `--log` or `--template` flags on these commands.)
 
 ### `plivo messaging sms list`
 
@@ -425,7 +429,7 @@ Toll-free verification (US TFN compliance): `list`, `get`, `submit`. (Alias: `tf
 
 ### `plivo messaging whatsapp send` / `plivo messaging mms send` (spend)
 
-Same five flags as `messaging sms send` (`--src`, `--dst`, `--text`, `--url`, `--method`), including the `--dst "+1...<+1..."` multi-recipient form. Each also has `list` and `diagnose`.
+Same five flags as `messaging sms send` (`--src`, `--dst`, `--text`, `--url`, `--method`), plus `--media-url` on MMS, including the `--dst "+1...<+1..."` multi-recipient form. Each also has `list` and `diagnose`.
 
 ## Voice — calls
 
@@ -441,7 +445,7 @@ Place an outbound call. **Requires `--yes`**.
 | `--answer-method <GET\|POST>` | string | default **GET** |
 | `--hangup-url <url>` | string | webhook on hangup |
 | `--ring-url <url>` | string | webhook on ring |
-| `--machine-detection <none\|true\|hangup>` | string | answering-machine handling |
+| `--machine-detection <true\|hangup>` | string | answering-machine handling; omit it to turn detection off (the help also lists `none`, which the API does not accept) |
 
 ### `plivo voice calls list` / `get <uuid>`
 
@@ -515,7 +519,7 @@ AI-powered lifecycle walkthrough + plain-English failure explanation.
 
 Distinct from `voice streams` (the dev-loop group). Sub-verbs: `list <call_uuid>`, `get <call_uuid> <stream_id>`, `start <call_uuid>`, `stop <call_uuid> [<stream_id>]`.
 
-`start` flags: `--url <wss>` (**required**), `--audio-track <inbound\|outbound\|both>` (default inbound), `--bidirectional`, `--content-type` (default `audio/x-l16;rate=16000`), `--stream-status-callback <url>` (alias `--callback-url`), `--extra-headers "k1=v1,k2=v2"`, `--service-type`.
+`start` flags: `--url <wss>` (**required**), `--audio-track <inbound\|outbound\|both>` (default inbound), `--bidirectional`, `--content-type` (default `audio/x-l16;rate=16000`), `--stream-status-callback <url>` (alias `--callback-url`), `--extra-headers "k1=v1,k2=v2"`, `--service-type`. Quote `--content-type "audio/x-mulaw;rate=8000"`: the `;` ends the shell command otherwise. `--stream-status-callback` sends `stream_status_callback_url`, which the Start Stream API does not document (it takes `status_callback_url`); when the callback matters, start the stream with `plivo api POST /Call/<call_uuid>/Stream/`.
 
 ## Voice — streaming dev loop
 
@@ -554,8 +558,10 @@ Temporarily redirect an app's `answer_url` to a local tunnel so a real call's au
 | `--rate <hz>` | int | 8000 | sample rate |
 | `--bidirectional` | bool | true | allow bot to write audio back to caller |
 | `--print-payload` | bool | false | dump full webhook bodies (verbose) |
+| `--tunnel <auto\|ngrok\|localhost.run>` | string | `auto` | tunnel provider |
+| `--insecure-skip-signature` | bool | false | skip Plivo's signature check on `/answer` and `/ws` |
 
-Requires ngrok in PATH or at `~/.plivo/bin/ngrok`. Saves the app's current `answer_url`, starts an ngrok tunnel + local HTTP/WS server, points the app at the tunnel, bridges incoming call audio. Restores `answer_url` on SIGINT unless `--keep`.
+The default tunnel is localhost.run over ssh (no install, no account); ngrok is used when it is on PATH or at `~/.plivo/bin/ngrok`. It saves the app's `answer_url` and `answer_method`, starts the tunnel and a local HTTP/WS server, points the app at the tunnel, and bridges incoming call audio to `--to`. Every number on the app is redirected while it runs, so use a dedicated test app. It checks Plivo's signature at the tunnel and connects to `--to` without signature headers. Without a terminal, pass `-y`. It restores `answer_url` and `answer_method` on Ctrl-C or SIGTERM unless `--keep`.
 
 ## Voice — conferences / multiparty / endpoints / recordings
 
@@ -572,6 +578,20 @@ plivo voice recordings   list | get | delete
 - `voice endpoints` / `voice recordings` `delete` require `--yes`.
 
 Run `plivo voice <group> --help` for the rest.
+
+## SIP trunking
+
+Typed commands for Zentrunk objects (`plivo sip`, alias `sip-trunking`); the `plivo-sip-trunking` skill covers the full journey (`plivo skill install sip-trunking`).
+
+| Group | Verbs | Notes |
+|---|---|---|
+| `sip uris` | `create`, `list`, `get`, `update`, `delete` | quote `--uri "host;transport=tcp"`; passwords only through `--password-stdin`; deleting a URI deletes the trunks that use it |
+| `sip trunks` | `create`, `list`, `get`, `update`, `delete` | `create --direction inbound --uri <uuid>`, or `--direction outbound` with `--credential <uuid>` or `--ip-acl <uuid>`; create prints `trunk_domain` |
+| `sip credentials` | `create`, `list`, `get`, `update`, `delete` | `--username` plus the password on stdin (`--password-stdin`, required on every update; to preview an update with `--dry-run`, pass `--username` too) |
+| `sip ip-acl` | `create`, `list`, `get`, `update`, `delete` | `--ip` is repeatable; update replaces the whole list |
+| `sip calls` | `list`, `get`, `diagnose` | `diagnose` is not live on the server yet; use `get` |
+
+`create` and `update` have no `--yes` gate, so preview them with `--dry-run`. `delete` needs `--yes`. Route a number to an inbound trunk with `plivo numbers update <number> --trunk-id <trunk_id>`.
 
 ## Account + applications
 
@@ -590,8 +610,8 @@ Subaccount CRUD: `list`, `get`, `create`, `update`, `delete` (`--yes`).
 | `list` | — | `--limit`, `--offset` for pagination |
 | `get <uuid>` | — | |
 | `create` | `--app-name`, `--answer-url` | optional: `--answer-method`, `--hangup-url`, `--message-url`, `--fallback-answer-url`, `--default-number-app`, `--log-incoming-messages` (default true) |
-| `update <uuid>` | — | same flags as create; only supplied ones get patched |
-| `delete <uuid>` | `--yes` | spend/destructive verb; refuses without confirmation |
+| `update <uuid>` | — | `--app-name`, `--answer-url`, `--answer-method`, `--hangup-url`, `--message-url`; only supplied ones are patched. No `--fallback-answer-url`: set it with `plivo api POST /Application/<uuid>/` |
+| `delete <uuid>` | `--yes` | refuses without confirmation. `--cascade` sends `cascade=true`, but the API's default is already `true`: it deletes the associated endpoints either way |
 
 (Aliases: `account application`, `account app`.)
 
@@ -609,14 +629,14 @@ plivo verify sessions validate <uuid> --otp 123456
 ## Lookup
 
 ```bash
-plivo lookup <e164>          # carrier + line-type (lookup.plivo.com); --type defaults to carrier
+plivo lookup <e164>          # carrier + line type; USD 0.004 per request and no --yes gate, so ask before running it
 ```
 
 ## Conversational / debug
 
 ### `plivo ask "<message>"`
 
-Ask Plivo's AI assistant — streams the answer via SSE. **One-shot only**: each invocation is a single message with no prior conversation history; there is no interactive mode and no history flag in this version. Long flows (voice-debug can run 2-5 minutes) have no overall HTTP timeout; Ctrl-C cancels (exit 130, no auto-retry).
+Ask Plivo's AI assistant — streams the answer via SSE. Each invocation is a single message by default. `-i` starts an interactive chat that keeps history; never use it from an agent. `ask` and `diagnose` share a limit of 5 requests per 10 minutes per account. Long flows (voice-debug can run 2-5 minutes) have no overall HTTP timeout; Ctrl-C cancels (exit 130, no auto-retry).
 
 | Flag | When |
 |---|---|
@@ -651,10 +671,10 @@ AI agent flows: node-graph voice/chat/message agents. Aliases to `agent`.
 | `agents publish` / `pause` / `resume` | move a flow between DRAFT and ACTIVE, or stop it handling traffic |
 | `agents delete` | delete a flow (**requires `--yes`**) |
 | `agents nodes list` / `get <type>` | browse the node catalogue available to a graph |
-| `agents runs list` / `get <id>` | inspect executions of a flow |
+| `agents runs list <agent_id>` / `get <agent_id> <run_id>` | inspect executions of a flow |
 
 ```bash
-plivo agents list -o json | jq '.data.objects[] | {agent_id, name, status}'
+plivo agents list -o json | jq '.data.objects[] | {agent_uuid, name, state}'
 plivo agents nodes list
 plivo agents runs list <agent_id>
 ```
@@ -673,27 +693,28 @@ Switch on `code` (string), never message text. `code` → exit-code mapping (sta
 | `DESTRUCTIVE_REFUSED` | 5 | spend/destructive verb without `--yes` |
 | `RATE_LIMITED` | 4 | back off + retry (`retryable: true`) |
 | `CLI_TOO_OLD` | 6 | server returned 426 — run `plivo upgrade` |
-| `NETWORK_ERROR` | 3 | DNS / connection / TLS (`retryable: true`) |
+| `NETWORK_ERROR` | 3 | DNS / connection / TLS, from `plivo api`, `ask`, `diagnose`, `streams test`, `streams forward` and `login` (`retryable: true`). Typed commands report the same failure as `USER_ERROR`, exit 1, with a message that starts `http:` |
 | `UPSTREAM_TIMEOUT` / `UPSTREAM_UNAVAILABLE` / `UPSTREAM_ERROR` / `INTERNAL_ERROR` | 3 | transient upstream failure |
 | `BAD_FLAG` / `BAD_INPUT` / `VALIDATION_ERROR` / `USER_ERROR` | 1 | client-side flag / shape / validation problem |
 | `RESOURCE_NOT_FOUND` | 1 | 404 from upstream |
 | `RESOURCE_CONFLICT` | 1 | 409 / state conflict |
 | `GEO_PERMISSION_DENIED` / `OUTBOUND_DISABLED` / `INSUFFICIENT_FUNDS` | 1 | account capability / policy gate |
 
-All envelopes carry `hint` + `retryable`. Unknown/unmapped codes exit 1.
+All envelopes carry `retryable`; most carry `hint`. Unknown or unmapped codes exit 1.
 
 ## JSON consumption patterns
 
 ```bash
 # One field
-plivo voice calls get <uuid> -o json | jq '.data.duration'
+plivo voice calls get <uuid> -o json | jq '.data.call_duration'
 
 # Filter
 plivo numbers list -o json | jq '.data.objects[] | select(.type=="local")'
 
 # Pipe across calls
 APP_ID=$(plivo account applications list -o json | jq -r '.data.objects[0].app_id')
-plivo numbers update +1... --app-id "$APP_ID" -o json
+plivo numbers update 14155550100 --app-id "$APP_ID"      # prints nothing on stdout
+plivo numbers get 14155550100 -o json | jq '.data.application'   # read the result back
 ```
 
 ## Sanity check
