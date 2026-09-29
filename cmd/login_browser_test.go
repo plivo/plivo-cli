@@ -223,7 +223,7 @@ func TestAwaitLoopbackCallback_happyPath(t *testing.T) {
 		err  error
 	}, 1)
 	go func() {
-		c, e := awaitLoopbackCallback(ctx, listener, "expected-state-value")
+		c, e := awaitCallback(ctx, listener, "expected-state-value", nil, false, io.Discard)
 		done <- struct {
 			code string
 			err  error
@@ -259,7 +259,7 @@ func TestAwaitLoopbackCallback_rejectsStateMismatch(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		_, e := awaitLoopbackCallback(ctx, listener, "expected-state")
+		_, e := awaitCallback(ctx, listener, "expected-state", nil, false, io.Discard)
 		done <- e
 	}()
 
@@ -284,7 +284,7 @@ func TestAwaitLoopbackCallback_timesOutAfterContextDeadline(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	_, err = awaitLoopbackCallback(ctx, listener, "state")
+	_, err = awaitCallback(ctx, listener, "state", nil, false, io.Discard)
 	elapsed := time.Since(start)
 
 	if err == nil || !strings.Contains(err.Error(), "timed out") {

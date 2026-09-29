@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -9,7 +10,7 @@ import (
 	"time"
 )
 
-// callbackResult drives awaitLoopbackCallback against a real loopback listener
+// callbackResult drives awaitCallback against a real loopback listener
 // and returns what the CLI concluded.
 func callbackResult(t *testing.T, query string) (string, error) {
 	t.Helper()
@@ -26,7 +27,7 @@ func callbackResult(t *testing.T, query string) (string, error) {
 	}
 	done := make(chan out, 1)
 	go func() {
-		c, e := awaitLoopbackCallback(ctx, ln, "expected-state")
+		c, e := awaitCallback(ctx, ln, "expected-state", nil, false, io.Discard)
 		done <- out{c, e}
 	}()
 
