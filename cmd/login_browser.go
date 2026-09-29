@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -236,6 +237,31 @@ func errLoginRejected(code string) error {
 		"Sign-in did not complete: the browser returned %q. Run `plivo login` again to retry.", code))
 }
 
+var (
+	errStateMismatch = errors.New("state mismatch on loopback callback")
+	errMissingCode   = errors.New("missing code in callback URL")
+)
+
+// callbackCode checks a callback's query string and returns its code.
+func callbackCode(q url.Values, expectedState string) (string, error) {
+	if q.Get("state") != expectedState {
+		return "", errStateMismatch
+	}
+	// The user said no in the browser. Without this branch a declined
+	// login fell through to "missing code in callback URL" after the full
+	// five-minute wait, telling someone who had just refused to go and
+	// approve it. access_denied is OAuth's own denial code (RFC 6749
+	// §4.1.2.1); any other value is surfaced as-is rather than guessed at.
+	if authErr := q.Get("error"); authErr != "" {
+		return "", errLoginRejected(authErr)
+	}
+	code := q.Get("code")
+	if code == "" {
+		return "", errMissingCode
+	}
+	return code, nil
+}
+
 // awaitLoopbackCallback serves one HTTP request on listener and returns
 // the `code` query param, after validating that `state` matches. Times
 // out via the context. The browser tab sees a tiny "you can close this"
@@ -254,41 +280,28 @@ func awaitLoopbackCallback(ctx context.Context, listener net.Listener, expectedS
 			http.NotFound(w, r)
 			return
 		}
-		gotState := r.URL.Query().Get("state")
-		code := r.URL.Query().Get("code")
-		authErr := r.URL.Query().Get("error")
-		if gotState != expectedState {
+		code, err := callbackCode(r.URL.Query(), expectedState)
+		switch {
+		case errors.Is(err, errStateMismatch):
 			http.Error(w, "state mismatch — possible CSRF; close this tab and retry", http.StatusBadRequest)
-			done <- result{err: fmt.Errorf("state mismatch on loopback callback")}
-			return
-		}
-		// The user said no in the browser. Without this branch a declined
-		// login fell through to "missing code in callback URL" after the full
-		// five-minute wait, telling someone who had just refused to go and
-		// approve it. access_denied is OAuth's own denial code (RFC 6749
-		// §4.1.2.1); any other value is surfaced as-is rather than guessed at.
-		if authErr != "" {
+		case errors.Is(err, errMissingCode):
+			http.Error(w, "missing code in callback", http.StatusBadRequest)
+		case err != nil:
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			_, _ = w.Write([]byte(`<!DOCTYPE html><html><head><title>Plivo CLI</title></head>` +
 				`<body style="font-family: -apple-system, system-ui, sans-serif; padding: 2rem; max-width: 480px; margin: 4rem auto; line-height: 1.5;">` +
 				`<h1 style="font-size: 1.5rem;">Sign-in cancelled</h1>` +
 				`<p>Nothing was granted. You can close this tab.</p>` +
 				`</body></html>`))
-			done <- result{err: errLoginRejected(authErr)}
-			return
+		default:
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte(`<!DOCTYPE html><html><head><title>Plivo CLI</title></head>` +
+				`<body style="font-family: -apple-system, system-ui, sans-serif; padding: 2rem; max-width: 480px; margin: 4rem auto; line-height: 1.5;">` +
+				`<h1 style="font-size: 1.5rem;">✓ Authenticated</h1>` +
+				`<p>You can close this tab. The CLI now has your credentials.</p>` +
+				`</body></html>`))
 		}
-		if code == "" {
-			http.Error(w, "missing code in callback", http.StatusBadRequest)
-			done <- result{err: fmt.Errorf("missing code in callback URL")}
-			return
-		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write([]byte(`<!DOCTYPE html><html><head><title>Plivo CLI</title></head>` +
-			`<body style="font-family: -apple-system, system-ui, sans-serif; padding: 2rem; max-width: 480px; margin: 4rem auto; line-height: 1.5;">` +
-			`<h1 style="font-size: 1.5rem;">✓ Authenticated</h1>` +
-			`<p>You can close this tab. The CLI now has your credentials.</p>` +
-			`</body></html>`))
-		done <- result{code: code}
+		done <- result{code: code, err: err}
 	})
 
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
