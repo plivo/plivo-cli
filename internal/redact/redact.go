@@ -15,6 +15,8 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+
+	"github.com/plivo/plivo-cli/internal/output"
 )
 
 // Placeholder replaces a redacted value.
@@ -82,7 +84,7 @@ func Body(body []byte) []byte {
 	}
 	var parsed any
 	if err := json.Unmarshal(body, &parsed); err == nil {
-		out, err := json.Marshal(walk(parsed))
+		out, err := output.Marshal(walk(parsed))
 		if err == nil {
 			return out
 		}
