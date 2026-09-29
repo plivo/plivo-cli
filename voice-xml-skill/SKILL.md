@@ -82,7 +82,7 @@ Then copy the closest document from "Patterns and the documents to copy" below a
 | `<Message>` | Send an SMS from inside the call flow |
 | `<Stream>` | Open a WebSocket audio stream. Its own attributes and the WebSocket protocol are in `plivo-audio-streaming`, a separate install |
 
-Pages: <https://www.plivo.com/docs/voice/xml/audio-output> (Speak, Play, DTMF), <https://www.plivo.com/docs/voice/xml/input> (GetDigits, GetInput), <https://www.plivo.com/docs/voice/xml/routing> (Dial, Redirect, Hangup, Wait, PreAnswer), <https://www.plivo.com/docs/voice/xml/record>, <https://www.plivo.com/docs/voice/api/conferences>, <https://www.plivo.com/docs/voice/xml/multiparty-call>, <https://www.plivo.com/docs/messaging/xml/message>, <https://www.plivo.com/docs/voice/xml/audio-streaming>.
+Pages: <https://www.plivo.com/docs/voice/xml/audio-output> (Speak, Play, DTMF), <https://www.plivo.com/docs/voice/xml/input> (GetDigits, GetInput), <https://www.plivo.com/docs/voice/xml/routing> (Dial, Redirect, Hangup, Wait, PreAnswer), <https://www.plivo.com/docs/voice/xml/record>, <https://www.plivo.com/docs/voice/xml/conference>, <https://www.plivo.com/docs/voice/xml/multiparty-call>, <https://www.plivo.com/docs/messaging/xml/message>, <https://www.plivo.com/docs/voice/xml/audio-streaming>.
 
 Full attribute tables, defaults and allowed values are in "Element reference" below.
 
@@ -103,7 +103,7 @@ Six ordering rules:
 - **`redirect` decides who owns the rest of the call, and this is a risk to raise rather than a verdict.** On `GetDigits`, `GetInput`, `Record`, `Dial` and `Conference`, `redirect` defaults to `true`, so when the `action` URL answers, Plivo runs the XML it returns. Those are default rows, not a documented statement that the elements below are discarded, and the docs' own sequential dialling example leaves `redirect` at its default on two `<Dial>` elements and still expects the trailing `<Speak>` to run. Say the content below may be skipped for a caller who responds; do not say the call breaks. With `redirect="false"` the `action` URL is still called, its answer is ignored, and the next element in your document runs. This is also why a bad action document only fails the call when `redirect` is `true`.
 - **Put a fallback after every element that can produce nothing.** After `GetDigits` or `GetInput` with no input, and after a `Dial` that nobody answered, execution falls through to the next element. If there is no next element the call ends silently.
 - **`<Record recordSession="true"/>` goes before the thing you want recorded.** It starts immediately, runs in the background until the call ends, and ignores `timeout`, `finishOnKey` and `playBeep`. To capture both parties on a transfer, use `startOnDialAnswer="true"` and place it before `<Dial>`.
-- **`<Redirect>` is the end of the document.** Nothing written after it runs, because control has moved to the new URL.
+- **Treat `<Redirect>` as the end of the document.** The routing page says Plivo fetches new XML from the URL and continues the call there. It does not say that elements written after `<Redirect>` are skipped, so move them into the document the URL returns rather than rely on them.
 - **`<Hangup/>` is the end of the call, unless it is scheduled.** `<Hangup schedule="60"/>` sets a timer and lets the following elements keep running.
 - **Put `<PreAnswer>` first.** It plays before the call is answered, so anything that answers the call should not precede it. The page gives three limitations and no ordering rule: only `Speak`, `Play` and `Wait` go inside; the call is not answered during PreAnswer, so some carriers may time out; keep it under 30 seconds. The ordering itself is this file's inference, so treat a `<PreAnswer>` that is not first as a risk to raise, not a rejected document.
 
@@ -181,7 +181,7 @@ The nine shapes that produce 8011 and 8012, each with the fix, are in "What brea
 
 Do not guess, and do not fill the gap from general knowledge of other platforms. In order:
 
-1. **Read the current documentation.** Every page on <https://www.plivo.com/docs> is available as Markdown by adding `.md` to its URL, and <https://www.plivo.com/docs/llms.txt> lists every page. Start at <https://www.plivo.com/docs/voice/xml/overview> and the element page for whatever you are writing. From a terminal `plivo docs search <keywords>` searches the full text of every page, `plivo docs list` prints the index and `plivo docs show <path-or-title>` prints one page; those three need no credentials and are not rate limited, so reach for them before the assistant.
+1. **Read the current documentation.** Every page on <https://www.plivo.com/docs> is available as Markdown by adding `.md` to its URL, and <https://www.plivo.com/docs/llms.txt> indexes many pages but not all (it has no CLI pages, for one). Start at <https://www.plivo.com/docs/voice/xml/overview> and the element page for whatever you are writing. From a terminal `plivo docs search <keywords>` searches the full text of every page, `plivo docs list` prints the index and `plivo docs show <path-or-title>` prints one page; those three need no credentials and are not rate limited, so reach for them before the assistant.
 2. **Ask Plivo's assistant from the terminal**: `plivo ask "<your question>"`. It reads the documentation and can see the account, so it answers things this file cannot: what a specific call did, whether a compliance application is accepted, what a destination costs. It is limited to five requests per ten minutes per account, so save it for the question you cannot answer another way. `plivo voice calls diagnose <call_uuid>` is the same assistant pointed at one call, and it shares that limit, so do not loop either.
 3. **If you have no CLI access**, tell the person you are working with to ask the same question to the assistant in the Plivo console.
 
@@ -211,7 +211,7 @@ Root element. Children run in order, one at a time.
 
 An empty `<Response></Response>` ends the call when it runs. Returned to a `callbackUrl` or a hangup URL it is simply an acknowledgement, which is fine and common.
 
-Nesting rules for the whole language are in "Ordering and nesting" above. No element other than `Response`, `GetDigits`, `GetInput`, `Dial` and `PreAnswer` takes children. `MultiPartyCall`, `Conference`, `Redirect`, `Play`, `DTMF` and `Message` carry their value as element text.
+Nesting rules for the whole language are in "Ordering and nesting" above. No element other than `Response`, `GetDigits`, `GetInput`, `Dial` and `PreAnswer` takes XML elements as children, except that `<Speak>` takes SSML tags with a `Polly.` voice (see Speak). `MultiPartyCall`, `Conference`, `Redirect`, `Play`, `DTMF` and `Message` carry their value as element text.
 
 ### Speak
 
@@ -483,7 +483,7 @@ Recordings are deleted after 30 days, so download what you need.
 
 ### Conference
 
-Joins a named room. The room name goes in the element body. Maximum 20 participants. Docs: <https://www.plivo.com/docs/voice/api/conferences>.
+Joins a named room. The room name goes in the element body. Maximum 20 participants. Docs: <https://www.plivo.com/docs/voice/xml/conference>.
 
 Basic:
 
@@ -495,7 +495,7 @@ Basic:
 | `maxMembers` | integer | `20` | 1 to 20 |
 | `timeLimit` | integer | `86400` | maximum seconds |
 | `hangupOnStar` | boolean | `false` | member presses `*` to leave |
-| `stayAlone` | boolean | `true` | keep the room open with one member left |
+| `stayAlone` | boolean | `true` | the Conference page describes it as "End conference if only one member"; the MultiPartyCall page describes its own `stayAlone` as "Stay if only participant". This file follows neither: test the behaviour before you rely on either reading |
 
 Moderation: `startConferenceOnEnter` default `true`, `endConferenceOnExit` default `false`, `waitSound` a URL played while waiting for the room to start.
 
@@ -548,6 +548,7 @@ Participant level:
 | `stayAlone` | boolean | `false` | stay when alone |
 | `startMpcOnEnter` | boolean | `true` | start the MPC on joining |
 | `endMpcOnExit` | boolean | `false` | end the MPC on leaving |
+| `recordParticipantTrack` | boolean | none | record this participant's own track (<https://www.plivo.com/docs/voice/use-cases/participant-level-recording>) |
 
 Entry and exit sounds: `enterSound` default `beep:1`, `exitSound` default `beep:2`, each accepting `none`, `beep:1`, `beep:2` or a URL, with `enterSoundMethod` and `exitSoundMethod` defaulting to `GET`.
 
@@ -572,7 +573,7 @@ Sends an SMS from inside a call flow. The message text goes in the element body.
 | Attribute | Type | Notes |
 |---|---|---|
 | `src` | string | sending number, must be one you own |
-| `dst` | string | destination. Several numbers are separated by `<` |
+| `dst` | string | destination. Several numbers are separated by `<`, which must be written `&lt;` inside the attribute: `dst="12025551111&lt;12025552222"`. A raw `<` makes the document invalid XML (8011 in an answer document, 8012 in an action document) |
 | `type` | string | `sms` |
 | `callbackUrl` | string | receives delivery reports |
 | `callbackMethod` | string | `GET` or `POST`, default `POST` |
@@ -905,10 +906,10 @@ If the call is going to a WebSocket voice bot, the bot workflow, readiness and d
 - **A keypad menu in front of the bot.** `<GetDigits>` before `<Stream>` works like any other menu. Remember that `redirect` defaults to `true`, so a caller who presses a key gets the action document instead of the `<Stream>` you wrote below it. A caller who presses nothing still falls through to it after `retries` attempts. Either set `redirect="false"`, or repeat the `<Stream>` in the action document, and raise it as a risk rather than a broken document.
 - **Recording.** `<Record recordSession="true"/>` goes **before** `<Stream>`, for the same reason it goes before `<Dial>`: it must be running while the audio flows.
 - **Handing off to a human.** `<Dial>` with `<Number>` or `<User>`, and an `action` URL that reads `DialStatus`. Handle `busy`, `no-answer`, `timeout` and `failed`, not only `completed`.
-- **Continuing after the bot.** `<Redirect>` after `<Stream>` sends the call to a URL of yours when the stream ends, instead of the call ending. `<Hangup/>` after `<Stream>` ends it deliberately.
+- **Continuing after the bot.** With `keepCallAlive="true"` on the `<Stream>`, a `<Redirect>` after it sends the call to a URL of yours when the stream ends, and a `<Hangup/>` after it ends the call then. `keepCallAlive` defaults to `false`. The XML page implies that the following element then runs without waiting for the stream, while the audio streaming guide says the call ends when streaming stops. Either way, set `keepCallAlive="true"` so that a `<Redirect>` or `<Hangup/>` after the stream runs only when the bot closes the socket (<https://www.plivo.com/docs/voice/xml/audio-streaming>).
 - **Putting the bot in a room.** `MultiPartyCall` with `role="ai-agent"` and the `aiAgentStream*` attributes.
 
-The `<Stream>` element's own attributes, the WebSocket protocol, and every question about whether the bot is ready for production are out of scope here. Install `plivo-audio-streaming` (`plivo skill install audio-streaming`) or read <https://www.plivo.com/docs/voice-agents/audio-streaming/xml/stream>.
+The `<Stream>` element's own attributes (except `keepCallAlive`, above), the WebSocket protocol, and every question about whether the bot is ready for production are out of scope here. Install `plivo-audio-streaming` (`plivo skill install audio-streaming`) or read <https://www.plivo.com/docs/voice-agents/audio-streaming/xml/stream>.
 
 ### A checklist before you ship a document
 
@@ -985,19 +986,27 @@ The full lists are in the element reference above. In short:
 
 ### Securing the URLs
 
-Every request from Plivo carries `X-Plivo-Signature-V3`, `X-Plivo-Signature-Ma-V3` and `X-Plivo-Signature-V3-Nonce`. Validate the signature instead of protecting the URL with Basic auth, a bearer token or a secret in the query string. Plivo has no way to send your credentials, so an answer URL behind Basic auth or a bearer token is expected to reject Plivo's request and produce 7011. That is an inference, not a documented rule: no page states what Plivo does with a 401.
+Every request from Plivo carries `X-Plivo-Signature-V3`, `X-Plivo-Signature-Ma-V3` and `X-Plivo-Signature-V3-Nonce`. Validate the signature instead of protecting the URL with Basic auth, a bearer token or a secret in the query string. The docs describe no way for Plivo to send your credentials, so an answer URL behind Basic auth or a bearer token rejects Plivo's request. A 401 is a non-2xx response, which the hangup-causes page lists as 7011.
 
 Use your SDK's helper. Every Plivo server SDK has one, and the manual form is easy to get subtly wrong.
 
-How it is built (<https://www.plivo.com/docs/voice/concepts/signature-validation>): Plivo takes the full request URL including scheme, port and query string; appends a `.`; appends the POST parameters sorted alphabetically by name with Unix style case sensitive sorting, as name then value with no separator between them; appends a second `.`; appends the nonce from `X-Plivo-Signature-V3-Nonce`; and signs the result with HMAC SHA256 using your Auth Token, Base64 encoded. On a GET the parameters are already in the query string, so the middle part is empty but both dots still stand.
+How it is built. The docs page shows one worked example, for a URL that already has a query string plus POST parameters. The Python SDK builds the string differently in the other cases, so use the SDK helper (`plivo.utils.validate_v3_signature` in Python, `plivo.validateV3Signature` in Node; <https://www.plivo.com/docs/voice/concepts/signature-validation>). If you must write it by hand, follow the SDK, not the page's prose:
 
-**The `.` separators are the part manual implementations miss.** The documented worked example, for URL `https://example.com/abcd?foo=bar` with POST parameters `CallUUID`, `Digits`, `From` and `To` and nonce `kjsdhfsd87sd7yisud2`, assembles to:
+1. Take the request URL's scheme, host, port (if the URL has one) and path. Decode its query string and sort the parameters by name.
+2. GET: merge Plivo's parameters into the query and sort by name. If the result is not empty, append `?name=value&name=value`.
+3. POST with parameters: if the URL has a query string, append `?`, the sorted query and a `.`; if it has none, append `?`. Then append the POST parameters sorted by name (Unix-style, case sensitive) as `namevalue` with no separator. A POST with no parameters adds only `?` and the sorted query, when the URL has one.
+4. Append `.` and the nonce from `X-Plivo-Signature-V3-Nonce`.
+5. HMAC-SHA256 with the Auth Token, Base64-encode, and compare with each comma-separated value in `X-Plivo-Signature-V3`. That header uses the Auth Token of the account or subaccount associated with the request entity (for example, the one that owns the number); `X-Plivo-Signature-Ma-V3` always uses the main account's token.
+
+Strings the Python SDK builds before the nonce is added (nonce `n` appended as `.n`):
 
 ```text
-https://example.com/abcd?foo=bar.CallUuid4vbcpem8-0u46-x1ha-9af1-438vc92bf374Digits1234From+15551111111To+15555555555.kjsdhfsd87sd7yisud2
+POST https://example.com/answer            + CallUUID=abc, From=+14155550100  ->  https://example.com/answer?CallUUIDabcFrom+14155550100
+POST https://example.com/abcd?foo=bar      + CallUUID=abc, From=+14155550100  ->  https://example.com/abcd?foo=bar.CallUUIDabcFrom+14155550100
+GET  https://example.com/answer?From=%2B14155550100&CallUUID=abc              ->  https://example.com/answer?CallUUID=abc&From=+14155550100
 ```
 
-A `.` between the URL and the sorted parameters, and a `.` before the nonce. Omit them and you compute a different string and reject every genuine request. Read the current page before shipping a hand written validator.
+The page's own example string has a `Caller` parameter that is not in its parameter list and writes `CallUuid`; do not use it as a test vector.
 
 If your account has more than one auth token, Plivo sends comma separated signatures and you must accept a match against any of them.
 
@@ -1007,7 +1016,7 @@ If your server sits behind a proxy or load balancer, sign against the URL the cl
 
 ### Timeouts, retries and edge region
 
-Plivo retries a webhook when it does not get a 200. You tune this with URL fragments appended to the callback URL, in the form `#key=value&key2=value2` (<https://www.plivo.com/docs/voice/concepts/callback-configurations>).
+The callback configuration page says both that Plivo retries when it does not get a 200 and that the default retry policy `rp` is `ct,rt`, which retries only on connection failures and read timeouts; set `rp` explicitly if you need retries on 4xx or 5xx. You tune this with URL fragments appended to the callback URL, in the form `#key=value&key2=value2` (<https://www.plivo.com/docs/voice/concepts/callback-configurations>).
 
 | Key | Meaning | Allowed | Default |
 |---|---|---|---|
