@@ -203,6 +203,38 @@ func TestFeedback_telemetryDisabled_surfacesFriendlyMessage(t *testing.T) {
 	}
 }
 
+// Declining the pre-submit preview is a choice, not a failure. Any error
+// returned from here reaches the root handler, which prints an error
+// envelope with a --help hint and exits non-zero, so a decline must come
+// back as "don't submit" with no error.
+func TestShowPreviewAndConfirm(t *testing.T) {
+	resetFeedbackFlags(t)
+	cases := []struct {
+		name       string
+		answer     string
+		wantSubmit bool
+	}{
+		{"Enter submits", "\n", true},
+		{"y submits", "y\n", true},
+		{"n cancels", "n\n", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			submit, err := showPreviewAndConfirm(&feedback.Event{Rating: 4}, strings.NewReader(tc.answer), &out)
+			if err != nil {
+				t.Fatalf("answer %q returned error %v, want nil", tc.answer, err)
+			}
+			if submit != tc.wantSubmit {
+				t.Errorf("answer %q: submit = %v, want %v", tc.answer, submit, tc.wantSubmit)
+			}
+			if cancelled := strings.Contains(out.String(), "Cancelled, nothing sent."); cancelled == tc.wantSubmit {
+				t.Errorf("answer %q: cancel line printed = %v, want %v; output:\n%s", tc.answer, cancelled, !tc.wantSubmit, out.String())
+			}
+		})
+	}
+}
+
 func TestFeedback_badRatingFlag_errors(t *testing.T) {
 	resetFeedbackFlags(t)
 	t.Setenv(feedback.MachineIDEnvVar, "test-machine")

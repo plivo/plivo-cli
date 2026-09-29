@@ -94,8 +94,12 @@ func runFeedback(cmd *cobra.Command, args []string) error {
 	event.SetComment(comment)
 
 	if !shouldSkipPreview() {
-		if err := showPreviewAndConfirm(event, cmd.InOrStdin(), cmd.OutOrStderr()); err != nil {
+		submit, err := showPreviewAndConfirm(event, cmd.InOrStdin(), cmd.OutOrStderr())
+		if err != nil {
 			return err
+		}
+		if !submit {
+			return nil
 		}
 	}
 
@@ -355,7 +359,9 @@ func shouldSkipPreview() bool {
 
 // showPreviewAndConfirm prints a summary of what will be sent and asks
 // the user to confirm. Y / Enter / 'y' = submit; anything else cancels.
-func showPreviewAndConfirm(event *feedback.Event, in io.Reader, out io.Writer) error {
+// Cancelling is the user's choice, not a failure, so it returns false
+// with no error and the command exits 0 without an error envelope.
+func showPreviewAndConfirm(event *feedback.Event, in io.Reader, out io.Writer) (bool, error) {
 	fmt.Fprintln(out, "")
 	fmt.Fprintln(out, " About to submit:")
 	if event.Rating > 0 {
@@ -378,13 +384,14 @@ func showPreviewAndConfirm(event *feedback.Event, in io.Reader, out io.Writer) e
 	reader := bufio.NewReader(in)
 	line, err := reader.ReadString('\n')
 	if err != nil && err != io.EOF {
-		return fmt.Errorf("read confirmation: %w", err)
+		return false, fmt.Errorf("read confirmation: %w", err)
 	}
 	answer := strings.ToLower(strings.TrimSpace(line))
 	if answer == "" || answer == "y" || answer == "yes" {
-		return nil
+		return true, nil
 	}
-	return clierr.BadInput("cancelled — nothing sent")
+	fmt.Fprintln(out, "Cancelled, nothing sent.")
+	return false, nil
 }
 
 // isTTY returns true if r is a *os.File on a terminal. Defensive: any
