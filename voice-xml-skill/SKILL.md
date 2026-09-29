@@ -24,8 +24,8 @@ plivo voice calls diagnose <call_uuid>                                          
 
 **What this file assumes you have: nothing but this file and the `plivo` CLI.** Every element, attribute, ordering rule, URL contract and failure shape you need to write and fix Plivo XML is here. Other Plivo skills are separate single files you may not have. Install one only if the task moves outside XML:
 
-- `npx skills add https://www.plivo.com/docs --skill plivo-audio-streaming` for the WebSocket voice bot journey: `<Stream>`'s own attributes, the WebSocket protocol, streaming readiness and debugging a failed agent call.
-- `npx skills add https://www.plivo.com/docs --skill plivo-sip-trunking` for SIP trunks and agent platforms reached over SIP, which have no answer URL and no XML at all.
+- `plivo skill install audio-streaming` for the WebSocket voice bot journey: `<Stream>`'s own attributes, the WebSocket protocol, streaming readiness and debugging a failed agent call.
+- `plivo skill install sip-trunking` for SIP trunks and agent platforms reached over SIP, which have no answer URL and no XML at all.
 - `plivo skill install` for `plivo-cli`, the CLI's own reference. The CLI writes that file out itself.
 
 If none is installed, do not stall: use `plivo <command> --help` and the public docs, and say which source you used.
@@ -194,7 +194,7 @@ Never invent an element, an attribute, an allowed value or a hangup code. Where 
 - **Cannot see your server.** A document that looks right here can still fail with 7011 because of a status code, an auth check or a dead host. Ask for the exact bytes and the exact HTTP status.
 - **Cannot confirm a call worked.** Well formed XML is not a working call. Only the call record and someone who heard the audio can say that.
 - **Cannot decide legal questions.** Recording notices, consent, retention and calling hours need the user's own legal review. This skill states the platform behaviour only.
-- **Cannot cover the voice agent journey.** Readiness, WebSocket protocol, streaming debugging and go live belong to `plivo-audio-streaming`, and SIP trunks and agent platforms to `plivo-sip-trunking`. Both are separate installs (`npx skills add https://www.plivo.com/docs --skill <name>`); if the user does not have one, say so and point at the public docs section rather than improvising the answer.
+- **Cannot cover the voice agent journey.** Readiness, WebSocket protocol, streaming debugging and go live belong to `plivo-audio-streaming`, and SIP trunks and agent platforms to `plivo-sip-trunking`. Both are separate installs (`plivo skill install audio-streaming`, `plivo skill install sip-trunking`); if the user does not have one, say so and point at the public docs section rather than improvising the answer.
 - **Cannot cover the rest of the platform.** Number provisioning, compliance and KYC, the Voice API beyond the URLs named here, the Browser SDK, messaging beyond `<Message>`, and the console flow application builder are all out of scope.
 
 ## Element reference: every documented attribute
@@ -908,7 +908,7 @@ If the call is going to a WebSocket voice bot, the bot workflow, readiness and d
 - **Continuing after the bot.** `<Redirect>` after `<Stream>` sends the call to a URL of yours when the stream ends, instead of the call ending. `<Hangup/>` after `<Stream>` ends it deliberately.
 - **Putting the bot in a room.** `MultiPartyCall` with `role="ai-agent"` and the `aiAgentStream*` attributes.
 
-The `<Stream>` element's own attributes, the WebSocket protocol, and every question about whether the bot is ready for production are out of scope here. Install `plivo-audio-streaming` (`npx skills add https://www.plivo.com/docs --skill plivo-audio-streaming`) or read <https://www.plivo.com/docs/voice-agents/audio-streaming/xml/stream>.
+The `<Stream>` element's own attributes, the WebSocket protocol, and every question about whether the bot is ready for production are out of scope here. Install `plivo-audio-streaming` (`plivo skill install audio-streaming`) or read <https://www.plivo.com/docs/voice-agents/audio-streaming/xml/stream>.
 
 ### A checklist before you ship a document
 

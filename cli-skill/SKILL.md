@@ -50,7 +50,7 @@ This file covers the CLI itself. Three product skills cover the work you do with
 - `plivo-sip-trunking` — connect LiveKit, ElevenLabs, Retell or Vapi to phone calls over SIP trunking.
 - `plivo-voice-xml` — write the XML your answer URL returns: IVRs, call routing, recording, conferences.
 
-Install any of them with `npx skills add https://www.plivo.com/docs --skill <name>`.
+Install one with `plivo skill install audio-streaming` (or `sip-trunking`, `voice-xml`, `all`). The skills ship inside the binary, so this needs no network.
 
 ## Installation — if `plivo` is not on PATH
 
