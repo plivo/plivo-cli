@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
@@ -278,17 +279,18 @@ func promptRating(reader *bufio.Reader, out io.Writer) (int, error) {
 	return n, nil
 }
 
-// promptComment asks for a free-text comment. Multi-line until Ctrl-D
-// (EOF) or two blank lines in a row. Returns "" if the user submits
-// nothing.
+// promptComment asks for a free-text comment. Multi-line until EOF, a
+// line of only Ctrl-D characters, or two blank lines in a row. Returns
+// "" if the user submits nothing.
 func promptComment(reader *bufio.Reader, out io.Writer, rating int) (string, error) {
 	fmt.Fprintln(out, "")
+	key := endOfInputKey(runtime.GOOS)
 	if rating > 0 && rating < 4 {
-		fmt.Fprintln(out, " What's going wrong? (multi-line; press Enter twice or Ctrl-D to finish)")
+		fmt.Fprintf(out, " What's going wrong? (multi-line; press Enter twice or %s to finish)\n", key)
 	} else if rating >= 4 {
-		fmt.Fprintln(out, " Anything to add? Optional. (multi-line; press Enter twice or Ctrl-D to finish)")
+		fmt.Fprintf(out, " Anything to add? Optional. (multi-line; press Enter twice or %s to finish)\n", key)
 	} else {
-		fmt.Fprintln(out, " Tell us anything? Optional. (multi-line; press Enter twice or Ctrl-D to finish)")
+		fmt.Fprintf(out, " Tell us anything? Optional. (multi-line; press Enter twice or %s to finish)\n", key)
 	}
 	fmt.Fprint(out, " > ")
 	var b strings.Builder
@@ -302,6 +304,11 @@ func promptComment(reader *bufio.Reader, out io.Writer, rating int) (string, err
 		if err != nil {
 			return "", fmt.Errorf("read comment: %w", err)
 		}
+		// Windows consoles pass Ctrl-D through as a literal 0x04; a line of
+		// nothing else is the user reaching for end-of-input.
+		if t := strings.TrimRight(line, "\r\n"); t != "" && strings.Trim(t, "\x04") == "" {
+			break
+		}
 		// Two consecutive blanks → finish.
 		if strings.TrimSpace(line) == "" {
 			blankCount++
@@ -314,7 +321,26 @@ func promptComment(reader *bufio.Reader, out io.Writer, rating int) (string, err
 		}
 		fmt.Fprint(out, " > ")
 	}
-	return strings.TrimSpace(b.String()), nil
+	// Drop control characters (the \r of CRLF, stray Ctrl-Ds) but keep
+	// newlines and tabs.
+	comment := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) && r != '\n' && r != '\t' {
+			return -1
+		}
+		return r
+	}, b.String())
+	return strings.TrimSpace(comment), nil
+}
+
+// endOfInputKey names the key that finishes the comment prompt on goos
+// (a parameter so tests can cover Windows). Windows consoles send Ctrl-D
+// as a plain character, so it needs Enter; Ctrl-Z, their EOF, would leave
+// the line ending buffered for the next prompt.
+func endOfInputKey(goos string) string {
+	if goos == "windows" {
+		return "Ctrl-D then Enter"
+	}
+	return "Ctrl-D"
 }
 
 // shouldSkipPreview returns true if --yes was passed OR if we're in

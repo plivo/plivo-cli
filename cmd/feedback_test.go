@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"io"
@@ -350,5 +351,45 @@ func TestResolveFeedbackTransport_gatesIdentityHeadersOnTelemetry(t *testing.T) 
 	}
 	if headers["X-Plivo-CLI-Version"] == "" {
 		t.Error("telemetry off: X-Plivo-CLI-Version should still be present")
+	}
+}
+
+// Windows consoles pass Ctrl-D through as a literal 0x04 and end lines with
+// \r\n. Neither may reach the collector, and a Ctrl-D line must end input.
+func TestPromptComment(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"Ctrl-D line ends input", "hello\r\n\x04\r\nnever read\r\n", "hello"},
+		{"repeated Ctrl-D line ends input", "\x04\x04\r\nnever read\r\n", ""},
+		{"blank first line does not end input", "\nhello\n\n", "hello"},
+		{"CRLF becomes LF", "line1\r\nline2\r\n\r\n", "line1\nline2"},
+		{"embedded control char dropped", "hi\x04there\n\n", "hithere"},
+		{"Unix input and tabs unchanged", "a\tb\nc\n\n", "a\tb\nc"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := promptComment(bufio.NewReader(strings.NewReader(tc.in)), io.Discard, 0)
+			if err != nil {
+				t.Fatalf("promptComment: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("promptComment(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestEndOfInputKey(t *testing.T) {
+	for goos, want := range map[string]string{
+		"windows": "Ctrl-D then Enter",
+		"darwin":  "Ctrl-D",
+		"linux":   "Ctrl-D",
+	} {
+		if got := endOfInputKey(goos); got != want {
+			t.Errorf("endOfInputKey(%q) = %q, want %q", goos, got, want)
+		}
 	}
 }
