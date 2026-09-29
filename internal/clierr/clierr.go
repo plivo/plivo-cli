@@ -16,6 +16,8 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+
+	"github.com/plivo/plivo-cli/internal/output"
 )
 
 // Code is a machine-readable error category. Stable string so AI clients can
@@ -315,7 +317,7 @@ func extractMessage(body []byte) string {
 		}
 	}
 	// Last resort: serialise the whole thing.
-	if b, err := json.Marshal(generic); err == nil {
+	if b, err := output.Marshal(generic); err == nil {
 		if len(b) > 400 {
 			return string(b[:400]) + "…"
 		}

@@ -33,10 +33,11 @@ func TestBodyRedactsCredentials(t *testing.T) {
 }
 
 // Redaction must not destroy the debugging value of the output, or people
-// will stop using --dry-run to check what a command will send.
+// will stop using --dry-run to check what a command will send. That includes
+// showing <, > and & as typed rather than HTML-escaped.
 func TestBodyKeepsNonSecrets(t *testing.T) {
-	got := String(`{"username":"bob","password":"s3cret","alias":"desk-phone","to":"+14155551234"}`)
-	for _, keep := range []string{"bob", "desk-phone", "+14155551234"} {
+	got := String(`{"username":"bob","password":"s3cret","alias":"desk-phone","to":"+14155551234","text":"Tom & Jerry <3"}`)
+	for _, keep := range []string{"bob", "desk-phone", "+14155551234", "Tom & Jerry <3"} {
 		if !strings.Contains(got, keep) {
 			t.Errorf("redacted a non-secret %q: %s", keep, got)
 		}

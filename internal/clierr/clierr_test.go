@@ -380,10 +380,10 @@ func TestFromHTTP_emptyBody(t *testing.T) {
 }
 
 func TestFromHTTP_unknownJSONStructure_serializes(t *testing.T) {
-	// Unknown shape — fallback path serializes the JSON.
-	e := FromHTTP(400, "", []byte(`{"unexpected":"shape","x":1}`))
-	if !strings.Contains(e.Message, "unexpected") {
-		t.Errorf("Message should serialize unknown shape: %q", e.Message)
+	// Unknown shape — fallback path serializes the JSON, <, > and & as sent.
+	e := FromHTTP(400, "", []byte(`{"unexpected":"shape & <size>","x":1}`))
+	if !strings.Contains(e.Message, `"unexpected":"shape & <size>"`) {
+		t.Errorf("Message should serialize unknown shape as sent: %q", e.Message)
 	}
 }
 
