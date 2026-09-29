@@ -6,8 +6,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -15,40 +15,37 @@ import (
 const pasteState = "paste-test-state"
 
 type pasteRun struct {
-	code      string
-	err       error
-	out       string
-	stdinRead bool
+	code string
+	err  error
+	out  string
 }
 
-// readRecorder notes whether anything read from it.
-type readRecorder struct {
-	io.Reader
-	read atomic.Bool
-}
-
-func (r *readRecorder) Read(p []byte) (int, error) {
-	r.read.Store(true)
-	return r.Reader.Read(p)
-}
-
-// awaitWithStdin runs awaitCallback on a fresh loopback listener with stdin
-// holding typed; {addr} and {port} in typed become the listener's own.
-func awaitWithStdin(t *testing.T, typed string, tty bool, timeout time.Duration) pasteRun {
+func listenLoopback(t *testing.T) net.Listener {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, port, _ := net.SplitHostPort(ln.Addr().String())
-	stdin := &readRecorder{Reader: strings.NewReader(
-		strings.NewReplacer("{addr}", ln.Addr().String(), "{port}", port).Replace(typed))}
+	return ln
+}
 
+// runAwait calls awaitCallback and captures what it printed.
+func runAwait(ln net.Listener, paste io.Reader, timeout time.Duration) pasteRun {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	var out bytes.Buffer
-	code, err := awaitCallback(ctx, ln, pasteState, stdin, tty, &out)
-	return pasteRun{code: code, err: err, out: out.String(), stdinRead: stdin.read.Load()}
+	code, err := awaitCallback(ctx, ln, pasteState, paste, &out)
+	return pasteRun{code: code, err: err, out: out.String()}
+}
+
+// awaitPaste runs awaitCallback with typed as the terminal input; {addr} and
+// {port} in typed become the listener's own.
+func awaitPaste(t *testing.T, typed string, timeout time.Duration) pasteRun {
+	t.Helper()
+	ln := listenLoopback(t)
+	_, port, _ := net.SplitHostPort(ln.Addr().String())
+	typed = strings.NewReplacer("{addr}", ln.Addr().String(), "{port}", port).Replace(typed)
+	return runAwait(ln, strings.NewReader(typed), timeout)
 }
 
 // A browser on another machine or network namespace can't reach the
@@ -67,7 +64,7 @@ func TestAwaitCallback_pastedCallbackEndsTheWait(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			run := awaitWithStdin(t, tc.typed, true, 3*time.Second)
+			run := awaitPaste(t, tc.typed, 3*time.Second)
 			if run.code != tc.wantCode {
 				t.Errorf("code = %q, want %q (err: %v)", run.code, tc.wantCode, run.err)
 			}
@@ -100,7 +97,7 @@ func TestAwaitCallback_badPasteIsRefusedAndWaitingContinues(t *testing.T) {
 	good := "http://{addr}/?code=good-code&state=" + pasteState + "\n"
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			run := awaitWithStdin(t, tc.typed+"\n"+good, true, 3*time.Second)
+			run := awaitPaste(t, tc.typed+"\n"+good, 3*time.Second)
 			if run.err != nil || run.code != "good-code" {
 				t.Fatalf("got (%q, %v), want the later valid paste's code", run.code, run.err)
 			}
@@ -114,26 +111,13 @@ func TestAwaitCallback_badPasteIsRefusedAndWaitingContinues(t *testing.T) {
 // With the paste path armed, a browser that can reach the listener must
 // still finish the login at once, not wait on the idle terminal.
 func TestAwaitCallback_browserCallbackWinsWhilePasteIsPending(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	stdin, typing := io.Pipe()
+	ln := listenLoopback(t)
+	idle, typing := io.Pipe()
 	t.Cleanup(func() { _ = typing.Close() })
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 
-	type result struct {
-		code string
-		err  error
-	}
-	done := make(chan result, 1)
-	go func() {
-		code, err := awaitCallback(ctx, ln, pasteState, stdin, true, io.Discard)
-		done <- result{code, err}
-	}()
+	done := make(chan pasteRun, 1)
+	go func() { done <- runAwait(ln, idle, 5*time.Second) }()
 
-	time.Sleep(60 * time.Millisecond)
 	resp, err := http.Get("http://" + ln.Addr().String() + "/?code=browser-code&state=" + pasteState)
 	if err != nil {
 		t.Fatalf("browser callback: %v", err)
@@ -153,10 +137,19 @@ func TestAwaitCallback_browserCallbackWinsWhilePasteIsPending(t *testing.T) {
 // Piped stdin (scripts, CI, `curl | bash`) must behave exactly as before the
 // paste path existed: never read, nothing printed, same timeout message.
 func TestAwaitCallback_nonTerminalStdinIsNeverRead(t *testing.T) {
-	run := awaitWithStdin(t, "http://{addr}/?code=piped-code&state="+pasteState+"\n", false, 200*time.Millisecond)
-	if run.stdinRead {
-		t.Error("read stdin although it is not a terminal")
+	ln := listenLoopback(t)
+	stdin, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = stdin.Close() })
+	piped := "http://" + ln.Addr().String() + "/?state=" + pasteState + "&code=piped-code\n"
+	if _, err := io.WriteString(w, piped); err != nil {
+		t.Fatal(err)
+	}
+	_ = w.Close()
+
+	run := runAwait(ln, pasteSource(stdin), 50*time.Millisecond)
 	if run.code != "" || run.err == nil || !strings.Contains(run.err.Error(), "timed out") {
 		t.Fatalf("got (%q, %v), want the browser-only timeout", run.code, run.err)
 	}
@@ -166,16 +159,19 @@ func TestAwaitCallback_nonTerminalStdinIsNeverRead(t *testing.T) {
 	if run.out != "" {
 		t.Errorf("printed %q", run.out)
 	}
+	if left, _ := io.ReadAll(stdin); string(left) != piped {
+		t.Errorf("stdin was read: %q left of %q", left, piped)
+	}
 }
 
-// On a terminal, the timeout should point at the paste fallback so the
-// next attempt doesn't hit the same wall.
-func TestAwaitCallback_terminalTimeoutMentionsPasting(t *testing.T) {
-	run := awaitWithStdin(t, "", true, 200*time.Millisecond)
-	if run.err == nil || !strings.Contains(run.err.Error(), "timed out") {
-		t.Fatalf("want a timeout, got (%q, %v)", run.code, run.err)
+// On a terminal the user is told about pasting up front, and again by the
+// timeout so the next attempt doesn't hit the same wall.
+func TestAwaitCallback_terminalIsToldAboutPasting(t *testing.T) {
+	run := awaitPaste(t, "", 50*time.Millisecond)
+	if !strings.Contains(run.out, "paste") {
+		t.Errorf("no paste hint printed: %q", run.out)
 	}
-	if !strings.Contains(run.err.Error(), "paste") {
+	if run.err == nil || !strings.Contains(run.err.Error(), "timed out") || !strings.Contains(run.err.Error(), "paste") {
 		t.Errorf("timeout should mention pasting the URL: %v", run.err)
 	}
 }

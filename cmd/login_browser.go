@@ -95,10 +95,6 @@ func runLoginBrowser(nameExplicit bool) error {
 		// Non-fatal — the URL is printed above so the user can paste it.
 		fmt.Fprintf(os.Stderr, "(could not auto-open the browser: %v)\n", err)
 	}
-	stdinTTY := isTTY(os.Stdin) && inForeground(os.Stdin)
-	if stdinTTY {
-		fmt.Fprintln(os.Stderr, "If the browser can't reach this terminal (SSH, WSL, containers), copy the full URL from its address bar after approving and paste it here.")
-	}
 
 	// Wait up to 5m for the callback from the Console redirect chain.
 	// The auth server's state TTL is 10 min — 5 min on the CLI side
@@ -106,7 +102,7 @@ func runLoginBrowser(nameExplicit bool) error {
 	// giving up first.
 	cbCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	code, err := awaitCallback(cbCtx, listener, state, os.Stdin, stdinTTY, os.Stderr)
+	code, err := awaitCallback(cbCtx, listener, state, pasteSource(os.Stdin), os.Stderr)
 	if err != nil {
 		return err
 	}
@@ -254,11 +250,8 @@ func callbackCode(q url.Values, expectedState string) (string, error) {
 	if q.Get("state") != expectedState {
 		return "", errStateMismatch
 	}
-	// The user said no in the browser. Without this branch a declined
-	// login fell through to "missing code in callback URL" after the full
-	// five-minute wait, telling someone who had just refused to go and
-	// approve it. access_denied is OAuth's own denial code (RFC 6749
-	// §4.1.2.1); any other value is surfaced as-is rather than guessed at.
+	// Declined in the browser. access_denied is OAuth's denial code (RFC 6749
+	// 4.1.2.1); any other value is surfaced as-is.
 	if authErr := q.Get("error"); authErr != "" {
 		return "", errLoginRejected(authErr)
 	}
@@ -289,8 +282,8 @@ func pastedCallbackCode(pasted, addr, expectedState string) (string, error) {
 
 // readPastedCallback reads lines until one is this login's callback URL,
 // saying what's wrong with anything else. It stops once ctx is done.
-func readPastedCallback(ctx context.Context, stdin io.Reader, out io.Writer, addr, expectedState string, finish func(string, error)) {
-	lines := bufio.NewScanner(stdin)
+func readPastedCallback(ctx context.Context, paste io.Reader, out io.Writer, addr, expectedState string, finish func(string, error)) {
+	lines := bufio.NewScanner(paste)
 	for lines.Scan() && ctx.Err() == nil {
 		line := strings.TrimSpace(lines.Text())
 		if line == "" {
@@ -306,11 +299,21 @@ func readPastedCallback(ctx context.Context, stdin io.Reader, out io.Writer, add
 	}
 }
 
+// pasteSource returns stdin if the callback URL can be pasted into it: a
+// terminal this process can read without being stopped. Otherwise nil, and
+// stdin is never read.
+func pasteSource(stdin *os.File) io.Reader {
+	if isTTY(stdin) && inForeground(stdin) {
+		return stdin
+	}
+	return nil
+}
+
 // awaitCallback returns the code from whichever arrives first: the browser's
-// redirect to listener or, when stdin is a terminal, the same URL pasted into
-// it. Times out via the context. The browser tab sees a tiny "you can close
+// redirect to listener or the same URL pasted into paste (nil turns pasting
+// off). Times out via the context. The browser tab sees a tiny "you can close
 // this" confirmation page on success.
-func awaitCallback(ctx context.Context, listener net.Listener, expectedState string, stdin io.Reader, stdinTTY bool, out io.Writer) (string, error) {
+func awaitCallback(ctx context.Context, listener net.Listener, expectedState string, paste io.Reader, out io.Writer) (string, error) {
 	ctx, stop := context.WithCancel(ctx)
 	defer stop()
 
@@ -341,19 +344,9 @@ func awaitCallback(ctx context.Context, listener net.Listener, expectedState str
 		case errors.Is(err, errMissingCode):
 			http.Error(w, "missing code in callback", http.StatusBadRequest)
 		case err != nil:
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			_, _ = w.Write([]byte(`<!DOCTYPE html><html><head><title>Plivo CLI</title></head>` +
-				`<body style="font-family: -apple-system, system-ui, sans-serif; padding: 2rem; max-width: 480px; margin: 4rem auto; line-height: 1.5;">` +
-				`<h1 style="font-size: 1.5rem;">Sign-in cancelled</h1>` +
-				`<p>Nothing was granted. You can close this tab.</p>` +
-				`</body></html>`))
+			writePage(w, "Sign-in cancelled", "Nothing was granted. You can close this tab.")
 		default:
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			_, _ = w.Write([]byte(`<!DOCTYPE html><html><head><title>Plivo CLI</title></head>` +
-				`<body style="font-family: -apple-system, system-ui, sans-serif; padding: 2rem; max-width: 480px; margin: 4rem auto; line-height: 1.5;">` +
-				`<h1 style="font-size: 1.5rem;">✓ Authenticated</h1>` +
-				`<p>You can close this tab. The CLI now has your credentials.</p>` +
-				`</body></html>`))
+			writePage(w, "✓ Authenticated", "You can close this tab. The CLI now has your credentials.")
 		}
 		finish(code, err)
 	})
@@ -368,8 +361,9 @@ func awaitCallback(ctx context.Context, listener net.Listener, expectedState str
 
 	// A blocked terminal read can't be interrupted; if the browser wins, the
 	// reader just exits with the process.
-	if stdinTTY {
-		go readPastedCallback(ctx, stdin, out, listener.Addr().String(), expectedState, finish)
+	if paste != nil {
+		fmt.Fprintln(out, "If the browser can't reach this terminal (SSH, WSL, containers), copy the full URL from its address bar after approving and paste it here.")
+		go readPastedCallback(ctx, paste, out, listener.Addr().String(), expectedState, finish)
 	}
 
 	select {
@@ -377,11 +371,19 @@ func awaitCallback(ctx context.Context, listener net.Listener, expectedState str
 		return r.code, r.err
 	case <-ctx.Done():
 		msg := "timed out waiting for browser callback (5m); finish signing in and approving access in the browser, then run `plivo login` again"
-		if stdinTTY {
+		if paste != nil {
 			msg += ". If the browser can't connect back after you approve, paste the full URL from its address bar into the terminal"
 		}
 		return "", errors.New(msg)
 	}
+}
+
+// writePage sends the small status page the browser tab lands on.
+func writePage(w http.ResponseWriter, heading, msg string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = fmt.Fprintf(w, `<!DOCTYPE html><html><head><title>Plivo CLI</title></head>`+
+		`<body style="font-family: -apple-system, system-ui, sans-serif; padding: 2rem; max-width: 480px; margin: 4rem auto; line-height: 1.5;">`+
+		`<h1 style="font-size: 1.5rem;">%s</h1><p>%s</p></body></html>`, heading, msg)
 }
 
 // openBrowser opens the URL in the user's default browser. Platform-

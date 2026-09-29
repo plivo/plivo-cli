@@ -27,7 +27,7 @@ func callbackResult(t *testing.T, query string) (string, error) {
 	}
 	done := make(chan out, 1)
 	go func() {
-		c, e := awaitCallback(ctx, ln, "expected-state", nil, false, io.Discard)
+		c, e := awaitCallback(ctx, ln, "expected-state", nil, io.Discard)
 		done <- out{c, e}
 	}()
 
