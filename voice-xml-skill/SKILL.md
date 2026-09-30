@@ -182,7 +182,7 @@ The nine shapes that produce 8011 and 8012, each with the fix, are in "What brea
 Do not guess, and do not fill the gap from general knowledge of other platforms. In order:
 
 1. **Read the current documentation.** Every page on <https://www.plivo.com/docs> is available as Markdown by adding `.md` to its URL, and <https://www.plivo.com/docs/llms.txt> indexes many pages but not all (it has no CLI pages, for one). Start at <https://www.plivo.com/docs/voice/xml/overview> and the element page for whatever you are writing. From a terminal `plivo docs search <keywords>` searches the full text of every page, `plivo docs list` prints the index and `plivo docs show <path-or-title>` prints one page; those three need no credentials and are not rate limited, so reach for them before the assistant.
-2. **Ask Plivo's assistant from the terminal**: `plivo ask "<your question>"`. It reads the documentation and can see the account, so it answers things this file cannot: what a specific call did, whether a compliance application is accepted, what a destination costs. It is limited to five requests per ten minutes per account, so save it for the question you cannot answer another way. `plivo voice calls diagnose <call_uuid>` is the same assistant pointed at one call, and it shares that limit, so do not loop either.
+2. **Ask Plivo's assistant from the terminal**: `plivo ask "<your question>"`. It reads the documentation and can see the account, so it answers things this file cannot: what a specific call did, whether a compliance application is accepted, what a destination costs. It has a small per-account rate limit: on `RATE_LIMITED`, wait the time the error message gives. Save it for the question you cannot answer another way. `plivo voice calls diagnose <call_uuid>` is the same assistant pointed at one call, and it shares that limit, so do not loop either.
 3. **If you have no CLI access**, tell the person you are working with to ask the same question to the assistant in the Plivo console.
 
 Treat the answer as evidence, not as final. If it contradicts the documentation, say that it does and prefer the documentation for published behaviour. If it gives a number the documentation does not publish, repeat it as something the assistant said, not as a documented fact.
@@ -573,7 +573,7 @@ Sends an SMS from inside a call flow. The message text goes in the element body.
 | Attribute | Type | Notes |
 |---|---|---|
 | `src` | string | sending number, must be one you own |
-| `dst` | string | destination. Several numbers are separated by `<`, which must be written `&lt;` inside the attribute: `dst="12025551111&lt;12025552222"`. A raw `<` makes the document invalid XML (8011 in an answer document, 8012 in an action document) |
+| `dst` | string | destination. Several numbers are separated by `<`, which must be written `&lt;` inside the attribute: `dst="12025551111&lt;12025552222"`. A raw `<` makes the document invalid XML (8011 in an answer document, 8012 in an action document when `redirect="true"`) |
 | `type` | string | `sms` |
 | `callbackUrl` | string | receives delivery reports |
 | `callbackMethod` | string | `GET` or `POST`, default `POST` |
@@ -906,7 +906,7 @@ If the call is going to a WebSocket voice bot, the bot workflow, readiness and d
 - **A keypad menu in front of the bot.** `<GetDigits>` before `<Stream>` works like any other menu. Remember that `redirect` defaults to `true`, so a caller who presses a key gets the action document instead of the `<Stream>` you wrote below it. A caller who presses nothing still falls through to it after `retries` attempts. Either set `redirect="false"`, or repeat the `<Stream>` in the action document, and raise it as a risk rather than a broken document.
 - **Recording.** `<Record recordSession="true"/>` goes **before** `<Stream>`, for the same reason it goes before `<Dial>`: it must be running while the audio flows.
 - **Handing off to a human.** `<Dial>` with `<Number>` or `<User>`, and an `action` URL that reads `DialStatus`. Handle `busy`, `no-answer`, `timeout` and `failed`, not only `completed`.
-- **Continuing after the bot.** With `keepCallAlive="true"` on the `<Stream>`, a `<Redirect>` after it sends the call to a URL of yours when the stream ends, and a `<Hangup/>` after it ends the call then. `keepCallAlive` defaults to `false`. The XML page implies that the following element then runs without waiting for the stream, while the audio streaming guide says the call ends when streaming stops. Either way, set `keepCallAlive="true"` so that a `<Redirect>` or `<Hangup/>` after the stream runs only when the bot closes the socket (<https://www.plivo.com/docs/voice/xml/audio-streaming>).
+- **Continuing after the bot.** With `keepCallAlive="true"` on the `<Stream>`, a `<Redirect>` after it sends the call to a URL of yours when the stream ends, and a `<Hangup/>` after it ends the call then. `keepCallAlive` defaults to `false`. The XML page implies that the following element then runs without waiting for the stream, while the audio streaming guide says the call ends when streaming stops. Either way, set `keepCallAlive="true"` so that a `<Redirect>` or `<Hangup/>` after the stream runs only when the stream ends (<https://www.plivo.com/docs/voice/xml/audio-streaming>).
 - **Putting the bot in a room.** `MultiPartyCall` with `role="ai-agent"` and the `aiAgentStream*` attributes.
 
 The `<Stream>` element's own attributes (except `keepCallAlive`, above), the WebSocket protocol, and every question about whether the bot is ready for production are out of scope here. Install `plivo-audio-streaming` (`plivo skill install audio-streaming`) or read <https://www.plivo.com/docs/voice-agents/audio-streaming/xml/stream>.
@@ -996,7 +996,7 @@ How it is built. The docs page shows one worked example, for a URL that already 
 2. GET: merge Plivo's parameters into the query and sort by name. If the result is not empty, append `?name=value&name=value`.
 3. POST with parameters: if the URL has a query string, append `?`, the sorted query and a `.`; if it has none, append `?`. Then append the POST parameters sorted by name (Unix-style, case sensitive) as `namevalue` with no separator. A POST with no parameters adds only `?` and the sorted query, when the URL has one.
 4. Append `.` and the nonce from `X-Plivo-Signature-V3-Nonce`.
-5. HMAC-SHA256 with the Auth Token, Base64-encode, and compare with each comma-separated value in `X-Plivo-Signature-V3`. That header uses the Auth Token of the account or subaccount associated with the request entity (for example, the one that owns the number); `X-Plivo-Signature-Ma-V3` always uses the main account's token.
+5. HMAC-SHA256 with the Auth Token, Base64-encode, and compare in constant time with each comma-separated value in `X-Plivo-Signature-V3`. That header uses the Auth Token of the account or subaccount associated with the request entity (for example, the one that owns the number); `X-Plivo-Signature-Ma-V3` always uses the main account's token.
 
 Strings the Python SDK builds before the nonce is added (nonce `n` appended as `.n`):
 

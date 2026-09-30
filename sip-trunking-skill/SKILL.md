@@ -48,7 +48,7 @@ Read-only. Nothing here changes anything. Run in order and stop at the first blo
 5. `plivo sip uris get <fallback_uri_uuid> -o json`. A missing fallback URI is a warning, not a blocker: it is the only way Plivo re-routes when the primary is unreachable or returns an error.
 6. Outbound only: `plivo sip trunks list --direction outbound -o json`, then `plivo sip ip-acl get <ipacl_uuid> -o json` or `plivo sip credentials list -o json`. Look for: an enabled outbound trunk with a credential or a narrow IP list; no `0.0.0.0/0`, no `/0`, no `/1`. Vapi needs its two `/32` addresses. Retell will not import a number without its termination URI, even inbound only.
 7. Limits (console only): Organization settings > Account limits shows the account's concurrency limit. Every PSTN leg counts toward concurrency, inbound and outbound, across SIP Trunking and Voice API, and SIP Trunking **rejects** calls above either limit (5180 CPS, 5190 concurrency); it never queues (<https://www.plivo.com/docs/sip-trunking/concepts/account-limits>).
-8. Ask the platform-side questions in stage 3. Plivo cannot see any of them, and they cause 4090 and 4410.
+8. Ask the platform-side questions in stage 3. Plivo cannot see any of them. A missing step there usually shows up as the platform's own 404 (stage 3) or 486 (Debugging, step 3).
 9. Optional reachability probe: one SIP OPTIONS to the URI host over its transport. A timeout proves nothing, because hosted platforms may ignore OPTIONS from unknown sources; a DNS or TLS error does prove something.
 
 There is no single CLI command that runs this checklist. Run the steps by hand, in order.
@@ -73,7 +73,7 @@ There is no single CLI command that runs this checklist. Run the steps by hand, 
 
 **India.** Read the India section below. Account in the India data region (cannot be changed; not readable over the API), KYC `accepted` and linked to the number (`plivo numbers compliance requirements|create|get|link`, with documents the user supplies), caller ID a Plivo India number, both legs in India, right number series, consent, no cold calls. **4590** `domestic_anchored_terms_not_met` is the documented India media-anchoring code. KYC is a separate gate, so check it with `plivo numbers compliance get`; do not read 4590 as proof that KYC is missing. **Vapi cannot do India**; ElevenLabs needs its India deployment and `sip.rtc.in.residency.elevenlabs.io:5060;transport=tcp`; LiveKit needs region pinning; Retell: confirm with Retell first (<https://www.plivo.com/docs/voice-agents/sip-trunking/deploy/calling-in-india>).
 
-**US.** No KYC. Caller ID: the technical-specifications page requires a Plivo number for all outbound calls; the generic guide also allows a verified caller ID. Use a Plivo number on the same account, which also gets STIR/SHAKEN attestation A; anything else risks 4190. Geo permissions: turn off every country you do not call (console only). New accounts start at 1 CPS and move to 2 CPS as spend grows (US accounts created before 1 October 2026 have custom limits), each trunk defaults to 1 CPS, and calls above the limit are **rejected** with 5180, not queued; pace the dialer (<https://www.plivo.com/docs/voice-agents/sip-trunking/deploy/us-call-quality-and-cps>). Detail: "Security and limits" below.
+**US.** No KYC. Caller ID: the technical-specifications page requires a Plivo number for all outbound calls; the generic guide also allows a verified caller ID. Use a Plivo number on the same account, which also gets STIR/SHAKEN attestation A; anything else risks 4190. Geo permissions: turn off every country you do not call (console only). New accounts start at 1 CPS and move to 2 CPS as spend grows (US accounts created before 1 October 2026 have custom limits), each outbound trunk defaults to 1 CPS, and calls above the limit are **rejected** with 5180, not queued; pace the dialer (<https://www.plivo.com/docs/voice-agents/sip-trunking/deploy/us-call-quality-and-cps>). Detail: "Security and limits" below.
 
 ## Stage 1: Account and number
 
@@ -139,7 +139,7 @@ Fix before go-live:
 
 ## Stage 3: Inbound, platform side (their dashboard)
 
-Plivo cannot see this, so ask and confirm (<https://www.plivo.com/docs/voice-agents/sip-trunking/getting-started/your-first-agent-call>): LiveKit inbound trunk listing `+<number>` **and** a dispatch rule (India: region pinning on); ElevenLabs number imported on a SIP trunk with an agent; Retell number imported (needs Stage 4 first) and an inbound agent bound; Vapi number registered with an assistant; self-hosted: Plivo signalling allowed on 5060/5061 and media UDP 10000 to 30000, and **no digest challenge** to Plivo unless the same username and password are on the Plivo URI (`authentication_needed`), or the handshake cannot complete. Do not promise 4150 for it: the published row for that code is a carrier requiring proxy auth. When this step is missing the platform answers **404** (ElevenLabs `Does not match any SIP Trunks`; other platforms use their own phrase). The published 4090 row is `destination_not_found`, "No route to destination", with a carrier framing and no direction, so read an inbound 4090 alongside the SIP flow rather than as proof of a missing import. Nothing in the docs ranks inbound failure causes, so treat "most common" as this file's experience, not a published fact.
+Plivo cannot see this, so ask and confirm (<https://www.plivo.com/docs/voice-agents/sip-trunking/getting-started/your-first-agent-call>): LiveKit inbound trunk listing `+<number>` **and** a dispatch rule (India: region pinning on); ElevenLabs number imported on a SIP trunk with an agent; Retell number imported (needs Stage 4 first) and an inbound agent bound; Vapi number registered with an assistant; xAI number added to the agent (Phone numbers, Add number, Direct SIP) with all 14 Plivo signaling ranges under Allowed addresses, or SIP digest credentials set on both sides; self-hosted: Plivo signalling allowed on 5060/5061 and media UDP 10000 to 30000, and **no digest challenge** to Plivo unless the same username and password are on the Plivo URI (`authentication_needed`), or the handshake cannot complete. Do not promise 4150 for it: the published row for that code is a carrier requiring proxy auth. When this step is missing the platform answers **404** (ElevenLabs `Does not match any SIP Trunks`; other platforms use their own phrase). The published 4090 row is `destination_not_found`, "No route to destination", with a carrier framing and no direction, so read an inbound 4090 alongside the SIP flow rather than as proof of a missing import. Nothing in the docs ranks inbound failure causes, so treat "most common" as this file's experience, not a published fact.
 
 ## Stage 4: Outbound
 
@@ -153,7 +153,7 @@ plivo sip trunks create --name <name> --direction outbound --credential <credent
 plivo sip trunks create --name <name> --direction outbound --credential <credential_uuid>             # after approval; prints trunk_domain = <trunk_id>.zt.plivo.com
 ```
 
-Put `trunk_domain` (no `sip:`, no spaces), the credential **username** (not its name) and password into the platform's outbound trunk or number import. Caller ID = a Plivo number on this account. `--secure` means TLS signaling and SRTP media, so the platform must use TLS too (Retell "Outbound Transport = TLS", LiveKit secure trunking). xAI needs no outbound trunk.
+Put `trunk_domain` (no `sip:`, no spaces), the credential **username** (not its name) and password into the platform's outbound trunk or number import. Caller ID = a Plivo number on this account. `--secure` means TLS signaling and SRTP media, so the platform must use TLS too (Retell "Outbound Transport = TLS", LiveKit secure trunking, TLS transport in ElevenLabs' outbound settings). xAI needs no outbound trunk.
 
 **Check:** re-run the readiness checklist, including the outbound steps, with no blocking answer, and the first call's SIP flow ends in 100/183. On a trunk that authenticates by credentials you will normally see INVITE, 407, then a second INVITE carrying them: that is the digest handshake (<https://www.plivo.com/docs/sip-trunking/interconnection-guides/asterisk>). A trunk that authenticates by IP ACL has no challenge and no 407. Wrong credentials, or a platform source IP missing from the IP list, end as 4180 `call_rejected_unauthorized`. Do not whitelist `0.0.0.0/0` to "make it work".
 
@@ -169,7 +169,7 @@ plivo api GET /Zentrunk/Call/<call_uuid>/Insights/ -o json               # rtt, 
 
 `sip calls list` strips a leading `+` from `--from-number` and `--to-number`; a raw filter with `+` matches nothing. `plivo voice calls list|get` read the Voice API, not SIP trunking call records.
 
-**Check:** `hangup_cause_code` 3000 or 3010 with a non-zero duration in both directions. The published table gives 3010 as `normal_hangup` and nothing more, so a 3010 with 0 s duration is a call that ended at once without saying who ended it: read the platform logs and the SIP flow before concluding anything. Anything else: **Debugging** below.
+**Check:** `hangup_cause_code` 3000 or 3010 with a non-zero duration in both directions. The published table gives 3010 as `normal_hangup`, a normal hangup from the user, and nothing more, so a 3010 with 0 s duration is a call that ended at once without saying who ended it: read the platform logs and the SIP flow before concluding anything. Anything else: **Debugging** below.
 
 ## Stage 6: Transfer to a human with SIP REFER (only if you need it)
 
@@ -190,7 +190,7 @@ The platform sends `REFER` with `Refer-To: <sip:+14155551234@<trunk_id>.zt.plivo
 
 1. `plivo sip calls list --limit 20 -o json` (filters: `--direction`, `--hangup-cause-code`, `--hangup-source customer|carrier|zentrunk`, `--from-number`, `--to-number`, `--since`, `--until`); then `plivo sip calls get <uuid> -o json` and the Insights call above.
 2. Map the code with the table below, or with the full table in "Zentrunk hangup codes" at the end. `hangup_source`: `customer` = your platform, `carrier` = network side, `zentrunk` = Plivo.
-3. Console Zentrunk, Logs, the call: **Call Stats** (trunk, transport, secure) and **SIP logs** (message flow, final response, PCAP). Trust the hangup code for Plivo's conclusion and the SIP flow for what the platform said; they can disagree. Read it in three lines: inbound with no INVITE towards your URI = Plivo refused (4590, 4030 or 4310); INVITE repeated with no reply = 4170; the platform's own 4xx is the answer (404 = not imported, 401/407 = your server challenged Plivo, 486 = no dispatch rule or agent, 503 = platform down). Outbound on a credential-authenticated trunk: one 407 then a second INVITE is normal; a flow that **ends** at 407, or a 4180, means the credentials or the IP list are wrong.
+3. Console Zentrunk, Logs, the call: **Call Stats** (trunk, transport, secure) and **SIP logs** (message flow, final response, PCAP). Trust the hangup code for Plivo's conclusion and the SIP flow for what the platform said; they can disagree. Read it in three lines (observed readings, not a published mapping): inbound with no INVITE towards your URI usually means Plivo refused (4590, 4030 or 4310); INVITE repeated with no reply usually ends as 4170; the platform's own 4xx is the answer (404 usually means not imported, 401/407 means your server challenged Plivo, 486 usually means no dispatch rule or agent, 503 means the platform is down). Outbound on a credential-authenticated trunk: one 407 then a second INVITE is normal; a flow that **ends** at 407, or a 4180, means the credentials or the IP list are wrong.
 4. `plivo sip calls diagnose <uuid>` is the trunk-call diagnose command (`plivo voice calls diagnose` refuses trunk UUIDs). The CLI's own release notes say its server side is not live yet, so it may report that it cannot retrieve the call; use `plivo sip calls get` in the meantime. It shares a rate limit with `plivo ask`; do not loop it. Then `plivo ask "..."` or Plivo support with the UUID and the PCAP.
 
 The public hangup-code table publishes a code, a name, a cause and a fix. It does not publish the SIP response that goes with each code. The **SIP seen** column below is therefore observational, gathered from SIP flows, not a Plivo contract: use it to recognise a flow you are already looking at, never as the reason for a conclusion. Where a row names a code as documented it is from the public table.
@@ -210,10 +210,12 @@ The public hangup-code table publishes a code, a name, a cause and a fix. It doe
 | out 4180 call_rejected_unauthorized | 403 from Plivo | platform config | wrong credential username or password, or a platform source IP missing from the IP list |
 | out 4000 bad_request | 400 | platform config per the docs | inspect the packet, do not retry without fixing. Commonly seen, not documented: the 400 arrives after 183 ringing; check the flow before assuming a syntax error, and collect the UUID for Plivo support |
 | out 4190 unknown_caller_id | 403 from Plivo | platform config | caller ID = Plivo number on this account |
-| out 4560 / 4570 barred_country / barred_number (docs also list 4650) | 403 Barred | customer Plivo config (geo permissions) | console Zentrunk, Geo Permissions |
+| out 4560 barred_country (docs also list 4650) | 403 Barred | customer Plivo config (geo permissions) | console Zentrunk, Geo Permissions |
+| out 4570 barred_number | 403 Barred | Plivo policy | drop the number, or Plivo support if it is legitimate |
 | out 4100 prefix_not_supported | 404 Prefix Not Supported | platform config (dial list) | E.164 with country code |
 | out 4410 / 4340 / 4550 | 486 / 480 / platform CANCEL | carrier or platform timeout | normal outcomes; very short 4550 cancels count as abandoned calls (US) |
-| out 4090 / 4160 / 5000 / 5300 / 5350 / 6000 / 6040 / 4630 / 4370 | 404 / 503 / 502 / 488 / 482 | carrier/destination | retry; Plivo support if concentrated on one destination |
+| out 4090 / 4160 / 5000 / 5300 / 5350 / 6000 / 6040 | 404 / 503 / 502 | carrier/destination | retry; Plivo support if concentrated on one destination |
+| out 4630 / 4370 | 488 / 482 | carrier/destination | 4630: offer PCMU/PCMA and fix the secure flag; 4370: remove the routing loop. See the full table |
 | out 5180 cps_limit_reached | 503 from Plivo | platform config (pacing) | pace the dialer; raise CPS with Request Enterprise or Buddy in the console |
 | any 5190 concurrent_call_limit_exceeded | rejected at once | Plivo policy | reduce concurrency or raise the limit (Organization settings > Account limits) |
 | any 5220 service_interrupted_by_customer | 200 then platform 4xx (or no answer to a mid-call request) | platform config | platform logs at the drop time; re-INVITE and UPDATE handling |
@@ -258,10 +260,11 @@ Treat every item as blocking until proved. The items below are what a SIP trunk 
    Review for 022 and 080 landline numbers is automated and usually takes a few minutes. `submitted` is not `accepted`. If a create is rejected, read `rejection_reason`, fix the document or the field and run `compliance update`, which replaces every document, so re-attach them all. A compliance application is a regulatory filing: submit it only when the user has explicitly said go.
 3. The caller ID is a Plivo-rented India number. Using one on the same account is this file's recommendation, not a rule the India page states.
 4. Plivo and the AI platform terminate SIP and media in India; violation fails with **4590**. The Voice API name for the same rule is `violates_media_anchoring`; SIP trunking uses 4590. (<https://www.plivo.com/docs/voice-agents/sip-trunking/deploy/calling-in-india>)
+
 Items 5, 6 and 8 come from the Voice API India pages, not from any SIP trunking page: the SIP trunking India checklist covers account region, a KYC'd number, platform region, the trunk URI and a test call. They are number-level regulatory rules, so they still apply to a number on a trunk, but say where they come from.
 
 5. Number series: landline (022, 080) for service and transactional calls only; 140 for promotional calls only; 160 for BFSI service and transactional calls only. Using the wrong series is itself a violation, and complaints from such calls count as UCC even with consent. 140 and 160 numbers are not provisioned through the compliance API: they go through Tata DLT registration, a signed declaration, a NOC per number and voice header and template approval, which takes several business days and runs through Plivo support. There is no CLI for that path.
-6. Explicit digital consent for every commercial call; cold calling is prohibited; complaints are treated as UCC. Complaints arrive on the console UCC dashboard and through the UCC API (`plivo api GET /Ucc/` and `plivo api GET /Ucc/<reference_id>/` to read them). Submitting opt-in proof takes a `multipart/form-data` upload with a `file` part (<https://www.plivo.com/docs/numbers/ucc>), and the CLI has no form-upload option, so upload proof on the console UCC dashboard. Opt-in proof is due within a few business days of a complaint, unresolved complaints block the compliance application, and repeated complaints suspend it. Remove a complainant from the list at once; calling them again is itself a violation. Read <https://www.plivo.com/docs/voice/concepts/ucc-management> for the current timers rather than quoting one from memory.
+6. Explicit digital consent for every commercial call; cold calling is prohibited; complaints are treated as UCC. Complaints arrive on the console UCC dashboard and through the UCC API (`plivo api GET /Ucc/` and `plivo api GET /Ucc/<reference_id>/` to read them). Submitting opt-in proof takes a `multipart/form-data` upload with a `file` part (<https://www.plivo.com/docs/numbers/ucc>). No CLI command builds that multipart upload, so upload proof on the console UCC dashboard. Opt-in proof is due within a few business days of a complaint, unresolved complaints block the compliance application, and repeated complaints suspend it. Remove a complainant from the list at once; calling them again is itself a violation. Read <https://www.plivo.com/docs/voice/concepts/ucc-management> for the current timers rather than quoting one from memory.
 7. Platform support: LiveKit via region pinning; ElevenLabs via an India deployment and `sip.rtc.in.residency.elevenlabs.io:5060;transport=tcp`; **Vapi not supported**; Retell: confirm with Retell, Plivo's docs do not verify it.
 8. Inbound to India: India to India. Outbound: Indian number to an Indian destination.
 
@@ -280,18 +283,18 @@ Docs: <https://www.plivo.com/docs/sip-trunking/concepts/geo-permissions>, <https
 
 - Console only: Zentrunk, Geo Permissions. All countries allowed by default; deselect the ones you never call; changes apply immediately. No API endpoint is documented.
 - High Risk Permissions toggle (on by default) blocks premium and high-risk prefix groups.
-- A blocked destination fails with SIP `403 Barred Country`; the geo-permissions page says code **4650**, the hangup table lists **4560 `barred_country`** and 4650. 4570 `barred_number` is the per-number block.
+- A blocked destination fails with SIP `403 Barred Country`; the geo-permissions page says code **4650**, the hangup table lists **4560 `barred_country`** and 4650. 4570 `barred_number` is a Plivo block on one number (Plivo policy; contact support), not a geo-permissions setting.
 - For an agent that calls one country, turn every other country off before go-live. A leaked credential then costs one country's rates.
 
 ### Caller ID and STIR/SHAKEN (US and Canada)
 
-- The technical-specifications page requires a Plivo number as caller ID for all outbound calls; the generic guide also allows a verified caller ID. Use a Plivo number rented on the same account: it is always accepted and is signed A / Verified. Otherwise expect **4190 `unknown_caller_id`**.
+- The technical-specifications page requires a Plivo number as caller ID for all outbound calls; the generic guide also allows a verified caller ID. Use a Plivo number rented on the same account: it is always accepted and is signed A / Verified. Anything else risks **4190 `unknown_caller_id`**.
 - STIR/SHAKEN is automatic. A call with a Plivo DID from the same account is signed A / Verified; anything else is B or C / Not Verified; non-US destinations show Not Applicable.
 - Call record fields: `stir_verification`, `attestation_indicator` on `plivo sip calls get <uuid> -o json`; filter with `plivo sip calls list --stir-verification "Not Verified"`.
 
 ### CPS and concurrency
 
-- New accounts start at 1 CPS and move to 2 CPS as spend grows; each trunk defaults to 1 CPS, allocated from the account pool. Both levels are enforced.
+- US data region: new accounts start at 1 CPS and move to 2 CPS as spend grows. India Professional accounts start at 2 CPS. Each outbound trunk defaults to 1 CPS, allocated from the account pool; inbound trunks have no CPS limit. Both levels are enforced.
 - Concurrency has tiers by plan (US: Free Tier 2, Professional 5 to 25, Enterprise 50; India Professional starts at 50). US accounts created before 1 October 2026 have custom limits instead. Every PSTN leg counts, inbound and outbound, across SIP Trunking and Voice API; REFER legs count too.
 - SIP Trunking **rejects** every call above a limit, with 5180 (CPS) or 5190 (concurrency). It never queues. Pace the dialer.
 - See your concurrency limit under Organization settings > Account limits. Raise limits with Request Enterprise there, or ask Buddy in the console.
@@ -299,9 +302,9 @@ Docs: <https://www.plivo.com/docs/sip-trunking/concepts/geo-permissions>, <https
 
 ### Secure trunking (TLS plus SRTP)
 
-- Secure Trunking is documented for outbound trunks: `--secure` means TLS signaling and SRTP media for that trunk. Mirror it on the platform's outbound side: LiveKit secure trunking, Retell Outbound Transport = TLS.
+- Secure Trunking is documented for outbound trunks: `--secure` means TLS signaling and SRTP media for that trunk. Mirror it on the platform's outbound side: LiveKit secure trunking, Retell Outbound Transport = TLS, TLS transport in ElevenLabs' outbound settings.
 - Inbound: `;transport=tls` in the URI, with the port the platform's guide writes. Outbound: the platform dials `<trunk_id>.zt.plivo.com` over TLS.
-- Mismatch: **4110 `secure_trunking_disabled`** is documented for TLS or SRTP used against a trunk without Secure Trunking. The reverse mismatch has no documented outcome; fix it anyway.
+- Mismatch: **4110 `secure_trunking_disabled`** is documented for TLS or SRTP used against a trunk without Secure Trunking. The reverse mismatch, a secure trunk with a platform on TCP, is documented in the Retell guide: "Calls drop or have no audio".
 
 ### IP lists and credentials
 
@@ -312,7 +315,7 @@ Docs: <https://www.plivo.com/docs/sip-trunking/concepts/geo-permissions>, <https
 
 ### Not available over the API (console or support only)
 
-Geo permissions, account limits, premium-number unblocking, the SIP flow and PCAP (console Zentrunk, Logs), the account data region. UCC proof upload is in the API as a multipart upload, but the CLI has no form-upload option, so use the console dashboard.
+Geo permissions, account limits, premium-number unblocking, the SIP flow and PCAP (console Zentrunk, Logs), the account data region. UCC proof upload is in the API as a multipart upload, but no CLI command builds it, so use the console dashboard.
 
 ## Platforms: what goes in the Plivo URI, how the platform authenticates, what to do on its side
 
@@ -321,7 +324,7 @@ Anything not in Plivo's docs is marked **not in docs**.
 | Platform | Inbound URI (create with `plivo sip uris create`) | India | Outbound auth | `secure` | Platform-side step, inbound | Platform-side step, outbound |
 |---|---|---|---|---|---|---|
 | **LiveKit Cloud** | `<livekit_sip_host>;transport=tcp` (your project's SIP endpoint). `;transport=tls` for secure trunking | Enable region pinning on the project, then copy the endpoint LiveKit shows (a dedicated India URI or the standard endpoint with the India region enabled) | Credentials. The docs' API example sets `"secure": true`; then enable secure trunking in LiveKit too | recommended | LiveKit **inbound trunk** listing the Plivo number and a **dispatch rule** | LiveKit outbound trunk with address `<trunk_id>.zt.plivo.com`, the credential username and password |
-| **LiveKit self-hosted** | `<your-sip-host>[:5060];transport=tcp` or `:5061;transport=tls` | Your servers must be in India | Credentials or an IP list of your egress IPs | both sides must agree | Allow Plivo signalling IPs; if your server challenges Plivo, set the same username and password on the Plivo URI (`authentication_needed`) | same as Cloud |
+| **LiveKit self-hosted** (not in docs) | `<your-sip-host>[:5060];transport=tcp` or `:5061;transport=tls` | Your servers must be in India | Credentials or an IP list of your egress IPs | both sides must agree | Allow Plivo signalling IPs; if your server challenges Plivo, set the same username and password on the Plivo URI (`authentication_needed`) | same as Cloud |
 | **ElevenLabs** | `sip.rtc.elevenlabs.io:5060;transport=tcp` or `sip.rtc.elevenlabs.io:5061;transport=tls` | `sip.rtc.in.residency.elevenlabs.io:5060;transport=tcp` after ElevenLabs sets up an India deployment | Credentials; secure trunking recommended | recommended | Import the Plivo number on a SIP trunk and link an agent. A `404 Does not match any SIP Trunks` means this step is missing | Termination domain `<trunk_id>.zt.plivo.com` plus the credentials in the number's outbound settings |
 | **Retell** | `sip.retellai.com;transport=tcp` (or `;transport=tls`, TLS 1.2+) | Plivo's docs do not verify an India endpoint; confirm with Retell first | Outbound trunk **required**: Retell will not import a number without its termination URI, even inbound only. Create the credential and enter its username and password in Retell's import | off by default; if on, set Outbound Transport = TLS in Retell | Import the number (Connect via SIP trunking) with termination URI `<trunk_id>.zt.plivo.com` (no `sip:`), username, password, transport; bind an inbound agent | Bind an outbound agent. Retell cannot edit an imported number: delete and re-import |
 | **Vapi** | `sip.vapi.ai;transport=udp` | **Not supported** | IP list `44.229.228.186/32`, `44.238.177.138/32` | no | Register the number in Vapi (BYO SIP trunk) and assign an assistant | Vapi dials `<trunk_id>.zt.plivo.com` from the two IPs |
@@ -340,7 +343,7 @@ For those, say so plainly, then follow the "Other or self-hosted" row. Get the S
 
 - "The transport parameter must match what your platform expects. A mismatch is the most common reason an inbound integration fails silently." (<https://www.plivo.com/docs/voice-agents/sip-trunking/integration-guides/other-platforms>)
 - LiveKit, ElevenLabs, Retell: TCP by default, TLS for secure trunking. Vapi: UDP. Plivo does not document the default when `;transport=` is missing, so always set it.
-- LiveKit commonly answers over UDP when the parameter is missing, so treat that as a warning rather than a blocker; write what the docs say for new setups. A missing transport parameter is a common cause of inbound no-reply failures (4170).
+- LiveKit commonly answers over UDP when the parameter is missing, so treat that as a warning rather than a blocker; write what the docs say for new setups. A missing transport parameter is a common cause of inbound calls that get no reply.
 - The SIP trunking API page shows `sip.livekit.cloud:5060` and `sip.vapi.ai:5060` without a transport and Vapi with `authentication_needed: true`; the integration guides disagree and are what this skill follows.
 
 ### Outbound authentication and the digest handshake
@@ -374,13 +377,13 @@ printf '%s' "$SIP_PASSWORD" | plivo sip credentials create --name livekit-out --
 plivo sip trunks create --name livekit-outbound --direction outbound --credential <credential_uuid> --secure
 ```
 
-**ElevenLabs** (India: `sip.rtc.in.residency.elevenlabs.io:5060;transport=tcp`)
+**ElevenLabs** (India: `sip.rtc.in.residency.elevenlabs.io:5060;transport=tcp`; set `--secure` only when ElevenLabs' outbound settings use TLS: Plivo's guide recommends Secure Trunking but names no ElevenLabs-side step, so check ElevenLabs' own Plivo guide)
 
 ```bash
 plivo sip uris create --name elevenlabs-primary --uri "sip.rtc.elevenlabs.io:5060;transport=tcp"   # or "sip.rtc.elevenlabs.io:5061;transport=tls"
 plivo sip trunks create --name elevenlabs-inbound --direction inbound --uri <uri_uuid>
 printf '%s' "$SIP_PASSWORD" | plivo sip credentials create --name elevenlabs-out --username <username> --password-stdin
-plivo sip trunks create --name elevenlabs-outbound --direction outbound --credential <credential_uuid> --secure
+plivo sip trunks create --name elevenlabs-outbound --direction outbound --credential <credential_uuid>   # add --secure with TLS on the ElevenLabs side
 ```
 
 **Retell** (needs the outbound trunk even for inbound only; set `--secure` only with Outbound Transport = TLS in Retell)
@@ -624,6 +627,8 @@ A failed REFER leaves the agent leg up, so it never shows as a hangup code.
 
 ### Name differences between the docs table and call records (quote the one you mean)
 
+The call-record names are observed on call records, not published.
+
 | Code | Docs | Call record |
 |---|---|---|
 | 4030 | `insufficient_plivo_credits` | `insufficient_credits` |
@@ -639,12 +644,12 @@ A code that is not in the public table still appears in `hangup_cause_name`. Do 
 Do not guess, and do not fill the gap from general knowledge of other platforms. In order:
 
 1. **Read the current documentation.** Every page on <https://www.plivo.com/docs> is available as Markdown by adding `.md` to its URL, and <https://www.plivo.com/docs/llms.txt> indexes many pages but not all (it has no CLI pages, for one). Start at <https://www.plivo.com/docs/sip-trunking/api/overview>, <https://www.plivo.com/docs/voice-agents/sip-trunking/integration-guides/other-platforms> and <https://www.plivo.com/docs/sip-trunking/troubleshooting/zentrunk-hangup-codes>. From a terminal `plivo docs search <keywords>` searches the full text of every page, `plivo docs list` prints the index and `plivo docs show <path-or-title>` prints one page; those three need no credentials and are not rate limited, so reach for them before the assistant.
-2. **Ask Plivo's assistant from the terminal**: `plivo ask "<your question>"`. It reads the documentation and can see the account, so it answers things this file cannot: what a specific call did, whether a compliance application is accepted, what a destination costs. It is limited to five requests per ten minutes per account, so save it for the question you cannot answer another way. `plivo sip calls diagnose <call_uuid>` is the same assistant pointed at one trunk call (`plivo voice calls diagnose` refuses trunk calls). Its server side is not live yet, so read the record with `plivo sip calls get`, and do not loop either command: they share the rate limit with `plivo ask`.
+2. **Ask Plivo's assistant from the terminal**: `plivo ask "<your question>"`. It reads the documentation and can see the account, so it answers things this file cannot: what a specific call did, whether a compliance application is accepted, what a destination costs. It has a small per-account rate limit: on `RATE_LIMITED`, wait the time the error message gives. Save it for the question you cannot answer another way. `plivo sip calls diagnose <call_uuid>` is the same assistant pointed at one trunk call (`plivo voice calls diagnose` refuses trunk calls). Its server side is not live yet, so read the record with `plivo sip calls get`, and do not loop either command: they share the rate limit with `plivo ask`.
 3. **If you have no CLI access**, tell the person you are working with to ask the same question to the assistant in the Plivo console.
 
 Treat the answer as evidence, not as final. If it contradicts the documentation, say that it does and prefer the documentation for published behaviour. If it gives a number the documentation does not publish, repeat it as something the assistant said, not as a documented fact.
 
-For account state read it yourself with `plivo sip <group> get <id> -o json` and `plivo numbers get`, and for one specific call read the console SIP logs. For CLI behaviour `plivo <command> --help` outranks this file: if the two disagree, the CLI is right and this file needs updating, and you should say so. Rules marked here as observed rather than documented are safe checks, not Plivo commitments. Never invent flags, API fields, hangup codes or platform IPs. Where Plivo's pages disagree with each other (4560 vs 4650, `user_cancelled` vs `customer_cancelled`, RTP port range, caller ID rules, the CIDR list (14 ranges on the SIP trunking page, 9 on the technical-specifications page), API examples without `;transport=`), this file names both and which one it follows.
+For account state read it yourself with `plivo sip <group> get <id> -o json` and `plivo numbers get`, and for one specific call read the console SIP logs. For which CLI commands and flags exist, `plivo <command> --help` outranks this file: if the two disagree, the CLI is right and this file needs updating, and you should say so. Where this file says a command behaves differently from its help text, it describes tested behavior: follow this file. Rules marked here as observed rather than documented are safe checks, not Plivo commitments. Never invent flags, API fields, hangup codes or platform IPs. Where Plivo's pages disagree with each other (4560 vs 4650, `user_cancelled` vs `customer_cancelled`, RTP port range, caller ID rules, the CIDR list (14 ranges on the SIP trunking page, 8 on the technical-specifications page), API examples without `;transport=`), this file names both and which one it follows.
 
 ## CANNOT
 

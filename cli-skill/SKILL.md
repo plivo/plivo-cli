@@ -37,7 +37,7 @@ Single Go binary on PATH (installed as `plivo`). Prefer the CLI over curl — th
 ## When to invoke
 
 - Any Plivo REST op (numbers, messages, calls, applications, verify, lookup).
-- Endpoints the CLI doesn't wrap yet → `plivo api <method> <path>` (typed errors, profile resolution, dry-run — strictly better than curl).
+- Endpoints the CLI doesn't wrap yet → `plivo api <method> <path>` (the same error envelope, profile resolution, dry-run — strictly better than curl).
 - Voice streaming developer-loop (`voice streams test`, `voice streams forward`).
 - Login + credential management.
 - About to write a curl against `api.plivo.com` → stop, check `plivo --help` / `plivo api` first.
@@ -102,6 +102,7 @@ This skill ships inside each plivo-cli release. After `plivo upgrade`, run `pliv
 - `[--flag]` = optional flag.
 - `--flag <value>` = flag that takes a value.
 - `(spend)` = costs money; refuses without `--yes` (exit 5, `code: DESTRUCTIVE_REFUSED`).
+- `(destructive)` = refuses without `--yes` the same way, and refuses `--dry-run` alone too: preview it with `--yes --dry-run`.
 
 ## Universal flags (work on every command — persistent/global)
 
@@ -148,7 +149,7 @@ verify      sessions (create | get | list | validate)
 voice       calls | conferences | endpoints | multiparty | recordings | streams
 ```
 
-Many groups have short aliases (e.g. `account application`/`app`, `voice call`, `voice conf`, `voice mpc`, `messaging sms powerpacks`/`pp`). `plivo <cmd> --help` is always the source of truth.
+Many groups have short aliases (e.g. `account application`/`app`, `voice call`, `voice conf`, `voice mpc`, `messaging sms powerpacks`/`pp`). `plivo <cmd> --help` is the source of truth for which commands and flags exist.
 
 ## Authentication
 
@@ -199,13 +200,13 @@ Delete a profile + best-effort remove its token from the keychain. With no arg �
 - **Spend verbs require `--yes`** or refuse with exit 5 + `code: DESTRUCTIVE_REFUSED`. Verified list (commands that gate on `--yes`): `messaging {sms,mms,whatsapp} send`, `voice calls make`, `voice calls hangup`, `numbers buy`, `numbers cnam`, `numbers release`, `numbers masking sessions create`/`delete`, `messaging sms 10dlc brands create`, `messaging sms 10dlc campaigns create`, `messaging sms 10dlc links delete`, `messaging sms powerpacks delete`, `voice multiparty end`, `voice multiparty participant add`/`kick`, `voice conferences hangup`, `voice conferences member kick`, `verify sessions create`, `account applications delete`, `account subaccounts delete`, `voice endpoints delete`, `voice recordings delete`, `numbers compliance delete`, `voice calls streams stop`, `messaging sms powerpacks numbers remove`, `agents delete`, `sip trunks|uris|credentials|ip-acl delete`, and mutating verbs of `plivo api` (POST/PUT/PATCH/DELETE).
   - NOTE: live-call control verbs `voice calls play`, `speak`, `record`, `dtmf`, `transfer`, `stop-*` do **NOT** require `--yes` — they act on an already-established call. `voice calls streams stop` is the exception: it does.
 - **Stable error envelope** on stderr: `{"error":{"code", "message", "hint", "retryable", "status_code", ...}}`. Switch on `code`, never message text.
-- **Verify before inventing**: `plivo <cmd> --help` is the source of truth. The CLI evolves; don't assume from memory.
+- **Verify before inventing**: `plivo <cmd> --help` is the source of truth for which commands and flags exist. The CLI evolves; don't assume from memory. Where this file says a flag behaves differently from its help text (`upgrade --dry-run`, `login --no-verify`, the `DESTRUCTIVE_REFUSED` hint, `--machine-detection none`, `plivo api` exit codes, `--stream-status-callback`), it records tested behavior: follow this file.
 - **`--dry-run`** previews the exact HTTP request without sending; destructive verbs need `--yes --dry-run` (see "If you are an AI agent"). `numbers update --trunk-id`, `sip trunks update` without `--direction`, and `voice streams forward` still make read-only GETs under it.
 - **`--explain`** narrates the action in plain English before running — only on the commands listed under "Universal flags" above; everywhere else it's `unknown flag: --explain`.
 
 ## JSON output envelopes
 
-API-backed list, get and create commands with `-o json` emit `{"data": <the upstream API response, verbatim>}` on stdout and exit 0, so `data` matches the API docs. Many other write commands (for example `numbers update`, `numbers release`, `calls hangup`, `calls transfer`, `account applications update`, `multiparty participant add`) print **nothing on stdout**, even with `-o json`: one line goes to stderr and the exit code is 0. Check the exit code and read the result back with a `get`; never retry a spend command because its stdout was empty. Other shapes: `sip trunks create` adds the read-back `trunk_domain`, and `sip` updates and deletes print a CLI-made summary object; `auth whoami` adds a sibling `meta.source`; `docs list` and `docs search` put rows at `data` with `meta.count`; `ask` and `diagnose` stream JSON lines.
+API-backed list, get and create commands with `-o json` emit `{"data": <the upstream API response, verbatim>}` on stdout and exit 0, so `data` matches the API docs. Many other write commands (for example `numbers update`, `numbers release`, `calls hangup`, `calls transfer`, `account applications update`, `multiparty participant add`) print **nothing on stdout**, even with `-o json`: one line goes to stderr and the exit code is 0. Check the exit code and read the result back with a `get`; never retry a spend command because its stdout was empty. Other shapes: `sip trunks get` nests the trunk at `data.object`; `support` puts the escalations array at `data`; `sip trunks create` adds the read-back `trunk_domain`, and `sip` updates and deletes print a CLI-made summary object; `auth whoami` adds a sibling `meta.source`; `docs list` and `docs search` put rows at `data` with `meta.count`; `ask` and `diagnose` stream JSON lines.
 
 For list commands that means the rows are nested, not at the top level:
 
@@ -213,7 +214,7 @@ For list commands that means the rows are nested, not at the top level:
 {"data": {"api_id": "...", "meta": {"limit": 20, "offset": 0, ...}, "objects": [ {...} ]}}
 ```
 
-So read `data.objects[]` for rows and `data.meta` for paging. Single-resource commands put the object straight at `data`.
+So read `data.objects[]` for rows and `data.meta` for paging. Single-resource commands put the object straight at `data`, except `sip trunks get` (above).
 
 **Changed in v0.3.0:** `data` used to be the rows array itself with paging in a sibling `"meta"`, and it only carried the subset of fields the CLI had typed. If you were written against a v0.2.x CLI, `data[0]` is now `data.objects[0]`.
 
@@ -246,7 +247,7 @@ The post-success auto-prompt is already TTY-gated so most scripted runs are fine
 Env vars:
 - `PLIVO_FEEDBACK_PROMPT=0` — silence the auto-prompt; manual `plivo feedback` still works.
 - `PLIVO_FEEDBACK_TELEMETRY=0` — disable all submission (manual becomes a no-op).
-- `PLIVO_FEEDBACK_ENDPOINT` — override the collector endpoint (when unset, the command surfaces a clear "not wired" message rather than dropping silently).
+- `PLIVO_FEEDBACK_ENDPOINT` — override the collector endpoint (when unset, it posts to Plivo's default collector).
 
 ## Generic REST escape hatch — `plivo api`
 
@@ -317,14 +318,14 @@ List rented numbers on the account.
 | Flag | Type | When |
 |---|---|---|
 | `--type <local\|tollfree\|mobile\|fixed>` | string | filter by number type |
-| `--starts-with <prefix>` | string | filter by E.164 prefix (e.g. `+1`) |
+| `--starts-with <prefix>` | string | filter by number prefix, digits without `+` (e.g. `1415`) |
 | `--alias <name>` | string | filter by alias |
 | `--services <voice\|sms\|mms\|...>` | string | filter by enabled services (comma-combine) |
 | `--subaccount <auth_id>` | string | filter by subaccount |
 | `--limit <n>` | int | page size (default 20, max 20) |
 | `--offset <n>` | int | pagination offset |
 
-### `plivo numbers get <e164>`
+### `plivo numbers get <number>`
 
 Get one rented number.
 
@@ -341,7 +342,7 @@ Search marketplace for buyable numbers.
 | `--limit <n>` | int | default 20 |
 | `--offset <n>` | int | pagination offset |
 
-### `plivo numbers buy <e164>` (spend)
+### `plivo numbers buy <number>` (spend)
 
 Rent a number from the marketplace. **Requires `--yes`**.
 
@@ -351,7 +352,7 @@ Rent a number from the marketplace. **Requires `--yes`**.
 
 (`--yes` / `--dry-run` are the universal spend flags.)
 
-### `plivo numbers update <e164>`
+### `plivo numbers update <number>`
 
 Update metadata on a rented number.
 
@@ -362,11 +363,11 @@ Update metadata on a rented number.
 | `--trunk-id <id>` | route the number to an inbound SIP trunk (refuses an outbound trunk; not with `--app-id`) |
 | `--subaccount <auth_id>` | move under a subaccount |
 
-### `plivo numbers release <e164>` (spend)
+### `plivo numbers release <number>` (destructive)
 
-Release a rented number (stops monthly billing). **Requires `--yes`**.
+Release a rented number (stops monthly billing). **Requires `--yes`**; preview with `--yes --dry-run`.
 
-### `plivo numbers cnam <e164>` (spend)
+### `plivo numbers cnam <number>` (spend)
 
 Caller-ID Name (CNAM) lookup for a US/CA number. **Requires `--yes`** (it costs money).
 
@@ -561,7 +562,7 @@ Temporarily redirect an app's `answer_url` to a local tunnel so a real call's au
 | `--tunnel <auto\|ngrok\|localhost.run>` | string | `auto` | tunnel provider |
 | `--insecure-skip-signature` | bool | false | skip Plivo's signature check on `/answer` and `/ws` |
 
-The default tunnel is localhost.run over ssh (no install, no account); ngrok is used when it is on PATH or at `~/.plivo/bin/ngrok`. It saves the app's `answer_url` and `answer_method`, starts the tunnel and a local HTTP/WS server, points the app at the tunnel, and bridges incoming call audio to `--to`. Every number on the app is redirected while it runs, so use a dedicated test app. It checks Plivo's signature at the tunnel and connects to `--to` without signature headers. Without a terminal, pass `-y`. It restores `answer_url` and `answer_method` on Ctrl-C or SIGTERM unless `--keep`.
+The default tunnel is localhost.run over ssh (no install, no account); ngrok is used when it is on PATH or at `~/.plivo/bin/ngrok`. It saves the app's `answer_url` and `answer_method`, starts the tunnel and a local HTTP/WS server, points the app at the tunnel, and bridges incoming call audio to `--to`. Every number on the app is redirected while it runs, so use a dedicated test app. It checks Plivo's signature at the tunnel and connects to `--to` without signature headers. Without a terminal, pass `-y`. Run it in the background with `-o table`: in JSON mode it prints nothing until it exits, not even the tunnel URL or its `Ready` line. It restores `answer_url` and `answer_method` on Ctrl-C or SIGTERM unless `--keep`. It does not notice a dropped tunnel and keeps the app on the dead URL: stop it and start it again. In v1.1.2 it cannot carry a live call (tested on 30 September 2026): it checks the stream signature over `wss://` while Plivo signs it over `http://`, so it refuses the stream, and its XML has no `keepCallAlive`; the call ends at once with 4010.
 
 ## Voice — conferences / multiparty / endpoints / recordings
 
@@ -585,7 +586,7 @@ Typed commands for Zentrunk objects (`plivo sip`, alias `sip-trunking`); the `pl
 
 | Group | Verbs | Notes |
 |---|---|---|
-| `sip uris` | `create`, `list`, `get`, `update`, `delete` | quote `--uri "host;transport=tcp"`; passwords only through `--password-stdin`; deleting a URI deletes the trunks that use it |
+| `sip uris` | `create`, `list`, `get`, `update`, `delete` | quote `--uri "host;transport=tcp"`; passwords only through `--password-stdin` (to preview a password change with `--dry-run`, pass `--username` too); deleting a URI deletes the trunks that use it |
 | `sip trunks` | `create`, `list`, `get`, `update`, `delete` | `create --direction inbound --uri <uuid>`, or `--direction outbound` with `--credential <uuid>` or `--ip-acl <uuid>`; create prints `trunk_domain` |
 | `sip credentials` | `create`, `list`, `get`, `update`, `delete` | `--username` plus the password on stdin (`--password-stdin`, required on every update; to preview an update with `--dry-run`, pass `--username` too) |
 | `sip ip-acl` | `create`, `list`, `get`, `update`, `delete` | `--ip` is repeatable; update replaces the whole list |
@@ -636,7 +637,7 @@ plivo lookup <e164>          # carrier + line type; USD 0.004 per request and no
 
 ### `plivo ask "<message>"`
 
-Ask Plivo's AI assistant — streams the answer via SSE. Each invocation is a single message by default. `-i` starts an interactive chat that keeps history; never use it from an agent. `ask` and `diagnose` share a limit of 5 requests per 10 minutes per account. Long flows (voice-debug can run 2-5 minutes) have no overall HTTP timeout; Ctrl-C cancels (exit 130, no auto-retry).
+Ask Plivo's AI assistant — streams the answer via SSE. Each invocation is a single message by default. `-i` starts an interactive chat that keeps history; never use it from an agent. `ask` and `diagnose` share a small per-account rate limit: on `RATE_LIMITED`, wait the time the error message gives. Long flows (voice-debug can run 2-5 minutes) have no overall HTTP timeout; Ctrl-C cancels (exit 130, no auto-retry).
 
 | Flag | When |
 |---|---|
