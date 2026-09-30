@@ -1,6 +1,6 @@
 ---
 name: plivo-first-agent
-description: "Take a new user from nothing to a first AI voice agent on a real phone call with Plivo, using the Plivo CLI and a WebSocket bot on their own machine. Use when someone wants to build, set up or try their first Plivo voice agent or voice bot, wants to call a phone number and talk to an AI, or asks to set up Plivo end to end. The run creates or reuses one application named my-first-agent, proves an echo bot and then an OpenAI bot on live calls, offers a deploy step and leaves the number in a safe state. Not for SIP platforms such as LiveKit, ElevenLabs, Retell or Vapi (use plivo-sip-trunking), and not for numbers in India, which need KYC first (use plivo-audio-streaming)."
+description: "Take a new user from nothing to a first AI voice agent on a real phone call with Plivo, using the Plivo CLI and a WebSocket bot on their own machine. Use when someone wants to build, set up or try their first Plivo voice agent or voice bot, wants to call a phone number and talk to an AI, or asks to set up Plivo end to end. The run creates or reuses one application named my-first-agent, proves an echo bot and then an OpenAI bot on live calls, offers a deploy step and leaves the number in a safe state. Not for SIP platforms such as LiveKit, ElevenLabs, Retell or Vapi (use plivo-sip-trunking). Numbers in India need an India data-region organization with accepted KYC."
 license: Apache-2.0
 ---
 
@@ -64,7 +64,7 @@ Setup questions (task 2). Before you ask, look for a previous run: do the step 5
 | Number | Do you want to rent a new number? | Rent a new number (recommended) · Use a number I have |
 | AI keys | Which AI keys do you have for the second bot? | None yet (echo bot only) · OpenAI only · OpenAI, Deepgram and Cartesia |
 
-- **India:** stop and explain. Indian numbers need an India data-region organisation and an accepted KYC application before rent. Install `plivo skill install audio-streaming` and follow its India section first.
+- **India:** Plivo expects KYC at signup, so assume an India data-region organization with an accepted KYC application, and check it: `plivo numbers compliance list --country IN --number-type local --status accepted -o json`. If that lists no application, stop and explain that KYC comes first (`plivo skill install audio-streaming`, India section). Otherwise continue, with the India notes in steps 4 and 6.
 - **Another country (from "Other"):** the Compliance API covers India only, so it cannot tell you what another country needs. Use the search result in step 4 instead: rent only a number whose `restriction` is null. If every result has a `restriction`, stop and explain its `restriction_text` (for example, an address proof).
 - **Money:** ask about each paid step separately with your question tool, after you show its preview. There are two: renting a number, and each call. Never pass `--yes` unless the user said yes to that exact step.
 
@@ -173,6 +173,8 @@ plivo numbers buy <number> --dry-run
 
 Pick one whose `voice_enabled` is true and whose `restriction` is null. Show the number, `setup_rate`, `monthly_rental_rate` and `voice_rate` from the search result. Ask the user, then run `plivo numbers buy <number> --yes`.
 
+**India:** search with `--country IN --type local` and pick a landline number (a city code such as 022 or 080); landline numbers are for service and transactional calls. The accepted KYC application links to the number at purchase. If a number has a `restriction`, show its `restriction_text` and ask before you rent it. If the search is empty although the KYC check passed, stop and show both outputs to the user. If `buy` fails with `compliance_application_id is required`, follow the audio-streaming skill's India section.
+
 Either way, read the number and record its current `application`. This is the rollback value:
 
 ```bash
@@ -240,6 +242,8 @@ Show the preview and ask. Then run the same command with `-o table --yes` in pla
 - `✓ Ready. Dial …`: the tunnel is up. Ask the user to call the number and speak for at least 10 seconds. They should hear their own voice.
 - `rejected: bad or missing Plivo signature`: the call came from a different account or subaccount than the CLI profile. Run `forward` under the profile that owns the number. If it shows on `/ws` for every call, the CLI is v1.1.2, which checks the stream signature over the wrong URL: use a later release.
 - `dial customer WS … failed`: the bot is not running or listens on another port.
+
+**India:** the user calls from an Indian phone, because India calls must stay India to India. The docs also require the server to be in India, and they do not say whether a stream to a laptop behind a tunnel counts. If the call ends with 2070 `Violates Media Anchoring`, the tunnel did not count: do not place another tunnel call in step 7. With an AI key, run step 8's one-host path on a server in India. Without one, go to step 9 and report item 2 as not met, with this reason.
 
 Before the user dials, list the calls to this number once and note their UUIDs. After the call, list them again and take the new call UUID. The list shows completed calls, so if it is not there yet, wait a few seconds and list again. If more than one call is new, ask the user which number they called from and match `from_number`:
 
@@ -355,12 +359,13 @@ plivo voice calls diagnose <call_uuid>           # AI explanation; it shares a s
 |---|---|---|
 | 7011 Error Reaching Answer URL | `forward` is not running, or its tunnel dropped. `forward` does not notice a dropped tunnel and leaves the answer URL on it | Stop `forward` (it restores the answer URL), check the resting values, then start it again and wait for `✓ Ready.` |
 | 8011 Invalid Answer XML | The answer URL returned something that is not Plivo XML | Run step 9, check the answer URL, and try again |
+| 2070 Violates Media Anchoring | India: a call leg, or the bot's server, is outside India. A laptop behind a tunnel may count as outside | Follow the India note in step 6 |
 | The call connects but the caller hears nothing | The bot is not running, or it listens on another port | Run the step 3 or step 7 `streams test` again |
 
 For anything deeper, install `plivo skill install audio-streaming`.
 
 ## Out of scope
 
-- Numbers in India: KYC and number series come first (`plivo skill install audio-streaming`).
+- India KYC itself, and 140 or 160 series numbers (`plivo skill install audio-streaming`).
 - Outbound calls from the agent, production hosting and monitoring (`plivo skill install audio-streaming`).
 - SIP platforms such as LiveKit, ElevenLabs, Retell and Vapi (`plivo skill install sip-trunking`).

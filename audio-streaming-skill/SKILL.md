@@ -10,7 +10,7 @@ You are guiding a developer, or their coding agent, to a working and monitored v
 
 **What this file assumes you have: nothing but this file, the `plivo` CLI and your own bot.** Everything the WebSocket bot journey needs is here: the readiness gates, the Stream XML with documents to copy, the XML checks that matter for a streamed call, the callbacks and signature recipe, the WebSocket protocol, the hangup codes and the India prerequisites. Other Plivo skills are separate single files that you may not have. Install one only if the task moves outside this journey:
 
-- `plivo skill install first-agent` for a guided first call: an echo bot, a fixed application `my-first-agent` and a live test call, step by step (not for numbers in India).
+- `plivo skill install first-agent` for a guided first call: an echo bot, a fixed application `my-first-agent` and a live test call, step by step (India needs accepted KYC first).
 - `plivo skill install voice-xml` for general Plivo XML: every element other than `<Stream>` in full, its complete attribute tables, and IVR, conference and voicemail flows that have no stream in them.
 - `plivo skill install` for `plivo-cli`, the CLI's own reference (every command, the JSON envelope, exit codes, headless auth). The CLI writes that file out itself.
 
