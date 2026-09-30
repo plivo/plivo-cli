@@ -408,7 +408,7 @@ func buildLocalStreamServer(out io.Writer, wssTunnelURL, customerWS string, bidi
 		}
 		fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Stream%s contentType="%s">%s</Stream>
+  <Stream%s keepCallAlive="true" contentType="%s">%s</Stream>
 </Response>`, bidiAttr, wsproxy.ContentType(codec, rate), wssTunnelURL)
 	})
 

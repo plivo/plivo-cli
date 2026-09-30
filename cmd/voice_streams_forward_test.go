@@ -16,8 +16,9 @@ import (
 	"github.com/plivo/plivo-cli/internal/api"
 )
 
-// /answer must return PlivoXML referencing the supplied wss URL and codec.
-// Bidirectional attr only appears when bidi=true.
+// /answer must return PlivoXML referencing the supplied wss URL and codec, and
+// keep the call up while the stream runs: nothing follows <Stream>, so without
+// keepCallAlive Plivo ends the call. Bidirectional attr only appears when bidi=true.
 func TestBuildLocalStreamServer_answerXML(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -35,7 +36,7 @@ func TestBuildLocalStreamServer_answerXML(t *testing.T) {
 			bidi:     false,
 			codec:    "mulaw",
 			rate:     8000,
-			wantSubs: []string{`contentType="audio/x-mulaw;rate=8000"`, "wss://abc.ngrok.dev/ws"},
+			wantSubs: []string{`contentType="audio/x-mulaw;rate=8000"`, "wss://abc.ngrok.dev/ws", `keepCallAlive="true"`},
 			denySubs: []string{`bidirectional="true"`, "sampleRate"},
 		},
 		{
@@ -43,7 +44,7 @@ func TestBuildLocalStreamServer_answerXML(t *testing.T) {
 			bidi:     true,
 			codec:    "l16",
 			rate:     16000,
-			wantSubs: []string{`bidirectional="true"`, `contentType="audio/x-l16;rate=16000"`},
+			wantSubs: []string{`bidirectional="true"`, `contentType="audio/x-l16;rate=16000"`, `keepCallAlive="true"`},
 			denySubs: []string{"sampleRate", `contentType="audio/l16"`},
 		},
 	}
