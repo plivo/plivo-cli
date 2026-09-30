@@ -6,7 +6,7 @@ license: Apache-2.0
 
 # Plivo: your first voice agent
 
-You take the user from nothing to a live call with an AI voice agent. The call comes in on a Plivo number, and Plivo streams the audio to a bot on the user's machine through a tunnel. The run has two bot stages:
+You take the user from nothing to a live call with an AI voice agent. The test call reaches a Plivo number (the user calls it, or Plivo calls the user), and Plivo streams the audio to a bot on the user's machine through a tunnel. The run has two bot stages:
 
 1. **Echo bot.** It needs no API key. The caller hears their own voice. This proves the number, the application, the tunnel and the audio in both directions.
 2. **OpenAI bot,** from the Pipecat example that the Plivo docs use. It needs the user's own AI keys.
@@ -31,12 +31,7 @@ Do not report "done" for an item that you did not see in a command output or hea
 
 ## Track the run in your task list
 
-At the start, create these nine tasks with your agent's task tool:
-
-- **Claude Code:** TaskCreate and TaskUpdate; TodoWrite in older versions.
-- **Codex CLI:** its plan tool.
-
-Mark a task done only when its check passes.
+At the start, create these nine tasks in your agent's own task or todo tool, and mark each one done only when its check passes. Each agent names the tool differently: for example TaskCreate and TaskUpdate in Claude Code (TodoWrite in older versions), and the plan tool in Codex CLI. Use the one your agent has.
 
 1. Check tools and login
 2. Ask the setup questions
@@ -48,13 +43,11 @@ Mark a task done only when its check passes.
 8. Offer a deploy
 9. Leave a safe resting state
 
-If you have no task tool, print this list, and print it again with ticks after each task. Claude Code turns the task tools off by default on some newer models. If they are missing, tell the user that starting Claude Code with `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` turns them on. Do not change their settings yourself.
+If your agent has no task tool, print this list, and print it again with ticks after each task. In Claude Code the task tools can be off by default; if they are missing, tell the user that starting Claude Code with `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` turns them on, and do not change their settings yourself.
 
 ## Ask with your question tool
 
-Ask the setup questions in one call to your agent's structured question tool. In Claude Code this is AskUserQuestion: one call takes 1 to 4 questions, each question takes 2 to 4 options, and the tool adds its own free-text "Other" option, so do not add one. If you have no such tool, ask the same questions as a numbered list with an "Other" choice, and wait for the answers.
-
-Ask every approval with the same tool: one yes/no question, after you show the preview, for each step that costs money or changes the account.
+Ask every question with your agent's own structured question tool, if it has one: the setup questions in one call, and one yes/no question for each step that costs money or changes the account, after you show its preview. Each agent names the tool differently. In Claude Code it is AskUserQuestion: one call takes 1 to 4 questions, each with 2 to 4 options, and it adds its own free-text "Other" option, so do not add one. If your agent has no such tool, ask the same questions as a numbered list with an "Other" choice, and wait for the answer.
 
 Setup questions (task 2). Before you ask, look for a previous run: do the step 5 lookup and list the numbers on `my-first-agent` as step 5 does. If a number is on it, add "Use +<number> from the last run" as the first Number option and mark it recommended in place of "Rent a new number", so a second run does not rent a second number.
 
@@ -63,6 +56,7 @@ Setup questions (task 2). Before you ask, look for a previous run: do the step 5
 | Country | Which country should the number be in? | US (recommended) · Canada · India |
 | Number | Do you want to rent a new number? | Rent a new number (recommended) · Use a number I have |
 | AI keys | Which AI keys do you have for the second bot? | None yet (echo bot only) · OpenAI only · OpenAI, Deepgram and Cartesia |
+| Test call | How do you want to make the test calls? | I call the number (recommended) · Plivo calls my phone |
 
 - **India:** Plivo expects KYC at signup, so assume an India data-region organization with an accepted KYC application, and check it: `plivo numbers compliance list --country IN --number-type local --status accepted -o json`. If that lists no application, stop and explain that KYC comes first (`plivo skill install audio-streaming`, India section). Otherwise continue, with the India notes in steps 4 and 6.
 - **Another country (from "Other"):** the Compliance API covers India only, so it cannot tell you what another country needs. Use the search result in step 4 instead: rent only a number whose `restriction` is null. If every result has a `restriction`, stop and explain its `restriction_text` (for example, an address proof).
@@ -239,16 +233,32 @@ plivo voice streams forward --number +<number> --app <app_id> --to ws://127.0.0.
 
 Show the preview and ask. Then run the same command with `-o table --yes` in place of `--dry-run`, in the background. Without `--yes`, `forward` asks for confirmation, and that prompt fails when no one can type an answer. Watch its output:
 
-- `✓ Ready. Dial …`: the tunnel is up. Ask the user to call the number and speak for at least 10 seconds. They should hear their own voice.
+- `✓ Ready. Dial …`: the tunnel is up. Place the test call the way the user chose (below). They speak for at least 10 seconds and should hear their own voice.
 - `rejected: bad or missing Plivo signature`: the call came from a different account or subaccount than the CLI profile. Run `forward` under the profile that owns the number. If it shows on `/ws` for every call, the CLI is v1.1.2, which checks the stream signature over the wrong URL: use a later release.
 - `dial customer WS … failed`: the bot is not running or listens on another port.
 
-**India:** the user calls from an Indian phone, because India calls must stay India to India. The docs also require the server to be in India, and they do not say whether a stream to a laptop behind a tunnel counts. If the call ends with 2070 `Violates Media Anchoring`, the tunnel did not count: do not place another tunnel call in step 7. With an AI key, run step 8's one-host path on a server in India. Without one, go to step 9 and report item 2 as not met, with this reason.
+**The user calls in:** ask them to call the number.
 
-Before the user dials, list the calls to this number once and note their UUIDs. After the call, list them again and take the new call UUID. The list shows completed calls, so if it is not there yet, wait a few seconds and list again. If more than one call is new, ask the user which number they called from and match `from_number`:
+**Plivo calls the user:**
+
+1. Ask for the phone number to call, in E.164 form. On a trial account it must be a verified number.
+2. Read the tunnel answer URL that `forward` set: `answer_url` in `plivo account applications get <app_id> -o json` (it ends in `/answer`).
+3. Preview the call, and show its price from `plivo api GET /Pricing/ --query country_iso=<ISO code of the phone> -o json`: take the rate of the longest `prefix` in `voice.outbound.rates[]` that matches the phone number (US +1907 costs more than +1415):
+
+   ```bash
+   plivo voice calls make --from +<number> --to <phone> --answer-url <answer_url> --answer-method POST --dry-run
+   ```
+
+4. Ask, then run it again with `--yes` in place of `--dry-run`.
+5. A 403 `Calls to this destination region are barred` means the account's geo permissions block that country. Professional (pay-as-you-go) accounts can allow only the US and India, in the console under Voice, Geo Permissions; other countries need an Enterprise plan. Offer that, or the user calls in.
+6. `calls make` sets no time limit. If the call is still up after about 2 minutes, find it: `plivo api GET /Call/ --query status=live -o json` lists only the UUIDs of every live call on the account, so read each with `plivo api GET /Call/<uuid>/ --query status=live -o json` and keep the one whose `to` is the phone and `from` is the number. Preview `plivo voice calls hangup <call_uuid> --yes --dry-run`, ask, then run it without `--dry-run`.
+
+**India:** the test call must use an Indian phone in either direction, because India calls must stay India to India. The docs also require the server to be in India, and they do not say whether a stream to a laptop behind a tunnel counts. If the call ends with 2070 `Violates Media Anchoring`, the tunnel did not count: do not place another tunnel call in step 7. With an AI key, run step 8's one-host path on a server in India. Without one, go to step 9 and report item 2 as not met, with this reason.
+
+Before the call, list the calls once and note their UUIDs: calls to the number (`--direction inbound`) when the user calls in, calls to their phone (`--direction outbound`) when Plivo calls them. After the call, list them again and take the new call UUID. The list shows completed calls, so if it is not there yet, wait a few seconds and list again. If more than one call is new, ask the user: for a call in, match `from_number` to their phone; for a Plivo call, take the one that started when you placed it:
 
 ```bash
-plivo voice calls list --to <number> --direction inbound --limit 5 -o json
+plivo voice calls list --to <number or phone> --direction <inbound or outbound> --limit 5 -o json
 plivo voice calls get <call_uuid> -o json        # call_duration, hangup_cause_name, hangup_source
 ```
 
@@ -293,7 +303,7 @@ Check the resting values again, then point `forward` at the bot. Preview first, 
 plivo voice streams forward --number +<number> --app <app_id> --to ws://127.0.0.1:7860/ws --dry-run
 ```
 
-Ask the user to call and talk to the bot. Check the call record as in step 6.
+Place the test call as in step 6, the way the user chose, and ask them to talk to the bot. Check the call record the same way.
 
 ## Step 8: offer a deploy
 
@@ -315,7 +325,7 @@ curl -s -i https://<host>/                           # status 200 and <Stream �
 plivo account applications update <app_id> --answer-url https://<host>/ --answer-method GET --dry-run   # preview; then run it again without --dry-run
 ```
 
-The number is still on `my-first-agent`, so a call now reaches the deployed bot. Call the number and check the call record as in step 6. Then record `https://<host>/` and `GET` as the new resting values.
+The number is still on `my-first-agent`, so a call now reaches the deployed bot. Place the test call as in step 6, the way the user chose; for a Plivo call, use `--answer-url https://<host>/ --answer-method GET`. Check the call record as in step 6. Then record `https://<host>/` and `GET` as the new resting values.
 
 For production hardening, install `plivo skill install audio-streaming` and read:
 
@@ -357,6 +367,7 @@ plivo voice calls diagnose <call_uuid>           # AI explanation; it shares a s
 
 | You see | Likely cause | Do this |
 |---|---|---|
+| 403 `Calls to this destination region are barred` on `calls make` | The account's geo permissions block the destination country | Allow it in the console (Voice, Geo Permissions): Professional accounts can allow only the US and India, other countries need Enterprise. Or the user calls in |
 | 7011 Error Reaching Answer URL | `forward` is not running, or its tunnel dropped. `forward` does not notice a dropped tunnel and leaves the answer URL on it | Stop `forward` (it restores the answer URL), check the resting values, then start it again and wait for `✓ Ready.` |
 | 8011 Invalid Answer XML | The answer URL returned something that is not Plivo XML | Run step 9, check the answer URL, and try again |
 | 2070 Violates Media Anchoring | India: a call leg, or the bot's server, is outside India. A laptop behind a tunnel may count as outside | Follow the India note in step 6 |
@@ -367,5 +378,5 @@ For anything deeper, install `plivo skill install audio-streaming`.
 ## Out of scope
 
 - India KYC itself, and 140 or 160 series numbers (`plivo skill install audio-streaming`).
-- Outbound calls from the agent, production hosting and monitoring (`plivo skill install audio-streaming`).
+- Outbound calling campaigns, production hosting and monitoring (`plivo skill install audio-streaming`).
 - SIP platforms such as LiveKit, ElevenLabs, Retell and Vapi (`plivo skill install sip-trunking`).
