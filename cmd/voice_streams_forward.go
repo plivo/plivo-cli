@@ -315,8 +315,8 @@ type streamAuth struct {
 	skip      bool   // --insecure-skip-signature
 }
 
-// ok reports whether r carries a valid signature for publicURL.
-func (a *streamAuth) ok(r *http.Request, publicURL string) bool {
+// ok reports whether r carries a valid signature for one of publicURLs.
+func (a *streamAuth) ok(r *http.Request, publicURLs ...string) bool {
 	if a.skip {
 		return true
 	}
@@ -337,7 +337,29 @@ func (a *streamAuth) ok(r *http.Request, publicURL string) bool {
 			}
 		}
 	}
-	return plivosig.Validate(a.authToken, publicURL, r.Method, nonce, sig, params)
+	for _, u := range publicURLs {
+		if plivosig.Validate(a.authToken, u, r.Method, nonce, sig, params) {
+			return true
+		}
+	}
+	return false
+}
+
+// handshakeURLs lists the URLs a stream handshake may be signed over. Plivo
+// signs it with an http(s) scheme, not the wss:// URL given in <Stream>, so the
+// wss:// form alone refuses real handshakes.
+func handshakeURLs(wsURL string) []string {
+	u, err := url.Parse(wsURL)
+	if err != nil {
+		return []string{wsURL}
+	}
+	urls := []string{wsURL}
+	for _, scheme := range []string{"http", "https"} {
+		v := *u
+		v.Scheme = scheme
+		urls = append(urls, v.String())
+	}
+	return urls
 }
 
 // reject writes the 403 and records the event.
@@ -393,7 +415,7 @@ func buildLocalStreamServer(out io.Writer, wssTunnelURL, customerWS string, bidi
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		// Before the upgrade: once accepted, this bridges straight through to
 		// --to in both directions.
-		if !auth.ok(r, auth.wsURL) {
+		if !auth.ok(r, handshakeURLs(auth.wsURL)...) {
 			auth.reject(w, out, jsonOut, events, "/ws")
 			return
 		}
