@@ -1,6 +1,6 @@
 ---
 name: plivo-first-agent
-description: "Take a new user from nothing to a first AI voice agent on a real phone call with Plivo, using the Plivo CLI and a WebSocket bot on their own machine. Use when someone wants to build, set up or try their first Plivo voice agent or voice bot, wants to call a phone number and talk to an AI, or asks to set up Plivo end to end. The run creates or reuses one application named my-first-agent, proves an echo bot and then an OpenAI bot on live calls, offers a deploy step and leaves the number in a safe state. Not for SIP platforms such as LiveKit, ElevenLabs, Retell or Vapi (use plivo-sip-trunking). Numbers in India need an India data-region organization with accepted KYC."
+description: "Guides a new user from nothing to a first Plivo AI voice agent on a real call, covering CLI login, a number, an application, an echo bot, then an OpenAI bot over a tunnel. Use when someone wants to build or try a first Plivo voice agent or bot, or set up Plivo end to end. Not for an existing bot or production (plivo-audio-streaming) or SIP platforms (plivo-sip-trunking)."
 license: Apache-2.0
 ---
 
@@ -15,7 +15,7 @@ Use the `plivo` CLI for every Plivo step and read values with `-o json`. `plivo 
 
 ## Done means all of this, with evidence
 
-1. Application `my-first-agent` exists, and the user's number is attached to it for the calls.
+1. Application `my-first-agent` exists, and the number is attached to it (a number the user already had: only if they call in).
 2. **Echo call:** a real call reached the echo bot, and the user confirms they heard their own voice.
 3. **OpenAI call:** a real call reached the OpenAI bot, and the user confirms they had a conversation. Skip this item only if the user has no AI key, and say so.
 4. **Call records:** for each call, `plivo voice calls get <call_uuid> -o json` shows `call_duration` of 10 seconds or more and a `hangup_cause_name` of `Normal Hangup` or `End Of XML Instructions`.
@@ -87,8 +87,9 @@ uv --version                     # the bots run with uv; if missing, ask the use
 ssh -V                           # `forward` uses ngrok when it is installed, otherwise localhost.run over ssh
 ```
 
-Check: `whoami` shows the account the user expects, and `cash_credits` is above 0.
+Check: `plivo --version` is v1.1.3 or later, `whoami` shows the account the user expects, and `cash_credits` is above 0.
 
+- **Version gate:** rent no number and place no call until this check passes. Earlier releases cannot carry the call (v1.1.0 to v1.1.2 end it at once with 4010). `plivo upgrade --check` reports whether a newer release exists; ask, then run `plivo upgrade` (Homebrew installs: `brew upgrade plivo`). A dev build (`-dev`, as in `0.1.0-dev`, or `vX.Y.Z-N-g<sha>`) is unknown: ask the user, or treat it as unsupported.
 - **ngrok without an authtoken:** if ngrok is installed but has no authtoken, `forward` fails. Run it again with `--tunnel localhost.run`.
 - **Trial accounts:** the docs require a verified sandbox number to make calls from a trial account, and they say nothing about inbound calls. If a call fails on a trial account, ask the user to verify the phone they call from in the Plivo console.
 
@@ -155,8 +156,8 @@ To use a number the user already has:
    plivo numbers list --services voice -o json          # pick one from data.objects[].number
    ```
 
-2. Show the user the number's current `application`, and explain what changes: while this run lasts, calls to that number reach the demo message or this machine.
-3. Ask before you move it.
+2. Attach it to `my-first-agent` only if the user calls in: a Plivo call (`voice calls make`) carries its own answer URL.
+3. With the step 5 attach preview, warn the user: `numbers update --app-id` moves the number's whole application link, so its inbound calls and messages go to `my-first-agent` until you restore it. Get an explicit yes.
 
 To rent a new number:
 
@@ -174,6 +175,8 @@ Either way, read the number and record its current `application`. This is the ro
 ```bash
 plivo numbers get <number> -o json
 ```
+
+If it ends in `/Zentrunk/Trunk/<id>/`, the number is on a SIP trunk, and the rollback is `--trunk-id <id>`, not `--app-id`.
 
 ## Step 5: create or reuse my-first-agent
 
@@ -208,7 +211,7 @@ Read `app_id` from the output, and record the demo URL and `GET` as the resting 
 - The name uses only lowercase letters and hyphens, because the Applications API allows only letters, digits, hyphens and underscores.
 - The demo URL answers GET only, so keep `--answer-method GET`.
 
-Attach the number. Preview first, then run it again without `--dry-run`:
+Attach the number, unless step 4 rules it out. Preview first, then run it again without `--dry-run`:
 
 ```bash
 plivo numbers update <number> --app-id <app_id> --dry-run
@@ -234,7 +237,7 @@ plivo voice streams forward --number +<number> --app <app_id> --to ws://127.0.0.
 Show the preview and ask. Then run the same command with `-o table --yes` in place of `--dry-run`, in the background. Without `--yes`, `forward` asks for confirmation, and that prompt fails when no one can type an answer. Watch its output:
 
 - `✓ Ready. Dial …`: the tunnel is up. Place the test call the way the user chose (below). They speak for at least 10 seconds and should hear their own voice.
-- `rejected: bad or missing Plivo signature`: the call came from a different account or subaccount than the CLI profile. Run `forward` under the profile that owns the number. If it shows on `/ws` for every call, the CLI is v1.1.2, which checks the stream signature over the wrong URL: use a later release.
+- `rejected: bad or missing Plivo signature`: the call came from a different account or subaccount than the CLI profile. Run `forward` under the profile that owns the number. If it shows on `/ws` for every call, the CLI is older than v1.1.3 (see step 1).
 - `dial customer WS … failed`: the bot is not running or listens on another port.
 
 **The user calls in:** ask them to call the number.
@@ -267,10 +270,9 @@ plivo voice calls get <call_uuid> -o json        # call_duration, hangup_cause_n
 Skip this step if the user has no AI key, and say that item 3 of the definition of done is not met.
 
 ```bash
-git clone --depth 1 https://github.com/pipecat-ai/pipecat-examples.git
-cd pipecat-examples/plivo-chatbot/inbound
-uv sync
-cp env.example .env
+{ [ -d pipecat-examples ] || git clone --depth 1 https://github.com/pipecat-ai/pipecat-examples.git; } &&
+  cd pipecat-examples/plivo-chatbot/inbound && uv sync &&
+  { [ -f .env ] || cp env.example .env; }      # safe to re-run: keeps the clone and a filled .env
 ```
 
 Ask the user to edit `.env` in their editor:
@@ -288,14 +290,14 @@ Stop the echo stage:
 2. Confirm the restore with `plivo account applications get <app_id> -o json`.
 3. Stop the echo bot.
 
-Then start the OpenAI bot in the background, and test it without a phone:
+Then start the OpenAI bot in the background, unbuffered so its errors show in its output, and test it without a phone:
 
 ```bash
-uv run server.py                       # port 7860; serves the answer XML on GET / and the bot on /ws
+PYTHONUNBUFFERED=1 uv run server.py    # port 7860; serves the answer XML on GET / and the bot on /ws
 plivo voice streams test --to ws://127.0.0.1:7860/ws --bidirectional --duration 10 -o json
 ```
 
-The first connection loads Pipecat, so it can be slow. If `frames_read_back` is 0, read the server output, fix the error it shows (a missing key is common), and run the test once more. To see which keys are set without printing their values, run `awk -F= '/^[A-Z_]+=/ {print $1, (length($2) ? "set" : "EMPTY")}' .env`.
+The first connection loads Pipecat, so it can be slow. If `frames_read_back` is 0, read the server output, fix the error it shows (a missing key is common), and run the test once more. After any change to `.env` or the bot code, restart the server before you re-test: a running server keeps the env and code it loaded at start. To see which keys are set without printing their values, run `awk -F= '/^[A-Z_]+=/ {print $1, (length($2) ? "set" : "EMPTY")}' .env`.
 
 Check the resting values again, then point `forward` at the bot. Preview first, then run it with `-o table --yes` in the background after the user agrees:
 
@@ -311,6 +313,8 @@ Stop `forward` first with Ctrl-C or `kill -TERM <pid>`, and confirm the restore 
 
 The agent works only while this machine, the bot and `forward` run. To keep it live, the answer URL and the bot need a public HTTPS host. Ask before you deploy anything, because hosting costs money. If the user says no, go to step 9. The example's `Dockerfile` builds only `bot.py`, for Pipecat Cloud. It does not include `server.py`, which serves the answer XML.
 
+**Before you expose the bot:** the example server's `/ws` has no Plivo signature check, so anyone who finds the URL can drive the bot on the user's AI keys. Keep it local, or add signature validation first: Plivo signs the WebSocket upgrade over `http://<host>/<path>`, not the `wss://` URL (recipe: the signature section listed below).
+
 Two paths:
 
 1. **Pipecat Cloud:**
@@ -325,7 +329,7 @@ curl -s -i https://<host>/                           # status 200 and <Stream �
 plivo account applications update <app_id> --answer-url https://<host>/ --answer-method GET --dry-run   # preview; then run it again without --dry-run
 ```
 
-The number is still on `my-first-agent`, so a call now reaches the deployed bot. Place the test call as in step 6, the way the user chose; for a Plivo call, use `--answer-url https://<host>/ --answer-method GET`. Check the call record as in step 6. Then record `https://<host>/` and `GET` as the new resting values.
+If the number is on `my-first-agent`, a call now reaches the deployed bot. Place the test call as in step 6, the way the user chose; for a Plivo call, use `--answer-url https://<host>/ --answer-method GET`. Check the call record as in step 6. Then record `https://<host>/` and `GET` as the new resting values.
 
 For production hardening, install `plivo skill install audio-streaming` and read:
 
@@ -351,9 +355,9 @@ Do this on every exit, including after a failure:
      --answer-url https://s3.amazonaws.com/static.plivo.com/answer.xml --answer-method GET
    ```
 
-4. Ask with your question tool where the number should stay:
+4. If the number is on `my-first-agent`, ask with your question tool where it should stay:
    - on `my-first-agent`, where callers reach the resting document or the deployed bot;
-   - back on its old application: `plivo numbers update <number> --app-id <old_app_id>` (preview it with `--dry-run` first). Offer this only if the recorded `application` had a value, because `numbers update` cannot clear it.
+   - back on its old application: `plivo numbers update <number> --app-id <old_app_id>`, or `--trunk-id <id>` for a trunk (step 4); preview it with `--dry-run` first. Offer this only if the recorded `application` had a value, because `numbers update` cannot clear it.
 
    For a number the user already had, make "back on its old application" the default, unless they deployed in step 8.
 5. To stop the monthly rental of a number rented in this run, preview with `plivo numbers release <number> --yes --dry-run` (a release refuses `--dry-run` alone), ask, then run `plivo numbers release <number> --yes`. After a deploy, offer this only if the user asks.
