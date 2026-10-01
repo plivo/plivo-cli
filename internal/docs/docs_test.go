@@ -95,6 +95,32 @@ func TestPages_splitsOnTitleAndSource(t *testing.T) {
 	}
 }
 
+// A "# " line is a page title only when "Source:" follows it. Comments in code
+// samples start with "# " too; splitting on them cut the page short and added
+// junk pages named after the comment.
+func TestParsePages_commentInCodeBlockIsBody(t *testing.T) {
+	body := "# Input\nSource: https://plivo.com/docs/voice/xml/input\nGetDigits collects keys.\n" +
+		"```bash\n# zsh\nplivo completion zsh\n```\nGetInput collects speech.\n\n" +
+		"# Record\nSource: https://plivo.com/docs/voice/xml/record\nRecord audio.\n"
+	pages := parsePages(body)
+	var titles []string
+	for _, p := range pages {
+		titles = append(titles, p.Title)
+	}
+	if len(pages) != 2 {
+		t.Fatalf("expected 2 pages, got %d: %q", len(pages), titles)
+	}
+	if !strings.Contains(pages[0].Body, "GetInput collects speech.") {
+		t.Errorf("page cut short at the code comment: %q", pages[0].Body)
+	}
+	if !strings.Contains(pages[0].Body, "# zsh") {
+		t.Errorf("code comment dropped from the body: %q", pages[0].Body)
+	}
+	if pages[1].Title != "Record" || pages[1].Source != "https://plivo.com/docs/voice/xml/record" {
+		t.Errorf("second page = %q %q", pages[1].Title, pages[1].Source)
+	}
+}
+
 // A page matches only when it contains every keyword, which is what stops a
 // two-word query returning everything that mentions either word.
 func TestSearch_requiresAllKeywords(t *testing.T) {
