@@ -62,10 +62,11 @@ voice       calls | conferences | endpoints | multiparty | recordings | streams
 - `sip`: quote `--uri "host;transport=tcp"` (the help example does not). Passwords go only through `--password-stdin`; to preview a password change, pass `--username` too. Deleting a URI deletes the trunks that use it. Route a number to an inbound trunk with `numbers update <number> --trunk-id <trunk_id>`.
 - `plivo api` reports every HTTP error as `UPSTREAM_ERROR` (exit 3) with the real status in `status_code`: switch on that. Its `--dry-run`, `--explain` and `--log-level debug` print the request body unredacted, so never send a secret through it. `/Message/` expands to `/v1/Account/<auth_id>/Message/`; a `/v1/...` path is used as-is.
 - `plivo ask` and the `diagnose` commands share a small per-account rate limit: on `RATE_LIMITED`, wait as long as the message says.
+- `docs show` prints a JSON envelope when piped: add `-o table`, or use `jq -r .data.body`. `docs search` rows are at `data`, not `data.objects`. A page that ends inside a code block was cut off: read `https://www.plivo.com/docs/<path>.md`, which returns clean Markdown (bare `plivo.com` only redirects there).
 
 ## Known issues
 
-- In v1.1.0 to v1.1.2, `voice streams forward` cannot carry a live call: it rejects Plivo's stream (it checks the signature against the `wss://` URL while Plivo signs the `http://` one), and its XML has no `keepCallAlive`, so the call ends at once with hangup cause 4010. Fixed on main for the next release; check `plivo --version`.
+- In v1.1.0 to v1.1.2, `voice streams forward` cannot carry a live call: it rejects Plivo's stream (it checks the signature against the `wss://` URL while Plivo signs the `http://` one), and its XML has no `keepCallAlive`, so the call ends at once with hangup cause 4010 (End Of XML Instructions). Fixed on main for the next release; check `plivo --version`.
 
 ## Workflows
 
@@ -84,9 +85,13 @@ Debug a failed call:
 ```bash
 plivo voice calls get <call_uuid> -o json | jq '.data | {hangup_cause_name, hangup_cause_code, hangup_source}'
 plivo voice calls diagnose <call_uuid>     # AI walk-through of the call
+plivo docs show voice/troubleshooting/hangup-causes -o table     # what a hangup code means
+plivo docs show sip-trunking/troubleshooting/zentrunk-hangup-codes -o table     # the same, for SIP trunk calls
 ```
 
-Pick a sending number: `plivo numbers list --type local -o json | jq '.data.objects[].number'`.
+Use the table for the call's product: the two code spaces reuse numbers, so 4010 is End Of XML Instructions on Voice but `unauthorized_by_carrier` on Zentrunk.
+
+Pick a sending number: `plivo numbers list --services sms -o json | jq -r '.data.objects[].number'`. Numbers are listed without a leading `+`.
 
 ## Exit codes
 
