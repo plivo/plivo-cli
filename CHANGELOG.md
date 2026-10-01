@@ -5,6 +5,54 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - 2026-10-01
+
+### Added
+
+- `plivo skill install first-agent` installs a new skill that walks a new
+  user to a first AI voice agent on a real call: login, a number, an
+  application, an echo bot, then an OpenAI bot. It needs this release, since
+  earlier releases cannot carry the call (see Fixed).
+- `plivo login` can now finish when the browser can't reach the terminal
+  (SSH, WSL, containers, VMs): while it waits, paste the callback URL from the
+  browser's address bar. It goes through the same state check as the
+  redirect, and the PKCE verifier never leaves the CLI. A host on a different
+  network from the browser still can't log in this way.
+
+### Changed
+
+- The bundled agent skills are rewritten and much smaller: the four existing
+  skills drop by about 70% (roughly 85k to 26k tokens), so they take far less
+  of an agent's context when they load. Long reference tables now point at
+  the matching docs page (`plivo docs show <path>`) instead of copying it, and
+  the skills warn again before commands that reroute a live number or delete
+  or change a SIP trunk or URI.
+- `voice multiparty create` is hidden and now fails fast with guidance. Plivo
+  has no API to create a MultiPartyCall; one starts when its first participant
+  is added (`voice multiparty participant add <name> ...`). The command used
+  to send a request that always failed with 405.
+- Updated `golang.org/x/sys` to v0.48.0 and `golang.org/x/term` to v0.46.0.
+
+### Fixed
+
+- `voice streams forward` can now carry a live call. It checked Plivo's
+  WebSocket signature against the `wss://` URL instead of the `http://` URL
+  Plivo signs, so every stream was refused with a 403, and its answer XML
+  lacked `keepCallAlive="true"`, so the call hung up as the stream started.
+  Closing the terminal now also restores the application's answer URL.
+- Strict skill loaders such as `npx skills` skipped the audio-streaming and
+  SIP trunking skills because their frontmatter was invalid YAML; every
+  bundled skill now loads.
+- JSON output no longer escapes `<`, `>` and `&` (for example in hints such
+  as `participant add <name>`, and in URLs).
+- `plivo docs show` no longer cuts a page short at a `# ` comment inside a
+  code sample, and those comments no longer show up as separate pages in
+  `plivo docs search`.
+- Answering `n` at the `plivo feedback` submit prompt now exits 0 with
+  "Cancelled, nothing sent." instead of reporting an input error.
+- `plivo feedback` on Windows names the right end-of-input key, and control
+  characters are stripped from the text.
+
 ## [1.1.2] - 2026-09-22
 
 ### Changed
