@@ -47,7 +47,7 @@ Run this loop on every document you write or change, including every document an
 
 ## Docs pages
 
-The CLI reads from its docs cache. If a CLI page stops inside a code block, the web URL has the rest.
+Outside a terminal, `docs show` and `docs search` print a JSON envelope: add `-o table`. A CLI page can stop early (`voice/xml/input` does): fetch `https://www.plivo.com/docs/<path>.md` for the whole page as clean Markdown, not the HTML URL.
 
 | Covers | CLI | Web |
 |---|---|---|
@@ -55,7 +55,7 @@ The CLI reads from its docs cache. If a CLI page stops inside a code block, the 
 | `GetDigits`, `GetInput` | `plivo docs show voice/xml/input` | https://plivo.com/docs/voice/xml/input |
 | `Dial` (`Number`, `User`), `Redirect`, `Hangup`, `Wait`, `PreAnswer` | `plivo docs show voice/xml/routing` | https://plivo.com/docs/voice/xml/routing |
 | `Record`, transcription, recording retention | `plivo docs show voice/xml/record` | https://plivo.com/docs/voice/xml/record |
-| `Conference` | `plivo docs show voice/xml/conference` | The HTML page may move; https://plivo.com/docs/voice/xml/conference.md |
+| `Conference` | `plivo docs show voice/xml/conference` | https://plivo.com/docs/voice/xml/conference |
 | `MultiPartyCall`, roles, status events, AI agent attributes | `plivo docs show voice/xml/multiparty-call` | https://plivo.com/docs/voice/xml/multiparty-call |
 | `Message` (SMS from a call flow) | `plivo docs show messaging/xml/overview` | https://plivo.com/docs/messaging/xml/overview |
 | `Stream` (use plivo-audio-streaming) | `plivo docs show voice/xml/audio-streaming` | https://plivo.com/docs/voice/xml/audio-streaming |
@@ -106,7 +106,7 @@ The docs recommend `GetInput` for new work.
 | `timeout` | `5` | seconds to wait for the first digit |
 | `digitTimeout` | `2` | seconds between digits |
 | `finishOnKey` | `#` | a digit, `#`, `*` or `none` |
-| `retries` | `1` | attempts with no input, then fall through to the next element |
+| `retries` | `1` | "Retry attempts if no input"; with no digits after `retries` attempts, the next element runs. Undocumented: whether the prompt replays, and whether `1` means one try or two |
 | `redirect` | `true` | |
 | `playBeep` | `false` | beep after the prompts |
 | `validDigits` | `1234567890*#` | |
@@ -141,7 +141,7 @@ The docs recommend `GetInput` for new work.
 | `action` | none | receives `DialStatus` (`completed`, `busy`, `failed`, `cancel`, `timeout`, `no-answer`), `DialRingStatus`, `DialHangupCause`, `DialALegUUID`, `DialBLegUUID` |
 | `method` | `POST` | |
 | `redirect` | `true` | |
-| `timeout` | none | seconds to ring |
+| `timeout` | `120` (hangup-causes 6010; routing: none) | seconds to ring |
 | `timeLimit` | `14400` | seconds once connected |
 | `callerId` | the caller's | use a number you own |
 | `callerName` | the caller's | at most 50 characters |
@@ -160,7 +160,7 @@ The docs recommend `GetInput` for new work.
 
 ### Record, Redirect, Hangup
 
-- `<Record>`: `action`, `method` `POST`, `redirect` `true`, `fileFormat` `mp3` or `wav`, `timeout` `15` (seconds of silence), `maxLength` `60` (raise it for voicemail), `finishOnKey` `#`, `playBeep` `true`, `recordSession` `false`, `startOnDialAnswer` `false`, `recordChannelType` `stereo` (one party per channel) or `mono`, `callbackUrl`. `action` receives `RecordUrl`, `RecordingID`, `RecordingDuration`, `RecordingDurationMs`, `RecordingStartMs`, `RecordingEndMs`, `Digits`. With `recordSession` or `startOnDialAnswer` the first durations are `-1`; the real values arrive at `callbackUrl`.
+- `<Record>`: `action`, `method` `POST`, `redirect` `true`, `fileFormat` `mp3` or `wav`, `timeout` `15` (seconds of silence), `maxLength` `60` (raise it for voicemail), `finishOnKey` `#`, `playBeep` `true`, `recordSession` `false`, `startOnDialAnswer` `false`, `recordChannelType` `stereo` (one party per channel) or `mono`, `callbackUrl`. `action` receives `RecordUrl`, `RecordingID`, `RecordingDuration`, `RecordingDurationMs`, `RecordingStartMs`, `RecordingEndMs`, `Digits`. With `recordSession` or `startOnDialAnswer` the first durations are `-1`; the real values arrive at `callbackUrl`. `RecordUrl` links to the file: download it (Record page: deleted after 30 days; Recordings API: storage billed past 90).
 - `<Redirect method="POST">https://...</Redirect>`: the URL receives the standard parameters and must return a document.
 - `<Hangup>`: `reason` takes only `rejected` (a rejection tone) or `busy` (a busy signal); `schedule` is in seconds. Do not leave `<Hangup/>` as a placeholder while you build: the call looks like it finished normally. Return a `<Speak>` instead.
 
@@ -168,7 +168,7 @@ The docs recommend `GetInput` for new work.
 
 - `Wait`: `length` (default 1 second), `silence`, `minSilence`, `beep` for beep detection. It is not a documented child of `GetDigits`.
 - `DTMF`: `0-9`, `*`, `#`, `w` and `W` pauses; `async` defaults to `true`. To reach an extension after dialling, use `sendDigits` on `<Number>`.
-- `Conference`: the room name as text, at most 20 members. Guests join with `startConferenceOnEnter="false"` and a `waitSound`; the host with `startConferenceOnEnter="true" endConferenceOnExit="true"`. `waitSound` and URL-valued `enterSound` or `exitSound` must return XML with `Play`, `Speak` or `Wait`, not an audio file; `beep:1` and `beep:2` are built in. Two callers who join the same name are bridged.
+- `Conference`: the room name as text; `maxMembers` 1 to 20 (default 20). Moderated: guests join with `startConferenceOnEnter="false"` and a `waitSound`, the moderator with `startConferenceOnEnter="true" endConferenceOnExit="true"`. A URL `enterSound` or `exitSound` must return XML with `Play`, `Speak` or `Wait`, not an audio file (`beep:1`, `beep:2` are built in). The page's `waitSound` examples point at `.xml` URLs: return XML there too, such as `<Play loop="0">` hold music. Two callers who join the same name are bridged.
 - `MultiPartyCall`: the name as text, at most 10 participants, `role` `Customer`, `Agent`, `Supervisor` or `ai-agent`. `coachMode="true"` lets agents, not customers, hear a supervisor. Hold-music URLs return XML. Prefer it to `Conference` when you need roles, coaching, per-participant hold and mute, or API control.
 - `Message`: `src` (a number you own), `dst`, `type="sms"`, `callbackUrl`, the text as the body. Several destinations are separated by `<`, which inside the attribute must be written `&lt;`.
 
@@ -184,6 +184,15 @@ The docs recommend `GetInput` for new work.
 | 8012 (8013 transfer, 8014 redirect) | a later document was bad; 8012 fails the call only when `redirect="true"` | the action document nobody tested: it returns `OK`, JSON, or handles only the happy branch. Run step 2 of the loop on that URL |
 | 4010 | the document ran out of elements | nothing, if the call was meant to end |
 | 3020 or 3010 with hangup source Answer XML | *observed* for `<Hangup reason="rejected"/>` and `reason="busy"`; the docs describe these codes as the called party rejecting or busy | deliberate screening, or a forgotten placeholder |
+
+**8011 from a console flow application.** Confirm: `plivo numbers get <number> -o json` (the `application` URI ends in the app id), `plivo account applications get <app_id> -o json` (its `answer_url`), then the step 2 `curl` to it: JSON back is the cause. Fix: attach an XML application.
+
+```bash
+plivo account applications create --app-name <name> --answer-url https://YOUR-HOST/plivo/answer --answer-method POST --fallback-answer-url https://YOUR-HOST/plivo/fallback --dry-run
+plivo numbers update <number> --app-id <new_app_id> --dry-run
+```
+
+Neither prompts, so drop `--dry-run` only after the user agrees; the old app id is the rollback. Making the flow itself answer is out of scope.
 
 The call's debug log in the console (Voice, Logs, Calls, the call) shows Plivo's parser message with a line and column, for example `not well-formed (invalid token): line 1, column 271`. `plivo voice calls diagnose <call_uuid>` reads it for you.
 
