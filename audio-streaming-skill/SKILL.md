@@ -6,7 +6,7 @@ license: Apache-2.0
 
 # Plivo Audio Streaming: connect a bot to calls and go live
 
-Take a developer, or their coding agent, from a WebSocket bot to a working, monitored phone agent. This file covers Plivo call control and the WebSocket boundary, not the STT, LLM or TTS inside the bot. Related skills, if installed: `plivo skill install first-agent` (a guided first call from nothing), `plivo skill install voice-xml` (Plivo XML without a stream), `plivo skill install` (the CLI's own skill). Without them, use `plivo <command> --help` and the docs pointers below.
+Take a developer, or their coding agent, from a WebSocket bot to a working, monitored phone agent. This file covers Plivo call control and the WebSocket boundary, not the STT, LLM or TTS inside the bot. Related skills, if installed: `plivo skill install first-agent` (a guided first call from nothing, not in releases up to v1.1.2: `plivo skill list` shows what yours bundles), `plivo skill install voice-xml` (Plivo XML without a stream), `plivo skill install` (the CLI's own skill). Without them, use `plivo <command> --help` and the docs pointers below.
 
 ## Rules for every step
 
@@ -18,8 +18,13 @@ Take a developer, or their coding agent, from a WebSocket bot to a working, moni
 
 ## Known issues (time-sensitive)
 
-- `plivo voice streams forward` on CLI v1.1.0 to v1.1.2 cannot carry a live call: it checks the stream upgrade's signature over `wss://` while Plivo signs it over `http://`, so it answers 403, and its answer XML has no `keepCallAlive`. `--insecure-skip-signature` gets past the 403 but not the early hangup. It is fixed on main for the next release: check `plivo --version`. Until then, put your bot behind a plain tunnel (for example `ngrok http 7860`) and serve your own answer XML.
-- `plivo docs show` can cut a page short at a `# ` comment inside a code sample (for example `voice/xml/overview`, `voice/xml/input` and the audio streaming guide). If a page ends mid-example, read its https URL.
+- `plivo voice streams forward` cannot carry a live call on releases up to v1.1.2 or on a `-dev` or unrecognised build (`plivo --version`): its answer XML has no `keepCallAlive`, and from v1.1.0 it checks the stream upgrade's signature over `wss://` while Plivo signs it over `http://`, so it answers 403 (`--insecure-skip-signature` fixes only the 403). Treat it as fixed only on a later release whose notes say so (`plivo upgrade --check` reports any newer release). Until then, from a laptop (writes: `--dry-run`, then `--yes` after approval):
+  1. An HTTPS tunnel to the bot, for example `ngrok http 7860`.
+  2. The bot serves document A with the tunnel host in its `wss://` URL. Pipecat's example (`plivo docs show voice-agents/audio-streaming/integration-guides/pipecat/overview`) does, minus `statusCallbackUrl`, at the tunnel root for GET only (its README): in step 3, `--answer-url https://<tunnel>/ --answer-method GET`.
+  3. `plivo account applications create --app-name voice-agent-test --answer-url https://<tunnel>/<path> --dry-run`
+  4. Record the number's current `application`, then `plivo numbers update <number> --app-id <app_id> --dry-run`.
+  5. Call (stage 5), then roll back to the recorded application.
+- Docs: when piped, `plivo docs show` prints a JSON envelope, so add `-o table`. A page cut off at a `# ` in a code sample is complete at `https://www.plivo.com/docs/<path>.md` (not the HTML page). In `plivo docs search`, quoted words match as a phrase; unquoted words must all appear.
 
 ## Stages 1 to 8: one flow from account to operations
 
@@ -97,9 +102,17 @@ plivo voice calls get <call_uuid> -o json
 
 `calls make --answer-method` defaults to GET. A `request_uuid` means Plivo accepted the request, nothing more.
 
-A bot that runs only on a laptop: `plivo voice streams forward --number <n> --app <app_id> --to ws://localhost:7860/ws` (but see "Known issues"). It opens a tunnel (localhost.run over ssh by default, ngrok if installed; `--tunnel` forces one), points the application's answer URL at it, and restores the URL on Ctrl-C. Every number on that application reaches your laptop meanwhile, so use a dedicated test application. It serves its own `<Stream>` with no `statusCallbackUrl`, so it does not test your XML, and it connects to your bot without signature headers. Without a terminal, pass `--yes` and `-o table` (in JSON mode it prints nothing until it exits).
+A bot only on a laptop: the "Known issues" recipe or, on a fixed release, `plivo voice streams forward --number <n> --app <app_id> --to ws://localhost:7860/ws`. It points that application's answer URL at a tunnel and restores it on Ctrl-C, so every number on the application reaches your laptop meanwhile: use a test application. Its `<Stream>` has no `statusCallbackUrl`, so it does not test your XML, and it reaches your bot without signature headers. Without a terminal, pass `--yes` and `-o table` (JSON mode prints nothing until it exits).
 
-Observed when: a person heard the agent and the agent heard them, the callbacks arrived, and the record ends 4000 (Normal Hangup) or 4010 (End Of XML Instructions, the normal end of a keepCallAlive stream) after a real conversation. A 4010 within seconds of answer: read the bot's connect handler and the stream status callbacks before you blame the bot, because the call record does not say who closed the socket.
+Observed when: a person heard the agent and the agent heard them, the callbacks arrived, and the record ends 4000 (Normal Hangup) or 4010 (End Of XML Instructions, the normal end of a keepCallAlive stream) after a real conversation.
+
+Silence, then 4010 within seconds: the call record does not say who closed the socket, but the console's Audio Streams log gives each stream's hangup reason (API request, call hangup, connection error, stream timeout). Most likely first:
+
+1. The XML: no `keepCallAlive` or `bidirectional`, or the number on another or a stale application.
+2. The socket never connected: tunnel, TLS or path, or the bot rejected the upgrade by checking its signature over `wss://`, not `http://`.
+3. The bot crashed on start or on the first `media` frame.
+4. Nothing playable came back: wrong `contentType` or `sampleRate`, a WAV header inside the base64, or audio not paced in real time.
+5. A fixed ceiling: `streamTimeout` or the bot's own idle timer.
 
 ### Stage 6: production hosting
 
@@ -148,12 +161,12 @@ Run each layer once, keep the evidence, and do not repeat a billed call until th
 |---|---|---|
 | 7011 Error Reaching Answer URL | No usable HTTP response: 404, 401 or 403 (your auth), 405 (method), 502 or 530 (dead tunnel), a timeout | Step 3; no credentials on the URL; a fallback URL |
 | 8011 Invalid Answer XML | A 200 that is not Plivo XML: empty, JSON (often a console flow application, stage 2), HTML, malformed, an unsupported `<Speak language>`, Twilio `<Reject/>` | The number's application; the XML check on the exact body |
-| 4010 End Of XML Instructions | The normal end of a keepCallAlive stream. Within seconds of answer, also how a refused or crashed stream ends | Bot logs and stream callbacks |
+| 4010 End Of XML Instructions | The normal end of a keepCallAlive stream. Within seconds of answer, also how a refused or crashed stream ends | The stage 5 checklist |
 | 4000 Normal Hangup | A person hung up. Source `Answer XML` means your `<Hangup/>` ran | Nothing |
 | 3020 / 3010, source Answer XML, 0 s | `<Hangup reason="rejected"/>` or `reason="busy"` ran first (seen in call records; no docs page maps it). A bare `<Hangup/>` does not produce these | Intended? |
 | 7012/8012, 7013/8013, 7014/8014 | The action, transfer or redirect URL was unreachable, or returned bad XML | Step 3 against that URL |
 | 6020 Media Timeout | No media for 60 s; the code does not say which side | Both media paths, the carrier, Call Insights |
-| 2070 / 5030 | India: a leg or your server is outside India / over the concurrency limit (any region, rejected at once) | "India"; raise the limit |
+| 2070 / 5030 | India only: a leg or your server is outside India / any region: over the concurrency limit, rejected at once | "India" / raise the limit |
 | 3030 / 2030 | The caller ID is neither rented on this account nor a verified caller ID / the destination is barred by geo permissions | Your Plivo number; Voice, Geo Permissions |
 | 9100 Machine Detected | `machine_detection=hangup` met a voicemail | Expected |
 | `DroppedStream` (stream callback) | The socket failed to connect or died mid-call; a `DegradedStream` before it means too slow | Server, tunnel, pacing |
@@ -265,7 +278,7 @@ Other Voice XML elements: `plivo skill install voice-xml`, which covers the comm
 
 Docs: `plivo docs show voice-agents/audio-streaming/xml/stream` (<https://plivo.com/docs/voice-agents/audio-streaming/xml/stream>); the 24 kHz value is on `plivo docs show voice/xml/audio-streaming` (<https://plivo.com/docs/voice/xml/audio-streaming>).
 
-Limits, from <https://plivo.com/docs/voice-agents/audio-streaming/concepts/audio-streaming-guide> (its CLI copy, `plivo docs show voice-agents/audio-streaming/concepts/audio-streaming-guide`, stops before the limits table) and the best-practices page: a stream URL of 2048 characters; one stream per call; WebSocket messages up to 64 KB, audio chunks of 16 KB base64 or less; about 20 ms of audio per `media` frame; a playback buffer of 40 s on the best-practices page (`DegradedStream` at 30, 60 and 90% full) and about 60 s in the guide. If the first connection fails, Plivo tries twice more, then drops the stream. Plivo closes the socket when the call ends.
+Limits, from <https://plivo.com/docs/voice-agents/audio-streaming/concepts/audio-streaming-guide> (cut off in the CLI) and the best-practices page: a stream URL of 2048 characters; one stream per call; WebSocket messages up to 64 KB, audio chunks of 16 KB base64 or less; about 20 ms of audio per `media` frame; a playback buffer of 40 s on the best-practices page (`DegradedStream` at 30, 60 and 90% full) and about 60 s in the guide. If the first connection fails, Plivo tries twice more, then drops the stream. Plivo closes the socket when the call ends.
 
 Plivo sends JSON text frames, never binary:
 
@@ -312,11 +325,11 @@ Plivo moves raw audio only: STT, the model and the voice are yours, and Plivo TT
 
 Never infer country rules from a phone prefix; check the account. Report each item as observed, not known or failed:
 
-1. **Organisation.** An India data-region organisation. The region is fixed at creation: make a new organisation from the console's organisation switcher (no new signup). Only India-registered businesses can rent Indian numbers and call on domestic routes; INR accounts can call only within India.
+1. **Organisation.** An India data-region organisation; the region is fixed at creation. The docs disagree on how: `rent-india-numbers` says the console's organisation switcher (no new signup), `india-calling` a second account with another email. Only India-registered businesses can rent Indian numbers and call on domestic routes; INR accounts can call only within India.
 2. **KYC.** An `accepted` compliance application: `plivo numbers compliance list --country IN --status accepted -o json`. `submitted` is not `accepted`. A number's `compliance_status` in `numbers get` is not in the published schema, so treat a missing field as not known.
 3. **Series.** Landline (022, 080) for service and transactional calls; 140-series for promotional calls only; 160-series for BFSI only. The wrong series makes every complaint count as UCC, even with consent. 140 and 160 numbers are provisioned offline (Tata DLT registration, a NOC, header and template approval, days to weeks, no CLI): `plivo docs show voice/concepts/140-series-provisioning` (<https://plivo.com/docs/voice/concepts/140-series-provisioning>) and `plivo docs show voice/concepts/160-series-provisioning` (<https://plivo.com/docs/voice/concepts/160-series-provisioning>). Which series allow `<Stream>` is not documented.
 4. **Media anchoring.** Both legs and your bot's server stay in India, or the call fails with 2070.
-5. **Consent.** Cold calling is prohibited. A UCC complaint needs opt-in proof within 5 business days or the compliance ID is blocked; repeated complaints suspend it, and numbers on a suspended application cannot place calls. Remove complainants at once. Rules: `plivo docs show voice/concepts/ucc-management` (<https://plivo.com/docs/voice/concepts/ucc-management>). Complaints are readable with `plivo api GET /Ucc/`; proof is a multipart upload the CLI cannot send, so upload it on the console UCC dashboard.
+5. **Consent.** Cold calling is prohibited. TRAI counts a pre-recorded or AI-generated voice call as A2P. Service calls (about what the customer already has) and transactional ones (within 30 minutes of their transaction) need no explicit consent; one that supports an ongoing purchase or use needs it, valid 7 days (renewable) or until revoked. A UCC complaint needs opt-in proof within 5 business days or the compliance ID is blocked; repeated complaints suspend it, and numbers on a suspended application cannot place calls. Remove complainants at once. Rules: `plivo docs show voice/concepts/ucc-management` (<https://plivo.com/docs/voice/concepts/ucc-management>). Complaints are readable with `plivo api GET /Ucc/`; proof is a multipart upload the CLI cannot send, so upload it on the console UCC dashboard.
 6. **Capacity.** Professional accounts start at 50 concurrent calls. Over the limit a call is rejected at once with 5030 and Make Call returns HTTP 403. Raise the limit with Request Enterprise under Organization settings > Account limits before a campaign: `plivo docs show voice/concepts/account-limits` (<https://plivo.com/docs/voice/concepts/account-limits>).
 7. **Caller ID.** A Plivo-rented Indian number; Verified Caller ID does not apply in India.
 
@@ -353,4 +366,4 @@ Documents, statuses and rejection reasons: `plivo docs show numbers/rent-india-n
 
 ## When this skill does not have the answer
 
-Do not guess from other platforms. Search the docs first, offline and without credentials: `plivo docs search <keywords>`, then `plivo docs show <path>`. Next, `plivo ask "<question>"`, which can also see the account; it shares the small rate limit with `diagnose` (on `RATE_LIMITED`, wait as told). Treat its answer as evidence and prefer the docs where they conflict. Without the CLI, ask the assistant in the Plivo console. The docs do not answer the price of a streamed call, Plivo's setup latency, data retention, HIPAA or BAA, which India series allow `<Stream>`, `<Stream>` on SIP-trunk legs, or the longest accepted answer URL: say so and route to Plivo support or the account manager. Out of scope: SIP-connected agent platforms (`plivo skill install sip-trunking`), Plivo's hosted AI Agents, SMS, browser and SIP endpoints, and the inside of the bot.
+Do not guess from other platforms. Search the docs first, without credentials: `plivo docs search <keywords>`, then `plivo docs show <path>`. Next, `plivo ask "<question>"`, which can also see the account; it shares the small rate limit with `diagnose` (on `RATE_LIMITED`, wait as told). Treat its answer as evidence and prefer the docs where they conflict. Without the CLI, ask the assistant in the Plivo console. The docs do not answer the price of a streamed call, Plivo's setup latency, data retention, HIPAA or BAA, which India series allow `<Stream>`, `<Stream>` on SIP-trunk legs, or the longest accepted answer URL: say so and route to Plivo support or the account manager. Out of scope: SIP-connected agent platforms (`plivo skill install sip-trunking`), Plivo's hosted AI Agents, SMS, browser and SIP endpoints, and the inside of the bot.
