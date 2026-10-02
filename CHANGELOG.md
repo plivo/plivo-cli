@@ -5,6 +5,22 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- The audio-streaming skill now runs one guided flow for new and existing
+  users: it checks credit, KYC and the number, builds an echo bot or Pipecat's
+  OpenAI bot or reuses the user's own bot, exposes it through ngrok or
+  Cloudflare Tunnel, creates an `audio-stream-<bot>-<n>` application, links
+  the number and places a test call.
+
+### Removed
+
+- The `first-agent` skill: the audio-streaming flow replaces it. A
+  `plivo-first-agent` folder installed by v1.1.3 stays on disk until you
+  delete it.
+
 ## [1.1.3] - 2026-10-01
 
 ### Added
