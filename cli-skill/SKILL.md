@@ -99,9 +99,8 @@ Pick a sending number: `plivo numbers list --services sms -o json | jq -r '.data
 
 ## Other Plivo skills
 
-Each is bundled in the binary and installed separately, with no network: `plivo skill install first-agent | audio-streaming | sip-trunking | voice-xml`.
+Each is bundled in the binary and installed separately, with no network: `plivo skill install audio-streaming | sip-trunking | voice-xml`.
 
-- `plivo-first-agent`: take a new user to a first AI voice agent on a real call.
-- `plivo-audio-streaming`: connect a WebSocket voice bot to calls with `<Stream>`.
+- `plivo-audio-streaming`: take a voice bot (a test bot or your own WebSocket bot) to real calls with `<Stream>`, from setup to go-live.
 - `plivo-sip-trunking`: connect LiveKit, ElevenLabs, Retell, Vapi or another SIP platform over SIP trunking.
 - `plivo-voice-xml`: write and fix the XML an answer URL returns.
