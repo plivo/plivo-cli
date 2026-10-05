@@ -1,0 +1,35 @@
+Create an inbound or outbound trunk.
+
+An inbound trunk needs a primary URI. An outbound trunk needs a credential or an
+IP access control list to authenticate your platform. Both are checked here
+before the request, because the API's own error does not say which is missing.
+
+trunk_domain is only returned on a read, so this reads the trunk back and prints
+it: that domain is what you paste into your platform.
+
+Usage:
+  plivo sip trunks create [flags]
+
+Examples:
+  plivo sip trunks create --name my-trunk --direction inbound --uri <uri_uuid>
+  plivo sip trunks create --name out --direction outbound --credential <uuid>
+
+Flags:
+      --credential string     credential uuid (outbound)
+      --direction string      inbound|outbound (required)
+      --fallback-uri string   fallback origination URI uuid
+  -h, --help                  help for create
+      --ip-acl string         IP access control list uuid (outbound)
+      --name string           trunk name
+      --secure                enable TLS/SRTP
+      --uri string            primary origination URI uuid (inbound)
+
+Global Flags:
+      --dry-run            print the HTTP request without sending
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts

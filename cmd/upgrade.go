@@ -217,21 +217,73 @@ func verifyDownload(ctx context.Context, rel *release.Release, asset *release.As
 	return verifyManifestSignature(ctx, rel, buf.String())
 }
 
-// verifyManifestSignature checks the signature over SHA256SUMS when the release
-// carries one and cosign is available. The hash check above already guarantees
-// integrity; this adds provenance — that the manifest came from us.
+// allowUnsignedEnv is the explicit, documented escape hatch for the rare case
+// where a signed release genuinely cannot be verified and the operator accepts
+// the risk. It has to be set deliberately; nothing sets it by accident.
+const allowUnsignedEnv = "PLIVO_ALLOW_UNSIGNED"
+
+// unsignedAllowed reports whether the override is explicitly switched ON.
 //
-// A missing signature or missing cosign is not an error: releases predating
-// signing have none, and we will not make an upgrade impossible over a tool the
-// user never installed. A signature that is PRESENT and fails is always fatal.
+// Deliberately NOT `!= ""`. This variable is named positively, so
+// PLIVO_ALLOW_UNSIGNED=0 reads as "do not allow unsigned" — and under a
+// non-empty test it would have done the exact opposite and disabled signature
+// enforcement. Someone hardening CI would have opened the hole they were
+// trying to close. Only an explicit truthy value counts.
+func unsignedAllowed() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(allowUnsignedEnv))) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
+}
+
+// verifyManifestSignature checks the signature over SHA256SUMS.
+//
+// SA-03: every failure here used to return a nil error, so "could not download
+// the signature" meant "install anyway". The checksum alone proves the binary
+// matches its manifest, not who published either, so an attacker able to serve
+// both only had to make the signature assets unavailable to remove the signer
+// check entirely.
+//
+// The line drawn here is what the ATTACKER controls:
+//
+//   - whether signature assets exist, download, or verify  -> attacker-controlled,
+//     so on a release that must be signed these are fatal.
+//   - whether cosign is installed on this machine          -> not attacker-controlled,
+//     so it stays a loud warning rather than blocking an upgrade over a tool
+//     the user never installed.
+//
+// Releases predating FirstSignedRelease have no signature to check and are
+// still allowed through on the checksum.
 func verifyManifestSignature(ctx context.Context, rel *release.Release, sums string) (string, error) {
+	mustVerify := release.SigningRequired(rel.TagName) && !unsignedAllowed()
+
+	// fatal reports a verification failure as an error when the release must be
+	// signed, and as a skip otherwise.
+	fatal := func(status, detail string) (string, error) {
+		if !mustVerify {
+			return "skipped: " + status, nil
+		}
+		return "", fmt.Errorf("release %s must be signed but its signature could not be verified (%s): %s. "+
+			"Refusing to install unverified code. Set %s=1 to override if you accept the risk",
+			rel.TagName, status, detail, allowUnsignedEnv)
+	}
+
 	sigAsset, sigErr := rel.AssetByName("SHA256SUMS.sig")
 	certAsset, certErr := rel.AssetByName("SHA256SUMS.pem")
 	if sigErr != nil || certErr != nil {
+		if mustVerify {
+			return "", fmt.Errorf("release %s publishes no signature assets, but releases from %s onward must be signed. "+
+				"Refusing to install unverified code. Set %s=1 to override if you accept the risk",
+				rel.TagName, release.FirstSignedRelease, allowUnsignedEnv)
+		}
 		return "unsigned", nil
 	}
+
 	cosign := release.CosignPath()
 	if cosign == "" {
+		// Deliberately not fatal: an attacker cannot uninstall the user's cosign,
+		// and the checksum still binds the binary to its manifest.
 		fmt.Fprintln(os.Stderr, "  signature present but cosign is not installed — skipping provenance check")
 		fmt.Fprintln(os.Stderr, "  install it with `brew install cosign` to verify who signed this release")
 		return "skipped: cosign not installed", nil
@@ -239,21 +291,21 @@ func verifyManifestSignature(ctx context.Context, rel *release.Release, sums str
 
 	dir, err := os.MkdirTemp("", "plivo-verify-")
 	if err != nil {
-		return "skipped: could not stage artifacts", nil // the hash check already passed
+		return fatal("could not stage artifacts", err.Error())
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 
 	sumsPath := filepath.Join(dir, "SHA256SUMS")
 	if err := os.WriteFile(sumsPath, []byte(sums), 0o600); err != nil {
-		return "skipped: could not stage artifacts", nil
+		return fatal("could not stage artifacts", err.Error())
 	}
 	sigPath, err := stageAsset(ctx, dir, "SHA256SUMS.sig", sigAsset)
 	if err != nil {
-		return "skipped: could not download signature", nil
+		return fatal("could not download signature", err.Error())
 	}
 	certPath, err := stageAsset(ctx, dir, "SHA256SUMS.pem", certAsset)
 	if err != nil {
-		return "skipped: could not download signature", nil
+		return fatal("could not download certificate", err.Error())
 	}
 
 	fmt.Fprintln(os.Stderr, "→ Verifying signature…")
@@ -263,8 +315,9 @@ func verifyManifestSignature(ctx context.Context, rel *release.Release, sums str
 		fmt.Fprintf(os.Stderr, "  ✓ signed by %s\n", detail)
 		return "verified: " + detail, nil
 	case release.SignatureSkipped:
-		fmt.Fprintf(os.Stderr, "  signature check skipped: %s\n", detail)
-		return "skipped: " + detail, nil
+		// Post-boundary this means an artefact vanished between staging and
+		// verification, which is exactly the case that used to fail open.
+		return fatal("signature check skipped", detail)
 	default:
 		return "failed", fmt.Errorf("%w: %s", err, detail)
 	}

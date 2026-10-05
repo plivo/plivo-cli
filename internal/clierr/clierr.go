@@ -14,7 +14,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
+
+	"github.com/plivo/plivo-cli/internal/output"
 )
 
 // Code is a machine-readable error category. Stable string so AI clients can
@@ -115,7 +118,7 @@ func AuthMissing() *Error {
 	return &Error{
 		Code:    CodeAuthMissing,
 		Message: "No Plivo credentials configured",
-		Hint:    "Run `plivo login` or set PLIVO_AUTH_ID and PLIVO_AUTH_TOKEN env vars.",
+		Hint:    "Run `plivo login`.",
 	}
 }
 
@@ -203,7 +206,7 @@ func FromHTTP(statusCode int, requestID string, body []byte) *Error {
 		e.Hint = "src and dst must differ. Use a destination phone number you can receive on."
 	case strings.Contains(lower, "invalid auth token") || strings.Contains(lower, "invalid credentials"):
 		e.Code = CodeAuthInvalid
-		e.Hint = "Re-check PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN, or run `plivo login`."
+		e.Hint = "Run `plivo login` to re-authenticate."
 	}
 	if e.Code != "" {
 		// Status-specific retryability still applies.
@@ -232,7 +235,7 @@ func FromHTTP(statusCode int, requestID string, body []byte) *Error {
 		e.Hint = "List available resources with the matching `... list` command."
 	case statusCode == http.StatusTooManyRequests:
 		e.Code = CodeRateLimited
-		e.Hint = "Plivo rate-limit is 300 req / 5 s. Back off and retry."
+		e.Hint = rateLimitHint(msg)
 		e.Retryable = true
 	case statusCode == http.StatusRequestTimeout, statusCode == http.StatusGatewayTimeout:
 		e.Code = CodeUpstreamTimeout
@@ -314,7 +317,7 @@ func extractMessage(body []byte) string {
 		}
 	}
 	// Last resort: serialise the whole thing.
-	if b, err := json.Marshal(generic); err == nil {
+	if b, err := output.Marshal(generic); err == nil {
 		if len(b) > 400 {
 			return string(b[:400]) + "…"
 		}
@@ -358,4 +361,21 @@ func upgradeHintFromBody(body []byte) string {
 	}
 	return "Your Plivo CLI is below the minimum supported " + b.MinVersion +
 		". Run `" + b.UpgradeCommand + "`."
+}
+
+// rateLimitStated matches a server message that already gives the limit or the
+// wait, so the hint can defer to it instead of guessing.
+var rateLimitStated = regexp.MustCompile(`(?i)retry in |requests per |rate.?limit`)
+
+// rateLimitHint avoids restating a number the CLI cannot know.
+//
+// Limits differ by orders of magnitude across endpoints: the assistant allows a
+// handful of requests per minute where the general API allows hundreds per
+// second. A hardcoded figure contradicted the server's own message on the same
+// error, so a user following the hint backed off by the wrong amount.
+func rateLimitHint(serverMsg string) string {
+	if rateLimitStated.MatchString(serverMsg) {
+		return "Wait the interval given in the message above, then retry."
+	}
+	return "Back off and retry; the response's Retry-After header gives the wait."
 }

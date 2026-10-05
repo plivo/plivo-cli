@@ -126,12 +126,9 @@ plivo support           # list your past support escalations
 
 Tokens stream as they arrive; long voice-debug runs (2–5 min) print live status until the root cause lands. Ctrl-C cancels cleanly. `-o json` emits one JSONL event per SSE frame for scripting and AI agents.
 
-You can also pass credentials via environment variables instead of `plivo login`:
-
-```bash
-export PLIVO_AUTH_ID=MAxxxxxxxxxxxxxxxxxxxx
-export PLIVO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
+`plivo login` is the only way to authenticate. There is no environment
+variable or flag that accepts a raw `auth_id` / `auth_token`, so a headless
+machine needs a profile that was logged in on it already.
 
 ## Output
 
@@ -164,7 +161,7 @@ For the full command reference, see [`docs/COMMANDS.md`](docs/COMMANDS.md) (auto
 
 ## For LLM agents
 
-If you're an LLM (Claude, Codex, Cursor, Aider, custom agent) and the user has asked you to do anything Plivo-related — **read [`cli-skill/SKILL.md`](cli-skill/SKILL.md) first**. It's the single-file reference written for agent consumption: every command with its required args, flag table, and "when to use" — plus the universal invariants (`--dry-run`, `--yes` for spend verbs, the stable error-envelope codes, JSON-output rules).
+If you're an LLM (Claude, Codex, Cursor, Aider, custom agent) and the user has asked you to do anything Plivo-related — **read [`cli-skill/SKILL.md`](cli-skill/SKILL.md) first**. It's the single-file reference written for agent consumption: the rules (`--dry-run` before `--yes` for spend and destructive verbs, the stable error-envelope codes, JSON-output rules), a command map, and the behaviour `--help` does not show. For flags, `plivo <command> --help` is the source of truth.
 
 **TL;DR for an agent starting cold:**
 

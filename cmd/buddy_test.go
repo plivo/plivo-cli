@@ -64,7 +64,7 @@ func TestBuddyRenderer_jsonMode_emitsOneJSONLLinePerEvent(t *testing.T) {
 		jsonMode: true, startedAt: time.Now(),
 	}
 	events := []api.SSEEvent{
-		{Event: "token", Data: `{"text":"hi"}`},
+		{Event: "token", Data: `{"text":"use <Speak> & <Play>"}`},
 		{Event: "final", Data: `{"answer":"done","latency_ms":42}`},
 	}
 	for _, ev := range events {
@@ -77,7 +77,8 @@ func TestBuddyRenderer_jsonMode_emitsOneJSONLLinePerEvent(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("expected 2 JSONL lines, got %d:\n%s", len(lines), out.String())
 	}
-	if !strings.Contains(lines[0], `"event":"token"`) || !strings.Contains(lines[0], `"text":"hi"`) {
+	// The data passes through as the server sent it, <, > and & included.
+	if !strings.Contains(lines[0], `"event":"token"`) || !strings.Contains(lines[0], `"text":"use <Speak> & <Play>"`) {
 		t.Errorf("first JSONL line wrong: %s", lines[0])
 	}
 	if !strings.Contains(lines[1], `"event":"final"`) {
@@ -323,6 +324,19 @@ func TestRunSupport_noAomUUID_dryRunStillPreviews(t *testing.T) {
 	}
 	if hit {
 		t.Error("--dry-run must not send a request")
+	}
+}
+
+// The dry-run preview shows what would be sent. Questions about XML are
+// common, so <, > and & in the message must print as typed.
+func TestRunAsk_dryRunShowsTheMessageAsTyped(t *testing.T) {
+	setFakeCreds(t)
+	err, _, stderr := execCmd(t, "ask", "can <Speak> & <Play> nest?", "--dry-run")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stderr, `"message": "can <Speak> & <Play> nest?"`) {
+		t.Errorf("dry-run body should show the message as typed, got: %s", stderr)
 	}
 }
 

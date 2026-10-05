@@ -17,6 +17,28 @@ import (
 // install cosign; everyone still gets the SHA256 check, which is already more
 // than most comparable CLIs enforce.
 
+// FirstSignedRelease is the earliest tag published with a cosign signature.
+// Anything at or after this MUST carry one; earlier releases genuinely cannot
+// and are allowed to install on the checksum alone.
+//
+// Before this existed the legacy exception was described in comments but never
+// enforced, so a brand-new release with its signature assets removed verified
+// as "skipped" and installed anyway.
+const FirstSignedRelease = "v0.3.0"
+
+// SigningRequired reports whether tag must carry a signature.
+//
+// An unparseable tag requires one. A tag we cannot place relative to the
+// boundary is not evidence that signing is optional, and this is the decision
+// an attacker would most like us to get wrong.
+func SigningRequired(tag string) bool {
+	t := normalize(tag)
+	if t == "" {
+		return true
+	}
+	return cmpSemver(t, normalize(FirstSignedRelease)) >= 0
+}
+
 // TrustedIdentities are the signer identities a release may carry, as a LIST so
 // a future rotation is additive. A single hardcoded value would strand every
 // already-installed binary the moment the identity changed — and the mechanism

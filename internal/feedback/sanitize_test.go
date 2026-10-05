@@ -150,3 +150,50 @@ func TestSanitize_multiplePIIInOneComment(t *testing.T) {
 		t.Errorf("count = %d, want 3", count)
 	}
 }
+
+// TestSA06_TokensSurviveRegardlessOfDigitPosition covers SA-06. The old
+// pattern required 30-80 characters AFTER a prefix proving both character
+// classes, so a 40-character token whose only digit sat near the end needed
+// 60+ characters to match and reached the collector intact.
+func TestSA06_TokensSurviveRegardlessOfDigitPosition(t *testing.T) {
+	cases := []struct {
+		name  string
+		token string
+	}{
+		{"digit at the very end", strings.Repeat("a", 38) + "9z"},
+		{"digit second", "a9" + strings.Repeat("b", 38)},
+		{"32 chars, single trailing digit", strings.Repeat("b", 31) + "7"},
+		{"well mixed", strings.Repeat("a1b2c3d4e5", 4)},
+		{"digit in the middle", strings.Repeat("x", 20) + "5" + strings.Repeat("y", 19)},
+		{"leading digit only", "7" + strings.Repeat("q", 39)},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			cleaned, n := Sanitize("my token is " + c.token + " thanks")
+			if strings.Contains(cleaned, c.token) {
+				t.Errorf("token survived redaction (%d chars): %q", len(c.token), cleaned)
+			}
+			if n == 0 {
+				t.Error("redaction count not incremented")
+			}
+		})
+	}
+}
+
+// The counterweight: redaction must not eat ordinary prose or long slugs, or
+// feedback becomes unreadable and people stop sending it.
+func TestSA06_DoesNotRedactProse(t *testing.T) {
+	keep := []string{
+		"the command failed with a really long descriptive error message here",
+		strings.Repeat("c", 32), // all letters, no digit
+		strings.Repeat("7", 40), // all digits, no letter
+		"short1",                // too short
+		"hyphenated-words-that-go-on-and-on-but-have-no-digits-at-all",
+	}
+	for _, s := range keep {
+		cleaned, _ := Sanitize(s)
+		if strings.Contains(cleaned, "[REDACTED-TOKEN]") {
+			t.Errorf("redacted ordinary text: %q -> %q", s, cleaned)
+		}
+	}
+}

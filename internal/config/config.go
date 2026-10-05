@@ -1,5 +1,5 @@
 // Package config manages CLI credential profiles in ~/.plivo/config.toml,
-// with fallback to PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN env vars.
+// written by `plivo login` (browser PKCE) and nothing else.
 package config
 
 import (
@@ -101,7 +101,7 @@ func TelemetryEnabled() bool {
 	return cfg.Telemetry.Enabled == nil || *cfg.Telemetry.Enabled
 }
 
-var ErrNoCredentials = errors.New("no credentials: set PLIVO_AUTH_ID/PLIVO_AUTH_TOKEN or run `plivo login`")
+var ErrNoCredentials = errors.New("no credentials: run `plivo login`")
 
 // Path returns the config file path: ~/.plivo/config.toml.
 func Path() (string, error) {
@@ -139,24 +139,54 @@ func Save(c *Config) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(p), 0700); err != nil {
+	dir := filepath.Dir(p)
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	// SA-09: MkdirAll and OpenFile only apply their mode when they CREATE.
+	// A ~/.plivo left at 0755 by an older version, a permissive umask or a
+	// restored backup kept that mode, and the auth token was written into it.
+	// Chmod unconditionally so the directory is private whatever it was.
+	if err := os.Chmod(dir, 0700); err != nil {
+		return err
+	}
+
+	// Write a fresh 0600 temp file and rename over the target, rather than
+	// truncating whatever is already there. A new file cannot inherit a
+	// pre-existing 0644, and the replace is atomic, so an interrupted save
+	// cannot leave a half-written config holding a partial token.
+	tmp, err := os.CreateTemp(dir, ".config-*.toml")
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	return toml.NewEncoder(f).Encode(c)
+	tmpName := tmp.Name()
+	defer func() {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName) // no-op once the rename has succeeded
+	}()
+
+	if err := tmp.Chmod(0600); err != nil {
+		return err
+	}
+	if err := toml.NewEncoder(tmp).Encode(c); err != nil {
+		return err
+	}
+	// Flush before the rename: a crash between the two would otherwise leave
+	// an empty file in place of the real config.
+	if err := tmp.Sync(); err != nil {
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, p)
 }
 
 // Resolve returns the credentials to use.
-// Order: explicit --profile → PLIVO_AUTH_ID/TOKEN env vars → active profile.
-// The second return value is the source label ("profile-name" or "env").
-//
-// Env vars beat the *active* profile so that exporting credentials works even
-// when a profile is already stored — matching the aws, stripe and twilio CLIs.
-// An explicit --profile still beats env: naming a profile is explicit intent.
+// Order: explicit --profile → active profile. Both read a profile written by
+// `plivo login`; there is deliberately no env-var or flag route for a raw
+// auth_id/auth_token.
+// The second return value is the source label (the profile name).
 func Resolve(profileName string) (Profile, string, error) {
 	cfg, err := Load()
 	if err != nil {
@@ -172,10 +202,6 @@ func Resolve(profileName string) (Profile, string, error) {
 			return p, profileName, nil
 		}
 		return Profile{}, "", fmt.Errorf("profile %q not found or has no stored token in %s", profileName, mustPath())
-	}
-
-	if authID, authToken := os.Getenv("PLIVO_AUTH_ID"), os.Getenv("PLIVO_AUTH_TOKEN"); authID != "" && authToken != "" {
-		return Profile{AuthID: authID, AuthToken: authToken}, "env", nil
 	}
 
 	if cfg.Active != "" {

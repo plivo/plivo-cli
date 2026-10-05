@@ -5,7 +5,127 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.3] - 2026-10-01
+
+### Added
+
+- `plivo skill install first-agent` installs a new skill that walks a new
+  user to a first AI voice agent on a real call: login, a number, an
+  application, an echo bot, then an OpenAI bot. It needs this release, since
+  earlier releases cannot carry the call (see Fixed).
+- `plivo login` can now finish when the browser can't reach the terminal
+  (SSH, WSL, containers, VMs): while it waits, paste the callback URL from the
+  browser's address bar. It goes through the same state check as the
+  redirect, and the PKCE verifier never leaves the CLI. A host on a different
+  network from the browser still can't log in this way.
+
+### Changed
+
+- The bundled agent skills are rewritten and much smaller: the four existing
+  skills drop by about 70% (roughly 85k to 26k tokens), so they take far less
+  of an agent's context when they load. Long reference tables now point at
+  the matching docs page (`plivo docs show <path>`) instead of copying it, and
+  the skills warn again before commands that reroute a live number or delete
+  or change a SIP trunk or URI.
+- `voice multiparty create` is hidden and now fails fast with guidance. Plivo
+  has no API to create a MultiPartyCall; one starts when its first participant
+  is added (`voice multiparty participant add <name> ...`). The command used
+  to send a request that always failed with 405.
+- Updated `golang.org/x/sys` to v0.48.0 and `golang.org/x/term` to v0.46.0.
+
+### Fixed
+
+- `voice streams forward` can now carry a live call. It checked Plivo's
+  WebSocket signature against the `wss://` URL instead of the `http://` URL
+  Plivo signs, so every stream was refused with a 403, and its answer XML
+  lacked `keepCallAlive="true"`, so the call hung up as the stream started.
+  Closing the terminal now also restores the application's answer URL.
+- Strict skill loaders such as `npx skills` skipped the audio-streaming and
+  SIP trunking skills because their frontmatter was invalid YAML; every
+  bundled skill now loads.
+- JSON output no longer escapes `<`, `>` and `&` (for example in hints such
+  as `participant add <name>`, and in URLs).
+- `plivo docs show` no longer cuts a page short at a `# ` comment inside a
+  code sample, and those comments no longer show up as separate pages in
+  `plivo docs search`.
+- Answering `n` at the `plivo feedback` submit prompt now exits 0 with
+  "Cancelled, nothing sent." instead of reporting an input error.
+- `plivo feedback` on Windows names the right end-of-input key, and control
+  characters are stripped from the text.
+
+## [1.1.2] - 2026-09-22
+
+### Changed
+
+- `PLIVO_AUTH_ID` / `PLIVO_AUTH_TOKEN` are no longer read. `plivo login`
+  (browser OAuth/PKCE) is now the only way a credential enters the CLI, and
+  credentials resolve `--profile` then active profile. The env vars previously
+  outranked a stored profile, so a long-lived `auth_token` pasted into a shell
+  profile or held as a CI secret bypassed the PKCE handshake entirely. **If you
+  authenticate a headless host or CI job by exporting those two variables, it
+  will stop working on upgrade** — that machine now needs a profile logged in on
+  it beforehand. There is no headless alternative; `plivo login` needs a browser.
+- A rejected profile's hint pointed at `plivo login --profile <name>`, which
+  only *selects* a profile and does not name one at login, so following it
+  changed nothing. It now says `--name`.
+
+## [1.1.1] - 2026-09-19
+
+### Fixed
+
+- `sip * delete` ran its dependency check only when refusing. With `--yes` there
+  was no pre-flight read at all, so a delete that detached other objects printed
+  nothing. Deleting an in-use URI **cascade-deletes the trunks pointing at it**,
+  which is exactly the case the check exists to surface. The read now always
+  runs; `--yes` skips the confirmation only.
+- `sip trunks update` 400'd on every flag except `--status` and `--secure`: the
+  API requires `trunk_direction` on each update and the CLI never sent it. It is
+  now read from the trunk, with `--direction` as an override.
+- `sip calls diagnose` exited 0 when the assistant failed to analyse the call,
+  so a script could not tell success from failure. It now exits non-zero when
+  the turn ends in an escalation rather than an answer.
+- `diagnose` told terminal users to reload the Plivo Console, and filed support
+  tickets on its own initiative. Both are now ruled out in the request.
+- `-o json` was ignored by every `update` and `delete`: stdout was empty, prose
+  went to stderr and the exit code was 0, which a jq pipeline reads as success
+  with no data.
+- `sip trunks create -o json` omitted `trunk_domain`, the one value a customer
+  pastes into their platform. Table mode read it back; JSON did not.
+- `sip credentials update` presented `--password-stdin` as optional, but the API
+  rewrites the password on every update, so an update without one blanks it.
+  The flag is now required.
+- `sip uris create` took `--password` on the command line, where it lands in
+  shell history, `ps` output and CI logs. Passwords are stdin-only, matching
+  credentials, and a URI password can now be rotated on update. Rotation also
+  restates `authentication_needed` and the stored username, which the API
+  demands alongside a password and which made rotation impossible on the wire.
+- `numbers update --trunk-id` skipped the outbound-trunk check under `--dry-run`,
+  so the preview showed a request the real run refuses. Pre-flight reads now run
+  under `--dry-run`; it suppresses writes, and a GET is not a write.
+
+## [1.1.0] - 2026-09-18
+
+### Added
+
+- `plivo sip` — SIP Trunking was the only Plivo product with no CLI surface at
+  all. Typed CRUD over trunks, origination URIs, credentials and IP access
+  control lists, plus reading trunk CDRs and `sip calls diagnose`.
+- `numbers update --trunk-id` routes a number to an inbound trunk. The API takes
+  a trunk in `app_id`, so until now you had to know a trunk goes in a flag named
+  after applications. An outbound trunk is refused: a number attached to one
+  quietly stops answering.
+- Credential passwords are read from stdin only. There is no `--password` flag,
+  because an argument lands in shell history, `ps` output and CI logs.
+- Deleting a URI, credential or IP ACL first names every trunk pointing at it,
+  and deleting a trunk reports how many numbers it would detach.
+- **Known limitation:** `sip calls diagnose` needs server-side support that is
+  not live yet, so it currently reports that the call could not be retrieved.
+  Everything else under `plivo sip` works today; use `sip calls get` for the
+  hangup cause, durations and SIP details in the meantime.
+- `sip calls list` filters cover exactly what the API accepts, so a flag that
+  would 400 upstream does not exist. `--limit` is bounded and `--since`/`--until`
+  are parsed locally, and `--until` widens a bare date to the end of that day so
+  the day you name is included.
 
 ### Fixed
 
@@ -31,6 +151,99 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is how the skill is installed. The map is now checked against the real
   command tree, and the repo-wide doc check reads git's file list rather than
   walking the filesystem, which reported a stale nested checkout as a defect.
+
+
+
+- Cancelling sign-in in the browser now ends `plivo login` immediately. The
+  Cancel button only closed the browser tab, so the CLI kept listening and
+  failed five minutes later with a timeout telling the user to go and approve
+  the thing they had just refused. An `error` in the loopback callback is now
+  handled; previously it fell through to "missing code in callback URL".
+
+### Security
+
+- `voice streams forward` now validates Plivo's V3 signature on `/answer` and
+  on the `/ws` upgrade (SA-01). Both were reachable by anyone who learned the
+  tunnel URL, and after any successful upgrade the CLI dialled `--to` and
+  forwarded frames both ways, so an unauthenticated caller could drive the
+  local handler and read its replies. Origin checking does not help: a
+  non-browser caller simply omits `Origin`.
+- Verification uses the public tunnel URL rather than the request's `Host`,
+  which is the local listener once the request has come through the tunnel.
+- `--insecure-skip-signature` restores the old behaviour deliberately.
+- The localhost.run SSH fallback now verifies the tunnel host (SA-02). It ran
+  with `StrictHostKeyChecking=no` and `UserKnownHostsFile=/dev/null`, so it
+  accepted any server without authenticating it and discarded the user's
+  stored trust. The justification in the code reasoned about confidentiality
+  ("nothing secret in the tunnel") and missed integrity: the server's output
+  supplies the URL the CLI writes into the application's `answer_url`, so an
+  impersonator redirects live call handling.
+- Uses `accept-new` against a dedicated `~/.plivo/known_hosts_tunnel`: an
+  unknown host is recorded once, a changed key is refused. An attacker now has
+  to be present at the first connection rather than at any connection.
+- This narrows SA-02 rather than closing it. localhost.run publishes no
+  fingerprint to pin, and re-reading the key on each run would just re-learn it
+  from the party being authenticated. First use prints that the provider's
+  identity cannot be checked and points at ngrok, whose client authenticates
+  its own service.
+- Credentials no longer appear in `--dry-run` or `--log-level debug` output
+  (SA-05). Both printed the request body verbatim, so
+  `voice endpoints create --password ...` put the SIP password in the
+  terminal, and from there into terminal recordings, CI logs, support
+  attachments and agent transcripts. A shared recursive redactor now covers
+  every path that prints a body, at any nesting depth, for JSON and
+  urlencoded forms.
+- Feedback redaction no longer depends on where a token's digits fall
+  (SA-06). The pattern required 30-80 characters *after* a prefix proving both
+  character classes were present, so a 40-character token whose only digit sat
+  near the end needed 60+ characters to match and reached the collector
+  intact. Length and character classes are now checked independently.
+- ngrok tunnel discovery is now bound to the tunnel we actually started
+  (SA-04). It returned the first HTTPS tunnel advertised on
+  127.0.0.1:4040, but that port belongs to whichever ngrok started first, so
+  an unrelated instance could hand us its URL, which is then written into the
+  Plivo application's `answer_url` and routes the account's calls to a tunnel
+  we do not own.
+- The tunnel must now forward to the port we requested, and polling aborts if
+  our own ngrok exits rather than waiting out the timeout against somebody
+  else's.
+- Terminal control sequences in API-provided text are now neutralised before
+  they reach human output (SA-07). A backend storing hostile text in an agent
+  name, alias or caller ID could repaint the terminal, hide or fake output, or
+  drive sequences some terminals act on. Applies to tables, key-value output
+  and the plain error renderer. Printable text, including every non-ASCII
+  script, is untouched; only C0 controls and DEL are escaped, and tab and
+  newline are kept because the renderers use them for layout.
+- Saving credentials now tightens permissions that already exist (SA-09).
+  `MkdirAll` and `OpenFile` only apply their mode when they create, so a
+  `~/.plivo` left at 0755 or a `config.toml` left at 0644 kept those modes and
+  the auth token was written into a file other local users could read.
+- The config is now written to a fresh 0600 temp file and renamed into place.
+  A new file cannot inherit a permissive mode, and the replace is atomic, so
+  an interrupted save can no longer leave a half-written config holding a
+  partial token.
+- Release signature verification no longer fails open (SA-03). Every failure
+  path returned a nil error, so a signature that could not be downloaded, or
+  assets that were simply absent, meant "install anyway". A checksum proves the
+  binary matches its manifest, not who published either, so an attacker able to
+  serve both only had to break the signature fetch to remove the signer check.
+- Releases from v0.3.0 onward must now carry a verifiable signature. That
+  boundary was described in comments but never enforced, so a brand-new release
+  with its signature assets removed verified as "skipped" and installed.
+  Genuinely older releases still install on the checksum alone.
+- Missing assets, download failures and staging errors are fatal on a release
+  that must be signed, in `plivo upgrade`, `install.sh` and `install.ps1`.
+  `PLIVO_ALLOW_UNSIGNED=1` overrides deliberately.
+- cosign not being installed stays a warning rather than an error. An attacker
+  cannot uninstall the user's cosign, so it is not a path they control, and
+  blocking upgrades over a tool the user never installed would cost more than
+  it buys.
+- Go toolchain baseline moved from 1.26.3 to 1.26.8 (SA-08). Every workflow
+  pins its toolchain with `go-version-file: go.mod`, so the stale `go`
+  directive was the build baseline, and the audit found symbol-level paths to
+  eight standard-library advisories from it.
+- CI now runs `govulncheck` over both the public and internal builds, so the
+  baseline cannot drift unnoticed again. Nothing was watching it before.
 
 ## [1.0.1] - 2026-09-08
 

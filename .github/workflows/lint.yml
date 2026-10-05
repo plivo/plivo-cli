@@ -30,3 +30,28 @@ jobs:
         with:
           version: v2.12.2
           args: --timeout=5m
+
+  # SA-08: the audit found symbol-level paths to eight Go standard-library
+  # advisories because the toolchain is pinned by the `go` directive in go.mod
+  # and that directive had gone stale. Nothing was watching it, so this runs
+  # govulncheck over BOTH build tags — the internal build compiles files the
+  # public one does not.
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: public build
+        run: govulncheck ./...
+
+      - name: internal build
+        run: govulncheck -tags internal ./...

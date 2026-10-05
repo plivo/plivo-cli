@@ -1,0 +1,32 @@
+List SIP Trunking calls
+
+Usage:
+  plivo sip calls list [flags]
+
+Examples:
+  plivo sip calls list --limit 20
+  plivo sip calls list --direction outbound --since 2026-09-01
+  plivo sip calls list --hangup-source carrier -o json
+
+Flags:
+      --direction string           inbound|outbound
+      --from-number string         filter by caller ID
+      --hangup-cause-code int      filter by numeric hangup cause code
+      --hangup-source string       who ended the call: customer|carrier|zentrunk
+  -h, --help                       help for list
+      --limit int                  rows to return (1-20) (default 20)
+      --offset int                 rows to skip
+      --since string               calls ending at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
+      --stir-verification string   "Verified"|"Not Verified"|"Not Applicable"
+      --to-number string           filter by destination
+      --until string               calls ending at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
+
+Global Flags:
+      --dry-run            print the HTTP request without sending
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts

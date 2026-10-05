@@ -1,0 +1,22 @@
+--authentication-needed takes a value so it reverses: --authentication-needed=false turns it off.
+
+Usage:
+  plivo sip uris update <uri_uuid> [flags]
+
+Flags:
+      --authentication-needed   require authentication (takes a value)
+  -h, --help                    help for update
+      --name string             URI name
+      --password-stdin          read a new URI password from stdin
+      --uri string              origination URI
+      --username string         username
+
+Global Flags:
+      --dry-run            print the HTTP request without sending
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts

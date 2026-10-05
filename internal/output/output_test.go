@@ -198,6 +198,70 @@ func TestJSONError_omitsEmptyOptionalFields(t *testing.T) {
 	}
 }
 
+// JSON output goes to terminals, pipes and parsers, never into an HTML page,
+// so <, > and & must come out as written, not as unicode escapes: a hint's
+// `<name>` has to stay readable and an API URL's query string intact.
+// Comparing exact bytes also pins the two-space indent and trailing newline.
+func TestJSONWriters_keepHTMLCharactersLiteral(t *testing.T) {
+	const dataWant = `{
+  "data": {
+    "alias": "<Sales & Support>",
+    "answer_url": "https://example.com/answer?a=1&b=2"
+  }
+}
+`
+	cases := []struct {
+		name  string
+		write func(*bytes.Buffer) error
+		want  string
+	}{
+		{
+			name: "error hint",
+			write: func(b *bytes.Buffer) error {
+				JSONError(b, "BAD_INPUT", "no such command", "Run plivo voice multiparty participant add <name>.", "", "", false, 0, nil)
+				return nil
+			},
+			want: `{
+  "error": {
+    "code": "BAD_INPUT",
+    "hint": "Run plivo voice multiparty participant add <name>.",
+    "message": "no such command",
+    "retryable": false
+  }
+}
+`,
+		},
+		{
+			name: "data value",
+			write: func(b *bytes.Buffer) error {
+				return JSONSuccess(b, map[string]any{
+					"alias":      "<Sales & Support>",
+					"answer_url": "https://example.com/answer?a=1&b=2",
+				}, nil)
+			},
+			want: dataWant,
+		},
+		{
+			name: "raw upstream body",
+			write: func(b *bytes.Buffer) error {
+				return JSONRaw(b, json.RawMessage(`{"alias":"<Sales & Support>","answer_url":"https://example.com/answer?a=1&b=2"}`))
+			},
+			want: dataWant,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := tc.write(&buf); err != nil {
+				t.Fatal(err)
+			}
+			if got := buf.String(); got != tc.want {
+				t.Errorf("got:\n%s\nwant:\n%s", got, tc.want)
+			}
+		})
+	}
+}
+
 // ─── PlainError ──────────────────────────────────────────────────────────────
 
 func TestPlainError_humanFormat(t *testing.T) {

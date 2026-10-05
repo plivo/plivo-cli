@@ -156,7 +156,7 @@ func runAsk(cmd *cobra.Command, args []string) error {
 
 	// --dry-run: print what would be sent, don't open the SSE stream.
 	if dryRunFlag {
-		pretty, _ := json.MarshalIndent(body, "  ", "  ")
+		pretty, _ := output.MarshalIndent(body, "  ", "  ")
 		fmt.Fprintf(os.Stderr, "[dry-run] POST %s (SSE)\n  body:\n  %s\n", url, pretty)
 		return nil
 	}
@@ -213,8 +213,17 @@ func runAsk(cmd *cobra.Command, args []string) error {
 		// A server-emitted error event is a service-side error, not bad user input.
 		return clierr.Upstream(r.errorMsg)
 	}
+	lastAskEscalated = r.escalated
 	return nil
 }
+
+// escalateToolName is the assistant tool that files a support ticket.
+const escalateToolName = "escalate_to_support"
+
+// lastAskEscalated reports whether the last assistant turn ended by filing a
+// support ticket. `ask` treats that as a normal outcome; `diagnose` does not,
+// because an investigation that ends in a ticket did not diagnose anything.
+var lastAskEscalated bool
 
 // buildBuddyUserContext fetches best-effort account context (balance). Failure
 // is non-fatal — an empty userContext is valid. The server's BuddyUserContext
@@ -485,6 +494,7 @@ type buddyRenderer struct {
 	streamed     bool
 	hadNarration bool
 	errorSeen    bool
+	escalated    bool
 	errorMsg     string
 	// sessionID is captured from a `session` event, if one ever arrives (the
 	// current server contract never sends one — see newBuddySessionID, which
@@ -505,10 +515,12 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		if !json.Valid(raw) {
 			raw = json.RawMessage(`null`)
 		}
-		_ = json.NewEncoder(r.out).Encode(map[string]any{
+		if b, err := output.Marshal(map[string]any{
 			"event": ev.Event,
 			"data":  raw,
-		})
+		}); err == nil {
+			_, _ = r.out.Write(append(b, '\n'))
+		}
 		// `final`/`error` end the legacy stream; `done` ends the PAI stream.
 		return ev.Event != "final" && ev.Event != "error" && ev.Event != "done"
 	}
@@ -560,13 +572,19 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		}
 
 	case "tool_call":
-		if !r.verbose {
-			return true
-		}
 		var d struct {
 			Name string `json:"name"`
 		}
 		_ = json.Unmarshal(buddyInner(ev.Data), &d)
+		if d.Name == escalateToolName {
+			// The assistant gave up and filed a ticket. That is a failed
+			// investigation however cheerful the prose reads, and `diagnose`
+			// checks this to decide its exit code.
+			r.escalated = true
+		}
+		if !r.verbose {
+			return true
+		}
 		// Clear the spinner/narration line under the lock so this print doesn't
 		// garble; the spinner redraws itself on the next tick.
 		r.withSpinnerCleared(func() {
@@ -925,15 +943,15 @@ func runSupport(cmd *cobra.Command, args []string) error {
 		}
 		client = c
 	}
-	// "Your past escalations" needs a human identity to scope by — only a
-	// browser `plivo login` populates one. PLIVO_AUTH_ID/TOKEN env auth (and
-	// older manually-entered profiles) can't be attributed to a person.
+	// "Your past escalations" needs a human identity to scope by, and only a
+	// browser `plivo login` populates one. Older manually-entered profiles
+	// can't be attributed to a person.
 	// --dry-run sends nothing, so it still previews the request.
 	if client.AomUUID == "" && !dryRunFlag {
 		return &clierr.Error{
 			Code:    clierr.CodeAuthForbidden,
 			Message: "support needs a browser-login profile to scope escalations to you",
-			Hint:    "Run `plivo login` — env var or manually-entered credentials have no per-user identity to filter by.",
+			Hint:    "Run `plivo login` — a manually-entered profile has no per-user identity to filter by.",
 		}
 	}
 	applyBuddyURL(client)

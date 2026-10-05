@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"io"
@@ -9,10 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/config"
 	"github.com/plivo/plivo-cli/internal/feedback"
-
-	"github.com/plivo/plivo-cli/internal/api"
 )
 
 // resetFeedbackFlags zeros out the package-level feedback flags between
@@ -204,6 +204,38 @@ func TestFeedback_telemetryDisabled_surfacesFriendlyMessage(t *testing.T) {
 	}
 }
 
+// Declining the pre-submit preview is a choice, not a failure. Any error
+// returned from here reaches the root handler, which prints an error
+// envelope with a --help hint and exits non-zero, so a decline must come
+// back as "don't submit" with no error.
+func TestShowPreviewAndConfirm(t *testing.T) {
+	resetFeedbackFlags(t)
+	cases := []struct {
+		name       string
+		answer     string
+		wantSubmit bool
+	}{
+		{"Enter submits", "\n", true},
+		{"y submits", "y\n", true},
+		{"n cancels", "n\n", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			submit, err := showPreviewAndConfirm(&feedback.Event{Rating: 4}, strings.NewReader(tc.answer), &out)
+			if err != nil {
+				t.Fatalf("answer %q returned error %v, want nil", tc.answer, err)
+			}
+			if submit != tc.wantSubmit {
+				t.Errorf("answer %q: submit = %v, want %v", tc.answer, submit, tc.wantSubmit)
+			}
+			if cancelled := strings.Contains(out.String(), "Cancelled, nothing sent."); cancelled == tc.wantSubmit {
+				t.Errorf("answer %q: cancel line printed = %v, want %v; output:\n%s", tc.answer, cancelled, !tc.wantSubmit, out.String())
+			}
+		})
+	}
+}
+
 func TestFeedback_badRatingFlag_errors(t *testing.T) {
 	resetFeedbackFlags(t)
 	t.Setenv(feedback.MachineIDEnvVar, "test-machine")
@@ -352,6 +384,46 @@ func TestResolveFeedbackTransport_gatesIdentityHeadersOnTelemetry(t *testing.T) 
 	}
 	if headers["X-Plivo-CLI-Version"] == "" {
 		t.Error("telemetry off: X-Plivo-CLI-Version should still be present")
+	}
+}
+
+// Windows consoles pass Ctrl-D through as a literal 0x04 and end lines with
+// \r\n. Neither may reach the collector, and a Ctrl-D line must end input.
+func TestPromptComment(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"Ctrl-D line ends input", "hello\r\n\x04\r\nnever read\r\n", "hello"},
+		{"repeated Ctrl-D line ends input", "\x04\x04\r\nnever read\r\n", ""},
+		{"blank first line does not end input", "\nhello\n\n", "hello"},
+		{"CRLF becomes LF", "line1\r\nline2\r\n\r\n", "line1\nline2"},
+		{"embedded control char dropped", "hi\x04there\n\n", "hithere"},
+		{"Unix input and tabs unchanged", "a\tb\nc\n\n", "a\tb\nc"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := promptComment(bufio.NewReader(strings.NewReader(tc.in)), io.Discard, 0)
+			if err != nil {
+				t.Fatalf("promptComment: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("promptComment(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestEndOfInputKey(t *testing.T) {
+	for goos, want := range map[string]string{
+		"windows": "Ctrl-D then Enter",
+		"darwin":  "Ctrl-D",
+		"linux":   "Ctrl-D",
+	} {
+		if got := endOfInputKey(goos); got != want {
+			t.Errorf("endOfInputKey(%q) = %q, want %q", goos, got, want)
+		}
 	}
 }
 

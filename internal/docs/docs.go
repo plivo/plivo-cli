@@ -159,20 +159,37 @@ func parsePages(body string) []Page {
 			sb.Reset()
 		}
 	}
+	write := func(line string) {
+		if cur != nil {
+			sb.WriteString(line)
+			sb.WriteByte('\n')
+		}
+	}
+	// A page starts at "# Title" only when the next line is "Source: url".
+	// Any other "# " line is body text, such as a comment in a code sample.
+	var title string
+	held := false
 	sc := bufio.NewScanner(strings.NewReader(body))
 	sc.Buffer(make([]byte, 0, 1<<20), 1<<20)
 	for sc.Scan() {
 		line := sc.Text()
-		switch {
-		case strings.HasPrefix(line, "# "):
-			flush()
-			cur = &Page{Title: strings.TrimSpace(line[2:])}
-		case cur != nil && cur.Source == "" && strings.HasPrefix(line, "Source: "):
-			cur.Source = strings.TrimSpace(line[len("Source: "):])
-		case cur != nil:
-			sb.WriteString(line)
-			sb.WriteByte('\n')
+		if held {
+			held = false
+			if strings.HasPrefix(line, "Source: ") {
+				flush()
+				cur = &Page{Title: strings.TrimSpace(title[2:]), Source: strings.TrimSpace(line[len("Source: "):])}
+				continue
+			}
+			write(title)
 		}
+		if strings.HasPrefix(line, "# ") {
+			title, held = line, true
+			continue
+		}
+		write(line)
+	}
+	if held {
+		write(title)
 	}
 	flush()
 	return out

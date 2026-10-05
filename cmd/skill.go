@@ -9,6 +9,7 @@ import (
 
 	audiostreamingskill "github.com/plivo/plivo-cli/audio-streaming-skill"
 	cliskill "github.com/plivo/plivo-cli/cli-skill"
+	firstagentskill "github.com/plivo/plivo-cli/first-agent-skill"
 	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/output"
 	siptrunkingskill "github.com/plivo/plivo-cli/sip-trunking-skill"
@@ -35,6 +36,7 @@ var bundledSkills = []bundledSkill{
 		content:  cliskill.SkillMD,
 		summary:  "the CLI reference — use `plivo` instead of raw curl",
 	},
+	{selector: "first-agent", dirName: "plivo-first-agent", content: firstagentskill.SkillMD, summary: "take a new user to a first AI voice agent on a real call"},
 	{selector: "audio-streaming", dirName: "plivo-audio-streaming", content: audiostreamingskill.SkillMD, summary: "connect a WebSocket voice bot to calls with <Stream>"},
 	{selector: "sip-trunking", dirName: "plivo-sip-trunking", content: siptrunkingskill.SkillMD, summary: "connect an AI voice platform over SIP trunking"},
 	{selector: "voice-xml", dirName: "plivo-voice-xml", content: voicexmlskill.SkillMD, summary: "write and fix Plivo Voice XML"},
@@ -85,7 +87,7 @@ var skillCmd = &cobra.Command{
 // skillInstallCmd writes the embedded SKILL.md into the agent skills directory
 // (default ~/.claude/skills/plivo-cli; override with --dir, or --print to stdout).
 var skillInstallCmd = &cobra.Command{
-	Use:   "install [cli|audio-streaming|sip-trunking|voice-xml|all]",
+	Use:   "install [cli|first-agent|audio-streaming|sip-trunking|voice-xml|all]",
 	Short: "Install an agent skill so coding agents auto-load the reference",
 	Long: `Install a Plivo agent skill.
 
@@ -93,6 +95,7 @@ A skill is a single-file reference (SKILL.md) written for LLM coding agents.
 They are bundled in the binary, so this writes them out without a network call.
 
   cli              the CLI reference — use ` + "`plivo`" + ` instead of raw curl
+  first-agent      take a new user to a first AI voice agent on a real call
   audio-streaming  connect a WebSocket voice bot to calls with <Stream>
   sip-trunking     connect an AI voice platform over SIP trunking
   voice-xml        write and fix Plivo Voice XML
@@ -103,11 +106,12 @@ Each skill lands at ~/.claude/skills/<skill>/SKILL.md by default. Use --dir to
 target another agent's skills directory, or --print to write the content to
 stdout so any other tool can capture it; both act on a single skill.`,
 	Example: `  plivo skill install                    # CLI skill -> ~/.claude/skills/plivo-cli/
+  plivo skill install first-agent        # -> ~/.claude/skills/plivo-first-agent/
   plivo skill install voice-xml          # -> ~/.claude/skills/plivo-voice-xml/
   plivo skill install all                # every listed skill
   plivo skill install all --dry-run      # show destinations, write nothing`,
 	Args:      cobra.MaximumNArgs(1),
-	ValidArgs: []string{"cli", "audio-streaming", "sip-trunking", "voice-xml", "all"},
+	ValidArgs: []string{"cli", "first-agent", "audio-streaming", "sip-trunking", "voice-xml", "all"},
 	RunE:      runSkillInstall,
 }
 
