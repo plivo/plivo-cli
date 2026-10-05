@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/config"
 	"github.com/plivo/plivo-cli/internal/feedback"
 )
@@ -423,5 +424,23 @@ func TestEndOfInputKey(t *testing.T) {
 		if got := endOfInputKey(goos); got != want {
 			t.Errorf("endOfInputKey(%q) = %q, want %q", goos, got, want)
 		}
+	}
+}
+
+// TestResolveFeedbackTransport_sendsClientType keeps the feedback path on the
+// same client-identification contract as Client.addCLIHeaders. Feedback is a
+// second, independent header builder, so a change to one silently misses the
+// other unless something checks both.
+func TestResolveFeedbackTransport_sendsClientType(t *testing.T) {
+	_, headers := resolveFeedbackTransport("MAWORK")
+	if got := headers["Client-Type"]; got != api.ClientTypeCLI {
+		t.Errorf("Client-Type = %q, want %q", got, api.ClientTypeCLI)
+	}
+	if headers["Client-Version"] == "" {
+		t.Error("Client-Version is empty on the feedback transport")
+	}
+	if headers["Client-Version"] != headers["X-Plivo-CLI-Version"] {
+		t.Errorf("Client-Version %q != X-Plivo-CLI-Version %q",
+			headers["Client-Version"], headers["X-Plivo-CLI-Version"])
 	}
 }

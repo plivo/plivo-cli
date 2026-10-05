@@ -38,6 +38,8 @@ type capturedRequest struct {
 	cliAuthID     string
 	cliRegion     string
 	cliAomUUID    string
+	clientType    string
+	clientVersion string
 	userAgent     string
 	body          []byte
 }
@@ -56,6 +58,8 @@ func newFakeServer(t *testing.T, status int, respBody string, respHeaders map[st
 		captured.cliAuthID = r.Header.Get("X-Plivo-CLI-Auth-ID")
 		captured.cliRegion = r.Header.Get("X-Plivo-CLI-Region")
 		captured.cliAomUUID = r.Header.Get("X-Plivo-CLI-AOM-UUID")
+		captured.clientType = r.Header.Get("Client-Type")
+		captured.clientVersion = r.Header.Get("Client-Version")
 		captured.userAgent = r.Header.Get("User-Agent")
 		b, _ := io.ReadAll(r.Body)
 		captured.body = b
@@ -445,5 +449,52 @@ func TestE2E_TelemetryEnabled_sendsIdentityHeaders(t *testing.T) {
 	}
 	if captured.cliAomUUID != "aom-fixture-uuid" {
 		t.Errorf("X-Plivo-CLI-AOM-UUID = %q, want aom-fixture-uuid", captured.cliAomUUID)
+	}
+}
+
+// TestE2E_ClientTypeAndVersionHeaders covers hodor's own client-identification
+// headers, which are separate from the X-Plivo-CLI-* set. Without them every
+// CLI request is logged as client_type "undefined" with an empty
+// client_version, while the console shows up as web_app, so CLI traffic could
+// only be found by knowing the /v1/cli route prefix and could not be sliced by
+// version at all.
+func TestE2E_ClientTypeAndVersionHeaders(t *testing.T) {
+	srv, captured := newFakeServer(t, 200, `{}`, nil)
+	c := newTestClient(srv.URL)
+	if _, err := c.Do("GET", c.AccountURL("Number"), nil, nil, nil); err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if captured.clientType != ClientTypeCLI {
+		t.Errorf("Client-Type = %q, want %q (hodor normalises anything unrecognised to \"undefined\")",
+			captured.clientType, ClientTypeCLI)
+	}
+	if captured.clientVersion != version.Value {
+		t.Errorf("Client-Version = %q, want %q", captured.clientVersion, version.Value)
+	}
+	// The two version headers feed different consumers (logs vs the upgrade
+	// gate); they must not drift apart.
+	if captured.clientVersion != captured.cliVersion {
+		t.Errorf("Client-Version %q != X-Plivo-CLI-Version %q", captured.clientVersion, captured.cliVersion)
+	}
+}
+
+// These identify the client, not the human, so they must survive a telemetry
+// opt-out exactly as Version/OS/Arch do.
+func TestE2E_ClientTypeSurvivesTelemetryOptOut(t *testing.T) {
+	srv, captured := newFakeServer(t, 200, `{}`, nil)
+	c := newTestClient(srv.URL)
+	c.TelemetryEnabled = false
+	c.Email = "someone@example.com"
+	if _, err := c.Do("GET", c.AccountURL("Number"), nil, nil, nil); err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if captured.clientType != ClientTypeCLI {
+		t.Errorf("Client-Type = %q with telemetry off, want %q", captured.clientType, ClientTypeCLI)
+	}
+	if captured.clientVersion == "" {
+		t.Error("Client-Version dropped with telemetry off")
+	}
+	if captured.cliEmail != "" {
+		t.Errorf("identity header leaked with telemetry off: %q", captured.cliEmail)
 	}
 }
