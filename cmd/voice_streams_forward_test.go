@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -418,7 +419,10 @@ func runForwardTeardown(t *testing.T, restoreStatus int, args ...string) (error,
 	t.Helper()
 	setFakeCreds(t)
 	const original = "https://old.example.com/answer"
-	var restoreBody map[string]any
+	var (
+		mu          sync.Mutex // the handler runs on the server's goroutine
+		restoreBody map[string]any
+	)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method == http.MethodGet {
@@ -431,7 +435,9 @@ func runForwardTeardown(t *testing.T, restoreStatus int, args ...string) (error,
 			fmt.Fprint(w, `{"message":"changed"}`) // pointing the app at the tunnel
 			return
 		}
+		mu.Lock()
 		restoreBody = body
+		mu.Unlock()
 		if restoreStatus == 0 {
 			conn, _, _ := w.(http.Hijacker).Hijack()
 			conn.Close()
@@ -458,6 +464,8 @@ func runForwardTeardown(t *testing.T, restoreStatus int, args ...string) (error,
 
 	base := []string{"voice", "streams", "forward", "--number", "+14155550142", "--app", "APP123", "--to", "ws://localhost:7860/ws", "--yes"}
 	err, stdout, _ := execCmd(t, append(base, args...)...)
+	mu.Lock()
+	defer mu.Unlock()
 	return err, stdout, restoreBody
 }
 
