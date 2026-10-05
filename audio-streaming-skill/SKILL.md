@@ -298,6 +298,14 @@ Then report, short, in these words where they fit:
 - Alert on the 7011 rate: an answer URL that fails under load keeps producing 7011s long after launch. Plivo's Voice Alerts also email you when callback failures pass 5%: `plivo docs show voice/concepts/voice-alerts` (<https://plivo.com/docs/voice/concepts/voice-alerts>).
 - Make one test call (step 9) against production before the first external caller.
 
+## One app for many customers
+
+- One application can serve every customer: route on `To` (the number dialled) and build the `wss://` URL per call on your server, with `CallUUID` or a short id in it.
+- Use a subaccount per customer only when they need their own numbers, their own signing token (`X-Plivo-Signature-V3` is signed with the token of the subaccount that owns the number) or separate call records. Subaccounts share the parent's balance and inherit its geo permissions, which can be overridden per subaccount.
+- The same number can serve people and a voice agent: the answer URL decides per call whether to return `<Dial>` or `<Stream>`.
+- India resellers file one compliance application per end customer ("KYC from the CLI").
+- The docs give no architecture guidance beyond this: say so if asked.
+
 ## Hand off to a human
 
 Your backend calls `plivo voice calls transfer <call_uuid> --legs aleg --aleg-url https://PROD/plivo/transfer/<call_uuid>`, and that URL returns document E below.
@@ -308,7 +316,7 @@ Your backend calls `plivo voice calls transfer <call_uuid> --legs aleg --aleg-ur
 - Contact centres: prefer SIP, `<User sipAuthUsername="..." sipAuthPassword="...">sip:queue@cc.example.com</User>`; failures are 4240 (auth failed) and 4250 (auth timeout). The centre must allow Plivo's SIP signalling and RTP ranges: `plivo docs show voice/concepts/firewall-network-configuration` (<https://plivo.com/docs/voice/concepts/firewall-network-configuration>). Set `dialMusic` so the caller does not hear silence.
 - Many human legs never answer: handle `DialStatus` and keep a `<Stream>` or `<Speak>` after `<Dial>`. A busy human is a handoff outcome, not a stream failure.
 - Observed when: one test transfer reports `DialStatus=completed`, caller and human hear each other, and the voice agent's audio has stopped. A failing transfer URL shows as 7013 or 8013.
-- An AI as a MultiPartyCall participant (`role="ai-agent"`) is documented (`plivo docs show voice/xml/multiparty-call`, <https://plivo.com/docs/voice/xml/multiparty-call>; `plivo docs show voice/api/multiparty-calls`, <https://plivo.com/docs/voice/api/multiparty-calls>), but its runtime behaviour is not verified and the docs do not say what `to` should be for a participant reached over a WebSocket: ask Plivo before you build on it. `participant add --role` has no `ai-agent`, so it needs `plivo api POST /MultiPartyCall/name_<room>/Participant/`.
+- An AI as a MultiPartyCall participant (`role="ai-agent"`) is documented (`plivo docs show voice/xml/multiparty-call`, <https://plivo.com/docs/voice/xml/multiparty-call>; `plivo docs show voice/api/multiparty-calls`, <https://plivo.com/docs/voice/api/multiparty-calls>), but its runtime behaviour is not verified and the docs do not say what `to` should be for a participant reached over a WebSocket: ask Plivo before you build on it. Also not documented: whether Plivo dials or bills that leg, what the AI hears (the whole room or one party), the order for holding and muting a party, and whether the XML form opens the socket the way the REST form does. `participant add --role` has no `ai-agent`, so it needs `plivo api POST /MultiPartyCall/name_<room>/Participant/`.
 
 ## Operate it
 
@@ -330,7 +338,7 @@ When a call fails or the user says something did not work, first ask whether the
 2. `plivo voice calls get <call_uuid> -o json`: `hangup_cause_code`, `hangup_cause_name`, `hangup_source`, `answer_time`, `bill_duration`; after a handoff read the human's leg too. `plivo api GET /Call/<call_uuid>/` has the full record.
 3. Re-run the step 5 answer URL `curl` against the URL that failed: the answer URL, or the action, transfer or redirect URL for 7012/8012, 7013/8013 or 7014/8014 (those documents need no `<Stream>`). Headers show 401, 404, 405 or 530; the XML check finds body faults.
 4. Re-run the step 5 `streams test` against the stream URL.
-5. Console: Voice, Logs, Calls, the call. Audio Streams has the stream's debug logs (events, the `DroppedStream` error text); Call Insights flags one-way, broken or robotic audio and lag. Then `plivo ask --call-uuid <uuid> "<question>"`, or Plivo support with every leg's call UUID, UTC times, the code, name and source per leg, the answer URL's host only, HTTP status and latency from your logs, the exact XML body (redacted), the stream callbacks received, the WebSocket close code, and whether the step 5 `streams test` passes. Never send tokens or caller audio.
+5. Console: Voice, Logs, Calls, the call. Audio Streams has the stream's debug logs (events, the `DroppedStream` error text); Call Insights flags audio problems per leg: one-way audio (packet count, audio level), broken audio (packet loss), robotic audio (jitter), audio lag (round-trip time), high connect time (post-dial delay); quality data is not available for every PSTN call, and the docs do not say how these apply to the WebSocket leg (`plivo docs show voice/call-insights`, <https://plivo.com/docs/voice/call-insights>). Then `plivo ask --call-uuid <uuid> "<question>"`, or Plivo support with every leg's call UUID, UTC times, the code, name and source per leg, the answer URL's host only, HTTP status and latency from your logs, the exact XML body (redacted), the stream callbacks received, the WebSocket close code, and whether the step 5 `streams test` passes. Never send tokens or caller audio.
 
 Silence, then 4010 within seconds: the call record does not say who closed the socket, but the console's Audio Streams log gives each stream's hangup reason (API request, call hangup, connection error, stream timeout). Most likely first:
 
@@ -354,9 +362,14 @@ A 7011 on a voice agent behind a tunnel: the voice agent or the tunnel stopped, 
 | 2070 / 5030 | India only: a leg or your server is outside India / any region: over the concurrency limit, rejected at once | "India" / raise the limit |
 | 3030 / 2030 | The caller ID is neither rented on this account nor a verified caller ID / the destination is barred by geo permissions | Your Plivo number; Voice, Geo Permissions |
 | 9100 Machine Detected | `machine_detection=hangup` met a voicemail | Expected |
+| 1000 Canceled / 1010 Canceled (Out Of Credits) | Your Hangup or Cancel API ended the call before answer / the balance ran out | Intended? / add credits, turn on auto-recharge |
+| 4020 / 4030 | The MultiPartyCall ended, or a participant was removed | Was it intended? |
+| 2020 / 9000 / 9110 (handoff) | The human's SIP endpoint is offline / another parallel leg answered first (normal for simultaneous dial) / the human did not press the `confirmKey` | Fall back to a number / nothing / check the confirm prompt |
+| 4210 | An external carrier sending SIP to your application failed the IP ACL or credential check | `plivo docs show voice/use-cases/connect-external-numbers` |
+| 3130 / 3140 | The carrier blocked the call as spam / the caller ID is on a Do Not Originate list | A Plivo number you rent (STIR/SHAKEN A), Caller Reputation / another number |
 | `DroppedStream` (stream callback) | The socket failed to connect or died mid-call; a `DegradedStream` before it means too slow | Server, tunnel, pacing |
 
-Every other code, including the carrier codes an outbound campaign sees daily: `plivo docs show voice/troubleshooting/hangup-causes` (<https://plivo.com/docs/voice/troubleshooting/hangup-causes>). A carrier code, a busy human, an out-of-credit cancel or a person hanging up is not a WebSocket defect.
+Read `hangup_source` before you blame the socket: `Caller` or `Callee` ("Call recipient" on the hangup-causes page) is a person, `API Request` is your Hangup or Cancel API, `Answer XML` is your `<Hangup>`, and `Plivo`, `Carrier`, `Error` or `Unknown` need the code. Every other code, including the carrier codes an outbound campaign sees daily: `plivo docs show voice/troubleshooting/hangup-causes` (<https://plivo.com/docs/voice/troubleshooting/hangup-causes>). A carrier code, a busy human, an out-of-credit cancel or a person hanging up is not a WebSocket defect.
 
 ## The XML: compose it, check it
 
@@ -408,6 +421,15 @@ Copy the closest document. `{{CallUUID}}` and `{{To}}` are for your server to fi
   <Record recordSession="true" fileFormat="mp3" maxLength="3600" callbackUrl="https://voice.example.com/plivo/recording" callbackMethod="POST"/>
   <Dial callerId="{{To}}" timeout="30" redirect="false" action="https://voice.example.com/plivo/dial-result" method="POST"><Number>+91XXXXXXXXXX</Number></Dial>
   <Stream bidirectional="true" keepCallAlive="true" contentType="audio/x-mulaw;rate=8000" statusCallbackUrl="https://voice.example.com/plivo/stream-status" statusCallbackMethod="POST">wss://voice.example.com/ws/{{CallUUID}}</Stream>
+</Response>
+```
+
+**F. Stream, then hand the call to a URL that decides.** When the voice agent closes the socket, Plivo fetches the `<Redirect>` URL and runs what it returns: a `<Dial>` to a person, another `<Stream>`, or a `<Hangup/>`. A handoff with no Transfer API call.
+
+```xml
+<Response>
+  <Stream bidirectional="true" keepCallAlive="true" contentType="audio/x-mulaw;rate=8000" statusCallbackUrl="https://voice.example.com/plivo/stream-status" statusCallbackMethod="POST">wss://voice.example.com/ws/{{CallUUID}}</Stream>
+  <Redirect method="POST">https://voice.example.com/plivo/after-agent</Redirect>
 </Response>
 ```
 
@@ -489,6 +511,9 @@ The voice agent sends:
 - Send audio at real-time pace. Bursting fills the buffer (`buffer_overflow`) and makes `clearAudio` late; use `checkpoint` to learn when a sentence has played.
 - The Stream page's example quotes `sampleRate` as a string and the reference shows a number: test what your SDK sends.
 - `extra_headers` is metadata, not authentication. Only noise cancellation is documented, not echo cancellation: if the voice agent hears itself, gate STT while it speaks.
+- Keep one state machine per `streamId`, and bound both queues (caller audio in, voice agent audio out). When the voice agent falls behind, drop or fail on purpose rather than let the delay grow.
+- Time to first word: answer, then Plivo fetches the answer URL, parses the XML, opens the socket and sends `start`, then your first `playAudio`. Read the first steps in the console call debug log and the last in your own log. Plivo publishes no figure for this setup time. The overview's latency budget is per reply, not for setup: under 1 s end to end, with the WebSocket round trip under 100 ms, speech-to-text under 200 ms, the model under 500 ms and text-to-speech under 200 ms (`plivo docs show voice-agents/audio-streaming/overview`, <https://plivo.com/docs/voice-agents/audio-streaming/overview>).
+- `ForwardedFrom` (the original number on a forwarded call, when the carrier sends it) arrives on the answer URL request, not in the `start` event.
 - Full schemas: `plivo docs show voice-agents/audio-streaming/concepts/audio-streaming-reference` (<https://plivo.com/docs/voice-agents/audio-streaming/concepts/audio-streaming-reference>).
 
 Stream status callbacks: the troubleshooting and best-practices pages and the console debug logs use the `Event` values `StartStream`, `StopStream`, `DroppedStream` and `DegradedStream`; the guide and the reference describe `started`, `stopped` and `failed`. Log the raw value. Common fields: `CallUUID`, `StreamID`, `Timestamp`, `From`, `To`, `Direction`. Acknowledge with a 200 (any body). Symptoms and error strings (`connection_failed`, `authentication_failed`, `invalid_content_type`, `buffer_overflow`): `plivo docs show voice-agents/audio-streaming/troubleshooting/troubleshooting` (<https://plivo.com/docs/voice-agents/audio-streaming/troubleshooting/troubleshooting>).
@@ -501,9 +526,11 @@ Plivo moves raw audio only: STT, the model and the voice are yours, and Plivo TT
 
 - Answer, fallback and `action` URLs must return Plivo XML; `hangup_url`, `ring_url`, `callbackUrl` and `statusCallbackUrl` need only a 200. Plivo retries, so make handlers idempotent: the keys are listed in `plivo docs show voice/concepts/callbacks` (<https://plivo.com/docs/voice/concepts/callbacks>).
 - Per-URL timeouts, retries and edge region go in a URL fragment such as `#ct=2000&rt=5000&rc=2&er=mumbai`: `plivo docs show voice/concepts/callback-configurations` (<https://plivo.com/docs/voice/concepts/callback-configurations>). A `<Stream>` `statusCallbackUrl` is not among the URLs it applies to. Still answer with XML well inside 15 s.
-- Every Plivo request carries `X-Plivo-Signature-V3`, `X-Plivo-Signature-Ma-V3` and `X-Plivo-Signature-V3-Nonce`. Validate with your SDK's helper (Python `plivo.utils.validate_v3_signature`, Node `plivo.validateV3Signature`): `plivo docs show voice/concepts/signature-validation` (<https://plivo.com/docs/voice/concepts/signature-validation>). Where the page's prose or worked example disagrees with the SDK, follow the SDK. With several active Auth Tokens a header holds a comma-separated list: accept any match. V3 is signed with the token of the account or subaccount that owns the number, Ma-V3 with the main account's.
+- Every Plivo request carries `X-Plivo-Signature-V3`, `X-Plivo-Signature-Ma-V3` and `X-Plivo-Signature-V3-Nonce`. Validate with your SDK's helper (Python `plivo.utils.validate_v3_signature`, Node `plivo.validateV3Signature`, Ruby `Plivo::Utils.valid_signatureV3?`, PHP `validateV3Signature`, Java `Utils.validateSignatureV3`, Go `plivo.ValidateSignatureV3`): `plivo docs show voice/concepts/signature-validation` (<https://plivo.com/docs/voice/concepts/signature-validation>). Where the page's prose or worked example disagrees with the SDK, follow the SDK. With several active Auth Tokens a header holds a comma-separated list: accept any match. V3 is signed with the token of the account or subaccount that owns the number, Ma-V3 with the main account's.
 - The WebSocket upgrade carries the same headers. Validate it as a `GET` over your stream URL with `wss://` replaced by `http://`, keeping the port and query as dialled: on a live call only that form matched, not `wss://` or `https://`.
 - Behind a proxy, validate against the URL Plivo dialled (its public host, port, path and query, and `https://` for HTTP callbacks), not a rewritten private one. If validation fails and you return no XML, the call ends 7011 or 8011, so reject only what is surely not Plivo's. Never log the token.
+- Before go-live, test the validation: a real GET and a real POST pass; a changed form value fails; a changed host, scheme, port or path fails; a missing signature or nonce fails; both tokens pass while you rotate them; a repeated callback has no second side effect; the token never reaches your logs.
+- Before recommending a Plivo stream or SDK package, check it is published for the user's language on that language's package index; otherwise use the raw protocol, which is fully documented.
 - Firewalls: Plivo calls your URLs from regional edge IPs, listed on the firewall page ("Hand off to a human"). Without an allow-list, rely on signatures.
 
 ## India: what a voice agent needs before its first call
@@ -514,9 +541,21 @@ Never infer country rules from a phone prefix; check the account. Report each it
 2. **KYC.** An `accepted` compliance application: `plivo numbers compliance list --country IN --status accepted -o json`. `submitted` is not `accepted`. A number's `compliance_status` in `numbers get` is not in the published schema, so treat a missing field as not known.
 3. **Series.** Landline (022, 080) for service and transactional calls; 140-series for promotional calls only; 160-series for BFSI only. The wrong series makes every complaint count as UCC, even with consent. 140 and 160 numbers are provisioned offline (Tata DLT registration, a NOC, header and template approval, days to weeks, no CLI): `plivo docs show voice/concepts/140-series-provisioning` (<https://plivo.com/docs/voice/concepts/140-series-provisioning>) and `plivo docs show voice/concepts/160-series-provisioning` (<https://plivo.com/docs/voice/concepts/160-series-provisioning>). Which series allow `<Stream>` is not documented.
 4. **Media anchoring.** Both legs and your voice agent's server stay in India, or the call fails with 2070.
-5. **Consent.** Cold calling is prohibited. TRAI counts a pre-recorded or AI-generated voice call as A2P. Service calls (about what the customer already has) and transactional ones (within 30 minutes of their transaction) need no explicit consent; one that supports an ongoing purchase or use needs it, valid 7 days (renewable) or until revoked. A UCC complaint needs opt-in proof within 5 business days or the compliance ID is blocked; repeated complaints suspend it, and numbers on a suspended application cannot place calls. Remove complainants at once. Rules: `plivo docs show voice/concepts/ucc-management` (<https://plivo.com/docs/voice/concepts/ucc-management>). Complaints are readable with `plivo api GET /Ucc/`; proof is a multipart upload the CLI cannot send, so upload it on the console UCC dashboard.
+5. **Consent.** Cold calling is prohibited. TRAI counts a pre-recorded or AI-generated voice call as A2P. Service calls (about what the customer already has) and transactional ones (within 30 minutes of their transaction) need no explicit consent; one that supports an ongoing purchase or use needs it, valid 7 days (renewable) or until revoked. A UCC complaint needs opt-in proof within 5 business days: the business logo, the complainant's number, and an opt-in date within 6 months of the complaint. No proof in time blocks the compliance ID for 15 days (valid proof lifts it). 5 or more complaints from different people in any 10 days suspends it for 15 days; a second such violation means TRAI blacklisting, with all telecom resources in India barred for a year. Numbers on a suspended application cannot place calls. Remove complainants at once. Rules: `plivo docs show voice/concepts/ucc-management` (<https://plivo.com/docs/voice/concepts/ucc-management>). Complaints are readable with `plivo api GET /Ucc/`; proof is a multipart upload the CLI cannot send, so upload it on the console UCC dashboard.
 6. **Capacity.** Professional accounts start at 50 concurrent calls. Over the limit a call is rejected at once with 5030 and Make Call returns HTTP 403. Raise the limit with Request Enterprise under Organization settings > Account limits before a campaign: `plivo docs show voice/concepts/account-limits` (<https://plivo.com/docs/voice/concepts/account-limits>).
 7. **Caller ID.** A Plivo-rented Indian number; Verified Caller ID does not apply in India.
+
+Before the first call, write down each item with where you saw it; anything you cannot show is not known:
+
+1. The organisation and its data region (console only).
+2. The legal entity behind the KYC (India-registered, or a reseller acting for one).
+3. The caller ID, rented on this account (`plivo numbers get <number> -o json`).
+4. The compliance application's id and `accepted` status.
+5. The call purpose (service, transactional, promotional, BFSI) and a number series that matches it.
+6. The consent record, and a check against complainants and opt-outs.
+7. Where both legs and the voice agent's server are, each in India.
+8. Approved 140 or 160 header and template references, where they apply.
+9. Who owns the rollback, and who handles UCC complaints.
 
 Eligibility and calling rules: `plivo docs show voice/concepts/india-calling` (<https://plivo.com/docs/voice/concepts/india-calling>).
 
@@ -536,6 +575,7 @@ plivo numbers compliance link --link +91XXXXXXXXXX=<compliance_id> --dry-run   #
 - `app.json`: copy the India example under "Create" in `plivo docs show numbers/compliance` (<https://plivo.com/docs/numbers/compliance>). The legal name goes in `end_user.name` and `data_fields.business_name` exactly as printed on the certificate; the CIN, Udyam number or GSTIN comes from the documents. Resellers file one application per customer, named in `alias`.
 - `rejected`: read `rejection_reason`, fix it, and run `plivo numbers compliance update` (valid only on `rejected`; it replaces every document, so re-attach every file).
 - `compliance_application_id is required` on `buy` (a reseller, or nothing to attach): `numbers buy` has no flag for it, so `plivo api POST /PhoneNumber/<number>/ --body '{"compliance_application_id":"<compliance_id>"}' --dry-run`, then `--yes`.
+- Exact errors, as Plivo returns them: `from parameter is invalid. +91... is not associated with your account` (the caller ID is not rented here); `Compliance application must be in 'accepted' status. Current status: 'submitted'.` (too early: keep polling); `Compliance application must be in 'rejected' status` (`update` works only on `rejected`); `Number not found on your account. Only rented numbers can be linked.`; `from number +91... cannot place calls as its compliance application is 'suspended'` (unresolved UCC complaints: upload proof on the console UCC dashboard).
 - `calls make` from a number whose application is not `accepted` fails with `cannot place calls as its compliance application is not in 'accepted' status`; `suspended` means unresolved UCC complaints.
 
 Documents, statuses and rejection reasons: `plivo docs show numbers/rent-india-numbers` (<https://plivo.com/docs/numbers/rent-india-numbers>).
@@ -547,6 +587,9 @@ Documents, statuses and rejection reasons: `plivo docs show numbers/rent-india-n
 - US: use a Plivo number rented on this account as the caller ID; it is the only way to get STIR/SHAKEN attestation A. Do not hang up on every voicemail: short calls count against the quality thresholds and draw surcharges. Calls above your CPS are queued, so pace your own requests. Thresholds and CPS: `plivo docs show voice-agents/audio-streaming/deploy/us-call-quality-and-cps` (<https://plivo.com/docs/voice-agents/audio-streaming/deploy/us-call-quality-and-cps>); concurrency: the account-limits page above.
 - Professional plans can call only the US and India; other countries need Enterprise, and barred destinations fail with 2030: `plivo docs show voice/concepts/geo-permissions` (<https://plivo.com/docs/voice/concepts/geo-permissions>).
 - A US-region trial organisation may see "Voice capability is currently disabled for this account" on outbound calls: request access in the console (not in the docs).
+- Size CPS from your peak: concurrent calls divided by the average call length in seconds (100 three-minute calls at once need under 1 CPS). Queued calls dial late, which hurts appointment-window calls. The API itself allows 300 requests per 5 seconds, then answers 429.
+- Have the voice agent say who it is and why it is calling in its first sentence: people who hang up in the first seconds create short calls.
+- Verified Caller ID (showing a number you own outside Plivo) and Caller Reputation (US spam-label registration) have no CLI commands: use `plivo api` with `/VerifiedCallerId/`, and `enable_caller_reputation` on the 10DLC profile. 10DLC registration itself is for SMS, not voice. Docs: `plivo docs show voice/concepts/verified-caller-id`, `plivo docs show voice/concepts/caller-reputation`.
 - Measure your own answer and connect rates by destination, list and time window.
 
 ## When this skill does not have the answer
