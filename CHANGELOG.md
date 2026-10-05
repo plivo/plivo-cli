@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   audio-streaming into the default skills folder (`plivo skill install` or
   `skills.sh`) removes the `plivo-first-agent` skill that v1.1.3 put there.
 
+### Fixed
+
+- `plivo voice streams forward` no longer says "All cleaned up" and exits 0
+  when it can't put the app's answer URL back. It exits non-zero, and the
+  restore command it prints now sets the answer method back too.
+
 ## [1.1.3] - 2026-10-01
 
 ### Added

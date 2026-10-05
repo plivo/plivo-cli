@@ -43,6 +43,10 @@ var (
 	// apiClientForTest in cmd/api.go — lets tests inject a client pointed at
 	// an httptest server instead of going through getClient().
 	streamsFwdClientForTest *api.Client
+
+	// startTunnel is swapped in tests so the teardown path runs without a
+	// real tunnel.
+	startTunnel = tunnel.Start
 )
 
 var voiceStreamsForwardCmd = &cobra.Command{
@@ -77,7 +81,6 @@ type streamsFwdResult struct {
 	AppID          string `json:"app_id"`
 	TunnelURL      string `json:"tunnel_url"`
 	Restored       bool   `json:"restored"`
-	RestoreError   string `json:"restore_error,omitempty"`
 	EventsObserved int64  `json:"events_observed"`
 }
 
@@ -186,7 +189,7 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	if !jsonOut {
 		fmt.Fprintf(out, "⠋ Starting tunnel via %s...\n", tunnel.Describe(streamsFwdTunnel))
 	}
-	tn, err := tunnel.Start(ctx, localPort, streamsFwdTunnel)
+	tn, err := startTunnel(ctx, localPort, streamsFwdTunnel)
 	if err != nil {
 		listener.Close()
 		return clierr.Wrap(err)
@@ -248,53 +251,65 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	_ = srv.Shutdown(shutdownCtx)
 	shutdownCancel()
 
-	var restored bool
-	var restoreErr string
-	if !streamsFwdKeep {
+	if streamsFwdKeep {
+		if !jsonOut {
+			fmt.Fprintf(out, "  --keep set; answer_url left at %s\n", tunnelAnswerURL)
+			fmt.Fprintf(out, "  Manual restore: %s\n", restoreCommand(streamsFwdAppID, originalAnswerURL, app.AnswerMethod))
+		}
+	} else {
 		if !jsonOut {
 			fmt.Fprintf(out, "  Restoring answer_url on %q...", app.AppName)
 		}
-		restoreBody := map[string]interface{}{
-			"answer_url":    originalAnswerURL,
-			"answer_method": app.AnswerMethod,
+		if err := restoreAnswerURL(client, streamsFwdAppID, originalAnswerURL, app.AnswerMethod); err != nil {
+			if !jsonOut {
+				fmt.Fprintln(out, " ✗ failed.")
+			}
+			return err
 		}
-		if apiErr, err := client.Do("POST", client.AccountURL("Application", streamsFwdAppID), restoreBody, nil, nil); err != nil {
-			restoreErr = err.Error()
-			if !jsonOut {
-				fmt.Fprintf(out, " ✗ FAILED: %v\n", err)
-				fmt.Fprintf(out, "  Manual restore: plivo account applications update %s --answer-url %s\n",
-					streamsFwdAppID, originalAnswerURL)
-			}
-		} else if apiErr != nil {
-			restoreErr = apiErr.Message
-			if !jsonOut {
-				fmt.Fprintf(out, " ✗ %s\n", apiErr.Message)
-				fmt.Fprintf(out, "  Manual restore: plivo account applications update %s --answer-url %s\n",
-					streamsFwdAppID, originalAnswerURL)
-			}
-		} else {
-			restored = true
-			if !jsonOut {
-				fmt.Fprintf(out, " done.\n")
-			}
+		if !jsonOut {
+			fmt.Fprintln(out, " done.")
 		}
-	} else if !jsonOut {
-		fmt.Fprintf(out, "  --keep set; answer_url left at %s\n", tunnelAnswerURL)
-		fmt.Fprintf(out, "  Manual restore: plivo account applications update %s --answer-url %s\n",
-			streamsFwdAppID, originalAnswerURL)
 	}
 
 	if jsonOut {
 		return output.JSONSuccess(os.Stdout, streamsFwdResult{
 			AppID:          streamsFwdAppID,
 			TunnelURL:      tn.PublicURL,
-			Restored:       restored,
-			RestoreError:   restoreErr,
+			Restored:       !streamsFwdKeep,
 			EventsObserved: events.Load(),
 		}, nil)
 	}
 	fmt.Fprintf(out, "✓ All cleaned up.\n")
 	return nil
+}
+
+// restoreAnswerURL puts the app's original answer URL and method back. If it
+// fails, every number on the app still points at the stopped tunnel, so the
+// error carries the command that restores it by hand.
+func restoreAnswerURL(client *api.Client, appID, answerURL, method string) error {
+	target := client.AccountURL("Application", appID)
+	body := map[string]interface{}{"answer_url": answerURL, "answer_method": method}
+	apiErr, err := client.Do("POST", target, body, nil, nil)
+	if err != nil {
+		apiErr = clierr.NetworkError(target, err)
+	}
+	if apiErr == nil {
+		return nil
+	}
+	apiErr.Message = "Could not restore the app's answer URL: " + apiErr.Message
+	apiErr.Hint = "Every number on the app still points at the stopped tunnel. Restore it: " +
+		restoreCommand(appID, answerURL, method)
+	return apiErr
+}
+
+// restoreCommand is the CLI command that sets the app's answer URL and method
+// back by hand.
+func restoreCommand(appID, answerURL, method string) string {
+	c := fmt.Sprintf("plivo account applications update %s --answer-url %s", appID, answerURL)
+	if method != "" {
+		c += " --answer-method " + method
+	}
+	return c
 }
 
 // streamAuth validates Plivo's V3 signature on the tunnel-exposed handlers.

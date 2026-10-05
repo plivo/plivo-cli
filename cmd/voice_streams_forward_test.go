@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,8 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/plivo/plivo-cli/internal/api"
+	"github.com/plivo/plivo-cli/internal/clierr"
+	"github.com/plivo/plivo-cli/internal/tunnel"
 )
 
 // /answer must return PlivoXML referencing the supplied wss URL and codec.
@@ -403,5 +406,118 @@ func TestNumbersAffectedWarning_fetchFailureDegrades(t *testing.T) {
 	got := numbersAffectedWarning(client, "APP123")
 	if !strings.Contains(got, "could not determine") {
 		t.Errorf("expected the degrade message, got: %q", got)
+	}
+}
+
+// runForwardTeardown runs `voice streams forward` against a fake app and a
+// fake tunnel with the context already cancelled, so it goes straight from
+// setup to teardown. restoreStatus is the API's answer to the restore (0
+// drops the connection instead). It returns the restore request's body, or
+// nil if none was sent.
+func runForwardTeardown(t *testing.T, restoreStatus int, args ...string) (error, string, map[string]any) {
+	t.Helper()
+	setFakeCreds(t)
+	const original = "https://old.example.com/answer"
+	var restoreBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet {
+			fmt.Fprintf(w, `{"app_id":"APP123","app_name":"my-test-app","answer_url":%q,"answer_method":"GET"}`, original)
+			return
+		}
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body["answer_url"] != original {
+			fmt.Fprint(w, `{"message":"changed"}`) // pointing the app at the tunnel
+			return
+		}
+		restoreBody = body
+		if restoreStatus == 0 {
+			conn, _, _ := w.(http.Hijacker).Hijack()
+			conn.Close()
+			return
+		}
+		w.WriteHeader(restoreStatus)
+		fmt.Fprint(w, `{"error":"restore refused"}`)
+	}))
+	t.Cleanup(srv.Close)
+
+	streamsFwdClientForTest = &api.Client{BaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", HTTP: &http.Client{}}
+	startTunnel = func(context.Context, int, string) (*tunnel.Tunnel, error) {
+		return &tunnel.Tunnel{PublicURL: "https://fake-tunnel.test"}, nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	voiceStreamsForwardCmd.SetContext(ctx)
+	t.Cleanup(func() {
+		streamsFwdClientForTest = nil
+		startTunnel = tunnel.Start
+		streamsFwdYes, streamsFwdKeep = false, false
+		voiceStreamsForwardCmd.SetContext(context.Background())
+	})
+
+	base := []string{"voice", "streams", "forward", "--number", "+14155550142", "--app", "APP123", "--to", "ws://localhost:7860/ws", "--yes"}
+	err, stdout, _ := execCmd(t, append(base, args...)...)
+	return err, stdout, restoreBody
+}
+
+const wantRestoreCmd = "plivo account applications update APP123 --answer-url https://old.example.com/answer --answer-method GET"
+
+// A failed restore leaves every number on the app pointing at the stopped
+// tunnel. It must exit non-zero and hand over the command that puts the URL
+// and its method back, not report "All cleaned up".
+func TestVoiceStreamsForward_failedRestoreIsAnError(t *testing.T) {
+	cases := []struct {
+		name, format string
+		status       int
+	}{
+		{"api error", "table", http.StatusInternalServerError},
+		{"api error json", "json", http.StatusInternalServerError},
+		{"connection dropped", "table", 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err, stdout, body := runForwardTeardown(t, c.status, "-o", c.format)
+			var ce *clierr.Error
+			if !errors.As(err, &ce) || ce.ExitCode() == 0 {
+				t.Fatalf("want a non-zero CLI error, got %v", err)
+			}
+			if !strings.Contains(ce.Hint, wantRestoreCmd) {
+				t.Errorf("hint lacks the restore command %q: %q", wantRestoreCmd, ce.Hint)
+			}
+			if strings.Contains(stdout, "All cleaned up") {
+				t.Errorf("reported success after a failed restore:\n%s", stdout)
+			}
+			if body["answer_method"] != "GET" {
+				t.Errorf("restore sent answer_method %v, want the original GET", body["answer_method"])
+			}
+		})
+	}
+}
+
+func TestVoiceStreamsForward_restoresURLAndMethod(t *testing.T) {
+	err, stdout, body := runForwardTeardown(t, http.StatusOK, "-o", "table")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if body["answer_url"] != "https://old.example.com/answer" || body["answer_method"] != "GET" {
+		t.Errorf("restore body = %v, want the original URL and GET", body)
+	}
+	if !strings.Contains(stdout, "All cleaned up") {
+		t.Errorf("missing the success line:\n%s", stdout)
+	}
+}
+
+// --keep leaves the tunnel URL on purpose; its hint must restore the method too.
+func TestVoiceStreamsForward_keepPrintsFullRestoreCommand(t *testing.T) {
+	err, stdout, body := runForwardTeardown(t, http.StatusOK, "-o", "table", "--keep")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if body != nil {
+		t.Errorf("--keep still restored the app: %v", body)
+	}
+	if !strings.Contains(stdout, wantRestoreCmd) {
+		t.Errorf("--keep hint lacks %q:\n%s", wantRestoreCmd, stdout)
 	}
 }
