@@ -222,6 +222,90 @@ func TestSkillInstall_allBundledSkillsInstallByteIdentical(t *testing.T) {
 	}
 }
 
+// v1.1.3 installed plivo-first-agent, whose flow now lives in
+// plivo-audio-streaming. Two skills claiming the same request make an agent
+// pick between them, so installing the replacement removes the old copy from
+// the default skills root, and from nowhere else.
+func TestSkillInstall_removesRetiredFirstAgentSkill(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Cleanup(func() { skillDir = ""; skillPrint = false; dryRunFlag = false })
+
+	old := writeRetiredSkill(t, filepath.Join(home, ".claude", "skills"))
+
+	dryRunFlag = true
+	if err := runSkillInstall(nil, []string{"audio-streaming"}); err != nil {
+		t.Fatalf("dry-run install: %v", err)
+	}
+	if _, err := os.Stat(old); err != nil {
+		t.Fatalf("--dry-run removed the retired skill: %v", err)
+	}
+	dryRunFlag = false
+
+	// --dir names the skill's own folder: a sibling plivo-first-agent there, or
+	// the copy in the default root, is not the install's to remove.
+	other := t.TempDir()
+	sibling := writeRetiredSkill(t, other)
+	skillDir = filepath.Join(other, "plivo-audio-streaming")
+	if err := runSkillInstall(nil, []string{"audio-streaming"}); err != nil {
+		t.Fatalf("--dir install: %v", err)
+	}
+	for _, p := range []string{sibling, old} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("--dir install removed %s: %v", p, err)
+		}
+	}
+	skillDir = ""
+
+	if err := runSkillInstall(nil, []string{"audio-streaming"}); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if _, err := os.Stat(old); !os.IsNotExist(err) {
+		t.Errorf("plivo-first-agent still installed after installing its replacement (stat err: %v)", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "plivo-audio-streaming", skillFileName)); err != nil {
+		t.Errorf("replacement not installed: %v", err)
+	}
+}
+
+// The retired folder may hold the user's own files. Only the SKILL.md that
+// v1.1.3 wrote goes, and that is enough to stop agents loading the old skill.
+func TestSkillInstall_keepsUserFilesInRetiredSkillFolder(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Cleanup(func() { skillDir = ""; skillPrint = false; dryRunFlag = false })
+
+	old := writeRetiredSkill(t, filepath.Join(home, ".claude", "skills"))
+	notes := filepath.Join(old, "notes.md")
+	if err := os.WriteFile(notes, []byte("mine"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runSkillInstall(nil, []string{"audio-streaming"}); err != nil {
+		t.Fatalf("install failed because the retired folder held another file: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(old, skillFileName)); !os.IsNotExist(err) {
+		t.Errorf("retired SKILL.md still there, so agents keep loading the old skill (stat err: %v)", err)
+	}
+	if _, err := os.Stat(notes); err != nil {
+		t.Errorf("the user's own file was deleted: %v", err)
+	}
+}
+
+func writeRetiredSkill(t *testing.T, root string) string {
+	t.Helper()
+	old := filepath.Join(root, "plivo-first-agent")
+	if err := os.MkdirAll(old, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(old, skillFileName), []byte("---\nname: plivo-first-agent\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return old
+}
+
 func TestSkillList_reportsEverySkillAndItsState(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

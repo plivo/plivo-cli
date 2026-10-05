@@ -5,6 +5,22 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- The audio-streaming skill now runs one guided flow for new and existing
+  users: it checks credit, KYC and the number, builds an echo bot or Pipecat's
+  OpenAI bot or reuses the user's own bot, exposes it through ngrok or
+  Cloudflare Tunnel, creates an `audio-stream-<bot>-<n>` application, links
+  the number and places a test call.
+
+### Removed
+
+- The `first-agent` skill: the audio-streaming flow replaces it. Installing
+  audio-streaming into the default skills folder (`plivo skill install` or
+  `skills.sh`) removes the `plivo-first-agent` skill that v1.1.3 put there.
+
 ## [1.1.3] - 2026-10-01
 
 ### Added
@@ -16,8 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `plivo login` can now finish when the browser can't reach the terminal
   (SSH, WSL, containers, VMs): while it waits, paste the callback URL from the
   browser's address bar. It goes through the same state check as the
-  redirect, and the PKCE verifier never leaves the CLI. A host on a different
-  network from the browser still can't log in this way.
+  redirect, and the PKCE verifier is never shown to the browser. A host on a
+  different network from the browser still can't log in this way.
 
 ### Changed
 

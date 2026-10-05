@@ -62,11 +62,11 @@ voice       calls | conferences | endpoints | multiparty | recordings | streams
 - `sip`: quote `--uri "host;transport=tcp"` (the help example does not). Passwords go only through `--password-stdin`; to preview a password change, pass `--username` too. Deleting a URI deletes the trunks that use it. Route a number to an inbound trunk with `numbers update <number> --trunk-id <trunk_id>`.
 - `plivo api` reports every HTTP error as `UPSTREAM_ERROR` (exit 3) with the real status in `status_code`: switch on that. Its `--dry-run`, `--explain` and `--log-level debug` print the request body unredacted, so never send a secret through it. `/Message/` expands to `/v1/Account/<auth_id>/Message/`; a `/v1/...` path is used as-is.
 - `plivo ask` and the `diagnose` commands share a small per-account rate limit: on `RATE_LIMITED`, wait as long as the message says.
-- `docs show` prints a JSON envelope when piped: add `-o table`, or use `jq -r .data.body`. `docs search` rows are at `data`, not `data.objects`. A page that ends inside a code block was cut off: read `https://www.plivo.com/docs/<path>.md`, which returns clean Markdown (bare `plivo.com` only redirects there).
+- `docs show` prints a JSON envelope when piped: add `-o table`, or use `jq -r .data.body`. `docs search` rows are at `data`, not `data.objects`.
 
 ## Known issues
 
-- In v1.1.0 to v1.1.2, `voice streams forward` cannot carry a live call: it rejects Plivo's stream (it checks the signature against the `wss://` URL while Plivo signs the `http://` one), and its XML has no `keepCallAlive`, so the call ends at once with hangup cause 4010 (End Of XML Instructions). Fixed on main for the next release; check `plivo --version`.
+- In v1.1.0 to v1.1.2, `voice streams forward` cannot carry a live call: it rejects Plivo's stream (it checks the signature against the `wss://` URL while Plivo signs the `http://` one), and its XML has no `keepCallAlive`, so the call ends at once with hangup cause 4010 (End Of XML Instructions). Fixed in v1.1.3; check `plivo --version`.
 
 ## Workflows
 
@@ -99,9 +99,8 @@ Pick a sending number: `plivo numbers list --services sms -o json | jq -r '.data
 
 ## Other Plivo skills
 
-Each is bundled in the binary and installed separately, with no network: `plivo skill install first-agent | audio-streaming | sip-trunking | voice-xml`.
+Each is bundled in the binary and installed separately, with no network: `plivo skill install audio-streaming | sip-trunking | voice-xml`.
 
-- `plivo-first-agent`: take a new user to a first AI voice agent on a real call.
-- `plivo-audio-streaming`: connect a WebSocket voice bot to calls with `<Stream>`.
+- `plivo-audio-streaming`: take a voice bot (a test bot or your own WebSocket bot) to real calls with `<Stream>`, from setup to go-live.
 - `plivo-sip-trunking`: connect LiveKit, ElevenLabs, Retell, Vapi or another SIP platform over SIP trunking.
 - `plivo-voice-xml`: write and fix the XML an answer URL returns.

@@ -9,7 +9,6 @@ import (
 
 	audiostreamingskill "github.com/plivo/plivo-cli/audio-streaming-skill"
 	cliskill "github.com/plivo/plivo-cli/cli-skill"
-	firstagentskill "github.com/plivo/plivo-cli/first-agent-skill"
 	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/output"
 	siptrunkingskill "github.com/plivo/plivo-cli/sip-trunking-skill"
@@ -25,6 +24,7 @@ type bundledSkill struct {
 	dirName  string // ~/.claude/skills/<dirName>/SKILL.md
 	content  string
 	summary  string
+	replaces []string // skill directories from earlier releases that this skill supersedes
 }
 
 // bundledSkills is ordered; the FIRST entry is the default when no selector is
@@ -36,8 +36,7 @@ var bundledSkills = []bundledSkill{
 		content:  cliskill.SkillMD,
 		summary:  "the CLI reference — use `plivo` instead of raw curl",
 	},
-	{selector: "first-agent", dirName: "plivo-first-agent", content: firstagentskill.SkillMD, summary: "take a new user to a first AI voice agent on a real call"},
-	{selector: "audio-streaming", dirName: "plivo-audio-streaming", content: audiostreamingskill.SkillMD, summary: "connect a WebSocket voice bot to calls with <Stream>"},
+	{selector: "audio-streaming", dirName: "plivo-audio-streaming", content: audiostreamingskill.SkillMD, summary: "a voice bot on real calls with <Stream>, from setup to go-live", replaces: []string{"plivo-first-agent"}},
 	{selector: "sip-trunking", dirName: "plivo-sip-trunking", content: siptrunkingskill.SkillMD, summary: "connect an AI voice platform over SIP trunking"},
 	{selector: "voice-xml", dirName: "plivo-voice-xml", content: voicexmlskill.SkillMD, summary: "write and fix Plivo Voice XML"},
 }
@@ -87,7 +86,7 @@ var skillCmd = &cobra.Command{
 // skillInstallCmd writes the embedded SKILL.md into the agent skills directory
 // (default ~/.claude/skills/plivo-cli; override with --dir, or --print to stdout).
 var skillInstallCmd = &cobra.Command{
-	Use:   "install [cli|first-agent|audio-streaming|sip-trunking|voice-xml|all]",
+	Use:   "install [cli|audio-streaming|sip-trunking|voice-xml|all]",
 	Short: "Install an agent skill so coding agents auto-load the reference",
 	Long: `Install a Plivo agent skill.
 
@@ -95,8 +94,7 @@ A skill is a single-file reference (SKILL.md) written for LLM coding agents.
 They are bundled in the binary, so this writes them out without a network call.
 
   cli              the CLI reference — use ` + "`plivo`" + ` instead of raw curl
-  first-agent      take a new user to a first AI voice agent on a real call
-  audio-streaming  connect a WebSocket voice bot to calls with <Stream>
+  audio-streaming  a voice bot on real calls with <Stream>, from setup to go-live
   sip-trunking     connect an AI voice platform over SIP trunking
   voice-xml        write and fix Plivo Voice XML
   all              every listed skill
@@ -106,12 +104,12 @@ Each skill lands at ~/.claude/skills/<skill>/SKILL.md by default. Use --dir to
 target another agent's skills directory, or --print to write the content to
 stdout so any other tool can capture it; both act on a single skill.`,
 	Example: `  plivo skill install                    # CLI skill -> ~/.claude/skills/plivo-cli/
-  plivo skill install first-agent        # -> ~/.claude/skills/plivo-first-agent/
+  plivo skill install audio-streaming    # -> ~/.claude/skills/plivo-audio-streaming/
   plivo skill install voice-xml          # -> ~/.claude/skills/plivo-voice-xml/
   plivo skill install all                # every listed skill
   plivo skill install all --dry-run      # show destinations, write nothing`,
 	Args:      cobra.MaximumNArgs(1),
-	ValidArgs: []string{"cli", "first-agent", "audio-streaming", "sip-trunking", "voice-xml", "all"},
+	ValidArgs: []string{"cli", "audio-streaming", "sip-trunking", "voice-xml", "all"},
 	RunE:      runSkillInstall,
 }
 
@@ -240,18 +238,59 @@ func installSkill(s bundledSkill) error {
 	// --dry-run: report the destination without touching disk.
 	if dryRunFlag {
 		fmt.Fprintf(os.Stderr, "Would write skill to %s\n", dest)
+	} else {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return clierr.Wrap(fmt.Errorf("create skill directory %s: %w", dir, err))
+		}
+		if err := os.WriteFile(dest, []byte(s.content), 0o644); err != nil {
+			return clierr.Wrap(fmt.Errorf("write skill to %s: %w", dest, err))
+		}
+		fmt.Fprintf(os.Stderr, "Installed skill: %s\n", dest)
+	}
+
+	// --dir names this skill's own folder, so there is no telling where an
+	// older copy of a replaced skill would be.
+	if skillDir != "" {
 		return nil
 	}
-
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return clierr.Wrap(fmt.Errorf("create skill directory %s: %w", dir, err))
-	}
-	if err := os.WriteFile(dest, []byte(s.content), 0o644); err != nil {
-		return clierr.Wrap(fmt.Errorf("write skill to %s: %w", dest, err))
-	}
-
-	fmt.Fprintf(os.Stderr, "Installed skill: %s\n", dest)
+	removeReplacedSkills(s)
 	return nil
+}
+
+// removeReplacedSkills removes, from the default skills root, the skills that s
+// supersedes, so an agent never sees both. Earlier releases wrote only
+// SKILL.md: a folder that holds other files keeps them. A failure is only a
+// warning, because the new skill is already installed.
+func removeReplacedSkills(s bundledSkill) {
+	for _, name := range s.replaces {
+		old, err := resolveSkillDir("", name)
+		if err != nil {
+			continue
+		}
+		info, err := os.Lstat(old)
+		if err != nil {
+			continue
+		}
+		if dryRunFlag {
+			fmt.Fprintf(os.Stderr, "Would remove retired skill: %s\n", old)
+			continue
+		}
+		if info.IsDir() {
+			if err := os.Remove(filepath.Join(old, skillFileName)); err != nil && !os.IsNotExist(err) {
+				fmt.Fprintf(os.Stderr, "Warning: could not remove retired skill %s: %v\n", old, err)
+				continue
+			}
+		}
+		if err := os.Remove(old); err != nil {
+			if info.IsDir() {
+				fmt.Fprintf(os.Stderr, "Removed the retired skill file from %s; kept the folder, which holds other files\n", old)
+			} else {
+				fmt.Fprintf(os.Stderr, "Warning: could not remove retired skill %s: %v\n", old, err)
+			}
+			continue
+		}
+		fmt.Fprintf(os.Stderr, "Removed retired skill: %s (now part of %s)\n", old, s.dirName)
+	}
 }
 
 // resolveSkillDir returns the override (with ~ expanded) or the default
