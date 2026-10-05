@@ -28,7 +28,7 @@ Take a developer, or their coding agent, from a Plivo account to a voice agent t
 - Name apps by their names, not their IDs, in anything the user reads. Keep the IDs inside commands.
 - Mask phone numbers as `+91 AB CDXX XEFG` (country code, first four digits, X for the next three, last three) and the account ID as its first four and last three characters with `…` between, in questions and the report. Show a number in full only where the user must dial it, and inside commands.
 - Show prices only for a number the user rents, never for calls or the balance. Take them from the step 4 search. The API gives no currency, so add `₹` only when you know the account bills in rupees.
-- Keep each question to one or two short sentences: what happens, and what it changes. Question headers: Account, Agent, Number, Test call, Country, Buy number, Answer URL, Tunnel, Install, Create app, Link, Call, Result, Debug, Finish.
+- Keep each question to one or two short sentences: what happens, and what it changes. Question headers: Account, Agent, Number, Test call, Country, Buy number, Keys, Answer URL, Tunnel, Install, Create app, Link, Call, Result, Debug, Finish.
 
 ## Steps 1 to 10: from the account to the first call
 
@@ -72,7 +72,7 @@ First list the account's voice numbers: `plivo numbers list --services voice -o 
 | Account | You're logged in as <first name> <initial>. (<masked account ID>). Use this account? | Yes · Use another account: "I'll show your other logins, or you can log in again." |
 | Agent | Which voice agent should answer the test call? | Echo test (recommended): "No AI. Repeats what you say, to check the line works. No API key needed." · OpenAI voice agent: "A real AI conversation. Needs your OpenAI key." · My own voice agent: "You already have one with a WebSocket URL." |
 | Number | Which number should your voice agent answer on? Its calls will go to the agent until you switch it back. | Up to two of the account's numbers, each "<masked number>: <city>. Now used by <app name>." · Buy a new number: "About <monthly price> a month." |
-| Test call | How do you want to test it? | I'll call the number (recommended): "Dial it from any Indian phone." · Call my phone: "Plivo rings you." |
+| Test call | How do you want to test it? | I'll call the number (recommended): "Dial it from a phone in the same country as the number." · Call my phone: "Plivo rings you." |
 
 - Account: use the name (first name and initial) and the masked `auth_id` from `whoami`. "Use another account": `plivo auth list`, then `plivo auth use <profile>`, or the user logs in again (step 1). Then run steps 1 and 2 again and ask the setup questions again: the numbers and the country belong to the account.
 - Number: prefer numbers on no application, and name the application each offered number is on now, because linking takes the number away from it. Fill in the monthly price only when you have it from a search; otherwise leave it out.
@@ -161,13 +161,13 @@ The application uses `https://<tunnel>/answer` with POST.
   { [ -f .env ] || cp env.example .env; }      # safe to re-run: keeps the clone and a filled .env
 ```
 
-Ask the user: "Open .env in your editor and paste your OpenAI key after OPENAI_API_KEY=. Tell me when it's saved. Don't paste it here." Then:
+Ask "Which AI keys do you have?" (header Keys) · OpenAI only: "I'll switch the agent to OpenAI's speech-to-speech model." · OpenAI, Deepgram and Cartesia: "The example as it is." Then ask for exactly the values that choice needs, plus the two Plivo values: "Open .env in your editor and paste your OpenAI key after OPENAI_API_KEY= (and your Deepgram and Cartesia keys after DEEPGRAM_API_KEY= and CARTESIA_API_KEY=), and your Plivo auth ID and auth token from the console after PLIVO_AUTH_ID= and PLIVO_AUTH_TOKEN=. Tell me when it's saved. Don't paste them here." Then:
 
-- All three keys: `OPENAI_API_KEY`, `DEEPGRAM_API_KEY` and `CARTESIA_API_KEY`; run the example as it is.
-- OpenAI key only: `OPENAI_API_KEY`, then change `bot.py` to one speech-to-speech service in place of the separate speech-to-text, language model and text-to-speech services. Import `OpenAIRealtimeLLMService` from `pipecat.services.openai.realtime.llm`, and build the pipeline as `transport.input()`, the user aggregator, the realtime service, `transport.output()` and the assistant aggregator. Take the settings from Pipecat's own `examples/realtime/realtime-openai.py` for the version that `uv sync` installed, not from memory.
-- `PLIVO_AUTH_ID` and `PLIVO_AUTH_TOKEN` for the example's Plivo serializer: the user copies them from the console. The CLI keeps its token in the operating system's keychain; never read it from there.
+- OpenAI, Deepgram and Cartesia: run the example as it is.
+- OpenAI only: change `bot.py` to one speech-to-speech service in place of the separate speech-to-text, language model and text-to-speech services. Import `OpenAIRealtimeLLMService` from `pipecat.services.openai.realtime.llm`, and build the pipeline as `transport.input()`, the user aggregator, the realtime service, `transport.output()` and the assistant aggregator. Take the settings from Pipecat's own `examples/realtime/realtime-openai.py` for the version that `uv sync` installed, not from memory.
+- `PLIVO_AUTH_ID` and `PLIVO_AUTH_TOKEN` feed the example's Plivo serializer. The CLI keeps its token in the operating system's keychain; never read it from there.
 
-Start it in the background with `PYTHONUNBUFFERED=1 uv run server.py` (port 7860: the answer XML on `GET /`, the voice agent on `/ws`). Check:
+Start it in the background with `PYTHONUNBUFFERED=1 uv run uvicorn server:app --host 127.0.0.1 --port 7860` (the answer XML on `GET /`, the voice agent on `/ws`). This accepts connections from this computer only, like the echo test; `uv run server.py` listens on every network, so anyone on the same Wi-Fi could reach it and spend the user's keys. Check:
 
 ```bash
 curl -s http://127.0.0.1:7860/                       # <Stream ...>wss://127.0.0.1:7860/ws</Stream>
@@ -241,7 +241,7 @@ Use the tunnel URL with the answer path and method from step 5: `https://<tunnel
 
 ### Step 8: link the number
 
-Linking moves all of the number's inbound calls and messages to the app. Show the preview, then ask "Send calls on <masked number> to the <echo test or voice agent>? Its calls and SMS stop going to <old app name> until you switch back. I'll do that for you at the end." (header Link) · Yes, switch it / Keep it on <old app name>. For a number on no app, leave out the part about where its calls go now.
+Linking moves all of the number's inbound calls and messages to the app. Show the preview, then ask "Send calls on <masked number> to the <echo test or voice agent>? Its calls and SMS stop going to <old app name> until you switch back. I'll do that for you at the end." (header Link) · Yes, switch it / Keep it on <old app name>. For a number on no app, replace the part about where its calls go now with: "Once linked, it can move to another app later, but it can't go back to having no app."
 
 ```bash
 plivo numbers update <number> --app-id <app_id> --dry-run
@@ -255,7 +255,7 @@ Check the credit first. Then place the call the way the user chose in step 3. Th
 
 - **The user calls in:** ask them to call the number, in full. For an Indian number, from an Indian phone: Indian calls stay within India.
 - **Plivo calls the user:**
-  1. Ask in plain text: "Which phone should I call? Use an Indian mobile, for example +91 98XXX XXXXX." Pass it to the CLI in `+91...` form.
+  1. Ask in plain text: "Which phone should I call? Use a mobile in <the number's country>, for example <its format, such as +91 98XXX XXXXX for India>." Pass it to the CLI in `+<country code>...` form.
   2. Preview `plivo voice calls make --from <number> --to <phone> --answer-url <answer URL> --answer-method <method> --dry-run` with the app's answer URL and method (`calls make` defaults to GET).
   3. Ask "Call <masked phone> now? When it rings, answer and talk for 10 seconds. You should hear yourself repeated." (header Call) · Call me / Not now. For the OpenAI or your own voice agent, the last sentence becomes "Talk to your voice agent as you would to a person." On yes, run it with `--yes`. The `request_uuid` it returns means only that Plivo accepted the request; it is also the call's UUID (seen on every test call).
   4. A 403 `Calls to this destination region are barred` means the account's geo permissions block that country: Voice, Geo Permissions in the console. Professional accounts can allow only India and the US; other countries need Enterprise. Offer that, or the user calls in.
@@ -410,7 +410,7 @@ Copy the closest document. `{{CallUUID}}` and `{{To}}` are for your server to fi
 ```xml
 <Response>
   <Stream bidirectional="true" contentType="audio/x-mulaw;rate=8000" statusCallbackUrl="https://voice.example.com/plivo/stream-status" statusCallbackMethod="POST">wss://voice.example.com/ws/{{CallUUID}}</Stream>
-  <MultiPartyCall role="customer" coachMode="true" maxDuration="900" maxParticipants="10" record="false" recordParticipantTrack="true" statusCallbackEvents="mpc-state-changes,participant-state-changes" statusCallbackUrl="https://voice.example.com/plivo/mpc-status" statusCallbackMethod="POST">room-{{CallUUID}}</MultiPartyCall>
+  <MultiPartyCall role="Customer" coachMode="true" maxDuration="900" maxParticipants="10" record="false" recordParticipantTrack="true" statusCallbackEvents="mpc-state-changes,participant-state-changes" statusCallbackUrl="https://voice.example.com/plivo/mpc-status" statusCallbackMethod="POST">room-{{CallUUID}}</MultiPartyCall>
 </Response>
 ```
 
@@ -485,7 +485,7 @@ Other Voice XML elements: `plivo skill install voice-xml`, which covers the comm
 
 Docs: `plivo docs show voice-agents/audio-streaming/xml/stream` (<https://plivo.com/docs/voice-agents/audio-streaming/xml/stream>); the 24 kHz value is on `plivo docs show voice/xml/audio-streaming` (<https://plivo.com/docs/voice/xml/audio-streaming>).
 
-Limits, from <https://plivo.com/docs/voice-agents/audio-streaming/concepts/audio-streaming-guide> (cut off in the CLI) and the best-practices page: a stream URL of 2048 characters; one stream per call; WebSocket messages up to 64 KB, audio chunks of 16 KB base64 or less; about 20 ms of audio per `media` frame; a playback buffer of 40 s on the best-practices page (`DegradedStream` at 30, 60 and 90% full) and about 60 s in the guide. If the first connection fails, Plivo tries twice more, then drops the stream. Plivo closes the socket when the call ends.
+Limits, from <https://plivo.com/docs/voice-agents/audio-streaming/concepts/audio-streaming-guide> and the best-practices page: a stream URL of 2048 characters; one stream per call; WebSocket messages up to 64 KB, audio chunks of 16 KB base64 or less; about 20 ms of audio per `media` frame; a playback buffer of 40 s on the best-practices page (`DegradedStream` at 30, 60 and 90% full) and about 60 s in the guide. If the first connection fails, Plivo tries twice more, then drops the stream. Plivo closes the socket when the call ends.
 
 Plivo sends JSON text frames, never binary:
 
@@ -594,4 +594,4 @@ Documents, statuses and rejection reasons: `plivo docs show numbers/rent-india-n
 
 ## When this skill does not have the answer
 
-Do not guess from other platforms. Search the docs first, which needs no login: `plivo docs search <keywords>`, then `plivo docs show <path>`. When piped, `plivo docs show` prints a JSON envelope, so add `-o table`; a page cut off at a `# ` in a code sample is complete at `https://www.plivo.com/docs/<path>.md`. In `plivo docs search`, quoted words match as a phrase; unquoted words must all appear. Next, `plivo ask "<question>"`, which can also see the account; it shares the small rate limit with `diagnose` (on `RATE_LIMITED`, wait as told). Treat its answer as evidence and prefer the docs where they conflict. Without the CLI, ask the assistant in the Plivo console. The docs do not answer the price of a streamed call, Plivo's setup latency, data retention, HIPAA or BAA, which India series allow `<Stream>`, `<Stream>` on SIP-trunk legs, or the longest accepted answer URL: say so and route to Plivo support or the account manager. Out of scope: SIP-connected agent platforms (`plivo skill install sip-trunking`), Plivo's hosted AI Agents, SMS, browser and SIP endpoints, and the inside of the voice agent.
+Do not guess from other platforms. Search the docs first, which needs no login: `plivo docs search <keywords>`, then `plivo docs show <path>`. When piped, `plivo docs show` prints a JSON envelope, so add `-o table`. In `plivo docs search`, quoted words match as a phrase; unquoted words must all appear. Next, `plivo ask "<question>"`, which can also see the account; it shares the small rate limit with `diagnose` (on `RATE_LIMITED`, wait as told). Treat its answer as evidence and prefer the docs where they conflict. Without the CLI, ask the assistant in the Plivo console. The docs do not answer the price of a streamed call, Plivo's setup latency, data retention, HIPAA or BAA, which India series allow `<Stream>`, `<Stream>` on SIP-trunk legs, or the longest accepted answer URL: say so and route to Plivo support or the account manager. Out of scope: SIP-connected agent platforms (`plivo skill install sip-trunking`), Plivo's hosted AI Agents, SMS, browser and SIP endpoints, and the inside of the voice agent.

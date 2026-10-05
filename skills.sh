@@ -95,6 +95,28 @@ for entry in $WANTED; do
 "
 done
 
+# plivo-first-agent (v1.1.3) is now part of plivo-audio-streaming. Remove the
+# old copy so an agent never sees both.
+OLD_FIRST_AGENT="$HOME/.claude/skills/plivo-first-agent"
+case " $WANTED " in
+  *" $STREAM_SKILL "*)
+    if [ -z "${PLIVO_SKILL_DIR:-}" ]; then
+      if [ -L "$OLD_FIRST_AGENT" ]; then
+        rm -f "$OLD_FIRST_AGENT"
+        echo "→ Removed retired skill: $OLD_FIRST_AGENT (now part of plivo-audio-streaming)"
+      elif [ -d "$OLD_FIRST_AGENT" ]; then
+        # v1.1.3 wrote only SKILL.md; anything else in the folder is the user's.
+        rm -f "$OLD_FIRST_AGENT/SKILL.md"
+        if rmdir "$OLD_FIRST_AGENT" 2>/dev/null; then
+          echo "→ Removed retired skill: $OLD_FIRST_AGENT (now part of plivo-audio-streaming)"
+        else
+          echo "→ Removed $OLD_FIRST_AGENT/SKILL.md; kept the folder, which holds other files"
+        fi
+      fi
+    fi
+    ;;
+esac
+
 echo
 echo "✓ Installed:"
 printf '%s' "$INSTALLED"

@@ -47,7 +47,7 @@ Run this loop on every document you write or change, including every document an
 
 ## Docs pages
 
-Outside a terminal, `docs show` and `docs search` print a JSON envelope: add `-o table`. A CLI page can stop early (`voice/xml/input` does): fetch `https://www.plivo.com/docs/<path>.md` for the whole page as clean Markdown, not the HTML URL.
+Outside a terminal, `docs show` and `docs search` print a JSON envelope: add `-o table`.
 
 | Covers | CLI | Web |
 |---|---|---|

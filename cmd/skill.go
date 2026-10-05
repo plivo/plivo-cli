@@ -24,6 +24,7 @@ type bundledSkill struct {
 	dirName  string // ~/.claude/skills/<dirName>/SKILL.md
 	content  string
 	summary  string
+	replaces []string // skill directories from earlier releases that this skill supersedes
 }
 
 // bundledSkills is ordered; the FIRST entry is the default when no selector is
@@ -35,7 +36,7 @@ var bundledSkills = []bundledSkill{
 		content:  cliskill.SkillMD,
 		summary:  "the CLI reference — use `plivo` instead of raw curl",
 	},
-	{selector: "audio-streaming", dirName: "plivo-audio-streaming", content: audiostreamingskill.SkillMD, summary: "a voice bot on real calls with <Stream>, from setup to go-live"},
+	{selector: "audio-streaming", dirName: "plivo-audio-streaming", content: audiostreamingskill.SkillMD, summary: "a voice bot on real calls with <Stream>, from setup to go-live", replaces: []string{"plivo-first-agent"}},
 	{selector: "sip-trunking", dirName: "plivo-sip-trunking", content: siptrunkingskill.SkillMD, summary: "connect an AI voice platform over SIP trunking"},
 	{selector: "voice-xml", dirName: "plivo-voice-xml", content: voicexmlskill.SkillMD, summary: "write and fix Plivo Voice XML"},
 }
@@ -237,18 +238,59 @@ func installSkill(s bundledSkill) error {
 	// --dry-run: report the destination without touching disk.
 	if dryRunFlag {
 		fmt.Fprintf(os.Stderr, "Would write skill to %s\n", dest)
+	} else {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return clierr.Wrap(fmt.Errorf("create skill directory %s: %w", dir, err))
+		}
+		if err := os.WriteFile(dest, []byte(s.content), 0o644); err != nil {
+			return clierr.Wrap(fmt.Errorf("write skill to %s: %w", dest, err))
+		}
+		fmt.Fprintf(os.Stderr, "Installed skill: %s\n", dest)
+	}
+
+	// --dir names this skill's own folder, so there is no telling where an
+	// older copy of a replaced skill would be.
+	if skillDir != "" {
 		return nil
 	}
-
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return clierr.Wrap(fmt.Errorf("create skill directory %s: %w", dir, err))
-	}
-	if err := os.WriteFile(dest, []byte(s.content), 0o644); err != nil {
-		return clierr.Wrap(fmt.Errorf("write skill to %s: %w", dest, err))
-	}
-
-	fmt.Fprintf(os.Stderr, "Installed skill: %s\n", dest)
+	removeReplacedSkills(s)
 	return nil
+}
+
+// removeReplacedSkills removes, from the default skills root, the skills that s
+// supersedes, so an agent never sees both. Earlier releases wrote only
+// SKILL.md: a folder that holds other files keeps them. A failure is only a
+// warning, because the new skill is already installed.
+func removeReplacedSkills(s bundledSkill) {
+	for _, name := range s.replaces {
+		old, err := resolveSkillDir("", name)
+		if err != nil {
+			continue
+		}
+		info, err := os.Lstat(old)
+		if err != nil {
+			continue
+		}
+		if dryRunFlag {
+			fmt.Fprintf(os.Stderr, "Would remove retired skill: %s\n", old)
+			continue
+		}
+		if info.IsDir() {
+			if err := os.Remove(filepath.Join(old, skillFileName)); err != nil && !os.IsNotExist(err) {
+				fmt.Fprintf(os.Stderr, "Warning: could not remove retired skill %s: %v\n", old, err)
+				continue
+			}
+		}
+		if err := os.Remove(old); err != nil {
+			if info.IsDir() {
+				fmt.Fprintf(os.Stderr, "Removed the retired skill file from %s; kept the folder, which holds other files\n", old)
+			} else {
+				fmt.Fprintf(os.Stderr, "Warning: could not remove retired skill %s: %v\n", old, err)
+			}
+			continue
+		}
+		fmt.Fprintf(os.Stderr, "Removed retired skill: %s (now part of %s)\n", old, s.dirName)
+	}
 }
 
 // resolveSkillDir returns the override (with ~ expanded) or the default
