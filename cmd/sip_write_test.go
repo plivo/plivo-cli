@@ -755,6 +755,7 @@ func deleteServer(t *testing.T, count, routed int, trunks string, fail func(r *h
 		mu.Unlock()
 		if fail != nil {
 			if status := fail(r); status != 0 {
+				w.Header().Set("X-Request-ID", "req-placeholder")
 				w.WriteHeader(status)
 				_, _ = w.Write([]byte(`{"error":"unavailable"}`))
 				return
@@ -941,52 +942,74 @@ func TestSIPDeletes_checkEachMatchClientSide(t *testing.T) {
 	}
 }
 
-// A check that cannot finish refuses the delete, even with --yes --force:
-// deleting blind is how an in-use URI takes its trunks with it.
-func TestSIPDeletes_refuseWhenTheCheckFails(t *testing.T) {
-	failLists := func(r *http.Request) int {
-		if r.Method == "GET" {
-			return http.StatusInternalServerError
+// A check that cannot finish stops the delete, even with --yes --force:
+// deleting blind is how an in-use URI takes its trunks with it. The read's own
+// error comes through, so a rejected login still exits 2 and a rate limit 4;
+// only the message and hint say that nothing was deleted.
+func TestSIPDeletes_stopWhenTheCheckFails(t *testing.T) {
+	cases := []struct {
+		name      string
+		status    int
+		code      clierr.Code
+		exit      int
+		retryable bool
+	}{
+		{"server error", http.StatusInternalServerError, clierr.CodeUpstreamError, 3, true},
+		{"rejected login", http.StatusUnauthorized, clierr.CodeAuthInvalid, 2, false},
+		{"rate limited past the retries", http.StatusTooManyRequests, clierr.CodeRateLimited, 4, true},
+	}
+	for _, tc := range cases {
+		for _, args := range [][]string{
+			{"sip", "trunks", "delete", "T1", "--yes", "--force"},
+			{"sip", "uris", "delete", "U1", "--yes", "--force"},
+			{"sip", "credentials", "delete", "C1", "--yes", "--force"},
+			{"sip", "ip-acl", "delete", "A1", "--yes", "--force"},
+		} {
+			t.Run(tc.name+"/"+args[1], func(t *testing.T) {
+				setFakeCreds(t)
+				resetWriteFlags(t)
+				recordWaits(t)
+				reqs := deleteServer(t, 10, -1, trunksUsingU1, func(r *http.Request) int {
+					if r.Method == "GET" {
+						return tc.status
+					}
+					return 0
+				})
+
+				err, _, _ := execCmd(t, args...)
+				var ce *clierr.Error
+				if !errors.As(err, &ce) || ce.Code != tc.code || ce.ExitCode() != tc.exit || ce.Retryable != tc.retryable {
+					t.Fatalf("want %s (exit %d, retryable %v), got %#v", tc.code, tc.exit, tc.retryable, ce)
+				}
+				if !strings.HasPrefix(ce.Message, "refusing to delete ") ||
+					!strings.Contains(ce.Message, ": could not check what depends on it: ") {
+					t.Errorf("message does not say what was refused and why: %q", ce.Message)
+				}
+				if !strings.HasSuffix(ce.Hint, "Nothing was deleted.") || ce.RequestID != "req-placeholder" {
+					t.Errorf("hint %q / request id %q not kept from the read", ce.Hint, ce.RequestID)
+				}
+				if countRequests(reqs(), "DELETE ") != 0 {
+					t.Fatal("deleted without a finished check")
+				}
+			})
 		}
-		return 0
-	}
-	for _, args := range [][]string{
-		{"sip", "trunks", "delete", "T1", "--yes", "--force"},
-		{"sip", "uris", "delete", "U1", "--yes", "--force"},
-		{"sip", "credentials", "delete", "C1", "--yes", "--force"},
-		{"sip", "ip-acl", "delete", "A1", "--yes", "--force"},
-	} {
-		t.Run(args[1], func(t *testing.T) {
-			setFakeCreds(t)
-			resetWriteFlags(t)
-			reqs := deleteServer(t, 10, -1, trunksUsingU1, failLists)
-
-			err, _, _ := execCmd(t, args...)
-			ce := wantRefused(t, err)
-			if !strings.Contains(ce.Message, "could not check") {
-				t.Errorf("the refusal does not give the reason: %q", ce.Message)
-			}
-			if countRequests(reqs(), "DELETE ") != 0 {
-				t.Fatal("deleted without a finished check")
-			}
-		})
 	}
 
-	t.Run("rate limited past the retries", func(t *testing.T) {
+	t.Run("no answer at all", func(t *testing.T) {
 		setFakeCreds(t)
 		resetWriteFlags(t)
-		recordWaits(t)
-		reqs := deleteServer(t, 10, -1, `{}`, func(r *http.Request) int {
-			if r.Method == "GET" {
-				return http.StatusTooManyRequests
-			}
-			return 0
-		})
+		srv := httptest.NewServer(http.NotFoundHandler())
+		srv.Close()
+		clientForTest = &api.Client{BaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
+		t.Cleanup(func() { clientForTest = nil })
 
-		err, _, _ := execCmd(t, "sip", "trunks", "delete", "T1", "--yes")
-		wantRefused(t, err)
-		if n := countRequests(reqs(), "GET "); n != 4 || countRequests(reqs(), "DELETE ") != 0 {
-			t.Fatalf("want 1 read + 3 retries and no delete, got %v", reqs())
+		err, _, _ := execCmd(t, "sip", "uris", "delete", "U1", "--yes", "--force")
+		var ce *clierr.Error
+		if !errors.As(err, &ce) || ce.Code != clierr.CodeNetworkError || ce.ExitCode() != 3 || !ce.Retryable {
+			t.Fatalf("want NETWORK_ERROR (exit 3, retryable), got %#v", ce)
+		}
+		if !strings.HasPrefix(ce.Message, "refusing to delete URI U1: could not check what depends on it: ") {
+			t.Errorf("message = %q", ce.Message)
 		}
 	})
 }

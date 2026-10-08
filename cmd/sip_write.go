@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -161,13 +162,21 @@ func confirmDelete(action string, dependents []string) error {
 	return e
 }
 
-// checkFailed refuses a delete whose dependents could not all be read: deleting
-// blind is how an in-use URI takes its trunks with it.
+// checkFailed stops a delete whose dependents could not all be read: deleting
+// blind is how an in-use URI takes its trunks with it. The read's own error
+// comes through (code, exit code, retryable flag, request id, hint), so a
+// rejected login still exits 2 and a rate limit 4; only the message and hint
+// add what was refused.
 func checkFailed(action string, err error) error {
-	e := clierr.DestructiveRefused(action)
-	e.Message = fmt.Sprintf("%s: could not check what depends on it: %v", e.Message, err)
-	e.Hint = "Nothing was deleted. Retry once the API answers: the delete runs only after the check has read every page."
-	return e
+	var read *clierr.Error
+	if !errors.As(err, &read) {
+		// No answer from the API, or none it could parse: a transport failure.
+		read = clierr.NetworkError("the Plivo API", err)
+	}
+	e := *read
+	e.Message = fmt.Sprintf("refusing to %s: could not check what depends on it: %s", action, read.Message)
+	e.Hint = strings.TrimSpace(read.Hint + " Nothing was deleted.")
+	return &e
 }
 
 // reportDependents names what a delete would detach. Printed on every delete,
