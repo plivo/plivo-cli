@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -591,5 +592,21 @@ func TestSkillInstall_homeInstallStillOverwrites(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(p); string(got) != cliskill.SkillMD {
 		t.Error("a home install no longer overwrites")
+	}
+}
+
+// The hash list is what tells a released copy from a user's edit, so the
+// version this binary bundles must be on it: otherwise `skill update` would
+// call its own output an edit.
+func TestSkillHashes_listEveryBundledSkill(t *testing.T) {
+	for _, s := range bundledSkills {
+		if !slices.Contains(shippedSkillHashes[s.dirName], skillDigest([]byte(s.content))) {
+			t.Errorf("%s: the bundled SKILL.md is not in cmd/skill_hashes.go; run `make skill-hashes`", s.selector)
+		}
+	}
+	for dir := range shippedSkillHashes {
+		if !slices.ContainsFunc(bundledSkills, func(s bundledSkill) bool { return s.dirName == dir }) {
+			t.Errorf("cmd/skill_hashes.go lists %q, which is not a bundled skill", dir)
+		}
 	}
 }

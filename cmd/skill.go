@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -338,6 +341,14 @@ func installSkill(s bundledSkill, projectRoot string) (kept string, err error) {
 	}
 	removeReplacedSkills(s)
 	return "", nil
+}
+
+// skillDigest is the sha256 of a SKILL.md with CRLF read as LF, so a copy a
+// Windows checkout converted still matches the version it came from.
+// tools/skillhashes computes the same digest for cmd/skill_hashes.go.
+func skillDigest(b []byte) string {
+	sum := sha256.Sum256(bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n")))
+	return hex.EncodeToString(sum[:])
 }
 
 // removeReplacedSkills removes, from the default skills root, the skills that s
