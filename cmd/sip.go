@@ -253,7 +253,7 @@ func runSIPCallsList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"CALL_UUID", "FROM", "TO", "DIR", "DUR", "CAUSE", "HUNG_UP_BY", "END_TIME"}}
 	for _, c := range resp.Objects {
@@ -351,7 +351,7 @@ func runSIPTrunksList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"TRUNK_ID", "NAME", "TRUNK_DIRECTION", "TRUNK_STATUS", "TRUNK_DOMAIN", "PRIMARY_URI_UUID"}}
 	for _, t := range resp.Objects {
@@ -432,7 +432,7 @@ func runSIPACLList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"IPACL_UUID", "NAME", "IP_ADDRESSES"}}
 	for _, a := range resp.Objects {

@@ -394,7 +394,7 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"AGENT_ID", "NAME", "STATE", "FLOW_TYPE", "VERSION", "UPDATED_AT"}}
 	for _, a := range resp.Objects {

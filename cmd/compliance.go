@@ -360,7 +360,7 @@ func runComplianceList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "compliances")
 	}
 	rows := [][]string{{"COMPLIANCE_ID", "ALIAS", "STATUS", "COUNTRY", "NUMBER_TYPE", "CREATED"}}
 	for _, a := range resp.Objects {

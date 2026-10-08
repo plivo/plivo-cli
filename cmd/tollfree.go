@@ -100,7 +100,7 @@ func runTfvList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"PROFILE_UUID", "BUSINESS", "USE_CASE", "VOLUME", "STATUS", "CREATED"}}
 	for _, t := range resp.Objects {

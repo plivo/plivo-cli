@@ -1,12 +1,17 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
+	"github.com/plivo/plivo-cli/internal/docs"
 	"github.com/spf13/cobra"
 )
 
@@ -226,4 +231,108 @@ func TestListFlags_everyPagedListChecksThePageFirst(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestListJSON(t *testing.T) {
+	cases := []struct{ name, body, key, want string }{
+		{"null rows become []", `{"meta":{},"objects":null}`, "objects", `[]`},
+		{"missing rows become []", `{"meta":{}}`, "objects", `[]`},
+		{"rows under another key", `{"compliances":null}`, "compliances", `[]`},
+		{"rows kept as sent", `{"objects":[{"id":"a"}]}`, "objects", `[{"id":"a"}]`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := listJSON(&buf, json.RawMessage(tc.body), tc.key); err != nil {
+				t.Fatal(err)
+			}
+			var env struct {
+				Data map[string]json.RawMessage `json:"data"`
+			}
+			if err := json.Unmarshal(buf.Bytes(), &env); err != nil {
+				t.Fatalf("output is not JSON: %v\n%s", err, buf.String())
+			}
+			var got bytes.Buffer
+			_ = json.Compact(&got, env.Data[tc.key])
+			if got.String() != tc.want {
+				t.Fatalf("%s = %s, want %s", tc.key, got.String(), tc.want)
+			}
+		})
+	}
+
+	t.Run("a body that is not an object passes through", func(t *testing.T) {
+		var buf bytes.Buffer
+		if err := listJSON(&buf, json.RawMessage(`[1,2]`), "objects"); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(buf.String(), "1,") {
+			t.Fatalf("body changed: %s", buf.String())
+		}
+	})
+}
+
+// The commands the empty-list rule was written for: the SIP Trunking ACL list
+// sends "objects": null, and the CLI-built lists left their slices nil.
+func TestEmptyLists_renderAnEmptyArray(t *testing.T) {
+	cases := []struct {
+		args []string
+		body string
+		want string
+	}{
+		{[]string{"sip", "ip-acl", "list"}, `{"api_id":"x","meta":{"total_count":0},"objects":null}`, `"objects": []`},
+		{[]string{"numbers", "compliance", "list"}, `{"api_id":"x","meta":{"total_count":0},"compliances":null}`, `"compliances": []`},
+		{[]string{"voice", "conferences", "list"}, `{"api_id":"x"}`, `"conferences": []`},
+	}
+	for _, tc := range cases {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			setFakeCreds(t)
+			sipServer(t, http.StatusOK, tc.body)
+
+			err, stdout, _ := execCmd(t, append(tc.args, "-o", "json")...)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !strings.Contains(stdout, tc.want) {
+				t.Fatalf("want %s in:\n%s", tc.want, stdout)
+			}
+			if tc.want != `"objects": []` && strings.Contains(stdout, `"objects"`) {
+				t.Fatalf("added an objects key to a list that has none:\n%s", stdout)
+			}
+		})
+	}
+
+	t.Run("support with no escalations", func(t *testing.T) {
+		setFakeCreds(t)
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(`{"api_id":"x","status":"ok","data":{}}`))
+		}))
+		t.Cleanup(srv.Close)
+		supportClientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001",
+			AuthToken: "tok", AomUUID: "aom-1", HTTP: &http.Client{}}
+		t.Cleanup(func() { supportClientForTest = nil })
+
+		err, stdout, _ := execCmd(t, "support", "-o", "json")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(stdout, `"data": []`) {
+			t.Fatalf("want an empty array:\n%s", stdout)
+		}
+	})
+
+	t.Run("docs list with an empty index", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+		t.Cleanup(srv.Close)
+		docsFetcherForTest = &docs.Fetcher{HTTP: srv.Client(), CacheDir: t.TempDir(),
+			BaseIndex: srv.URL + "/llms.txt", BaseFull: srv.URL + "/llms-full.txt"}
+		t.Cleanup(func() { docsFetcherForTest = nil })
+
+		err, stdout, _ := execCmd(t, "docs", "list", "-o", "json")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(stdout, `"data": []`) {
+			t.Fatalf("want an empty array:\n%s", stdout)
+		}
+	})
 }

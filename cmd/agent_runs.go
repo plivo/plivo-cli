@@ -97,7 +97,7 @@ func runAgentRunsList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"RUN_ID", "STATUS", "STARTED_AT", "ENDED_AT", "PLAYGROUND"}}
 	for _, r := range resp.Objects {

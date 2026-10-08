@@ -460,7 +460,7 @@ func runSIPURIsList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"URI_UUID", "NAME", "URI", "AUTHENTICATION_NEEDED", "USERNAME"}}
 	for _, u := range resp.Objects {
@@ -711,7 +711,7 @@ func runSIPCredsList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"CREDENTIAL_UUID", "NAME", "USERNAME"}}
 	for _, c := range resp.Objects {

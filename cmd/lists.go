@@ -1,11 +1,15 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
 	"github.com/plivo/plivo-cli/internal/clierr"
+	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -34,6 +38,23 @@ func validatePage(limit, offset int) error {
 		return clierr.BadFlag("offset", fmt.Sprintf("must be 0 or more, got %d", offset))
 	}
 	return nil
+}
+
+// listJSON writes a list response for -o json with its rows array never null.
+// A few endpoints send null, or nothing, for an empty list where the rest send
+// [], and a script reading the rows should not need a case for that. key names
+// the array: "objects" on most lists.
+func listJSON(w io.Writer, raw json.RawMessage, key string) error {
+	var env map[string]json.RawMessage
+	if json.Unmarshal(raw, &env) == nil && env != nil {
+		if rows, ok := env[key]; !ok || bytes.Equal(bytes.TrimSpace(rows), []byte("null")) {
+			env[key] = json.RawMessage("[]")
+			if b, err := output.Marshal(env); err == nil {
+				raw = b
+			}
+		}
+	}
+	return output.JSONRaw(w, raw)
 }
 
 // Values the list filters accept, as the API reference documents them (the

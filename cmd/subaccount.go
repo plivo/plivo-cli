@@ -102,7 +102,7 @@ func runSubList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"AUTH_ID", "NAME", "ENABLED", "CREATED"}}
 	for _, s := range resp.Objects {

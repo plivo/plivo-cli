@@ -150,7 +150,7 @@ func runPowerpackList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"UUID", "NAME", "STICKY", "LOCAL", "APP_TYPE", "CREATED"}}
 	for _, p := range resp.Objects {
@@ -326,7 +326,7 @@ func runPowerpackNumberList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"NUMBER", "COUNTRY", "TYPE", "ADDED"}}
 	for _, n := range resp.Objects {

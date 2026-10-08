@@ -189,7 +189,7 @@ func runNumberList(cmd *cobra.Command, args []string) error {
 
 func renderNumberList(resp api.NumberList) error {
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"NUMBER", "TYPE", "COUNTRY", "APP_ID", "ALIAS"}}
 	for _, n := range resp.Objects {

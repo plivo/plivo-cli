@@ -118,7 +118,7 @@ func runBrandList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "brands")
 	}
 	rows := [][]string{{"BRAND_ID", "ALIAS", "LEGAL_NAME", "TYPE", "STATUS", "VERTICAL"}}
 	for _, b := range resp.Brands {

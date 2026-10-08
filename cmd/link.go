@@ -91,7 +91,7 @@ func runLinkList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"LINK_ID", "NUMBER", "CAMPAIGN_ID", "STATUS", "CREATED"}}
 	for _, l := range resp.Objects {
