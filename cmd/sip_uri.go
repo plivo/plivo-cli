@@ -182,3 +182,33 @@ func (u *sipURI) setParams(params string) error {
 	}
 	return nil
 }
+
+// checkACLEntries checks every --ip value before a request is spent. Each is
+// one IPv4 or IPv6 address or CIDR range. A comma-separated list is refused
+// rather than split, so what is sent is exactly what was typed.
+func checkACLEntries(entries []string) error {
+	for _, e := range entries {
+		if err := checkACLEntry(e); err != nil {
+			bad := clierr.BadFlag("ip", err.Error())
+			bad.Hint = "Pass one address or CIDR range per --ip, e.g. --ip 203.0.113.4 --ip 198.51.100.0/24."
+			return bad
+		}
+	}
+	return nil
+}
+
+func checkACLEntry(e string) error {
+	if strings.Contains(e, ",") {
+		return fmt.Errorf("%q holds more than one value: repeat --ip for each address", e)
+	}
+	if strings.Contains(e, "/") {
+		if _, err := netip.ParsePrefix(e); err != nil {
+			return fmt.Errorf("%q is not a CIDR range such as 198.51.100.0/24", e)
+		}
+		return nil
+	}
+	if a, err := netip.ParseAddr(e); err != nil || a.Zone() != "" {
+		return fmt.Errorf("%q is not an IPv4 or IPv6 address", e)
+	}
+	return nil
+}

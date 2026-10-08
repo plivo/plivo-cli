@@ -2721,9 +2721,10 @@ Create an IP access control list
 
 Create an IP access control list.
 
---ip is repeatable. A range that allows the whole internet is reported but not
-blocked: it is occasionally deliberate, and refusing it outright would push
-people to the console instead.
+--ip is repeatable and takes one IPv4 or IPv6 address or CIDR range each. A
+comma-separated list is refused rather than split. A range that allows the
+whole internet is reported but not blocked: it is occasionally deliberate, and
+refusing it outright would push people to the console instead.
 
 ```
 plivo sip ip-acl create [flags]

@@ -826,9 +826,10 @@ var sipACLCreateCmd = &cobra.Command{
 	Short: "Create an IP access control list",
 	Long: `Create an IP access control list.
 
---ip is repeatable. A range that allows the whole internet is reported but not
-blocked: it is occasionally deliberate, and refusing it outright would push
-people to the console instead.`,
+--ip is repeatable and takes one IPv4 or IPv6 address or CIDR range each. A
+comma-separated list is refused rather than split. A range that allows the
+whole internet is reported but not blocked: it is occasionally deliberate, and
+refusing it outright would push people to the console instead.`,
 	Example: `  plivo sip ip-acl create --name platform --ip 203.0.113.4 --ip 198.51.100.0/24`,
 	RunE:    runSIPACLCreate,
 }
@@ -883,6 +884,9 @@ func runSIPACLCreate(cmd *cobra.Command, args []string) error {
 	if len(aclCreateIPs) == 0 {
 		return clierr.BadInput("at least one --ip is required")
 	}
+	if err := checkACLEntries(aclCreateIPs); err != nil {
+		return err
+	}
 	warnRiskyIPs(aclCreateIPs)
 	client, _, err := getClient()
 	if err != nil {
@@ -901,6 +905,11 @@ func runSIPACLCreate(cmd *cobra.Command, args []string) error {
 }
 
 func runSIPACLUpdate(cmd *cobra.Command, args []string) error {
+	if cmd.Flags().Changed("ip") {
+		if err := checkACLEntries(aclUpdateIPs); err != nil {
+			return err
+		}
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err

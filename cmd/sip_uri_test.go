@@ -89,8 +89,32 @@ func TestParseSIPURI_namesWhatIsWrong(t *testing.T) {
 	}
 }
 
-// A bad --uri must be refused locally as BAD_FLAG, on create and on update,
-// before a single request leaves.
+func TestCheckACLEntry(t *testing.T) {
+	for _, tc := range []struct {
+		in string
+		ok bool
+	}{
+		{"203.0.113.4", true},
+		{"198.51.100.0/24", true},
+		{"2001:db8::1", true},
+		{"2001:db8::/32", true},
+		{"0.0.0.0/0", true},
+		{"203.0.113.4,198.51.100.7", false},
+		{"203.0.113.4, 198.51.100.7", false},
+		{"999.0.113.4", false},
+		{"203.0.113.4/33", false},
+		{"fe80::1%eth0", false},
+		{"sip.example.com", false},
+		{"", false},
+	} {
+		if err := checkACLEntry(tc.in); (err == nil) != tc.ok {
+			t.Errorf("checkACLEntry(%q) = %v, want ok=%v", tc.in, err, tc.ok)
+		}
+	}
+}
+
+// A bad --uri or --ip must be refused locally as BAD_FLAG, on create and on
+// update, before a single request leaves.
 func TestSIPWrites_refuseBadValuesWithoutARequest(t *testing.T) {
 	for _, tc := range []struct {
 		name, flag string
@@ -100,6 +124,9 @@ func TestSIPWrites_refuseBadValuesWithoutARequest(t *testing.T) {
 		{"uris create unknown transport", "uri", []string{"sip", "uris", "create", "--name", "n", "--uri", "sip.example.com;transport=sctp"}},
 		{"uris update bad host", "uri", []string{"sip", "uris", "update", "U1", "--uri", "sip_example.com"}},
 		{"uris update empty", "uri", []string{"sip", "uris", "update", "U1", "--uri", " "}},
+		{"ip-acl create comma list", "ip", []string{"sip", "ip-acl", "create", "--name", "a", "--ip", "203.0.113.4,198.51.100.7"}},
+		{"ip-acl create bad address", "ip", []string{"sip", "ip-acl", "create", "--name", "a", "--ip", "203.0.113.4", "--ip", "999.0.113.4"}},
+		{"ip-acl update bad range", "ip", []string{"sip", "ip-acl", "update", "A1", "--ip", "198.51.100.0/33"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setFakeCreds(t)
@@ -114,5 +141,24 @@ func TestSIPWrites_refuseBadValuesWithoutARequest(t *testing.T) {
 				t.Errorf("validation must not spend a request, made %d", n)
 			}
 		})
+	}
+}
+
+// Valid IPv6 addresses and ranges reach the API exactly as typed.
+func TestSIPACLCreate_sendsValidEntriesVerbatim(t *testing.T) {
+	setFakeCreds(t)
+	resetWriteFlags(t)
+	reqs := sipWriteServer(t, trunksUsingU1)
+
+	if err, _, _ := execCmd(t, "sip", "ip-acl", "create", "--name", "a", "--ip", "2001:db8::1", "--ip", "198.51.100.0/24"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	p := post(reqs(), "/Zentrunk/IPAccessControlList/")
+	if p == nil {
+		t.Fatal("no create request")
+	}
+	got, _ := p.body["ip_addresses"].([]any)
+	if len(got) != 2 || got[0] != "2001:db8::1" || got[1] != "198.51.100.0/24" {
+		t.Errorf("entries not sent verbatim: %v", p.body["ip_addresses"])
 	}
 }
