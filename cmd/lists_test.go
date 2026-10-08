@@ -640,3 +640,31 @@ func TestListAll_onEveryPagedList(t *testing.T) {
 	}
 	walk(rootCmd)
 }
+
+// The page check goes in front of a pre-run hook the command already has; it
+// must not replace it. cobra skips PreRun once PreRunE is set, so a PreRun is
+// carried into the chain too.
+func TestRegisterListFlags_keepsAnExistingPreRunHook(t *testing.T) {
+	var limit, offset int
+	var ran []string
+	withE := &cobra.Command{Use: "a", PreRunE: func(*cobra.Command, []string) error {
+		ran = append(ran, "PreRunE")
+		return nil
+	}}
+	plain := &cobra.Command{Use: "b", PreRun: func(*cobra.Command, []string) { ran = append(ran, "PreRun") }}
+	for _, c := range []*cobra.Command{withE, plain} {
+		registerListFlags(c, &limit, &offset)
+		if err := c.PreRunE(c, nil); err != nil {
+			t.Fatalf("%s: unexpected error: %v", c.Use, err)
+		}
+	}
+	if strings.Join(ran, ",") != "PreRunE,PreRun" {
+		t.Fatalf("hooks run = %v, want both", ran)
+	}
+
+	ran, limit = nil, 0
+	var ce *clierr.Error
+	if !errors.As(withE.PreRunE(withE, nil), &ce) || ce.Code != clierr.CodeBadFlag || len(ran) != 0 {
+		t.Fatalf("a bad page must stop before the hook: err %v, ran %v", ce, ran)
+	}
+}
