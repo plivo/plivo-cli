@@ -505,9 +505,9 @@ func kycRefusal(e *clierr.Error, number, appID string) *clierr.Error {
 	}
 	e.Hint = fmt.Sprintf("India numbers need an accepted compliance application (KYC): 1) %s; "+
 		"2) `plivo numbers compliance create --data @app.json --file documents[0].file=@doc.pdf` submits one "+
-		"(`update <compliance_id>` with the same flags resubmits a rejected one); "+
+		"(`plivo numbers compliance update <compliance_id>` with the same flags resubmits a rejected one); "+
 		"3) `plivo numbers compliance link --link %s=<compliance_id>` attaches an accepted one. "+
-		"--force skips this check; Plivo still enforces KYC.", see, number)
+		"`plivo numbers update --force` skips this check; Plivo still enforces KYC.", see, number)
 	e.DocsURL = indiaKYCDocsURL
 	return e
 }
