@@ -56,3 +56,17 @@ func TestLoadLastError_noneWhenMissingOrCorrupt(t *testing.T) {
 		t.Errorf("corrupt file: %+v, %v; want nil, nil", got, err)
 	}
 }
+
+func TestEndpoint(t *testing.T) {
+	t.Setenv(EndpointEnvVar, "")
+	if got, err := Endpoint("https://example.test/"); err != nil || got != "https://example.test/v1/accounts/cli/feedback" {
+		t.Errorf("Endpoint(base) = %q, %v", got, err)
+	}
+	if _, err := Endpoint(""); err != ErrEndpointNotConfigured {
+		t.Errorf("Endpoint(\"\") err = %v, want ErrEndpointNotConfigured", err)
+	}
+	t.Setenv(EndpointEnvVar, "http://127.0.0.1:1/collect")
+	if got, _ := Endpoint("https://example.test"); got != "http://127.0.0.1:1/collect" {
+		t.Errorf("the env override lost to the base: %q", got)
+	}
+}

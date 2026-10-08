@@ -24,11 +24,13 @@ func resetFeedbackFlags(t *testing.T) {
 		feedbackMessage = ""
 		feedbackNoContext = false
 		feedbackYes = false
+		feedbackBug = false
 	})
 	feedbackRating = 0
 	feedbackMessage = ""
 	feedbackNoContext = false
 	feedbackYes = false
+	feedbackBug = false
 }
 
 // runWithFakeStdio invokes the feedback command with controlled stdin
