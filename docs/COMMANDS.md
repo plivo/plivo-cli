@@ -1151,7 +1151,6 @@ Flags:
       --message string   one-shot comment. Skip the interactive prompt.
       --no-context       don't auto-attach CLI version / OS / arch metadata
       --rating int       one-shot rating (1-5). Skip the interactive prompt.
-      --yes              skip the pre-submit preview / confirmation (default: confirm in interactive)
 ```
 
 ---

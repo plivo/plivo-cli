@@ -273,7 +273,7 @@ func TestFeedbackBug_sendsTheCommentAndTheFailure(t *testing.T) {
 	bugReportSetup(t)
 	c := newBugCollector(t, http.StatusNoContent)
 	feedbackMessage = "calling +14155551234 fails"
-	feedbackYes = true
+	yesFlag = true
 
 	if _, err := runWithFakeStdio(t, ""); err != nil {
 		t.Fatalf("send: %v", err)
@@ -301,7 +301,7 @@ func TestFeedbackBug_aFailedSendPrintsAnIssueLink(t *testing.T) {
 	bugReportSetup(t)
 	newBugCollector(t, http.StatusInternalServerError)
 	feedbackMessage = "trunk list hangs"
-	feedbackYes = true
+	yesFlag = true
 
 	out, err := runWithFakeStdio(t, "")
 	var ce *clierr.Error
@@ -356,7 +356,7 @@ func TestFeedbackBug_nothingToReport(t *testing.T) {
 	setEmptyHome(t)
 	t.Setenv(feedback.MachineIDEnvVar, "test-machine")
 	c := newBugCollector(t, http.StatusNoContent)
-	feedbackBug, feedbackYes = true, true
+	feedbackBug, yesFlag = true, true
 
 	out, err := runWithFakeStdio(t, "")
 	if err != nil || !strings.Contains(out, "Nothing to report") {

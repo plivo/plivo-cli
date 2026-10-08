@@ -25,7 +25,7 @@ plivo feedback --bug --message "..." --yes  # report the last failure
 | `--rating <1-5>` | One-shot rating. Skips the interactive rating prompt. |
 | `--message <text>` | One-shot comment (max 500 chars). Skips the interactive comment prompt. |
 | `--no-context` | Don't auto-attach CLI version / OS / arch metadata. CLI version still attached (needed for any aggregate). |
-| `--yes` | Skip the pre-submit confirmation step. A bug report sent without a terminal needs it. |
+| `-y`, `--yes` | Skip the pre-submit confirmation step. A bug report sent without a terminal needs it. |
 | `--bug` | Send a bug report: your comment plus the last failed command, printed in full before sending. |
 | `--dry-run` | Print the exact request (endpoint, headers, JSON body) and send nothing. Works on every path, `--bug` included. |
 

@@ -30,7 +30,6 @@ var (
 	feedbackRating    int    // 1-5; 0 = unset
 	feedbackMessage   string // free text; "" = unset
 	feedbackNoContext bool   // skip auto-attached context
-	feedbackYes       bool   // skip pre-submit preview
 	feedbackBug       bool   // send a bug report with the last failure
 )
 
@@ -81,8 +80,6 @@ func init() {
 		"one-shot comment. Skip the interactive prompt.")
 	feedbackCmd.Flags().BoolVar(&feedbackNoContext, "no-context", false,
 		"don't auto-attach CLI version / OS / arch metadata")
-	feedbackCmd.Flags().BoolVar(&feedbackYes, "yes", false,
-		"skip the pre-submit preview / confirmation (default: confirm in interactive)")
 	feedbackCmd.Flags().BoolVar(&feedbackBug, "bug", false,
 		"report a bug: your comment plus the last failed command, printed in full before sending")
 	rootCmd.AddCommand(feedbackCmd)
@@ -383,11 +380,11 @@ func endOfInputKey(goos string) string {
 	return "Ctrl-D"
 }
 
-// shouldSkipPreview returns true if --yes was passed OR if we're in
-// non-interactive mode (one-shot flags + no TTY → no point asking for
-// confirmation, nothing reads the response).
+// shouldSkipPreview returns true if --yes (the global flag, so -y works
+// too) was passed OR if we're in non-interactive mode (one-shot flags + no
+// TTY → no point asking for confirmation, nothing reads the response).
 func shouldSkipPreview() bool {
-	if feedbackYes {
+	if yesFlag {
 		return true
 	}
 	return !isTTY(os.Stdin)
@@ -502,7 +499,7 @@ func runBugReport(cmd *cobra.Command) error {
 		fmt.Fprintln(out, "Dry run: nothing sent.")
 		return nil
 	}
-	if !feedbackYes {
+	if !yesFlag {
 		if !isTTY(in) {
 			e := clierr.DestructiveRefused("send a bug report")
 			e.Hint = "Check the report above, then pass --yes to send it. --dry-run prints it without sending."

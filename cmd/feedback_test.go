@@ -23,13 +23,13 @@ func resetFeedbackFlags(t *testing.T) {
 		feedbackRating = 0
 		feedbackMessage = ""
 		feedbackNoContext = false
-		feedbackYes = false
+		yesFlag = false
 		feedbackBug = false
 	})
 	feedbackRating = 0
 	feedbackMessage = ""
 	feedbackNoContext = false
-	feedbackYes = false
+	yesFlag = false
 	feedbackBug = false
 }
 
@@ -68,7 +68,7 @@ func TestFeedback_oneShot_bothFlags_skipsPrompts(t *testing.T) {
 
 	feedbackRating = 4
 	feedbackMessage = "the upgrade flow was great"
-	feedbackYes = true
+	yesFlag = true
 
 	out, err := runWithFakeStdio(t, "")
 	if err != nil {
@@ -99,7 +99,7 @@ func TestFeedback_oneShot_ratingOnly(t *testing.T) {
 	t.Setenv(feedback.EndpointEnvVar, srv.URL)
 
 	feedbackRating = 5
-	feedbackYes = true
+	yesFlag = true
 	// stdin not a TTY → no comment prompt; rating from flag, comment empty.
 	_, err := runWithFakeStdio(t, "")
 	if err != nil {
@@ -127,7 +127,7 @@ func TestFeedback_oneShot_messageOnly(t *testing.T) {
 	t.Setenv(feedback.EndpointEnvVar, srv.URL)
 
 	feedbackMessage = "the docs for compliance create are confusing"
-	feedbackYes = true
+	yesFlag = true
 
 	_, err := runWithFakeStdio(t, "")
 	if err != nil {
@@ -168,7 +168,7 @@ func TestFeedback_emptyRatingAndComment_doesNotSubmit(t *testing.T) {
 
 	// One-shot --message but message is whitespace-only → treated as empty.
 	feedbackMessage = "   "
-	feedbackYes = true
+	yesFlag = true
 
 	out, err := runWithFakeStdio(t, "")
 	if err != nil {
@@ -192,7 +192,7 @@ func TestFeedback_telemetryDisabled_surfacesFriendlyMessage(t *testing.T) {
 	t.Setenv(feedback.MachineIDEnvVar, "test-machine")
 
 	feedbackRating = 3
-	feedbackYes = true
+	yesFlag = true
 
 	out, err := runWithFakeStdio(t, "")
 	if err != nil {
@@ -324,7 +324,7 @@ func TestFeedback_redactsPIIBeforeSubmit(t *testing.T) {
 
 	feedbackRating = 2
 	feedbackMessage = "tried with MAABCDEFGHIJKLMNOPQR and got an error"
-	feedbackYes = true
+	yesFlag = true
 
 	if _, err := runWithFakeStdio(t, ""); err != nil {
 		t.Fatalf("RunE: %v", err)
@@ -469,5 +469,20 @@ func TestFeedback_dryRunSendsNothing(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("the dry run did not print %q:\n%s", want, out)
 		}
+	}
+}
+
+// feedback used to define its own --yes, which hid the global -y.
+func TestFeedback_takesTheGlobalYesShorthand(t *testing.T) {
+	resetFeedbackFlags(t)
+	setEmptyHome(t)
+	t.Setenv(feedback.MachineIDEnvVar, "test-machine")
+	c := newBugCollector(t, http.StatusNoContent)
+
+	if err, _, stderr := execCmd(t, "feedback", "-y", "--rating", "3"); err != nil {
+		t.Fatalf("feedback -y: %v\n%s", err, stderr)
+	}
+	if hits, ev, _ := c.snapshot(); hits != 1 || ev.Rating != 3 {
+		t.Errorf("hits = %d, rating = %d; want the rating sent once", hits, ev.Rating)
 	}
 }
