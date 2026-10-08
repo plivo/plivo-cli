@@ -150,10 +150,11 @@ func fetchList(client *api.Client, endpoint string, q url.Values, key string, ou
 }
 
 // walkPages reads a list page by page from the first row, handing each page's
-// rows to visit. It stops on a short or empty page, at meta.total_count, when
-// visit returns false, or after maxPages pages (0: no limit); capped reports
-// that last case, when rows were left unread. Returns the first page's
-// envelope.
+// rows to visit. When the server sends meta.total_count, reaching it ends the
+// walk; only when it does not is a short page taken for the last one. An empty
+// page always ends it, as does visit returning false or maxPages pages (0: no
+// limit); capped reports that last case, when rows were left unread. Returns
+// the first page's envelope.
 func walkPages(client *api.Client, endpoint string, q url.Values, key string, maxPages int,
 	visit func(rows []json.RawMessage) bool,
 ) (first map[string]json.RawMessage, capped bool, err error) {
@@ -180,15 +181,22 @@ func walkPages(client *api.Client, endpoint string, q url.Values, key string, ma
 			first = env
 		}
 		offset += len(rows)
-		if !visit(rows) || len(rows) < limit || (total > 0 && offset >= total) {
+		// The total, when sent, says where the list ends; otherwise a short page
+		// does. An empty page ends it either way.
+		last := len(rows) < limit
+		if total != nil {
+			last = len(rows) == 0 || offset >= *total
+		}
+		if !visit(rows) || last {
 			return first, false, nil
 		}
 	}
 }
 
 // getPage reads one page of a walk, retrying a 429 up to pageRetries times.
+// total is meta.total_count, nil when the page did not send one.
 func getPage(client *api.Client, endpoint string, q url.Values, key string,
-) (env map[string]json.RawMessage, rows []json.RawMessage, total int, err error) {
+) (env map[string]json.RawMessage, rows []json.RawMessage, total *int, err error) {
 	var timeout time.Duration
 	if client.HTTP != nil {
 		timeout = client.HTTP.Timeout
@@ -197,13 +205,13 @@ func getPage(client *api.Client, endpoint string, q url.Values, key string,
 	for attempt := 0; ; attempt++ {
 		apiErr, derr := client.Do("GET", endpoint, nil, q, &raw)
 		if derr != nil {
-			return nil, nil, 0, derr
+			return nil, nil, nil, derr
 		}
 		if apiErr == nil {
 			break
 		}
 		if apiErr.Code != clierr.CodeRateLimited || attempt == pageRetries {
-			return nil, nil, 0, apiErr
+			return nil, nil, nil, apiErr
 		}
 		wait := retryWait(attempt, apiErr.RetryAfter, timeout)
 		if !quietFlag {
@@ -212,17 +220,17 @@ func getPage(client *api.Client, endpoint string, q url.Values, key string,
 		waitBeforeRetry(wait)
 	}
 	if json.Unmarshal(raw, &env) != nil || env == nil {
-		return nil, nil, 0, clierr.Upstream("a page of the list was not a JSON object")
+		return nil, nil, nil, clierr.Upstream("a page of the list was not a JSON object")
 	}
 	if v := env[key]; len(v) > 0 {
 		if json.Unmarshal(v, &rows) != nil {
-			return nil, nil, 0, clierr.Upstream(fmt.Sprintf("a page of the list had no %q array", key))
+			return nil, nil, nil, clierr.Upstream(fmt.Sprintf("a page of the list had no %q array", key))
 		}
 	}
 	var meta struct {
-		TotalCount int `json:"total_count"`
+		TotalCount *int `json:"total_count"`
 	}
-	_ = json.Unmarshal(env["meta"], &meta) // absent: the short page ends the walk
+	_ = json.Unmarshal(env["meta"], &meta) // absent or odd: the short page ends the walk
 	return env, rows, meta.TotalCount, nil
 }
 
