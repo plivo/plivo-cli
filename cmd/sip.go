@@ -144,17 +144,17 @@ func init() {
 	f.IntVar(&sipCallsOffset, "offset", 0, "rows to skip")
 	f.StringVar(&sipCallsFrom, "from-number", "", "filter by caller ID")
 	f.StringVar(&sipCallsTo, "to-number", "", "filter by destination")
-	f.StringVar(&sipCallsDirection, "direction", "", "inbound|outbound")
+	f.StringVar(&sipCallsDirection, "direction", "", oneOf(directionValues))
 	f.StringVar(&sipCallsSince, "since", "", "calls ending at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]])")
 	f.StringVar(&sipCallsUntil, "until", "", "calls ending at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]])")
 	f.IntVar(&sipCallsCauseCode, "hangup-cause-code", 0, "filter by numeric hangup cause code")
-	f.StringVar(&sipCallsSource, "hangup-source", "", "who ended the call: customer|carrier|zentrunk")
-	f.StringVar(&sipCallsSTIR, "stir-verification", "", `"Verified"|"Not Verified"|"Not Applicable"`)
+	f.StringVar(&sipCallsSource, "hangup-source", "", "who ended the call: "+oneOf(sipHangupSources))
+	f.StringVar(&sipCallsSTIR, "stir-verification", "", oneOf(stirValues))
 
 	tf := sipTrunksListCmd.Flags()
 	tf.IntVar(&sipTrunksLimit, "limit", 20, "rows to return")
 	tf.IntVar(&sipTrunksOffset, "offset", 0, "rows to skip")
-	tf.StringVar(&sipTrunksDirection, "direction", "", "inbound|outbound")
+	tf.StringVar(&sipTrunksDirection, "direction", "", oneOf(directionValues))
 
 	af := sipACLListCmd.Flags()
 	af.IntVar(&sipACLLimit, "limit", 20, "rows to return")
@@ -206,6 +206,15 @@ func trimPlus(number string) string {
 func runSIPCallsList(cmd *cobra.Command, args []string) error {
 	if sipCallsLimit < 1 || sipCallsLimit > maxSIPCallLimit {
 		return clierr.BadInput(fmt.Sprintf("--limit must be between 1 and %d", maxSIPCallLimit))
+	}
+	if err := validateEnum("direction", &sipCallsDirection, directionValues...); err != nil {
+		return err
+	}
+	if err := validateEnum("hangup-source", &sipCallsSource, sipHangupSources...); err != nil {
+		return err
+	}
+	if err := validateEnum("stir-verification", &sipCallsSTIR, stirValues...); err != nil {
+		return err
 	}
 	// The API refuses an upper time bound without a lower one. Say so here
 	// rather than let it come back as a 400 naming raw filter names.
@@ -330,6 +339,9 @@ func sipCallKV(c api.SIPTrunkCall) [][2]string {
 }
 
 func runSIPTrunksList(cmd *cobra.Command, args []string) error {
+	if err := validateEnum("direction", &sipTrunksDirection, directionValues...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err

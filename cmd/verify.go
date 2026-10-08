@@ -85,7 +85,7 @@ func init() {
 
 	verifySessionListCmd.Flags().IntVar(&vsListLimit, "limit", 20, "results per page")
 	verifySessionListCmd.Flags().IntVar(&vsListOffset, "offset", 0, "pagination offset")
-	verifySessionListCmd.Flags().StringVar(&vsListStatus, "status", "", "filter by status: pending|verified|expired")
+	verifySessionListCmd.Flags().StringVar(&vsListStatus, "status", "", "filter by status: "+oneOf(verifyStatusValues))
 
 	verifySessionValidateCmd.Flags().StringVar(&vsValidateOTP, "otp", "", "OTP code received by the recipient (required)")
 	_ = verifySessionValidateCmd.MarkFlagRequired("otp")
@@ -189,6 +189,9 @@ func runVerifySessionGet(cmd *cobra.Command, args []string) error {
 }
 
 func runVerifySessionList(cmd *cobra.Command, args []string) error {
+	if err := validateEnum("status", &vsListStatus, verifyStatusValues...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err

@@ -8,10 +8,10 @@ Flags:
       --country string       filter by ISO country code
   -h, --help                 help for list
       --limit int            results per page (default 20)
-      --number-type string   filter by number type
+      --number-type string   filter by number type: local|mobile|tollfree
       --offset int           pagination offset
-      --status string        filter by status
-      --user-type string     filter by user type
+      --status string        filter by status: draft|submitted|accepted|rejected|suspended|expired
+      --user-type string     filter by user type: individual|business
 
 Global Flags:
       --dry-run            print the HTTP request without sending

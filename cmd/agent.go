@@ -177,7 +177,7 @@ func init() {
 	agentListCmd.Flags().IntVar(&agentListLimit, "limit", 20, "results per page (max 20)")
 	agentListCmd.Flags().IntVar(&agentListOffset, "offset", 0, "pagination offset")
 	agentListCmd.Flags().StringVar(&agentListName, "name", "", "filter by name (substring match)")
-	agentListCmd.Flags().StringVar(&agentListState, "state", "", "filter by state (e.g. DRAFT, ACTIVE)")
+	agentListCmd.Flags().StringVar(&agentListState, "state", "", "filter by state: "+oneOf(agentStateValues))
 	registerAllFlag(agentListCmd)
 
 	agentUpdateCmd.Flags().StringVar(&agentUpdateName, "name", "", "rename the agent")
@@ -332,6 +332,9 @@ func accumulateRawObjects(dst, page api.RawCapturer) {
 }
 
 func runAgentList(cmd *cobra.Command, args []string) error {
+	if err := validateEnum("state", &agentListState, agentStateValues...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err

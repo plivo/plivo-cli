@@ -164,10 +164,10 @@ func init() {
 
 	complianceGetCmd.Flags().StringVar(&compGetExpand, "expand", "", "comma-separated: end_user,documents,linked_numbers")
 
-	complianceListCmd.Flags().StringVar(&compListStatus, "status", "", "filter by status")
+	complianceListCmd.Flags().StringVar(&compListStatus, "status", "", "filter by status: "+oneOf(complianceStatuses))
 	complianceListCmd.Flags().StringVar(&compListCountry, "country", "", "filter by ISO country code")
-	complianceListCmd.Flags().StringVar(&compListNumberType, "number-type", "", "filter by number type")
-	complianceListCmd.Flags().StringVar(&compListUserType, "user-type", "", "filter by user type")
+	complianceListCmd.Flags().StringVar(&compListNumberType, "number-type", "", "filter by number type: "+oneOf(complianceNumTypes))
+	complianceListCmd.Flags().StringVar(&compListUserType, "user-type", "", "filter by user type: "+oneOf(complianceUserTypes))
 	complianceListCmd.Flags().StringVar(&compListAlias, "alias", "", "filter by alias")
 	complianceListCmd.Flags().IntVar(&compListLimit, "limit", 20, "results per page")
 	complianceListCmd.Flags().IntVar(&compListOffset, "offset", 0, "pagination offset")
@@ -325,6 +325,15 @@ func runComplianceGet(cmd *cobra.Command, args []string) error {
 }
 
 func runComplianceList(cmd *cobra.Command, args []string) error {
+	if err := validateEnum("status", &compListStatus, complianceStatuses...); err != nil {
+		return err
+	}
+	if err := validateEnum("number-type", &compListNumberType, complianceNumTypes...); err != nil {
+		return err
+	}
+	if err := validateEnum("user-type", &compListUserType, complianceUserTypes...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err

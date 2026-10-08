@@ -131,7 +131,7 @@ var mpcPartUnholdCmd = &cobra.Command{
 func init() {
 	mpcListCmd.Flags().IntVar(&mpcListLimit, "limit", 20, "results per page")
 	mpcListCmd.Flags().IntVar(&mpcListOffset, "offset", 0, "pagination offset")
-	mpcListCmd.Flags().StringVar(&mpcListStatus, "status", "", "filter by status: active|initialized|ended")
+	mpcListCmd.Flags().StringVar(&mpcListStatus, "status", "", "filter by status: "+oneOf(mpcStatusValues))
 
 	mpcCreateCmd.Flags().String("name", "", "ignored")
 	mpcCreateCmd.Flags().Int("max-participants", 0, "ignored")
@@ -153,6 +153,9 @@ func init() {
 }
 
 func runMPCList(cmd *cobra.Command, args []string) error {
+	if err := validateEnum("status", &mpcListStatus, mpcStatusValues...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
