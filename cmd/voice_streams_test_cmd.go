@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -66,7 +67,7 @@ type streamsTestResult struct {
 	Rate           int    `json:"rate"`
 	Bidirectional  bool   `json:"bidirectional"`
 	FramesReadBack int    `json:"frames_read_back"`
-	Errors         int    `json:"errors"`
+	Errors         int    `json:"errors"` // kept for scripts: a failed send now ends the run, so always 0 here
 }
 
 func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
@@ -137,25 +138,35 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	totalFrames := streamsTestDuration * 1000 / frameMs
 	frames := wsproxy.SyntheticAudio(streamsTestCodec, totalFrames, frameMs, streamsTestRate)
 
+	// The reader starts before the first media frame, so an answer is read
+	// as it arrives rather than after the whole stream.
 	sendStart := time.Now()
-	var sendErrs, framesSent int
+	var rb *streamsReadBack
+	if streamsTestBidirectional {
+		rb = startStreamsReadBack(conn)
+	}
 	for i, audio := range frames {
-		mediaCtx, mediaCancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		if ctx.Err() != nil {
+			break
+		}
+		// A write that runs out of time closes the connection, so the
+		// bound only catches an endpoint that has stopped reading.
+		mediaCtx, mediaCancel := context.WithTimeout(ctx, 2*time.Second)
 		raw, _ := wsproxy.EncodeMedia("inbound", i+1, i*frameMs, audio)
-		if err := conn.Write(mediaCtx, websocket.MessageText, raw); err != nil {
-			mediaCancel()
-			sendErrs++
+		err := conn.Write(mediaCtx, websocket.MessageText, raw)
+		mediaCancel()
+		if err != nil {
 			if ctx.Err() != nil {
 				break
 			}
-			// Tolerate transient send errors up to 5 then bail.
-			if sendErrs > 5 {
-				return clierr.NetworkError(streamsTestTo, fmt.Errorf("write frame %d after %d send errors: %w", i+1, sendErrs, err))
+			// The socket is gone after any failed write: no point retrying.
+			_ = conn.CloseNow()
+			if rb != nil {
+				rb.stop()
 			}
-			continue
+			return clierr.NetworkError(streamsTestTo, fmt.Errorf("send frame %d: %w", i+1, writeFailure(rb, err)))
 		}
-		mediaCancel()
-		framesSent++
+		result.FramesSent++
 		// 20ms-paced; if we're falling behind, send-as-fast-as-possible
 		// instead. The endpoint should drain.
 		nextSend := sendStart.Add(time.Duration(i+1) * time.Duration(frameMs) * time.Millisecond)
@@ -166,36 +177,36 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 			}
 		}
 	}
-	result.FramesSent = framesSent
-	result.Errors = sendErrs
 	if !jsonOut {
 		fmt.Fprintf(out, "✓ Streamed %ds of synthetic %s %dHz audio (%d frames)\n",
-			streamsTestDuration, streamsTestCodec, streamsTestRate, totalFrames)
-		if sendErrs > 0 {
-			fmt.Fprintf(out, "⚠ %d frame send errors during streaming\n", sendErrs)
-		}
+			streamsTestDuration, streamsTestCodec, streamsTestRate, result.FramesSent)
 	}
 
-	// --- Phase 4: bidirectional read-back (optional) ---
-	if streamsTestBidirectional {
-		readCtx, readCancel := context.WithTimeout(ctx, time.Duration(streamsTestDuration)*time.Second)
-		framesRead := readBidirectionalFrames(readCtx, conn)
-		readCancel()
-		result.FramesReadBack = framesRead
+	// --- Phase 4: give the endpoint time to answer ---
+	if rb != nil && ctx.Err() == nil {
+		rb.waitForAnswer(ctx, time.Duration(streamsTestDuration)*time.Second)
+	}
+
+	// --- Phase 5: stop, close, then stop reading ---
+	// In that order: coder/websocket drops the connection when a Read's
+	// context ends, which used to cut the socket before stop went out.
+	stop, _ := wsproxy.EncodeStop()
+	stopCtx, stopCancel := context.WithTimeout(context.WithoutCancel(ctx), 1*time.Second)
+	_ = conn.Write(stopCtx, websocket.MessageText, stop)
+	stopCancel()
+	_ = conn.Close(websocket.StatusNormalClosure, "test complete")
+
+	if rb != nil {
+		rb.stop()
+		result.FramesReadBack = rb.frames
 		if !jsonOut {
-			if framesRead == 0 {
+			if rb.frames == 0 {
 				fmt.Fprintf(out, "⚠ No frames received back from endpoint — bot→caller path may not be wired\n")
 			} else {
-				fmt.Fprintf(out, "✓ Received %d frames back from endpoint (bot→caller path live)\n", framesRead)
+				fmt.Fprintf(out, "✓ Received %d frames back from endpoint (bot→caller path live)\n", rb.frames)
 			}
 		}
 	}
-
-	// --- Phase 5: stop ---
-	stop, _ := wsproxy.EncodeStop()
-	stopCtx, stopCancel := context.WithTimeout(ctx, 1*time.Second)
-	_ = conn.Write(stopCtx, websocket.MessageText, stop)
-	stopCancel()
 
 	if jsonOut {
 		return output.JSONSuccess(os.Stdout, result, nil)
@@ -204,15 +215,68 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// readBidirectionalFrames reads incoming messages until the context fires
-// or the connection closes, returning how many it saw.
-func readBidirectionalFrames(ctx context.Context, conn *websocket.Conn) int {
-	count := 0
-	for {
-		_, _, err := conn.Read(ctx)
-		if err != nil {
-			return count
+// readBackLimit replaces coder/websocket's 32 KiB cap on one message: a
+// second of 16 kHz l16 audio is larger once base64-encoded, and a voice
+// agent may send that much in one playAudio.
+const readBackLimit = 1 << 20
+
+// streamsReadBack reads everything the endpoint sends during the test. Its
+// fields are final once stop returns.
+type streamsReadBack struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+
+	frames int   // every message, as frames_read_back has always counted
+	err    error // why reading ended
+}
+
+// startStreamsReadBack reads conn until the connection closes. Its context
+// is cancelled only by stop, after the stop frame and Close: a deadline on a
+// Read would drop the connection.
+func startStreamsReadBack(conn *websocket.Conn) *streamsReadBack {
+	conn.SetReadLimit(readBackLimit)
+	ctx, cancel := context.WithCancel(context.Background())
+	rb := &streamsReadBack{cancel: cancel, done: make(chan struct{})}
+	go func() {
+		defer close(rb.done)
+		for {
+			if _, _, err := conn.Read(ctx); err != nil {
+				rb.err = err
+				return
+			}
+			rb.frames++
 		}
-		count++
+	}()
+	return rb
+}
+
+// waitForAnswer gives the endpoint up to window after the last media frame
+// to answer, returning early if reading has ended.
+func (rb *streamsReadBack) waitForAnswer(ctx context.Context, window time.Duration) {
+	select {
+	case <-time.After(window):
+	case <-rb.done:
+	case <-ctx.Done():
 	}
+}
+
+// stop ends the reader and waits for it to return.
+func (rb *streamsReadBack) stop() {
+	rb.cancel()
+	<-rb.done
+}
+
+// writeFailure explains a write the endpoint did not take. When the reader
+// saw the endpoint's close frame, its code and reason say why; stop rb
+// first.
+func writeFailure(rb *streamsReadBack, err error) error {
+	var ce websocket.CloseError
+	if rb == nil || !errors.As(rb.err, &ce) {
+		return err
+	}
+	msg := fmt.Sprintf("the endpoint closed the connection (code %d", int(ce.Code))
+	if ce.Reason != "" {
+		msg += fmt.Sprintf(", reason %q", ce.Reason)
+	}
+	return errors.New(msg + ")")
 }
