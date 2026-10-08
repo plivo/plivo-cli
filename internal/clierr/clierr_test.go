@@ -450,17 +450,24 @@ func TestFromHTTP_fieldErrors(t *testing.T) {
 	}
 }
 
-// The parsed body rides along under context.upstream, so -o json keeps fields
-// the message leaves out (api_id and the like). A body that is not JSON has
-// nothing to parse and adds no context.
+// The parsed body rides along as context.upstream {status, body}, the shape
+// `plivo api` emits, so -o json keeps fields the message leaves out (api_id and
+// the like). A body that is not JSON has nothing to parse and adds no context.
 func TestFromHTTP_keepsTheParsedBodyAsUpstreamContext(t *testing.T) {
 	e := FromHTTP(404, "rid", []byte(`{"Error":"URI with uuid:x not found","api_id":"00000000-0000-0000-0000-000000000000"}`))
 	upstream, ok := e.Context["upstream"].(map[string]any)
 	if !ok {
-		t.Fatalf("context.upstream = %#v, want the parsed body", e.Context["upstream"])
+		t.Fatalf("context.upstream = %#v, want {status, body}", e.Context["upstream"])
 	}
-	if upstream["api_id"] != "00000000-0000-0000-0000-000000000000" || upstream["Error"] != "URI with uuid:x not found" {
-		t.Errorf("context.upstream = %v, want the body's fields as sent", upstream)
+	if upstream["status"] != 404 {
+		t.Errorf("context.upstream.status = %v, want 404", upstream["status"])
+	}
+	body, ok := upstream["body"].(map[string]any)
+	if !ok {
+		t.Fatalf("context.upstream.body = %#v, want the parsed body", upstream["body"])
+	}
+	if body["api_id"] != "00000000-0000-0000-0000-000000000000" || body["Error"] != "URI with uuid:x not found" {
+		t.Errorf("context.upstream.body = %v, want the body's fields as sent", body)
 	}
 
 	if e := FromHTTP(502, "", []byte("<html>Bad Gateway</html>")); e.Context != nil {

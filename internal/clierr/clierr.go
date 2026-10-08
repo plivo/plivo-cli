@@ -177,17 +177,18 @@ func Upstream(message string) *Error {
 // the status code and the body text to pick a specific Code where possible
 // (e.g. distinguishing GEO_PERMISSION_DENIED from a generic 403).
 //
-// A JSON body is also kept, parsed, under context.upstream: the message is one
-// field of it, and -o json readers may want the rest (api_id and the like).
+// A JSON body is also kept, parsed, as context.upstream {status, body}, the
+// shape `plivo api` emits: the message is one field of it, and -o json readers
+// may want the rest (api_id and the like).
 func FromHTTP(statusCode int, requestID string, body []byte) *Error {
-	msg, upstream := extractMessage(body)
+	msg, parsed := extractMessage(body)
 	e := &Error{
 		StatusCode: statusCode,
 		RequestID:  requestID,
 		Message:    msg,
 	}
-	if upstream != nil {
-		e.Context = map[string]any{"upstream": upstream}
+	if parsed != nil {
+		e.Context = map[string]any{"upstream": map[string]any{"status": statusCode, "body": parsed}}
 	}
 
 	// Body-text fingerprinting first — these win over status-code defaults.
