@@ -5,6 +5,7 @@ Targets:
   calls                    voice call logs
   call <call_uuid>         one voice call, with its Call Insights
   sip-call <call_uuid>     one SIP Trunking call
+  numbers                  your phone numbers; the console has no page for a single number
   docs [path]              the docs home, or one page, such as voice/api/calls
 
 A docs path is the part after /docs/ in a page's `plivo docs list` URL.

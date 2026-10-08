@@ -41,7 +41,7 @@ logout      remove a profile and its keychain token
 lookup      carrier lookup for an E.164 number
 messaging   get | sms | mms | whatsapp   (aliases: message, msg, sms)
 numbers     buy | cnam | compliance | get | list | masking | release | search | update
-open        console | calls | call <uuid> | sip-call <uuid> | docs [path]   (v1.2.0+)
+open        console | calls | call <uuid> | sip-call <uuid> | numbers | docs [path]   (v1.2.0+)
 sip         calls | credentials | ip-acl | trunks | uris
 skill       install | list
 support     past support escalations

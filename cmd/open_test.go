@@ -53,6 +53,7 @@ func TestOpen_targets(t *testing.T) {
 		{[]string{"calls"}, "https://cx.plivo.com/logs/voice"},
 		{[]string{"call", id}, "https://cx.plivo.com/logs/voice/" + id},
 		{[]string{"sip-call", id}, "https://cx.plivo.com/logs/sip-trunking/" + id},
+		{[]string{"numbers"}, "https://cx.plivo.com/phone-numbers"},
 		{[]string{"docs"}, "https://www.plivo.com/docs/"},
 		{[]string{"docs", "voice/api/calls"}, "https://www.plivo.com/docs/voice/api/calls"},
 		{[]string{"docs", "/docs/voice/api/calls/"}, "https://www.plivo.com/docs/voice/api/calls"},
@@ -118,6 +119,8 @@ func TestOpen_rejectsBadInput(t *testing.T) {
 		want string
 	}{
 		{[]string{"number", "14155551234"}, `unknown target "number"`},
+		// The console has no page for one number, so numbers takes none.
+		{[]string{"numbers", "14155551234"}, "takes no argument"},
 		{[]string{"call"}, "needs a call UUID"},
 		{[]string{"sip-call", "not-a-uuid"}, "needs a call UUID"},
 		{[]string{"call", "00000000-0000-0000-0000-000000000000/x"}, "needs a call UUID"},

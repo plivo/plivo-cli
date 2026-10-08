@@ -13,7 +13,8 @@ import (
 
 // `plivo open` takes you from a CLI result to the same thing in the console.
 // Every console path is one Plivo's docs link to or the console routes;
-// a page with no such evidence (one number) is left out rather than guessed.
+// a page with no such evidence (one number's own page) is left out rather
+// than guessed.
 
 const (
 	consoleBaseURL = "https://cx.plivo.com"
@@ -35,6 +36,9 @@ var openTargets = []struct {
 	}},
 	{"sip-call", "<call_uuid>", "one SIP Trunking call", func(id string) string {
 		return consoleBaseURL + "/logs/sip-trunking/" + url.PathEscape(id)
+	}},
+	{"numbers", "", "your phone numbers; the console has no page for a single number", func(string) string {
+		return consoleBaseURL + "/phone-numbers"
 	}},
 	{"docs", "[path]", "the docs home, or one page, such as voice/api/calls", docsPageURL},
 }
