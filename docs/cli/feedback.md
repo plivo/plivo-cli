@@ -54,8 +54,7 @@ We do NOT collect:
 - Free-text from `plivo ask` / `plivo support` message bodies
 - Argument values you passed to the CLI
 
-The client-side redaction is defence-in-depth — the collector re-runs
-the same scrub server-side.
+The redaction runs on your machine, before anything is sent.
 
 ## Bug reports (`--bug`)
 

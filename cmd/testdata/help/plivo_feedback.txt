@@ -14,8 +14,7 @@ and send nothing. If sending fails, it prints a prefilled GitHub issue
 link instead.
 
 Comments are scrubbed client-side for phone numbers, auth tokens,
-emails and similar PII patterns before being sent. The collector
-re-runs the same scrub server-side.
+emails and similar PII patterns before being sent.
 
 Feedback goes to the Plivo CLI feedback collector. PLIVO_FEEDBACK_ENDPOINT
 points it at another one; PLIVO_FEEDBACK_TELEMETRY=0 stops sending.

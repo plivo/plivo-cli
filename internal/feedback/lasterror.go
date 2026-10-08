@@ -11,7 +11,7 @@ import (
 // --bug`. It holds the command path and the error's category: never argument
 // values or the error message, either of which can echo what the user typed.
 type LastError struct {
-	Command    string    `json:"command"` // dotted path, e.g. "voice.calls.get"
+	Command    string    `json:"command"` // cobra's command path, e.g. "plivo voice calls get"
 	ExitCode   int       `json:"exit_code"`
 	ErrorCode  string    `json:"error_code"`
 	RequestID  string    `json:"request_id,omitempty"`
