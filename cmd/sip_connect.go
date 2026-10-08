@@ -154,13 +154,15 @@ func (c *connectPlan) check(client *api.Client, p *sipPlatform, digits string) e
 	}
 	c.add("country", "info", country)
 
-	switch {
-	case strings.Contains(n.Application, "/Zentrunk/Trunk/"):
-		c.add("routing", "info", "routed to SIP trunk "+n.ResolvedAppID()+"; the last step routes it to the new inbound trunk")
-	case n.ResolvedAppID() != "":
-		c.add("routing", "info", "routed to application "+n.ResolvedAppID()+"; the last step routes it to the new inbound trunk")
-	default:
-		c.add("routing", "info", "not routed; the last step routes it to the new inbound trunk")
+	current := "application " + n.ResolvedAppID()
+	if strings.Contains(n.Application, "/Zentrunk/Trunk/") {
+		current = "SIP trunk " + n.ResolvedAppID()
+	}
+	if n.ResolvedAppID() == "" {
+		c.add("routing", "info", "not routed; step 5 routes it to the new inbound trunk")
+	} else {
+		c.add("routing", "info", "routed to "+current+"; step 5 takes its calls away from "+current+
+			" and sends them to the new inbound trunk")
 	}
 	if !india {
 		return nil
@@ -244,7 +246,18 @@ func (c *connectPlan) build(p *sipPlatform, digits string) {
 	}
 	if p.outbound == "credential" {
 		c.NextActions = append(c.NextActions, "Step 2 reads the password from $SIP_PASSWORD on stdin: "+
-			"set it and pick the <username> your platform will sign in with.")
+			"set it and pick the <username> your platform will sign in with. Plivo's rules: the username must be "+
+			"5 to 20 characters, containing only alphanumeric characters; the password must be 5 to 20 characters, "+
+			"containing only alphanumeric characters and the special characters `~!@#$%^&*()_+`, with at least one special character.")
+	}
+	if r := p.region; r != nil {
+		transport := p.uris[0].transport
+		if m := p.match(r.host, "", 0); m != nil {
+			transport = m.transport
+		}
+		c.NextActions = append(c.NextActions, fmt.Sprintf("%s %s: add --uri %s to step 1 (the preset adds ;transport=%s) "+
+			"and --ip %s to step 2 in place of the preset's addresses (both from %s's docs).",
+			p.label, r.name, r.host, transport, strings.Join(r.ips, " --ip "), p.label))
 	}
 	if p.secure {
 		c.NextActions = append(c.NextActions, "recommended: add --secure to step 4 (Plivo's "+p.label+

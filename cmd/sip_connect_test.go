@@ -84,10 +84,15 @@ func TestSIPConnectPlan_printsEveryStepInOrder(t *testing.T) {
 		}
 	}
 	actions := strings.Join(plan.NextActions, "\n")
-	for _, s := range []string{"recommended: add --secure to step 4", "dispatch rule", "integration-guides/livekit", "<project> is the subdomain"} {
+	for _, s := range []string{"recommended: add --secure to step 4", "dispatch rule", "integration-guides/livekit", "<project> is the subdomain",
+		"the username must be 5 to 20 characters, containing only alphanumeric characters",
+		"special characters `~!@#$%^&*()_+`, with at least one special character"} {
 		if !strings.Contains(actions, s) {
 			t.Errorf("next_actions missing %q:\n%s", s, actions)
 		}
+	}
+	if strings.Contains(actions, " EU: ") {
+		t.Errorf("only Vapi has a second region:\n%s", actions)
 	}
 }
 
@@ -106,8 +111,38 @@ func TestSIPConnectPlan_vapiAuthenticatesByIPList(t *testing.T) {
 	if got := plan.Requests[3].Command; !strings.Contains(got, "--ip-acl <ipacl_uuid>") {
 		t.Errorf("step 4 = %q", got)
 	}
-	if actions := strings.Join(plan.NextActions, "\n"); strings.Contains(actions, "--secure") || strings.Contains(actions, "SIP_PASSWORD") {
+	actions := strings.Join(plan.NextActions, "\n")
+	if strings.Contains(actions, "--secure") || strings.Contains(actions, "SIP_PASSWORD") {
 		t.Errorf("Vapi's guide uses neither secure trunking nor a credential:\n%s", actions)
+	}
+	if want := "Vapi EU: add --uri sip.eu.vapi.ai to step 1 (the preset adds ;transport=udp) and --ip 63.182.83.170/32 to step 2 " +
+		"in place of the preset's addresses (both from Vapi's docs)."; !strings.Contains(actions, want) {
+		t.Errorf("next_actions should tell EU users what to change:\n%s", actions)
+	}
+}
+
+// Step 5 moves the number's calls, so the plan says from where.
+func TestSIPConnectPlan_routingSaysWhatStep5TakesAway(t *testing.T) {
+	for _, tc := range []struct{ name, application, want string }{
+		{"application", "/v1/Account/CIFAKEPLACEHOLDER001/Application/00000000000000000000/",
+			"routed to application 00000000000000000000; step 5 takes its calls away from application 00000000000000000000 and sends them to the new inbound trunk"},
+		{"trunk", "/v1/Account/CIFAKEPLACEHOLDER001/Zentrunk/Trunk/00000000000000000/",
+			"routed to SIP trunk 00000000000000000; step 5 takes its calls away from SIP trunk 00000000000000000 and sends them to the new inbound trunk"},
+		{"none", "", "not routed; step 5 routes it to the new inbound trunk"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setFakeCreds(t)
+			complianceServer(t, complianceFixture{number: `{"number":"14155551234","voice_enabled":true,"application":"` + tc.application + `"}`})
+			err, stdout, _ := execCmd(t, "sip", "connect", "plan", "--number", "+14155551234", "--platform", "retell", "-o", "json")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			for _, c := range decodeConnectPlan(t, stdout).Checks {
+				if c.Name == "routing" && c.Detail != tc.want {
+					t.Errorf("routing = %q, want %q", c.Detail, tc.want)
+				}
+			}
+		})
 	}
 }
 

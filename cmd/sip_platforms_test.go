@@ -34,6 +34,11 @@ func TestSIPPlatforms_tableIsWellFormed(t *testing.T) {
 		if p.outbound != "credential" && p.outbound != "ip-acl" {
 			t.Errorf("%s: outbound %q", p.name, p.outbound)
 		}
+		if r := p.region; r != nil {
+			if !p.knowsHost(r.host) || checkACLEntries(r.ips) != nil {
+				t.Errorf("%s: region %+v is not in the table's hosts or has a bad address", p.name, r)
+			}
+		}
 	}
 }
 

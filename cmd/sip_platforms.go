@@ -45,8 +45,16 @@ type sipPlatform struct {
 	indiaHost string
 	note      string   // printed when an inbound trunk is created
 	steps     []string // what the guide has you set up on the platform's side
-	guide     string
-	verified  string // YYYY-MM-DD the values were last checked
+	// region is a second region from the platform's own docs: its host and
+	// the addresses its calls come from there.
+	region   *sipPlatformRegion
+	guide    string
+	verified string // YYYY-MM-DD the values were last checked
+}
+
+type sipPlatformRegion struct {
+	name, host string
+	ips        []string
 }
 
 var sipPlatforms = []sipPlatform{
@@ -111,6 +119,7 @@ var sipPlatforms = []sipPlatform{
 			"(Vapi's docs): pass --ip 63.182.83.170/32 instead.",
 		india:   "are not supported (Plivo's India calling guide).",
 		noIndia: true,
+		region:  &sipPlatformRegion{name: "EU", host: "sip.eu.vapi.ai", ips: []string{"63.182.83.170/32"}},
 		steps: []string{
 			"In Vapi, set up outbound calling with the Plivo outbound trunk's trunk_domain (its Termination SIP Domain).",
 			"In Vapi, register your Plivo number to accept incoming calls.",
