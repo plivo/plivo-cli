@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -499,29 +500,73 @@ func runSIPCallsDiagnose(cmd *cobra.Command, args []string) error {
 	prompt := "Help me debug this SIP Trunking call. Walk the SIP ladder and the trunk " +
 		"configuration, and tell me what happened and whether anything is wrong." +
 		diagnoseClientConstraints
-	if err := runAsk(cmd, []string{prompt}); err != nil {
-		return err
-	}
-	return diagnoseOutcome(callUUID)
+	return diagnoseOutcome(runAsk(cmd, []string{prompt}), "call", callUUID, "sip calls get")
 }
 
 // diagnoseClientConstraints is appended to every diagnose turn. The assistant
 // otherwise offers console-only remedies to a terminal user, and files support
 // tickets on its own initiative — `diagnose` is a read, and a command that
 // opens a ticket every time it cannot answer is worse than one that says so.
-const diagnoseClientConstraints = " The caller is a terminal, not the Plivo Console: never suggest reloading a page or clicking anything in a browser. Do not raise a support ticket; if you cannot complete the analysis, say so plainly and stop."
+// The ANALYSIS_INCOMPLETE line is how a give-up in prose reaches the exit code.
+const diagnoseClientConstraints = " The caller is a terminal, not the Plivo Console: never suggest reloading a page or clicking anything in a browser. Do not raise a support ticket. If you cannot complete the analysis (for example, the trace is unavailable), say so plainly, end your reply with a line of the form `" + analysisIncompleteMarker + ": <reason>`, and stop."
+
+// analysisIncompleteMarker starts the line the assistant is asked to end with
+// when it cannot finish.
+const analysisIncompleteMarker = "ANALYSIS_INCOMPLETE"
+
+// analysisIncompleteLine finds the marker anywhere in the answer, tolerating
+// markdown emphasis around it; the reason is the rest of that line.
+var analysisIncompleteLine = regexp.MustCompile(analysisIncompleteMarker + "[*_`]*\\s*:([^\\n]*)")
+
+// analysisIncomplete returns the reason from the answer's ANALYSIS_INCOMPLETE
+// line, and whether it has one.
+func analysisIncomplete(answer string) (string, bool) {
+	m := analysisIncompleteLine.FindStringSubmatch(answer)
+	if m == nil {
+		return "", false
+	}
+	if reason := strings.Trim(m[1], " \t*_`"); reason != "" {
+		return reason, true
+	}
+	return "no reason given", true
+}
 
 // diagnoseOutcome turns a failed investigation into a non-zero exit. The stream
 // itself succeeds, so without this the command reported success while telling
 // the user it had learned nothing — and a script could not tell the difference.
-func diagnoseOutcome(uuid string) error {
-	if !lastAskEscalated {
-		return nil
+// It judges both output modes alike. askErr is runAsk's result; label and uuid
+// name the record, and getCmd is the command that reads it directly.
+func diagnoseOutcome(askErr error, label, uuid, getCmd string) error {
+	if askErr != nil && !lastAsk.errored {
+		return askErr // the turn never ran: auth, HTTP or network trouble
 	}
-	return &clierr.Error{
+	if dryRunFlag {
+		return nil // nothing was sent, so there is no analysis to judge
+	}
+	e := &clierr.Error{
 		Code:       clierr.CodeUpstreamError,
-		Message:    fmt.Sprintf("the assistant could not analyse call %s and escalated instead", uuid),
-		Hint:       "`plivo sip calls get " + uuid + "` shows the hangup cause and SIP details directly.",
+		Hint:       fmt.Sprintf("Run `plivo %s %s` to read the %s record directly.", getCmd, uuid, label),
 		StatusCode: http.StatusBadGateway,
 	}
+	switch {
+	case lastAsk.errored:
+		msg := strings.TrimSpace(lastAsk.errorMsg)
+		if msg == "" {
+			msg = "the service returned an error"
+		}
+		e.Message = fmt.Sprintf("the analysis of %s %s failed: %s", label, uuid, msg)
+		e.Retryable = true
+	case lastAsk.escalated:
+		e.Message = fmt.Sprintf("the assistant could not analyse %s %s and escalated instead", label, uuid)
+	case !lastAsk.finished:
+		e.Message = fmt.Sprintf("the analysis of %s %s stopped before it finished", label, uuid)
+		e.Retryable = true
+	default:
+		reason, incomplete := analysisIncomplete(lastAsk.answer)
+		if !incomplete {
+			return nil
+		}
+		e.Message = fmt.Sprintf("the assistant could not complete the analysis of %s %s: %s", label, uuid, reason)
+	}
+	return e
 }

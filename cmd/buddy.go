@@ -120,6 +120,7 @@ func applyBuddyURL(c *api.Client) {
 }
 
 func runAsk(cmd *cobra.Command, args []string) error {
+	lastAsk = askOutcome{}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -209,21 +210,38 @@ func runAsk(cmd *cobra.Command, args []string) error {
 		}
 		return clierr.NetworkError("buddy", sseErr)
 	}
+	lastAsk = askOutcome{
+		escalated: r.escalated,
+		errored:   r.errorSeen,
+		errorMsg:  r.errorMsg,
+		finished:  r.finished,
+		answer:    r.answer(),
+	}
 	if r.errorSeen {
 		// A server-emitted error event is a service-side error, not bad user input.
 		return clierr.Upstream(r.errorMsg)
 	}
-	lastAskEscalated = r.escalated
 	return nil
 }
 
 // escalateToolName is the assistant tool that files a support ticket.
 const escalateToolName = "escalate_to_support"
 
-// lastAskEscalated reports whether the last assistant turn ended by filing a
-// support ticket. `ask` treats that as a normal outcome; `diagnose` does not,
-// because an investigation that ends in a ticket did not diagnose anything.
-var lastAskEscalated bool
+// askOutcome is how the last assistant turn ended. `ask` reports the stream as
+// it came; `diagnose` judges it (diagnoseOutcome), because an investigation
+// that errored, escalated, stopped early or says it could not finish did not
+// diagnose anything.
+type askOutcome struct {
+	escalated bool   // ended by filing a support ticket
+	errored   bool   // the server sent an error event
+	errorMsg  string // that event's message
+	finished  bool   // a final/done event arrived
+	answer    string // the answer text, in either output mode
+}
+
+// lastAsk is the outcome of the last runAsk stream. Reset when runAsk starts,
+// so a dry run or a failed request never leaves an older turn's outcome behind.
+var lastAsk askOutcome
 
 // buildBuddyUserContext fetches best-effort account context (balance). Failure
 // is non-fatal — an empty userContext is valid. The server's BuddyUserContext
@@ -496,6 +514,11 @@ type buddyRenderer struct {
 	errorSeen    bool
 	escalated    bool
 	errorMsg     string
+	// finished is set by a final/done event. A stream that closes without one
+	// was cut off mid-turn.
+	finished bool
+	// finalAnswer is final.answer, the answer when nothing else was buffered.
+	finalAnswer string
 	// sessionID is captured from a `session` event, if one ever arrives (the
 	// current server contract never sends one — see newBuddySessionID, which
 	// mints the id the CLI actually sends). Kept so buddySession.sendTurn can
@@ -508,7 +531,54 @@ type buddyRenderer struct {
 	sp *buddySpinner
 }
 
+// track records what the turn amounts to (the answer text, an escalation, an
+// error, a clean end) in both output modes. It runs before the JSON branch
+// returns: JSON mode used to skip it, so an escalation or error event there
+// went unnoticed and diagnose exited 0.
+func (r *buddyRenderer) track(ev api.SSEEvent) {
+	var d struct {
+		Text   string `json:"text"`
+		Name   string `json:"name"`
+		Answer string `json:"answer"`
+		Error  string `json:"error"`
+	}
+	_ = json.Unmarshal(buddyInner(ev.Data), &d)
+	switch ev.Event {
+	case "token":
+		r.answerBuf.WriteString(d.Text)
+	case "message", "result":
+		// A complete answer (no-stream / debugger-final shape); replaces the
+		// accumulated one.
+		r.answerBuf.Reset()
+		r.answerBuf.WriteString(d.Text)
+	case "tool_call":
+		if d.Name == escalateToolName {
+			// The assistant gave up and filed a ticket. That is a failed
+			// investigation however cheerful the prose reads, and `diagnose`
+			// checks this to decide its exit code.
+			r.escalated = true
+		}
+	case "final":
+		r.finalAnswer = d.Answer
+		r.finished = true
+	case "done":
+		r.finished = true
+	case "error":
+		r.errorSeen = true
+		r.errorMsg = d.Error
+	}
+}
+
+// answer is the turn's answer text: what was buffered, else final.answer.
+func (r *buddyRenderer) answer() string {
+	if s := r.answerBuf.String(); s != "" {
+		return s
+	}
+	return r.finalAnswer
+}
+
 func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
+	r.track(ev)
 	if r.jsonMode {
 		// Pass the raw data through so consumers see the exact buddy-ext payload.
 		raw := json.RawMessage(ev.Data)
@@ -542,21 +612,15 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		// line) before streaming. Subsequent tokens: spinner already stopped.
 		r.stopSpinner()
 		// Clear any leftover narration line (non-spinner path) so it doesn't
-		// interleave. answerBuf keeps the text; final won't re-print.
+		// interleave. answerBuf keeps the text (track); final won't re-print.
 		r.clearNarrationLine()
 		fmt.Fprint(r.out, d.Text)
-		r.answerBuf.WriteString(d.Text)
 		r.streamed = true
 
 	case "message":
-		var d struct {
-			Text string `json:"text"`
-		}
-		_ = json.Unmarshal(buddyInner(ev.Data), &d)
+		// no-stream / debugger-final shape; track replaced the buffered answer,
+		// which final prints as one block.
 		r.stopSpinner()
-		// no-stream / debugger-final shape; replaces the accumulated answer.
-		r.answerBuf.Reset()
-		r.answerBuf.WriteString(d.Text)
 
 	case "narration":
 		var d struct {
@@ -572,19 +636,13 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		}
 
 	case "tool_call":
+		if !r.verbose {
+			return true
+		}
 		var d struct {
 			Name string `json:"name"`
 		}
 		_ = json.Unmarshal(buddyInner(ev.Data), &d)
-		if d.Name == escalateToolName {
-			// The assistant gave up and filed a ticket. That is a failed
-			// investigation however cheerful the prose reads, and `diagnose`
-			// checks this to decide its exit code.
-			r.escalated = true
-		}
-		if !r.verbose {
-			return true
-		}
 		// Clear the spinner/narration line under the lock so this print doesn't
 		// garble; the spinner redraws itself on the next tick.
 		r.withSpinnerCleared(func() {
@@ -664,15 +722,9 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 		return false
 
 	case "error":
-		var d struct {
-			Error string `json:"error"`
-		}
-		_ = json.Unmarshal(buddyInner(ev.Data), &d)
 		r.stopSpinner()
 		r.clearNarrationLine()
-		fmt.Fprintf(r.err, "\nbuddy error: %s\n", d.Error)
-		r.errorSeen = true
-		r.errorMsg = d.Error
+		fmt.Fprintf(r.err, "\nbuddy error: %s\n", r.errorMsg)
 		return false
 
 	// --- PAI stream contract (session / result / cost / done) ------------------
@@ -698,14 +750,9 @@ func (r *buddyRenderer) handle(ev api.SSEEvent) bool {
 
 	case "result":
 		// {"text": "..."} — the complete, sanitized answer (no token deltas).
-		// Mirror `message`: replace the accumulated answer; `done` prints it.
-		var d struct {
-			Text string `json:"text"`
-		}
-		_ = json.Unmarshal(buddyInner(ev.Data), &d)
+		// Mirror `message`: track replaced the accumulated answer; `done`
+		// prints it.
 		r.stopSpinner()
-		r.answerBuf.Reset()
-		r.answerBuf.WriteString(d.Text)
 
 	case "cost":
 		// {"total_cost_usd": ...} — internal metric; show only in --verbose.
