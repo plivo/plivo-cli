@@ -1,6 +1,9 @@
 package api
 
-import "strings"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // ListMeta is the pagination envelope present on every Plivo list response.
 type ListMeta struct {
@@ -785,6 +788,55 @@ type SIPTrunkCallList struct {
 	APIID   string         `json:"api_id"`
 	Meta    ListMeta       `json:"meta"`
 	Objects []SIPTrunkCall `json:"objects"`
+}
+
+// FlexString takes a scalar whether the API sends it as a string, a number or
+// null, and keeps it as sent: 24, "24" and 1000.0 read back as 24, 24 and
+// 1000.0. A plain string field would fail the whole decode on a number.
+type FlexString string
+
+func (f *FlexString) UnmarshalJSON(b []byte) error {
+	if string(b) == "null" {
+		*f = ""
+		return nil
+	}
+	if len(b) > 0 && b[0] == '"' {
+		var s string
+		if err := json.Unmarshal(b, &s); err != nil {
+			return err
+		}
+		*f = FlexString(s)
+		return nil
+	}
+	*f = FlexString(b)
+	return nil
+}
+
+// SIPCallInsights is the quality record of one SIP Trunking call —
+// /Account/{id}/Zentrunk/Call/{call_uuid}/Insights/
+//
+// The docs type the metrics as strings except post_dial_delay (a float), so
+// every scalar is a FlexString: a wrong guess must not lose the whole record.
+type SIPCallInsights struct {
+	RawBody
+	APIID             FlexString         `json:"api_id"`
+	CallUUID          FlexString         `json:"call_uuid"`
+	From              SIPCallInsightsLeg `json:"from"`
+	To                SIPCallInsightsLeg `json:"to"`
+	HangupCause       FlexString         `json:"hangup_cause"`
+	HangupSource      FlexString         `json:"hangup_source"`
+	RTT               FlexString         `json:"rtt"`
+	Jitter            FlexString         `json:"jitter"`
+	PacketLoss        FlexString         `json:"packet_loss"`
+	PostDialDelay     FlexString         `json:"post_dial_delay"`
+	PlivoQualityScore FlexString         `json:"plivo_quality_score"`
+}
+
+// SIPCallInsightsLeg is one side of the call as Insights reports it.
+type SIPCallInsightsLeg struct {
+	Carrier FlexString `json:"carrier"`
+	Number  FlexString `json:"number"`
+	Region  FlexString `json:"region"`
 }
 
 // SIPTrunk is one trunk — /Account/{id}/Zentrunk/Trunk/
