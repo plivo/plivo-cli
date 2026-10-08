@@ -235,8 +235,13 @@ Credentials come from browser OAuth/PKCE login and resolve in order:
 
 Run "plivo login" if you have no profile yet.
 
+Output is a table on a terminal and JSON otherwise. -o jsonl writes one JSON
+record per line (a list's objects, or the one result), -o csv one row per
+record, -o yaml the whole JSON envelope. --query filters that envelope with
+JMESPath first, e.g. --query 'data.objects[].number'.
+
 ```
-plivo
+plivo [flags]
 plivo [command]
 ```
 
@@ -267,10 +272,13 @@ Flags:
 ```
       --dry-run            print the HTTP request without sending
       --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --map                print every command with its arguments and flags
       --no-color           disable colored output
-  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+  -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
       --profile string     named profile from ~/.plivo/config.toml
+      --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
+      --schema             describe the command (arguments, flags, output fields) instead of running it
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts
 ```
@@ -809,6 +817,9 @@ Paths come in two flavours:
 Mutating verbs (POST, PUT, PATCH, DELETE) require --yes (matches the rest of
 the CLI). Use --dry-run to preview without sending. GET and HEAD pass through.
 
+Here --query adds URL query parameters (key=value). It is not the JMESPath
+--query filter other commands take; -o jsonl, yaml and csv still apply.
+
 Examples:
 
   plivo api GET /v1/Account/MA…/            # absolute: the account itself
@@ -829,7 +840,7 @@ Flags:
       --explain              narrate in plain English before executing
       --header stringArray   extra header as 'Key: Value' (repeatable; overrides defaults)
       --method string        HTTP method (alternative to the positional arg; useful when piping)
-      --query stringArray    query param as key=value (repeatable)
+      --query stringArray    URL query param as key=value (repeatable; not a JMESPath filter here)
 ```
 
 ---
@@ -852,8 +863,9 @@ so the assistant can't see your previous questions). In -i, /reset starts a
 fresh conversation, /help lists commands, and /exit or Ctrl-D leaves.
 
 Pass --call-uuid for voice-debug context; --verbose to show the assistant's
-tool calls; -o json to emit each SSE event as one JSONL line (handy for
-scripts and AI agents).
+tool calls; -o json or -o jsonl to emit each SSE event as one JSON line
+(handy for scripts and AI agents). A stream has no single result, so -o yaml,
+-o csv and --query are refused.
 
 ```
 plivo ask [message] [flags]

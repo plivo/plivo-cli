@@ -68,6 +68,7 @@ points it at another one; PLIVO_FEEDBACK_TELEMETRY=0 stops sending.`,
   plivo feedback --rating 5 --yes             # skip pre-submit preview
   plivo feedback --bug --dry-run              # show a bug report, send nothing
   plivo feedback --bug --message "..." --yes  # report the last failure`,
+	Args: cobra.NoArgs,
 	RunE: runFeedback,
 }
 

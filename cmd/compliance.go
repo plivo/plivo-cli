@@ -35,6 +35,7 @@ var complianceRequirementsCmd = &cobra.Command{
 	Short:   "List documents/fields required to activate a regulated number",
 	Long:    "Returns the document types and required data fields for a given country / number type\n/ user type — use the returned document_type_id values when building a `create` payload.",
 	Example: "  plivo numbers compliance requirements --country US --number-type local --user-type business",
+	Args:    cobra.NoArgs,
 	RunE:    runComplianceRequirements,
 }
 
@@ -78,6 +79,7 @@ Discover the document_type_id values and required data_fields first with
     --data @app.json \
     --file documents[0].file=@passport.pdf \
     --file documents[1].file=@address-proof.pdf`,
+	Args: cobra.NoArgs,
 	RunE: runComplianceCreate,
 }
 
@@ -106,6 +108,7 @@ var (
 var complianceListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List compliance applications",
+	Args:  cobra.NoArgs,
 	RunE:  runComplianceList,
 }
 
@@ -147,6 +150,7 @@ var complianceLinkCmd = &cobra.Command{
 once per number, or pass the full JSON body via --data (inline or @file.json):
 {"numbers":[{"number":"+14155551234","compliance_application_id":"<id>"}]}.`,
 	Example: "  plivo numbers compliance link --link +14155551234=<compliance_id> --link +14155556789=<compliance_id>",
+	Args:    cobra.NoArgs,
 	RunE:    runComplianceLink,
 }
 

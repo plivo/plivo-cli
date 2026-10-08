@@ -41,6 +41,7 @@ var (
 var maskingSessionCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a masking session (spends money — requires --yes)",
+	Args:  cobra.NoArgs,
 	RunE:  runMaskingCreate,
 }
 
@@ -59,6 +60,7 @@ var (
 var maskingSessionListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List masking sessions",
+	Args:  cobra.NoArgs,
 	RunE:  runMaskingList,
 }
 

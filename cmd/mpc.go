@@ -29,6 +29,7 @@ var (
 var mpcListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List multi-party calls",
+	Args:  cobra.NoArgs,
 	RunE:  runMPCList,
 }
 
@@ -49,6 +50,7 @@ var mpcCreateCmd = &cobra.Command{
 	Use:    "create",
 	Short:  "Retired: `plivo voice multiparty participant add` starts an MPC",
 	Hidden: true,
+	Args:   cobra.NoArgs,
 	RunE:   runMPCCreate,
 }
 

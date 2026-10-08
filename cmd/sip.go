@@ -86,6 +86,7 @@ var sipCallsListCmd = &cobra.Command{
 	Example: `  plivo sip calls list --limit 20
   plivo sip calls list --direction outbound --since 2026-09-01
   plivo sip calls list --hangup-source carrier -o json`,
+	Args: cobra.NoArgs,
 	RunE: runSIPCallsList,
 }
 
@@ -115,6 +116,7 @@ var sipTrunksListCmd = &cobra.Command{
 	Use:     "list",
 	Short:   "List trunks",
 	Example: `  plivo sip trunks list --direction outbound`,
+	Args:    cobra.NoArgs,
 	RunE:    runSIPTrunksList,
 }
 
@@ -128,6 +130,7 @@ var sipTrunksGetCmd = &cobra.Command{
 var sipACLListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List IP access control lists",
+	Args:  cobra.NoArgs,
 	RunE:  runSIPACLList,
 }
 

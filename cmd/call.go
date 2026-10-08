@@ -31,6 +31,7 @@ var (
 var callListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List calls",
+	Args:  cobra.NoArgs,
 	RunE:  runCallList,
 }
 
@@ -54,6 +55,7 @@ var (
 var callMakeCmd = &cobra.Command{
 	Use:   "make",
 	Short: "Make an outbound call (requires --yes; spends money — use --dry-run to preview)",
+	Args:  cobra.NoArgs,
 	RunE:  runCallMake,
 }
 

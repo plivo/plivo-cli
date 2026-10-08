@@ -30,6 +30,7 @@ var (
 var campListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List campaigns",
+	Args:  cobra.NoArgs,
 	RunE:  runCampaignList,
 }
 
@@ -66,6 +67,7 @@ var (
 var campCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Register a new campaign (spends money — TCR fee, requires --yes)",
+	Args:  cobra.NoArgs,
 	RunE:  runCampaignCreate,
 }
 

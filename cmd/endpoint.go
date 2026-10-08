@@ -28,6 +28,7 @@ var (
 var epListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List SIP endpoints",
+	Args:  cobra.NoArgs,
 	RunE:  runEndpointList,
 }
 
@@ -48,6 +49,7 @@ var (
 var epCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a SIP endpoint",
+	Args:  cobra.NoArgs,
 	RunE:  runEndpointCreate,
 }
 
