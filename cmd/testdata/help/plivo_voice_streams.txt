@@ -29,6 +29,7 @@ Global Flags:
       --profile string     named profile from ~/.plivo/config.toml
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
+      --schema             describe the command (arguments, flags, output fields) instead of running it
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts
 

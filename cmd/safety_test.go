@@ -45,9 +45,10 @@ func resetAllFlags(c *cobra.Command) {
 	}
 }
 
-// execCmd resets global flag state, sets argv, and invokes rootCmd.Execute.
-// Returns the error from cobra (NOT the wrapped CLI error envelope) plus the
-// captured stdout / stderr buffers.
+// execCmd resets global flag state, sets argv, and runs it the way Execute
+// does: the argv pre-scan, then rootCmd.Execute. Returns the error from cobra
+// (NOT the wrapped CLI error envelope) plus the captured stdout / stderr
+// buffers.
 //
 // NOTE: rootCmd is a package-level global, so tests must be careful about
 // state pollution between runs. We reset every persistent flag explicitly
@@ -65,6 +66,8 @@ func execCmd(t *testing.T, args ...string) (err error, stdout, stderr string) {
 	profileFlag = ""
 	outputFormat = ""
 	queryFlag = ""
+	mapFlag = false
+	schemaFlag = false
 	logLevel = "warn"
 	timeoutSec = 30
 	adminServer = ""
@@ -93,7 +96,7 @@ func execCmd(t *testing.T, args ...string) (err error, stdout, stderr string) {
 		close(done)
 	}()
 
-	err = rootCmd.Execute()
+	err = execute(args)
 
 	_ = wOut.Close()
 	_ = wErr.Close()

@@ -241,7 +241,7 @@ record, -o yaml the whole JSON envelope. --query filters that envelope with
 JMESPath first, e.g. --query 'data.objects[].number'.
 
 ```
-plivo
+plivo [flags]
 plivo [command]
 ```
 
@@ -272,11 +272,13 @@ Flags:
 ```
       --dry-run            print the HTTP request without sending
       --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --map                print every command with its arguments and flags
       --no-color           disable colored output
   -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
       --profile string     named profile from ~/.plivo/config.toml
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
+      --schema             describe the command (arguments, flags, output fields) instead of running it
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts
 ```
