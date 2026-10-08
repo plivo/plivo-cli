@@ -358,6 +358,7 @@ func runSIPTrunksDelete(cmd *cobra.Command, args []string) error {
 
 var (
 	uriCreateName, uriCreateURI, uriCreateUsername string
+	uriCreatePlatform, uriCreateTransport          string
 	uriCreateAuthNeeded, uriCreatePasswordStdin    bool
 	uriUpdatePasswordStdin                         bool
 	uriUpdateName, uriUpdateURI, uriUpdateUsername string
@@ -382,9 +383,17 @@ var sipURIsCreateCmd = &cobra.Command{
 sips:host. The host is a name, an IPv4 address or an IPv6 address in brackets.
 It is checked before sending: a space, a bad port, an unknown transport or a
 malformed host is refused. A missing port is fine: the platform decides the
-default.`,
-	Example: `  plivo sip uris create --name eleven --uri sip.rtc.elevenlabs.io:5060;transport=tcp`,
-	RunE:    runSIPURIsCreate,
+default. --transport adds ;transport= to --uri.
+
+--platform livekit|elevenlabs|retell|vapi fills in what Plivo's guide for that
+platform gives: host, port and transport, so you add only your own details,
+such as a LiveKit project host or a regional host with --uri. Flags you pass
+always win; a host or transport the guide does not list is used as given,
+with a warning.`,
+	Example: `  plivo sip uris create --name eleven --uri "sip.rtc.elevenlabs.io:5060;transport=tcp"
+  plivo sip uris create --name eleven --platform elevenlabs
+  plivo sip uris create --name agent --platform livekit --uri <project>.sip.livekit.cloud`,
+	RunE: runSIPURIsCreate,
 }
 
 var sipURIsListCmd = &cobra.Command{Use: "list", Short: "List origination URIs", RunE: runSIPURIsList}
@@ -413,11 +422,25 @@ var sipURIsDeleteCmd = &cobra.Command{
 func normalizeSIPURI(v string) string { return strings.TrimSpace(v) }
 
 func runSIPURIsCreate(cmd *cobra.Command, args []string) error {
-	if normalizeSIPURI(uriCreateURI) == "" {
+	p, err := sipPlatformFlag(uriCreatePlatform)
+	if err != nil {
+		return err
+	}
+	if err := checkTransportFlag(uriCreateTransport); err != nil {
+		return err
+	}
+	uri, err := presetURI(p, uriCreateURI, uriCreateTransport)
+	if err != nil {
+		return err
+	}
+	if uri == "" {
 		return clierr.BadInput("--uri is required (host, host:port, host;transport=…, or sip:user@host)")
 	}
-	if _, err := parseURIFlag(uriCreateURI); err != nil {
+	if _, err := parseURIFlag(uri); err != nil {
 		return err
+	}
+	if p != nil {
+		p.begin()
 	}
 	if uriCreateAuthNeeded && uriCreateUsername == "" {
 		return errAuthNeedsUsername
@@ -426,7 +449,7 @@ func runSIPURIsCreate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	body := map[string]any{"name": uriCreateName, "uri": normalizeSIPURI(uriCreateURI)}
+	body := map[string]any{"name": uriCreateName, "uri": uri}
 	boolFlagPatch(cmd, "authentication-needed", "authentication_needed", uriCreateAuthNeeded, body)
 	if uriCreateUsername != "" {
 		body["username"] = uriCreateUsername
@@ -965,6 +988,8 @@ func init() {
 	ucf.StringVar(&uriCreateUsername, "username", "", "username when authentication is needed")
 	ucf.BoolVar(&uriCreatePasswordStdin, "password-stdin", false, "read the URI password from stdin")
 	ucf.BoolVar(&uriCreateAuthNeeded, "authentication-needed", false, "require authentication")
+	ucf.StringVar(&uriCreatePlatform, "platform", "", "fill in a platform's published values: livekit|elevenlabs|retell|vapi")
+	ucf.StringVar(&uriCreateTransport, "transport", "", "udp|tcp|tls, added to --uri as ;transport=")
 	sipURIsListCmd.Flags().IntVar(&uriListLimit, "limit", 20, "rows to return")
 	sipURIsListCmd.Flags().IntVar(&uriListOffset, "offset", 0, "rows to skip")
 	uuf := sipURIsUpdateCmd.Flags()

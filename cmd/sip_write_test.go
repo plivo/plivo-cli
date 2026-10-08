@@ -80,6 +80,7 @@ func resetWriteFlags(t *testing.T) {
 		credCreatePasswordStdin, credUpdatePasswordStdin = false, false
 		aclCreateName, aclUpdateName = "", ""
 		aclCreateIPs, aclUpdateIPs = nil, nil
+		uriCreatePlatform, uriCreateTransport = "", ""
 		numberUpdateTrunkID, numberUpdateAppID = "", ""
 		readAllStdin = defaultReadAllStdin
 	})
