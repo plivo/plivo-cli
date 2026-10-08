@@ -205,8 +205,6 @@ func TestSIPTrunksCreate_platformChecksTheAuthAndPrintsNotes(t *testing.T) {
 			[]string{"--direction", "outbound", "--platform", "livekit", "--ip-acl", "A1"}},
 		{"retell inbound", "even for inbound-only use",
 			[]string{"--direction", "inbound", "--platform", "retell", "--uri", "U1"}},
-		{"vapi india", "Indian numbers on Vapi are not supported",
-			[]string{"--direction", "inbound", "--platform", "vapi", "--uri", "U1"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setFakeCreds(t)

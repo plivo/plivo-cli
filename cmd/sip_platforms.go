@@ -87,7 +87,7 @@ var sipPlatforms = []sipPlatform{
 		ips:      []string{"44.229.228.186/32", "44.238.177.138/32"},
 		ipsNote: "These are Vapi's US addresses. Vapi's EU region sends from 63.182.83.170/32 " +
 			"(Vapi's docs): pass --ip 63.182.83.170/32 instead.",
-		india: "are not supported: Vapi does not terminate SIP in India.",
+		india: "are not supported (Plivo's India calling guide).",
 		guide: "vapi", verified: "2026-10-08",
 	},
 }
@@ -137,14 +137,11 @@ func (p *sipPlatform) guideURL() string {
 }
 
 // begin prints what every use of a preset prints: a warning once its values
-// are more than 90 days old, and what the guides say about Indian numbers.
+// are more than 90 days old.
 func (p *sipPlatform) begin() {
 	if v, err := time.Parse("2006-01-02", p.verified); err == nil && sipPresetNow().Sub(v) > sipPresetMaxAge {
 		fmt.Fprintf(os.Stderr, "Warning: the %s preset was last verified on %s, more than 90 days ago. Check it against %s\n",
 			p.label, p.verified, p.guideURL())
-	}
-	if !quietFlag {
-		fmt.Fprintf(os.Stderr, "Indian numbers on %s %s\n", p.label, p.india)
 	}
 }
 
