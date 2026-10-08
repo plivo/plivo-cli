@@ -14,6 +14,7 @@ Available Commands:
   calls       Inspect SIP Trunking calls (CDRs)
   credentials Trunk credentials
   ip-acl      IP access control lists
+  test        Check that a SIP URI is reachable from this machine (places no call)
   trunks      Inbound and outbound trunks
   uris        Origination URIs
 
