@@ -444,7 +444,7 @@ func diagnoseRouter(t *testing.T, trunkKnown, voiceKnown bool) func() []string {
 		switch {
 		case strings.Contains(r.URL.Path, "/chat"):
 			w.Header().Set("Content-Type", "text/event-stream")
-			_, _ = w.Write([]byte("event: final\ndata: {\"answer\":\"ok\",\"latency_ms\":1}\n\n"))
+			_, _ = w.Write([]byte(okDiagnoseTurn))
 		case isTrunk && trunkKnown, !isTrunk && voiceKnown:
 			_, _ = w.Write([]byte(`{"call_uuid":"abc"}`))
 		default:

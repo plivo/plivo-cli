@@ -248,8 +248,9 @@ func TestOutputFormats_streamCommandsRejectYAMLCSVAndQuery(t *testing.T) {
 	}
 }
 
-// Until the stream commands get a fixed JSON result, -o jsonl and -o json
-// are the same event stream, one JSON event per line.
+// -o jsonl is the event stream, one JSON event per line. For ask, -o json is
+// that same stream; diagnose has a fixed result, so its -o json is one JSON
+// document instead.
 func TestOutputFormats_streamCommandsTreatJSONLAsTheEventStream(t *testing.T) {
 	setFakeCreds(t)
 	t.Setenv("PLIVO_BUDDY_URL", "")
@@ -264,8 +265,17 @@ func TestOutputFormats_streamCommandsTreatJSONLAsTheEventStream(t *testing.T) {
 			if err != nil {
 				t.Fatalf("-o jsonl: %v", err)
 			}
-			if asJSONL != asJSON || !strings.Contains(asJSONL, `"event":"final"`) {
-				t.Errorf("-o jsonl = %q, want the -o json stream %q", asJSONL, asJSON)
+			if !strings.Contains(asJSONL, `"event":"final"`) {
+				t.Errorf("-o jsonl = %q, want the event stream", asJSONL)
+			}
+			if args[0] == "ask" {
+				if asJSONL != asJSON {
+					t.Errorf("ask -o jsonl = %q, want the -o json stream %q", asJSONL, asJSON)
+				}
+				return
+			}
+			if data, _ := decodeOne(t, asJSON)["data"].(map[string]any); data["what_happened"] == nil {
+				t.Errorf("diagnose -o json = %q, want one result", asJSON)
 			}
 		})
 	}
