@@ -511,12 +511,10 @@ func runBugReport(cmd *cobra.Command) error {
 
 	if err := event.Submit(context.Background(), baseURL, headers); err != nil {
 		if errors.Is(err, feedback.ErrTelemetryDisabled) {
-			fmt.Fprintln(out, "Feedback sending is off (PLIVO_FEEDBACK_TELEMETRY=0), so nothing was sent. To file it on GitHub:")
-			fmt.Fprintln(out, "  "+bugIssueURL(scrubbed, last))
+			printIssueLink(out, "Feedback sending is off (PLIVO_FEEDBACK_TELEMETRY=0), so nothing was sent. To file it on GitHub:", scrubbed, last)
 			return nil
 		}
-		fmt.Fprintln(out, "Could not send the report. To file it on GitHub instead (no account details included):")
-		fmt.Fprintln(out, "  "+bugIssueURL(scrubbed, last))
+		printIssueLink(out, "Could not send the report. To file it on GitHub instead (no account details included):", scrubbed, last)
 		return clierr.NetworkError("submitting feedback", err)
 	}
 	fmt.Fprintln(out, "✓ Bug report sent. Thanks!")
@@ -552,6 +550,13 @@ func printFeedbackRequest(out io.Writer, title string, event *feedback.Event, ba
 			"`plivo config telemetry off` leaves them out.")
 	}
 	return nil
+}
+
+// printIssueLink offers the GitHub route for a report that was not sent.
+func printIssueLink(out io.Writer, lead, comment string, last *feedback.LastError) {
+	fmt.Fprintln(out, lead)
+	fmt.Fprintln(out, "  "+bugIssueURL(comment, last))
+	fmt.Fprintln(out, "If the issue form opens without the report, paste the one printed above.")
 }
 
 // lastErrorText renders the recorded failure for the report and the issue.

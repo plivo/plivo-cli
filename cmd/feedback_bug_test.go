@@ -317,6 +317,9 @@ func TestFeedbackBug_aFailedSendPrintsAnIssueLink(t *testing.T) {
 	if link == "" {
 		t.Fatalf("no issue link printed:\n%s", out)
 	}
+	if !strings.Contains(out, "paste the one printed above") {
+		t.Errorf("no fallback for an issue form that opens empty:\n%s", out)
+	}
 	if len(link) > maxIssueURLLen {
 		t.Errorf("link is %d chars, over the %d cap", len(link), maxIssueURLLen)
 	}
