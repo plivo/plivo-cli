@@ -298,6 +298,14 @@ func runNumberUpdate(cmd *cobra.Command, args []string) error {
 
 func runNumberBuy(cmd *cobra.Command, args []string) error {
 	number := args[0]
+	// Checked whenever the flag is passed: an empty value (an unset shell
+	// variable) would otherwise let Plivo pick the application itself.
+	complianceID := strings.TrimSpace(numberBuyComplianceID)
+	if cmd.Flags().Changed("compliance-application-id") && !looksLikeUUID(complianceID) {
+		e := clierr.BadFlag("compliance-application-id", fmt.Sprintf("expected a compliance application UUID, got %q", complianceID))
+		e.Hint = "`plivo numbers compliance list --status accepted` shows your application ids."
+		return e
+	}
 	proceed, dryRun, gerr := guardSpend("buy number " + number)
 	if !proceed {
 		return gerr
@@ -311,8 +319,8 @@ func runNumberBuy(cmd *cobra.Command, args []string) error {
 	if numberBuyAppID != "" {
 		body["app_id"] = numberBuyAppID
 	}
-	if id := strings.TrimSpace(numberBuyComplianceID); id != "" {
-		body["compliance_application_id"] = id
+	if complianceID != "" {
+		body["compliance_application_id"] = complianceID
 	}
 	if explainFlag {
 		fmt.Fprintf(os.Stderr, "Will POST %s (rent number %s)\n", client.AccountURL("PhoneNumber", number), number)

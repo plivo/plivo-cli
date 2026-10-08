@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -44,6 +45,22 @@ func TestNumbersBuy_complianceApplicationID(t *testing.T) {
 			t.Errorf("sent compliance_application_id nobody asked for: %v", p.body)
 		}
 	})
+
+	// An empty value matters most: from an unset shell variable it would
+	// otherwise drop the field, and Plivo would pick an application itself.
+	for _, bad := range []string{"not-a-uuid", ""} {
+		t.Run("rejects "+strconv.Quote(bad)+" without a request", func(t *testing.T) {
+			setFakeCreds(t)
+			reqs := sipWriteServer(t, trunksUsingU1)
+			err, _, _ := execCmd(t, "numbers", "buy", "+14155551234", "--compliance-application-id", bad, "--yes")
+			if err == nil || !strings.Contains(err.Error(), "BAD_FLAG") {
+				t.Fatalf("want BAD_FLAG, got: %v", err)
+			}
+			if len(reqs()) != 0 {
+				t.Errorf("a bad id must not cost a request, made %d", len(reqs()))
+			}
+		})
+	}
 
 	t.Run("dry-run previews it", func(t *testing.T) {
 		setFakeCreds(t)
