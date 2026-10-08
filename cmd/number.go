@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
@@ -73,7 +74,10 @@ var numberSearchCmd = &cobra.Command{
 	RunE:  runNumberSearch,
 }
 
-var numberBuyAppID string
+var (
+	numberBuyAppID        string
+	numberBuyComplianceID string
+)
 
 var numberBuyCmd = &cobra.Command{
 	Use:   "buy <number>",
@@ -112,6 +116,7 @@ func init() {
 	numberSearchCmd.Flags().IntVar(&numberSearchOffset, "offset", 0, "pagination offset")
 
 	numberBuyCmd.Flags().StringVar(&numberBuyAppID, "app-id", "", "auto-attach to this application after purchase")
+	numberBuyCmd.Flags().StringVar(&numberBuyComplianceID, "compliance-application-id", "", "accepted compliance application to attach; if unset, Plivo picks your most recent applicable one")
 	registerExplainFlag(numberBuyCmd)
 	registerExplainFlag(numberReleaseCmd)
 
@@ -287,6 +292,9 @@ func runNumberBuy(cmd *cobra.Command, args []string) error {
 	body := map[string]any{}
 	if numberBuyAppID != "" {
 		body["app_id"] = numberBuyAppID
+	}
+	if id := strings.TrimSpace(numberBuyComplianceID); id != "" {
+		body["compliance_application_id"] = id
 	}
 	if explainFlag {
 		fmt.Fprintf(os.Stderr, "Will POST %s (rent number %s)\n", client.AccountURL("PhoneNumber", number), number)

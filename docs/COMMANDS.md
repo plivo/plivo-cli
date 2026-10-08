@@ -2056,8 +2056,9 @@ plivo numbers buy <number> [flags]
 Flags:
 
 ```
-      --app-id string   auto-attach to this application after purchase
-      --explain         narrate in plain English before executing
+      --app-id string                      auto-attach to this application after purchase
+      --compliance-application-id string   accepted compliance application to attach; if unset, Plivo picks your most recent applicable one
+      --explain                            narrate in plain English before executing
 ```
 
 ---
