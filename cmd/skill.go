@@ -148,6 +148,9 @@ func runSkillInstall(cmd *cobra.Command, args []string) error {
 	if skillProject && skillDir != "" {
 		return clierr.BadFlag("project", "can't be combined with --dir; --project installs into the repository's .claude/skills")
 	}
+	if skillForce && !skillProject {
+		return clierr.BadFlag("force", "only applies with --project; a home or --dir install always overwrites")
+	}
 
 	// "all" fans out; --dir and --print each name a single destination, so they
 	// are incompatible with it.
@@ -240,6 +243,10 @@ func findGitRoot(dir string) (string, bool) {
 	}
 }
 
+// crlfToLF reads CRLF line endings as LF. Git for Windows checks text out with
+// CRLF by default, and a copy that differs only in that is the same skill.
+func crlfToLF(s string) string { return strings.ReplaceAll(s, "\r\n", "\n") }
+
 // skillState describes whether a bundled skill is on disk and current.
 // "differs from bundled" is the useful one: it catches a skill written by an
 // older binary, which is the drift embedding the content creates.
@@ -312,7 +319,7 @@ func installSkill(s bundledSkill, projectRoot string) (kept string, err error) {
 	dest := filepath.Join(dir, skillFileName)
 
 	if projectRoot != "" && !skillForce {
-		if b, err := os.ReadFile(dest); err == nil && string(b) != s.content {
+		if b, err := os.ReadFile(dest); err == nil && crlfToLF(string(b)) != crlfToLF(s.content) {
 			return dest, nil
 		}
 	}

@@ -575,6 +575,51 @@ func TestSkillInstall_projectDryRunWritesNothing(t *testing.T) {
 	}
 }
 
+// Git for Windows checks a committed skill out with CRLF line endings by
+// default. That copy is the same skill, not an edit to keep.
+func TestSkillInstall_projectReadsCRLFAsLF(t *testing.T) {
+	root, _ := fakeRepo(t, false)
+	p := projectSkillPath(root, "plivo-cli")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	crlf := func(s string) []byte { return []byte(strings.ReplaceAll(s, "\n", "\r\n")) }
+
+	if err := os.WriteFile(p, crlf(cliskill.SkillMD), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err, _, stderr := execCmd(t, "skill", "install", "--project"); err != nil {
+		t.Fatalf("a CRLF checkout of the bundled skill was kept as an edit: %v\n%s", err, stderr)
+	}
+
+	edited := crlf(cliskill.SkillMD + "our team's notes\n")
+	if err := os.WriteFile(p, edited, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err, _, _ := execCmd(t, "skill", "install", "--project")
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeDestructiveRefused {
+		t.Fatalf("a CRLF copy with an edit: err = %v, want DESTRUCTIVE_REFUSED", err)
+	}
+	if got, _ := os.ReadFile(p); string(got) != string(edited) {
+		t.Error("the edited CRLF copy was overwritten")
+	}
+}
+
+// --force only means something for a project copy; a home or --dir install
+// always overwrites, so the flag there is a mistake to report, not ignore.
+func TestSkillInstall_forceNeedsProject(t *testing.T) {
+	_, home := fakeRepo(t, false)
+	err, _, _ := execCmd(t, "skill", "install", "--force")
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeBadFlag {
+		t.Fatalf("err = %v, want BAD_FLAG", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude")); !os.IsNotExist(err) {
+		t.Errorf("a rejected command wrote under HOME (stat err: %v)", err)
+	}
+}
+
 // Without --project nothing changes: the home copy is the CLI's own and is
 // overwritten, as every earlier release did.
 func TestSkillInstall_homeInstallStillOverwrites(t *testing.T) {
