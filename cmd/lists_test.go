@@ -164,3 +164,22 @@ func TestListFilters_documentedValuesReachTheQuery(t *testing.T) {
 		}
 	})
 }
+
+// The compliance list sends its rows under "compliances", not "objects"; read
+// from the wrong key, the table is empty however many applications exist.
+func TestComplianceList_tableReadsTheCompliancesKey(t *testing.T) {
+	setFakeCreds(t)
+	sipServer(t, http.StatusOK, `{"api_id":"x","meta":{"limit":20,"offset":0,"total_count":1},
+		"compliances":[{"compliance_id":"00000000-0000-0000-0000-000000000000","alias":"acme-in",
+		"status":"accepted","country_iso":"IN","number_type":"local","user_type":"business"}]}`)
+
+	err, stdout, _ := execCmd(t, "numbers", "compliance", "list", "-o", "table")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, want := range []string{"00000000-0000-0000-0000-000000000000", "acme-in", "accepted"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("table missing %q:\n%s", want, stdout)
+		}
+	}
+}
