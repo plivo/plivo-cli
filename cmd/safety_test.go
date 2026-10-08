@@ -15,6 +15,7 @@ import (
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
+	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/zalando/go-keyring"
@@ -63,6 +64,7 @@ func execCmd(t *testing.T, args ...string) (err error, stdout, stderr string) {
 	noColorFlag = false
 	profileFlag = ""
 	outputFormat = ""
+	queryFlag = ""
 	logLevel = "warn"
 	timeoutSec = 30
 	adminServer = ""
@@ -106,6 +108,9 @@ func execCmd(t *testing.T, args ...string) (err error, stdout, stderr string) {
 	// later test (especially help_snapshot_test) sees stale flag values and
 	// fails under `-count >= 2`.
 	resetAllFlags(rootCmd)
+	// The output writers keep the run's -o/--query; put back the default so
+	// a later test that calls a RunE directly gets plain JSON.
+	_ = output.Configure("", "")
 
 	return err, outBuf.String(), errBuf.String()
 }

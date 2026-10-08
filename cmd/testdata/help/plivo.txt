@@ -6,6 +6,11 @@ Credentials come from browser OAuth/PKCE login and resolve in order:
 
 Run "plivo login" if you have no profile yet.
 
+Output is a table on a terminal and JSON otherwise. -o jsonl writes one JSON
+record per line (a list's objects, or the one result), -o csv one row per
+record, -o yaml the whole JSON envelope. --query filters that envelope with
+JMESPath first, e.g. --query 'data.objects[].number'.
+
 Usage:
   plivo [command]
 
@@ -37,8 +42,9 @@ Flags:
   -h, --help               help for plivo
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
-  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+  -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
       --profile string     named profile from ~/.plivo/config.toml
+      --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts
