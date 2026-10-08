@@ -182,14 +182,12 @@ func registerExplainFlag(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&explainFlag, "explain", false, "narrate in plain English before executing")
 }
 
-// registerAllFlag adds a local (non-persistent) --all flag to cmd. Call this
-// only on list commands whose RunE actually walks every page — --all used to
-// be persistent on rootCmd and silently did nothing on the ~172 commands
-// (including every list command) that never read it; it was removed rather
-// than wired up everywhere at once. Wire it back one list command at a time,
-// the same way --explain was scoped down via registerExplainFlag.
+// registerAllFlag adds a local (non-persistent) --all flag to cmd. --all used
+// to be persistent on rootCmd and silently did nothing on the commands that
+// never read it. It is now registered by registerListFlags, on the lists whose
+// fetch goes through fetchList's page walk.
 func registerAllFlag(cmd *cobra.Command) {
-	cmd.Flags().BoolVar(&allFlag, "all", false, "auto-paginate through all pages")
+	cmd.Flags().BoolVar(&allFlag, "all", false, fmt.Sprintf("fetch every page (stops after %d pages)", maxListPages))
 }
 
 // credSource records which source supplied the credentials ("env" or a profile

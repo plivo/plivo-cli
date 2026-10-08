@@ -508,12 +508,8 @@ func runCallList(cmd *cobra.Command, args []string) error {
 	}
 
 	var resp api.CallList
-	apiErr, err := client.Do("GET", client.AccountURL("Call"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Call"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil

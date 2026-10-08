@@ -202,12 +202,8 @@ func runVerifySessionList(cmd *cobra.Command, args []string) error {
 		q.Set("status", vsListStatus)
 	}
 	var resp api.VerifySessionList
-	apiErr, err := client.Do("GET", client.AccountURL("Verify", "Session"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Verify", "Session"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil

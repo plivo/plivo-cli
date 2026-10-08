@@ -182,12 +182,8 @@ func runMaskingList(cmd *cobra.Command, args []string) error {
 	q.Set("limit", strconv.Itoa(msListLimit))
 	q.Set("offset", strconv.Itoa(msListOffset))
 	var resp api.MaskingSessionList
-	apiErr, err := client.Do("GET", client.AccountURL("Masking", "Session"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Masking", "Session"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil

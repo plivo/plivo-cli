@@ -165,12 +165,8 @@ func runMPCList(cmd *cobra.Command, args []string) error {
 		q.Set("status", mpcListStatus)
 	}
 	var resp api.MPCList
-	apiErr, err := client.Do("GET", client.AccountURL("MultiPartyCall"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("MultiPartyCall"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
@@ -256,12 +252,8 @@ func runMPCPartList(cmd *cobra.Command, args []string) error {
 	q.Set("limit", strconv.Itoa(mpcPartListLimit))
 	q.Set("offset", strconv.Itoa(mpcPartListOffset))
 	var resp api.MPCParticipantList
-	apiErr, err := client.Do("GET", mpcResourceURL(client, id)+"Participant/", nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, mpcResourceURL(client, id)+"Participant/", q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil

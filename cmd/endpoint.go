@@ -98,12 +98,8 @@ func runEndpointList(cmd *cobra.Command, args []string) error {
 	q.Set("limit", strconv.Itoa(epListLimit))
 	q.Set("offset", strconv.Itoa(epListOffset))
 	var resp api.EndpointList
-	apiErr, err := client.Do("GET", client.AccountURL("Endpoint"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Endpoint"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil

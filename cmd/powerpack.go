@@ -139,12 +139,8 @@ func runPowerpackList(cmd *cobra.Command, args []string) error {
 	q.Set("limit", strconv.Itoa(ppListLimit))
 	q.Set("offset", strconv.Itoa(ppListOffset))
 	var resp api.PowerpackList
-	apiErr, err := client.Do("GET", client.AccountURL("Powerpack"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Powerpack"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
@@ -315,12 +311,8 @@ func runPowerpackNumberList(cmd *cobra.Command, args []string) error {
 	q.Set("limit", strconv.Itoa(ppNumListLimit))
 	q.Set("offset", strconv.Itoa(ppNumListOffset))
 	var resp api.PowerpackNumberList
-	apiErr, err := client.Do("GET", client.AccountURL("Powerpack", id, "Number"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Powerpack", id, "Number"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil

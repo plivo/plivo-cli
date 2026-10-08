@@ -107,7 +107,7 @@ func init() {
 	numberSearchCmd.Flags().StringVar(&numberSearchType, "type", "", oneOf(numberTypeValues))
 	numberSearchCmd.Flags().StringVar(&numberSearchPattern, "pattern", "", "digit pattern")
 	numberSearchCmd.Flags().StringVar(&numberSearchRegion, "region", "", "region filter")
-	registerListFlags(numberSearchCmd, &numberSearchLimit, &numberSearchOffset)
+	registerPageFlags(numberSearchCmd, &numberSearchLimit, &numberSearchOffset)
 
 	numberBuyCmd.Flags().StringVar(&numberBuyAppID, "app-id", "", "auto-attach to this application after purchase")
 	registerExplainFlag(numberBuyCmd)
@@ -174,12 +174,8 @@ func runNumberList(cmd *cobra.Command, args []string) error {
 	q.Set("offset", strconv.Itoa(numberListOffset))
 
 	var resp api.NumberList
-	apiErr, err := client.Do("GET", client.AccountURL("Number"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Number"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil

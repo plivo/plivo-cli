@@ -107,12 +107,8 @@ func runBrandList(cmd *cobra.Command, args []string) error {
 	q.Set("limit", strconv.Itoa(brandListLimit))
 	q.Set("offset", strconv.Itoa(brandListOffset))
 	var resp api.Brand10DLCList
-	apiErr, err := client.Do("GET", client.AccountURL("10dlc", "Brand"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("10dlc", "Brand"), q, "brands", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil

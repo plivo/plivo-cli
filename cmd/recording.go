@@ -82,12 +82,8 @@ func runRecordingList(cmd *cobra.Command, args []string) error {
 	}
 
 	var resp api.RecordingList
-	apiErr, err := client.Do("GET", client.AccountURL("Recording"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Recording"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil

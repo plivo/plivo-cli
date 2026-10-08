@@ -5,6 +5,7 @@ Usage:
 
 Flags:
       --alias string         filter by alias
+      --all                  fetch every page (stops after 100 pages)
       --country string       filter by ISO country code
   -h, --help                 help for list
       --limit int            results per page (1-20) (default 20)

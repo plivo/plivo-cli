@@ -170,12 +170,8 @@ func runAppList(cmd *cobra.Command, args []string) error {
 	q.Set("offset", strconv.Itoa(appListOffset))
 
 	var resp api.ApplicationList
-	apiErr, err := client.Do("GET", client.AccountURL("Application"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Application"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil

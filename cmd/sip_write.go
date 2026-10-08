@@ -449,12 +449,8 @@ func runSIPURIsList(cmd *cobra.Command, args []string) error {
 	q.Set("limit", strconv.Itoa(uriListLimit))
 	q.Set("offset", strconv.Itoa(uriListOffset))
 	var resp api.SIPTrunkURIList
-	apiErr, err := client.Do("GET", client.AccountURL("Zentrunk", "URI"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Zentrunk", "URI"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
@@ -700,12 +696,8 @@ func runSIPCredsList(cmd *cobra.Command, args []string) error {
 	q.Set("limit", strconv.Itoa(credListLimit))
 	q.Set("offset", strconv.Itoa(credListOffset))
 	var resp api.SIPTrunkCredentialList
-	apiErr, err := client.Do("GET", client.AccountURL("Zentrunk", "Credential"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Zentrunk", "Credential"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil

@@ -4,10 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
@@ -335,4 +339,304 @@ func TestEmptyLists_renderAnEmptyArray(t *testing.T) {
 			t.Fatalf("want an empty array:\n%s", stdout)
 		}
 	})
+}
+
+// pagedServer serves rows rows under key, honouring limit and offset like the
+// real endpoints, with meta.total_count set to total (left out when total < 0).
+// fail, when set, may answer request n (1-based) instead: status and
+// Retry-After.
+func pagedServer(t *testing.T, key string, rows, total int, fail func(n int) (int, string)) func() []string {
+	t.Helper()
+	var mu sync.Mutex
+	var offsets []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		mu.Lock()
+		offsets = append(offsets, q.Get("offset"))
+		n := len(offsets)
+		mu.Unlock()
+		if fail != nil {
+			if status, after := fail(n); status != 0 {
+				w.Header().Set("Retry-After", after)
+				w.WriteHeader(status)
+				_, _ = w.Write([]byte(`{"error":"too many requests"}`))
+				return
+			}
+		}
+		limit, _ := strconv.Atoi(q.Get("limit"))
+		offset, _ := strconv.Atoi(q.Get("offset"))
+		page := []string{}
+		for i := offset; i < offset+limit && i < rows; i++ {
+			page = append(page, fmt.Sprintf(`{"id":"row-%d","name":"<%d> & co"}`, i, i))
+		}
+		meta := fmt.Sprintf(`{"limit":%d,"offset":%d,"total_count":%d}`, limit, offset, total)
+		if total < 0 {
+			meta = fmt.Sprintf(`{"limit":%d,"offset":%d}`, limit, offset)
+		}
+		_, _ = fmt.Fprintf(w, `{"api_id":"x","meta":%s,%q:[%s]}`, meta, key, strings.Join(page, ","))
+	}))
+	t.Cleanup(srv.Close)
+	clientForTest = &api.Client{BaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
+	t.Cleanup(func() { clientForTest = nil })
+	return func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string(nil), offsets...)
+	}
+}
+
+// recordWaits swaps the retry sleep for a recorder, so no test waits.
+func recordWaits(t *testing.T) *[]time.Duration {
+	t.Helper()
+	var waits []time.Duration
+	waitBeforeRetry = func(d time.Duration) { waits = append(waits, d) }
+	t.Cleanup(func() { waitBeforeRetry = time.Sleep })
+	return &waits
+}
+
+// dataRows decodes the rows and meta out of -o json's {"data": {...}}.
+func dataRows(t *testing.T, stdout, key string) ([]map[string]any, map[string]any) {
+	t.Helper()
+	var out struct {
+		Data map[string]json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
+		t.Fatalf("stdout is not JSON: %v\n%s", err, stdout)
+	}
+	var rows []map[string]any
+	var meta map[string]any
+	_ = json.Unmarshal(out.Data[key], &rows)
+	_ = json.Unmarshal(out.Data["meta"], &meta)
+	return rows, meta
+}
+
+func TestListAll_walksEveryPageIntoOneEnvelope(t *testing.T) {
+	setFakeCreds(t)
+	hits := pagedServer(t, "objects", 45, 45, nil)
+
+	err, stdout, _ := execCmd(t, "sip", "calls", "list", "--all", "-o", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := strings.Join(hits(), ","); got != "0,20,40" {
+		t.Fatalf("offsets requested = %s, want 0,20,40", got)
+	}
+	rows, meta := dataRows(t, stdout, "objects")
+	if len(rows) != 45 || rows[0]["id"] != "row-0" || rows[44]["id"] != "row-44" {
+		t.Fatalf("merged %d rows, want row-0..row-44 in order", len(rows))
+	}
+	if meta["total_count"] != float64(45) || meta["truncated"] != nil {
+		t.Errorf("meta = %v, want the server's total_count and no truncated", meta)
+	}
+	if !strings.Contains(stdout, `"<44> & co"`) {
+		t.Errorf("rows were re-escaped on the way through:\n%s", stdout)
+	}
+}
+
+func TestListAll_stopConditions(t *testing.T) {
+	cases := []struct {
+		name        string
+		rows, total int
+		limit       string
+		want        string
+	}{
+		{"short page ends it without a total", 30, -1, "20", "0,20"},
+		{"total_count ends it on a full page", 40, 40, "20", "0,20"},
+		{"empty first page", 0, 0, "20", "0"},
+		{"advances by rows returned, not by --limit", 7, 7, "5", "0,5"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setFakeCreds(t)
+			hits := pagedServer(t, "objects", tc.rows, tc.total, nil)
+
+			err, stdout, _ := execCmd(t, "voice", "calls", "list", "--all", "--limit", tc.limit, "-o", "json")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got := strings.Join(hits(), ","); got != tc.want {
+				t.Fatalf("offsets requested = %s, want %s", got, tc.want)
+			}
+			if rows, _ := dataRows(t, stdout, "objects"); len(rows) != tc.rows {
+				t.Fatalf("got %d rows, want %d", len(rows), tc.rows)
+			}
+		})
+	}
+}
+
+// A list larger than the safety stop gets 100 pages, a warning, and
+// meta.truncated so a script can tell it did not get everything.
+func TestListAll_stopsAfter100Pages(t *testing.T) {
+	setFakeCreds(t)
+	hits := pagedServer(t, "objects", 5000, 5000, nil)
+
+	err, stdout, stderr := execCmd(t, "messaging", "sms", "list", "--all", "-o", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n := len(hits()); n != 100 {
+		t.Fatalf("made %d requests, want 100", n)
+	}
+	rows, meta := dataRows(t, stdout, "objects")
+	if len(rows) != 2000 || meta["truncated"] != true || meta["total_count"] != float64(5000) {
+		t.Fatalf("rows=%d meta=%v, want 2000 rows, truncated, total_count 5000", len(rows), meta)
+	}
+	if !strings.Contains(stderr, "stopped after 100 pages") {
+		t.Errorf("no warning on stderr: %q", stderr)
+	}
+}
+
+func TestListAll_retriesARateLimitedPage(t *testing.T) {
+	setFakeCreds(t)
+	waits := recordWaits(t)
+	// Requests 2 and 3 (the second page and its first retry) are refused.
+	hits := pagedServer(t, "objects", 25, 25, func(n int) (int, string) {
+		if n == 2 || n == 3 {
+			return http.StatusTooManyRequests, "2"
+		}
+		return 0, ""
+	})
+
+	err, stdout, _ := execCmd(t, "voice", "calls", "list", "--all", "-o", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := strings.Join(hits(), ","); got != "0,20,20,20" {
+		t.Fatalf("offsets requested = %s, want 0,20,20,20", got)
+	}
+	if fmt.Sprint(*waits) != "[2s 2s]" {
+		t.Errorf("waits = %v, want the server's 2s twice", *waits)
+	}
+	if rows, _ := dataRows(t, stdout, "objects"); len(rows) != 25 {
+		t.Fatalf("got %d rows, want 25", len(rows))
+	}
+}
+
+func TestListAll_givesUpAfterThreeRetries(t *testing.T) {
+	setFakeCreds(t)
+	waits := recordWaits(t)
+	hits := pagedServer(t, "objects", 25, 25, func(int) (int, string) { return http.StatusTooManyRequests, "" })
+
+	err, _, _ := execCmd(t, "voice", "calls", "list", "--all")
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeRateLimited {
+		t.Fatalf("want RATE_LIMITED, got %v", err)
+	}
+	if n := len(hits()); n != 4 {
+		t.Fatalf("made %d requests, want 1 + 3 retries", n)
+	}
+	if fmt.Sprint(*waits) != "[1s 2s 4s]" {
+		t.Errorf("waits = %v, want 1s 2s 4s without a Retry-After", *waits)
+	}
+}
+
+// Without --all a 429 is returned as is: the retry lives in the walk only.
+func TestListAll_noRetryWithoutAll(t *testing.T) {
+	setFakeCreds(t)
+	recordWaits(t)
+	hits := pagedServer(t, "objects", 25, 25, func(int) (int, string) { return http.StatusTooManyRequests, "1" })
+
+	err, _, _ := execCmd(t, "voice", "calls", "list")
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeRateLimited || len(hits()) != 1 {
+		t.Fatalf("want one request and RATE_LIMITED, got %v after %d", err, len(hits()))
+	}
+}
+
+func TestRetryWait(t *testing.T) {
+	cases := []struct {
+		attempt             int
+		retryAfter, timeout time.Duration
+		want                time.Duration
+	}{
+		{0, 0, 0, time.Second},
+		{2, 0, 0, 4 * time.Second},
+		{0, 5 * time.Second, 0, 5 * time.Second},
+		{0, time.Hour, 0, 30 * time.Second},
+		{0, 20 * time.Second, 10 * time.Second, 10 * time.Second},
+	}
+	for _, tc := range cases {
+		if got := retryWait(tc.attempt, tc.retryAfter, tc.timeout); got != tc.want {
+			t.Errorf("retryWait(%d, %v, %v) = %v, want %v", tc.attempt, tc.retryAfter, tc.timeout, got, tc.want)
+		}
+	}
+}
+
+func TestListAll_refusesOffset(t *testing.T) {
+	setFakeCreds(t)
+	hits := pagedServer(t, "objects", 5, 5, nil)
+
+	err, _, _ := execCmd(t, "sip", "trunks", "list", "--all", "--offset", "20")
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeBadFlag {
+		t.Fatalf("want BAD_FLAG, got %v", err)
+	}
+	if len(hits()) != 0 {
+		t.Fatal("a request went out")
+	}
+}
+
+// The real client (not a test one) so --dry-run reaches it: anything actually
+// sent would go to the live API with fake credentials and fail.
+func TestListAll_dryRunSendsNothing(t *testing.T) {
+	setFakeCreds(t)
+
+	err, _, stderr := execCmd(t, "verify", "sessions", "list", "--all", "--dry-run")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Count(stderr, "[dry-run] GET") != 1 || !strings.Contains(stderr, "offset=0") {
+		t.Errorf("want exactly the first page previewed: %q", stderr)
+	}
+	if !strings.Contains(stderr, "--all would read the pages after this one") {
+		t.Errorf("no note on what --all would do: %q", stderr)
+	}
+}
+
+// Lists whose rows are not under "objects" must merge their own key, or --all
+// would walk every page and show none of it.
+func TestListAll_mergesUnderEachListsKey(t *testing.T) {
+	cases := []struct {
+		key  string
+		args []string
+	}{
+		{"brands", []string{"messaging", "sms", "10dlc", "brands", "list"}},
+		{"campaigns", []string{"messaging", "sms", "10dlc", "campaigns", "list"}},
+		{"compliances", []string{"numbers", "compliance", "list"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.key, func(t *testing.T) {
+			setFakeCreds(t)
+			pagedServer(t, tc.key, 25, 25, nil)
+
+			err, stdout, _ := execCmd(t, append(tc.args, "--all", "-o", "json")...)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if rows, _ := dataRows(t, stdout, tc.key); len(rows) != 25 {
+				t.Fatalf("got %d rows under %s, want 25", len(rows), tc.key)
+			}
+			if strings.Contains(stdout, `"objects"`) {
+				t.Errorf("an objects key appeared:\n%s", stdout)
+			}
+		})
+	}
+}
+
+// Every paged list takes --all except numbers search: walking the whole
+// inventory of numbers for sale is not a sensible request.
+func TestListAll_onEveryPagedList(t *testing.T) {
+	var walk func(c *cobra.Command)
+	walk = func(c *cobra.Command) {
+		if c.Flags().Lookup("limit") != nil && c.CommandPath() != "plivo docs search" {
+			hasAll := c.Flags().Lookup("all") != nil
+			if want := c.CommandPath() != "plivo numbers search"; hasAll != want {
+				t.Errorf("%s: --all registered = %v, want %v", c.CommandPath(), hasAll, want)
+			}
+		}
+		for _, sub := range c.Commands() {
+			walk(sub)
+		}
+	}
+	walk(rootCmd)
 }

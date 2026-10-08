@@ -4,6 +4,7 @@ Usage:
   plivo messaging whatsapp list [flags]
 
 Flags:
+      --all                fetch every page (stops after 100 pages)
       --direction string   inbound|outbound
       --from string        filter by from_number
   -h, --help               help for list
