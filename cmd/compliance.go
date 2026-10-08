@@ -287,6 +287,18 @@ func runComplianceCreate(cmd *cobra.Command, args []string) error {
 	})
 }
 
+// unwrapCompliance returns the application from under "compliance", where the
+// documented get response puts it. A flat body is returned untouched.
+func unwrapCompliance(app api.ComplianceApplication) api.ComplianceApplication {
+	var wrapped struct {
+		Compliance *api.ComplianceApplication `json:"compliance"`
+	}
+	if json.Unmarshal(app.Raw(), &wrapped) != nil || wrapped.Compliance == nil {
+		return app
+	}
+	return *wrapped.Compliance
+}
+
 func runComplianceGet(cmd *cobra.Command, args []string) error {
 	id := args[0]
 	client, _, err := getClient()
@@ -311,6 +323,7 @@ func runComplianceGet(cmd *cobra.Command, args []string) error {
 	if effectiveFormat() == output.FormatJSON {
 		return output.JSONRaw(os.Stdout, app.Raw())
 	}
+	app = unwrapCompliance(app)
 	return output.KV(os.Stdout, [][2]string{
 		{"compliance_id", app.ComplianceID},
 		{"alias", app.Alias},
