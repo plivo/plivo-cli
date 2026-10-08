@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/plivo/plivo-cli/internal/api"
@@ -397,6 +398,27 @@ func showPreviewAndConfirm(event *feedback.Event, in io.Reader, out io.Writer) (
 	}
 	fmt.Fprintln(out, "Cancelled, nothing sent.")
 	return false, nil
+}
+
+// recordLastError saves the failure handleError just rendered, for `feedback
+// --bug`: the command path and the error's category, never argument values or
+// the message, which can echo what the user typed. Best effort, so a failed
+// write changes neither the output nor the exit code. A failing `feedback`
+// keeps the failure it was trying to report.
+func recordLastError(ran *cobra.Command, e *clierr.Error, exitCode int) {
+	if ran == nil || ran == feedbackCmd {
+		return
+	}
+	_ = feedback.SaveLastError(feedback.LastError{
+		Command:    ran.CommandPath(),
+		ExitCode:   exitCode,
+		ErrorCode:  string(e.Code),
+		RequestID:  e.RequestID,
+		CLIVersion: versionValue(),
+		OS:         runtimeOS(),
+		Arch:       runtimeArch(),
+		Timestamp:  time.Now().UTC(),
+	})
 }
 
 // isTTY returns true if r is a *os.File on a terminal. Defensive: any

@@ -53,9 +53,9 @@ Run "plivo login" if you have no profile yet.`,
 }
 
 func Execute() {
-	cmdErr := rootCmd.Execute()
+	ran, cmdErr := rootCmd.ExecuteC()
 	if cmdErr != nil {
-		handleError(cmdErr)
+		handleError(ran, cmdErr)
 	}
 	firstWord := firstCmdWord(os.Args[1:])
 	// Server-driven upgrade nudge (from server warn response headers) wins
@@ -324,7 +324,7 @@ func malformedAuthIDHint(authID string) string {
 	return ""
 }
 
-func handleError(err error) {
+func handleError(ran *cobra.Command, err error) {
 	f := output.Resolve(outputFormat, os.Stderr)
 
 	// Convert any error into a *clierr.Error so we render a structured
@@ -366,5 +366,8 @@ func handleError(err error) {
 			apiErr.StatusCode,
 		)
 	}
-	os.Exit(exitCodeForAPI(apiErr))
+	code := exitCodeForAPI(apiErr)
+	// After the output, and best effort: it never changes either.
+	recordLastError(ran, apiErr, code)
+	os.Exit(code)
 }
