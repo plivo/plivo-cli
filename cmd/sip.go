@@ -514,9 +514,11 @@ const diagnoseClientConstraints = " The caller is a terminal, not the Plivo Cons
 // when it cannot finish.
 const analysisIncompleteMarker = "ANALYSIS_INCOMPLETE"
 
-// analysisIncompleteLine finds the marker anywhere in the answer, tolerating
-// markdown emphasis around it; the reason is the rest of that line.
-var analysisIncompleteLine = regexp.MustCompile(analysisIncompleteMarker + "[*_`]*\\s*:([^\\n]*)")
+// analysisIncompleteLine finds the marker at the start of a line, after any
+// whitespace or markdown (**, >, -, a heading or a backtick), so an answer that
+// quotes the instruction mid-sentence does not fail a good analysis. The
+// reason is the rest of that line.
+var analysisIncompleteLine = regexp.MustCompile("(?m)^[ \\t>*_#+`-]*" + analysisIncompleteMarker + "[*_`]*[ \\t]*:([^\\n]*)")
 
 // analysisIncomplete returns the reason from the answer's ANALYSIS_INCOMPLETE
 // line, and whether it has one.

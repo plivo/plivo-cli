@@ -306,6 +306,9 @@ func TestDiagnose_dryRunIsNotJudged(t *testing.T) {
 	}
 }
 
+// The marker counts only at the start of a line (after whitespace or markdown),
+// so an answer that quotes the instruction mid-sentence does not fail a good
+// analysis.
 func TestAnalysisIncomplete(t *testing.T) {
 	cases := []struct {
 		answer, reason string
@@ -313,10 +316,13 @@ func TestAnalysisIncomplete(t *testing.T) {
 	}{
 		{"Checked the trace.\nANALYSIS_INCOMPLETE: no trace yet", "no trace yet", true},
 		{"**ANALYSIS_INCOMPLETE:** no trace yet", "no trace yet", true},
+		{"  **ANALYSIS_INCOMPLETE**: no trace yet", "no trace yet", true},
 		{"`ANALYSIS_INCOMPLETE: no trace yet`", "no trace yet", true},
 		{"- ANALYSIS_INCOMPLETE: no trace yet\nMore text", "no trace yet", true},
-		{"I stopped. ANALYSIS_INCOMPLETE: no trace yet", "no trace yet", true},
+		{"Summary first.\n> ANALYSIS_INCOMPLETE: no trace yet", "no trace yet", true},
 		{"ANALYSIS_INCOMPLETE:", "no reason given", true},
+		{"I stopped. ANALYSIS_INCOMPLETE: no trace yet", "", false},
+		{"The call was fine, so there is no need for an ANALYSIS_INCOMPLETE: <reason> line.", "", false},
 		{"The call completed normally.", "", false},
 		{"", "", false},
 	}
