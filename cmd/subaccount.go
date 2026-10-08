@@ -28,6 +28,7 @@ var (
 var subListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List subaccounts",
+	Args:  cobra.NoArgs,
 	RunE:  runSubList,
 }
 
@@ -46,6 +47,7 @@ var (
 var subCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a subaccount",
+	Args:  cobra.NoArgs,
 	RunE:  runSubCreate,
 }
 

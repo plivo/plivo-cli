@@ -21,6 +21,7 @@ var conferenceCmd = &cobra.Command{
 var confListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List active conference names",
+	Args:  cobra.NoArgs,
 	RunE:  runConferenceList,
 }
 

@@ -30,6 +30,7 @@ var (
 var linkListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List number→campaign links",
+	Args:  cobra.NoArgs,
 	RunE:  runLinkList,
 }
 
@@ -41,6 +42,7 @@ var (
 var linkCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Link a number to a campaign",
+	Args:  cobra.NoArgs,
 	RunE:  runLinkCreate,
 }
 

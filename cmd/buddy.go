@@ -86,6 +86,7 @@ var supportCmd = &cobra.Command{
 	Use:     "support",
 	Short:   "List your past support escalations (filed via `plivo ask`)",
 	Example: "  plivo support\n  plivo support -o json",
+	Args:    cobra.NoArgs,
 	RunE:    runSupport,
 }
 

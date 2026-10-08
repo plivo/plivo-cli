@@ -91,6 +91,7 @@ var (
 var messagingSmsSendCmd = &cobra.Command{
 	Use:   "send",
 	Short: "Send an SMS (requires --yes; spends money — use --dry-run to preview)",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runMessageSendForChannel(cmd, "sms", smsSendSrc, smsSendDst, smsSendText, smsSendURL, smsSendMethod, nil)
 	},
@@ -99,6 +100,7 @@ var messagingSmsSendCmd = &cobra.Command{
 var messagingWhatsappSendCmd = &cobra.Command{
 	Use:   "send",
 	Short: "Send a WhatsApp message (requires --yes; spends money — use --dry-run to preview)",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runMessageSendForChannel(cmd, "whatsapp", whatsappSendSrc, whatsappSendDst, whatsappSendText, whatsappSendURL, whatsappSendMethod, nil)
 	},
@@ -107,6 +109,7 @@ var messagingWhatsappSendCmd = &cobra.Command{
 var messagingMmsSendCmd = &cobra.Command{
 	Use:   "send",
 	Short: "Send an MMS (requires --yes; spends money — use --dry-run to preview)",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runMessageSendForChannel(cmd, "mms", mmsSendSrc, mmsSendDst, mmsSendText, mmsSendURL, mmsSendMethod, mmsSendMediaURLs)
 	},
@@ -117,6 +120,7 @@ var messagingMmsSendCmd = &cobra.Command{
 var messagingSmsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List SMS messages",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runMessageListForChannel(cmd, "sms",
 			smsListLimit, smsListOffset, smsListState, smsListDirection, smsListFrom, smsListTo)
@@ -126,6 +130,7 @@ var messagingSmsListCmd = &cobra.Command{
 var messagingWhatsappListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List WhatsApp messages",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runMessageListForChannel(cmd, "whatsapp",
 			whatsappListLimit, whatsappListOffset, whatsappListState, whatsappListDirection, whatsappListFrom, whatsappListTo)
@@ -135,6 +140,7 @@ var messagingWhatsappListCmd = &cobra.Command{
 var messagingMmsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List MMS messages",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runMessageListForChannel(cmd, "mms",
 			mmsListLimit, mmsListOffset, mmsListState, mmsListDirection, mmsListFrom, mmsListTo)

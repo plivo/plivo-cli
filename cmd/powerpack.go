@@ -28,6 +28,7 @@ var (
 var ppListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List powerpacks",
+	Args:  cobra.NoArgs,
 	RunE:  runPowerpackList,
 }
 
@@ -50,6 +51,7 @@ var (
 var ppCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a powerpack",
+	Args:  cobra.NoArgs,
 	RunE:  runPowerpackCreate,
 }
 

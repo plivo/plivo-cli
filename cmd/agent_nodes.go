@@ -23,6 +23,7 @@ var agentNodesCmd = &cobra.Command{
 var agentNodesListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List available agent node types",
+	Args:  cobra.NoArgs,
 	RunE:  runAgentFlowNodesList,
 }
 

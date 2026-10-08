@@ -28,6 +28,7 @@ var (
 var brandListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List registered brands",
+	Args:  cobra.NoArgs,
 	RunE:  runBrandList,
 }
 
@@ -56,6 +57,7 @@ var (
 var brandCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Register a new brand (spends money — TCR registration fee, requires --yes)",
+	Args:  cobra.NoArgs,
 	RunE:  runBrandCreate,
 }
 
