@@ -31,6 +31,7 @@ Available Commands:
   lookup      Carrier + format lookup for an E.164 number (lookup.plivo.com)
   messaging   Send messages (SMS / MMS / WhatsApp) — channel-split surface
   numbers     Manage account phone numbers
+  open        Open the console or docs page for a call, the call logs, or the docs
   sip         SIP Trunking — trunks, CDRs, access control
   skill       Manage the plivo-cli agent skill
   support     List your past support escalations (filed via `plivo ask`)
