@@ -115,6 +115,14 @@ func TestSIPCreates_platformRefusalsSpendNoRequest(t *testing.T) {
 			[]string{"sip", "uris", "create", "--name", "n", "--uri", "sip.example.com", "--transport", "sctp"}},
 		{"conflicting transports", string(clierr.CodeBadFlag), "conflicts with transport=tcp",
 			[]string{"sip", "uris", "create", "--name", "n", "--uri", "sip.example.com;transport=tcp", "--transport", "tls"}},
+		{"inbound trunk without a URI", string(clierr.CodeBadInput), "sip uris create --name livekit --platform livekit --uri <project>.sip.livekit.cloud",
+			[]string{"sip", "trunks", "create", "--name", "n", "--direction", "inbound", "--platform", "livekit"}},
+		{"outbound vapi trunk without auth", string(clierr.CodeBadInput), "sip ip-acl create --name vapi --platform vapi",
+			[]string{"sip", "trunks", "create", "--name", "n", "--direction", "outbound", "--platform", "vapi"}},
+		{"outbound livekit trunk without auth", string(clierr.CodeBadInput), "sip credentials create",
+			[]string{"sip", "trunks", "create", "--name", "n", "--direction", "outbound", "--platform", "livekit"}},
+		{"ip-acl for a credential platform", string(clierr.CodeBadInput), "has no addresses to fill",
+			[]string{"sip", "ip-acl", "create", "--name", "n", "--platform", "retell"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setFakeCreds(t)
@@ -133,6 +141,132 @@ func TestSIPCreates_platformRefusalsSpendNoRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Secure trunking is billed per minute: a preset only ever recommends it.
+func TestSIPTrunksCreate_platformNeverSetsSecure(t *testing.T) {
+	for _, p := range sipPlatforms {
+		for _, dir := range []string{dirInbound, dirOutbound} {
+			t.Run(p.name+"/"+dir, func(t *testing.T) {
+				setFakeCreds(t)
+				resetWriteFlags(t)
+				reqs := sipWriteServer(t, trunksUsingU1)
+				args := []string{"sip", "trunks", "create", "--name", "n", "--direction", dir, "--platform", p.name, "-o", "json"}
+				if dir == dirInbound {
+					args = append(args, "--uri", "U1")
+				} else {
+					args = append(args, "--credential", "C1", "--ip-acl", "A1")
+				}
+				err, _, stderr := execCmd(t, args...)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				body := post(reqs(), "/Zentrunk/Trunk/")
+				if body == nil {
+					t.Fatal("no create request")
+				}
+				if _, ok := body.body["secure"]; ok {
+					t.Errorf("the preset sent secure: %v", body.body)
+				}
+				recommended := strings.Contains(stderr, "recommended: --secure")
+				if want := p.secure && dir == dirOutbound; recommended != want {
+					t.Errorf("recommended: --secure printed=%v, want %v:\n%s", recommended, want, stderr)
+				}
+			})
+		}
+	}
+
+	t.Run("an explicit --secure is sent and not re-recommended", func(t *testing.T) {
+		setFakeCreds(t)
+		resetWriteFlags(t)
+		reqs := sipWriteServer(t, trunksUsingU1)
+		err, _, stderr := execCmd(t, "sip", "trunks", "create", "--name", "n", "--direction", "outbound",
+			"--platform", "livekit", "--credential", "C1", "--secure")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if p := post(reqs(), "/Zentrunk/Trunk/"); p == nil || p.body["secure"] != true {
+			t.Fatalf("--secure was not sent: %v", p)
+		}
+		if strings.Contains(stderr, "recommended: --secure") {
+			t.Errorf("recommended a flag that was passed:\n%s", stderr)
+		}
+	})
+}
+
+func TestSIPTrunksCreate_platformChecksTheAuthAndPrintsNotes(t *testing.T) {
+	for _, tc := range []struct {
+		name, want string
+		args       []string
+	}{
+		{"vapi with a credential", "authenticates its outbound calls with an IP access control list",
+			[]string{"--direction", "outbound", "--platform", "vapi", "--credential", "C1"}},
+		{"livekit with an ip acl", "authenticates its outbound calls with a credential",
+			[]string{"--direction", "outbound", "--platform", "livekit", "--ip-acl", "A1"}},
+		{"retell inbound", "even for inbound-only use",
+			[]string{"--direction", "inbound", "--platform", "retell", "--uri", "U1"}},
+		{"vapi india", "Indian numbers on Vapi are not supported",
+			[]string{"--direction", "inbound", "--platform", "vapi", "--uri", "U1"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setFakeCreds(t)
+			resetWriteFlags(t)
+			sipWriteServer(t, trunksUsingU1)
+			err, _, stderr := execCmd(t, append([]string{"sip", "trunks", "create", "--name", "n"}, tc.args...)...)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !strings.Contains(stderr, tc.want) {
+				t.Errorf("stderr should say %q:\n%s", tc.want, stderr)
+			}
+		})
+	}
+}
+
+func TestSIPACLCreate_platformFillsTheGuidesAddresses(t *testing.T) {
+	t.Run("vapi fills its US addresses and names the EU one", func(t *testing.T) {
+		setFakeCreds(t)
+		resetWriteFlags(t)
+		reqs := sipWriteServer(t, trunksUsingU1)
+		err, _, stderr := execCmd(t, "sip", "ip-acl", "create", "--name", "vapi", "--platform", "vapi")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		p := post(reqs(), "/Zentrunk/IPAccessControlList/")
+		got, _ := p.body["ip_addresses"].([]any)
+		if len(got) != 2 || got[0] != "44.229.228.186/32" || got[1] != "44.238.177.138/32" {
+			t.Fatalf("ip_addresses = %v", p.body["ip_addresses"])
+		}
+		if !strings.Contains(stderr, "63.182.83.170/32") {
+			t.Errorf("the EU address should be named:\n%s", stderr)
+		}
+	})
+
+	t.Run("an explicit --ip wins", func(t *testing.T) {
+		setFakeCreds(t)
+		resetWriteFlags(t)
+		reqs := sipWriteServer(t, trunksUsingU1)
+		if err, _, _ := execCmd(t, "sip", "ip-acl", "create", "--name", "vapi", "--platform", "vapi", "--ip", "63.182.83.170/32"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		got, _ := post(reqs(), "/Zentrunk/IPAccessControlList/").body["ip_addresses"].([]any)
+		if len(got) != 1 || got[0] != "63.182.83.170/32" {
+			t.Fatalf("ip_addresses = %v", got)
+		}
+	})
+
+	t.Run("a credential platform with --ip warns and sends", func(t *testing.T) {
+		setFakeCreds(t)
+		resetWriteFlags(t)
+		reqs := sipWriteServer(t, trunksUsingU1)
+		err, _, stderr := execCmd(t, "sip", "ip-acl", "create", "--name", "lk", "--platform", "livekit", "--ip", "203.0.113.4")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if post(reqs(), "/Zentrunk/IPAccessControlList/") == nil || !strings.Contains(stderr, "with a credential") {
+			t.Errorf("want a warning and a request, stderr:\n%s", stderr)
+		}
+	})
 }
 
 // The table goes stale silently, so a preset older than 90 days says so.

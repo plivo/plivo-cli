@@ -291,3 +291,73 @@ func fillSIPURI(s string, port int, transport string) string {
 	}
 	return out
 }
+
+// authMismatch warns when the auth given is not the one the guide uses.
+func (p *sipPlatform) authMismatch(hasCredential, hasIPACL bool) {
+	switch {
+	case p.outbound == "credential" && !hasCredential:
+		fmt.Fprintf(os.Stderr, "Warning: Plivo's %s guide authenticates its outbound calls with a credential, not an IP access control list.\n", p.label)
+	case p.outbound == "ip-acl" && !hasIPACL:
+		fmt.Fprintf(os.Stderr, "Warning: Plivo's %s guide authenticates its outbound calls with an IP access control list: `plivo sip ip-acl create --name %s --platform %s`.\n",
+			p.label, p.name, p.name)
+	}
+}
+
+// checkTrunk is what --platform adds to `trunks create`. It fills nothing: it
+// warns when the auth is not the guide's, recommends secure trunking where the
+// guide uses it, and prints the platform's note for an inbound trunk.
+func (p *sipPlatform) checkTrunk(direction, credential, ipACL string, secureGiven bool) {
+	p.begin()
+	if direction == dirOutbound {
+		p.authMismatch(credential != "", ipACL != "")
+		if p.secure && !secureGiven && !quietFlag {
+			fmt.Fprintf(os.Stderr, "recommended: --secure (Plivo's %s guide uses secure trunking for outbound calls; "+
+				"it is billed per minute, so the preset never turns it on)\n", p.label)
+		}
+		return
+	}
+	if p.note != "" && !quietFlag {
+		fmt.Fprintln(os.Stderr, p.note)
+	}
+}
+
+// presetIPs fills --ip with the addresses the guide allows when none were
+// given. A platform whose outbound calls carry a credential has none to fill.
+func (p *sipPlatform) presetIPs(given []string) ([]string, error) {
+	if p.outbound != "ip-acl" {
+		if len(given) == 0 {
+			e := clierr.BadInput(fmt.Sprintf("--platform %s has no addresses to fill: Plivo's %s guide authenticates its outbound calls with a credential",
+				p.name, p.label))
+			e.Hint = p.outboundTrunkHint()
+			return nil, e
+		}
+		p.authMismatch(false, true)
+		return given, nil
+	}
+	if len(given) > 0 {
+		return given, nil
+	}
+	if !quietFlag {
+		fmt.Fprintf(os.Stderr, "%s preset (verified %s): --ip %s\n%s\n", p.label, p.verified, strings.Join(p.ips, " --ip "), p.ipsNote)
+	}
+	return p.ips, nil
+}
+
+// inboundTrunkHint names the command that makes the URI an inbound trunk needs.
+func (p *sipPlatform) inboundTrunkHint() string {
+	cmd := "plivo sip uris create --name " + p.name + " --platform " + p.name
+	if p.hostSuffix != "" {
+		cmd += " --uri " + p.hostExample()
+	}
+	return "Create the URI first: `" + cmd + "`, then pass its uri_uuid as --uri."
+}
+
+// outboundTrunkHint names the command that makes the auth an outbound trunk needs.
+func (p *sipPlatform) outboundTrunkHint() string {
+	if p.outbound == "ip-acl" {
+		return "Create the IP access control list first: `plivo sip ip-acl create --name " + p.name +
+			" --platform " + p.name + "`, then pass its ipacl_uuid as --ip-acl."
+	}
+	return "Create a credential first: `printf '%s' \"$SIP_PASSWORD\" | plivo sip credentials create --name " + p.name +
+		" --username <user> --password-stdin`, then pass its credential_uuid as --credential."
+}
