@@ -4,6 +4,7 @@ hangup cause and source and the carrier and region of each leg.
 
 Values are printed as the API returns them, with units; nothing is computed
 here. A quality score outside the documented 1-5 range is labelled as such.
+The table ends with which side ended the call, as in `sip calls get`.
 -o json returns the API response unchanged.
 
 Usage:
