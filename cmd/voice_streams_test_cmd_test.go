@@ -96,6 +96,12 @@ func (s *streamServer) assertStopThenClose(t *testing.T) {
 	}
 }
 
+// echoPlayAudio answers like the audio-streaming skill's echo bot: the
+// caller's audio straight back as playAudio.
+func echoPlayAudio(payload string) string {
+	return `{"event":"playAudio","media":{"contentType":"audio/x-mulaw","sampleRate":8000,"payload":"` + payload + `"}}`
+}
+
 // streamsTestJSON runs `voice streams test --duration 1 -o json` with args
 // and decodes the summary on stdout, which is printed even when the command
 // then fails.
@@ -139,6 +145,11 @@ func TestVoiceStreamsTest_jsonSummary(t *testing.T) {
 	if res.Errors != 0 {
 		t.Errorf("errors = %d, want 0", res.Errors)
 	}
+	for _, want := range []string{`"latency_ms": `, `"first_response_ms": null`, `"play_audio_frames": 0`, `"warnings": []`} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("stdout should contain %s, got: %s", want, stdout)
+		}
+	}
 	if strings.Contains(stdout, "✓") || strings.Contains(stdout, "Endpoint is ready") {
 		t.Errorf("stdout should contain only the JSON summary, got: %q", stdout)
 	}
@@ -158,8 +169,59 @@ func TestVoiceStreamsTest_humanOutputUnchangedWithTableFormat(t *testing.T) {
 	}
 }
 
+// --expect-audio passes on an echo endpoint. Its playAudio is read while the
+// audio still streams, so the first one is timed from the first send rather
+// than after the whole stream, and stop goes out before the close.
+func TestVoiceStreamsTest_expectAudioPassesOnEcho(t *testing.T) {
+	setFakeCreds(t)
+	srv := newStreamServer(t, echoPlayAudio)
+
+	res, _, err := streamsTestJSON(t, "--to", srv.wsURL(), "--expect-audio")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.Bidirectional {
+		t.Error("--expect-audio should imply --bidirectional")
+	}
+	if res.PlayAudioFrames == 0 || res.FramesReadBack < res.PlayAudioFrames {
+		t.Errorf("play_audio_frames = %d, frames_read_back = %d; want playAudio counted among the frames read back",
+			res.PlayAudioFrames, res.FramesReadBack)
+	}
+	if res.FirstResponseMs == nil || *res.FirstResponseMs < 0 || *res.FirstResponseMs >= 1000 {
+		t.Errorf("first_response_ms = %v, want the echo's round trip, well inside the 1s of audio", res.FirstResponseMs)
+	}
+	if len(res.Warnings) != 0 {
+		t.Errorf("warnings = %q, want none", res.Warnings)
+	}
+	srv.assertStopThenClose(t)
+}
+
+// --expect-audio counts playAudio only: an endpoint that answers with other
+// events fails with exit 1, after the summary is printed.
+func TestVoiceStreamsTest_expectAudioFailsWithoutPlayAudio(t *testing.T) {
+	setFakeCreds(t)
+	srv := newStreamServer(t, func(string) string {
+		return `{"event":"checkpoint","streamId":"test-stream","name":"tick"}`
+	})
+
+	res, _, err := streamsTestJSON(t, "--to", srv.wsURL(), "--expect-audio")
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || ce.ExitCode() != ExitUserError {
+		t.Fatalf("err = %v, want an exit-1 error", err)
+	}
+	if res.FramesReadBack == 0 || res.PlayAudioFrames != 0 || res.FirstResponseMs != nil {
+		t.Errorf("frames_read_back = %d, play_audio_frames = %d, first_response_ms = %v; want frames read but no playAudio",
+			res.FramesReadBack, res.PlayAudioFrames, res.FirstResponseMs)
+	}
+	if len(res.Warnings) == 0 {
+		t.Error("warnings should say none of the frames was playAudio")
+	}
+	srv.assertStopThenClose(t)
+}
+
 // With --bidirectional the endpoint gets stop and then a normal close: the
-// read timeout used to drop the socket before stop went out.
+// read timeout used to drop the socket before stop went out. Without
+// --expect-audio a silent endpoint still exits 0, with a warning.
 func TestVoiceStreamsTest_bidirectionalSilentStopsBeforeClose(t *testing.T) {
 	setFakeCreds(t)
 	srv := newStreamServer(t, nil)
@@ -171,7 +233,29 @@ func TestVoiceStreamsTest_bidirectionalSilentStopsBeforeClose(t *testing.T) {
 	if !res.Bidirectional || res.FramesReadBack != 0 {
 		t.Errorf("bidirectional = %v, frames_read_back = %d; want true and nothing back", res.Bidirectional, res.FramesReadBack)
 	}
+	if res.FirstResponseMs != nil || len(res.Warnings) != 1 {
+		t.Errorf("first_response_ms = %v, warnings = %q; want null and one warning", res.FirstResponseMs, res.Warnings)
+	}
 	srv.assertStopThenClose(t)
+}
+
+// The human summary is printed before --expect-audio fails, without the
+// "ready" line.
+func TestVoiceStreamsTest_expectAudioFailsInTableMode(t *testing.T) {
+	setFakeCreds(t)
+	srv := newStreamServer(t, nil)
+
+	err, stdout, _ := execCmd(t, "-o", "table", "voice", "streams", "test", "--to", srv.wsURL(), "--duration", "1", "--expect-audio")
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || ce.ExitCode() != ExitUserError {
+		t.Fatalf("err = %v, want an exit-1 error", err)
+	}
+	if !strings.Contains(stdout, "⚠ No frames received back") {
+		t.Errorf("expected the no-frames warning, got: %q", stdout)
+	}
+	if strings.Contains(stdout, "Endpoint is ready") {
+		t.Errorf("a failed --expect-audio must not claim the endpoint is ready: %q", stdout)
+	}
 }
 
 // When the endpoint hangs up mid-stream the error carries its close code and

@@ -3,11 +3,13 @@ package cmd
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -25,6 +27,7 @@ var (
 	streamsTestCodec         string
 	streamsTestRate          int
 	streamsTestBidirectional bool
+	streamsTestExpectAudio   bool
 	streamsTestInsecure      bool
 )
 
@@ -32,8 +35,13 @@ var voiceStreamsTestCmd = &cobra.Command{
 	Use:   "test",
 	Short: "Pre-flight a WebSocket endpoint with synthetic Plivo audio frames",
 	Long: `Open a WebSocket to --to, send a Plivo-format start frame, stream synthetic
-audio for --duration seconds, then stop. Reports connection latency,
-frame send rate, and any disconnects.
+audio (a 1 kHz tone) for --duration seconds, then send stop and close.
+Reports the connection time (latency_ms) and any warnings.
+
+With --bidirectional it also reads what the endpoint sends back, while the
+audio streams and for up to --duration seconds after, and times the first
+playAudio from the first frame sent (first_response_ms). --expect-audio
+does the same and exits 1 when no playAudio comes back.
 
 No call is placed and no Plivo backend interaction occurs — this is a
 pure-client tool that verifies your handler can accept the Plivo stream
@@ -41,7 +49,8 @@ shape before you wire it up to a real number.`,
 	Example: `  plivo voice streams test --to wss://my-bot.example.com/ws
   plivo voice streams test --to ws://localhost:7860/ws --duration 5
   plivo voice streams test --to wss://localhost:7860/ws --insecure   # self-signed dev cert
-  plivo voice streams test --to wss://my-bot.example.com/ws --bidirectional`,
+  plivo voice streams test --to wss://my-bot.example.com/ws --bidirectional
+  plivo voice streams test --to ws://localhost:8765/ws --expect-audio   # exit 1 unless playAudio comes back`,
 	RunE: runVoiceStreamsTest,
 }
 
@@ -51,6 +60,7 @@ func init() {
 	voiceStreamsTestCmd.Flags().StringVar(&streamsTestCodec, "codec", "mulaw", "audio codec: mulaw | l16")
 	voiceStreamsTestCmd.Flags().IntVar(&streamsTestRate, "rate", 8000, "sample rate in Hz (mulaw: 8000; l16: 8000 or 16000)")
 	voiceStreamsTestCmd.Flags().BoolVar(&streamsTestBidirectional, "bidirectional", false, "also read frames back from the endpoint (test bot→caller path)")
+	voiceStreamsTestCmd.Flags().BoolVar(&streamsTestExpectAudio, "expect-audio", false, "exit 1 unless playAudio comes back (implies --bidirectional); the test audio is a tone, not speech, so only an echo-style bot or one that speaks first answers")
 	voiceStreamsTestCmd.Flags().BoolVar(&streamsTestInsecure, "insecure", false, "skip TLS verification (self-signed dev certs only)")
 	_ = voiceStreamsTestCmd.MarkFlagRequired("to")
 
@@ -58,7 +68,8 @@ func init() {
 }
 
 // streamsTestResult is the -o json summary for `plivo voice streams test` —
-// one final object instead of the human progress narration.
+// one final object instead of the human progress narration. Fields are only
+// ever added: scripts and the audio-streaming skill read frames_read_back.
 type streamsTestResult struct {
 	Connected      bool   `json:"connected"`
 	HandshakeSent  bool   `json:"handshake_sent"`
@@ -68,6 +79,11 @@ type streamsTestResult struct {
 	Bidirectional  bool   `json:"bidirectional"`
 	FramesReadBack int    `json:"frames_read_back"`
 	Errors         int    `json:"errors"` // kept for scripts: a failed send now ends the run, so always 0 here
+
+	LatencyMs       int64    `json:"latency_ms"`        // WebSocket connect time
+	PlayAudioFrames int      `json:"play_audio_frames"` // playAudio frames carrying audio
+	FirstResponseMs *int64   `json:"first_response_ms"` // first media frame sent to first playAudio back; null when none
+	Warnings        []string `json:"warnings"`
 }
 
 func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
@@ -80,6 +96,7 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	if err := wsproxy.ValidateCodecRate(streamsTestCodec, streamsTestRate); err != nil {
 		return clierr.BadFlag("codec", err.Error())
 	}
+	readBack := streamsTestBidirectional || streamsTestExpectAudio
 
 	mediaFormat := wsproxy.MediaFormat{
 		Encoding:   wsproxy.Encoding(streamsTestCodec),
@@ -101,20 +118,28 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 
 	out := cmd.OutOrStdout()
 	jsonOut := effectiveFormat() == output.FormatJSON
-	result := streamsTestResult{Codec: streamsTestCodec, Rate: streamsTestRate, Bidirectional: streamsTestBidirectional}
+	result := streamsTestResult{Codec: streamsTestCodec, Rate: streamsTestRate, Bidirectional: readBack, Warnings: []string{}}
+	warn := func(msg string) {
+		result.Warnings = append(result.Warnings, msg)
+		if !jsonOut {
+			fmt.Fprintf(out, "⚠ %s\n", msg)
+		}
+	}
 
 	// --- Phase 1: connect ---
 	dialCtx, dialCancel := context.WithTimeout(ctx, 10*time.Second)
 	dialStart := time.Now()
 	conn, _, err := websocket.Dial(dialCtx, streamsTestTo, &websocket.DialOptions{HTTPClient: httpClient})
+	latency := time.Since(dialStart)
 	dialCancel()
 	if err != nil {
 		return clierr.NetworkError(streamsTestTo, err)
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "test complete")
 	result.Connected = true
+	result.LatencyMs = latency.Milliseconds()
 	if !jsonOut {
-		fmt.Fprintf(out, "✓ Connection established (%dms)\n", time.Since(dialStart).Milliseconds())
+		fmt.Fprintf(out, "✓ Connection established (%dms)\n", result.LatencyMs)
 	}
 
 	// --- Phase 2: handshake (start frame) ---
@@ -138,11 +163,11 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	totalFrames := streamsTestDuration * 1000 / frameMs
 	frames := wsproxy.SyntheticAudio(streamsTestCodec, totalFrames, frameMs, streamsTestRate)
 
-	// The reader starts before the first media frame, so an answer is read
-	// as it arrives rather than after the whole stream.
+	// The reader starts before the first media frame, so an answer is read,
+	// and timed, as it arrives rather than after the whole stream.
 	sendStart := time.Now()
 	var rb *streamsReadBack
-	if streamsTestBidirectional {
+	if readBack {
 		rb = startStreamsReadBack(conn)
 	}
 	for i, audio := range frames {
@@ -181,6 +206,9 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 		fmt.Fprintf(out, "✓ Streamed %ds of synthetic %s %dHz audio (%d frames)\n",
 			streamsTestDuration, streamsTestCodec, streamsTestRate, result.FramesSent)
 	}
+	if ctx.Err() != nil {
+		warn(fmt.Sprintf("Interrupted after %d of %d frames", result.FramesSent, totalFrames))
+	}
 
 	// --- Phase 4: give the endpoint time to answer ---
 	if rb != nil && ctx.Err() == nil {
@@ -192,24 +220,52 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	// context ends, which used to cut the socket before stop went out.
 	stop, _ := wsproxy.EncodeStop()
 	stopCtx, stopCancel := context.WithTimeout(context.WithoutCancel(ctx), 1*time.Second)
-	_ = conn.Write(stopCtx, websocket.MessageText, stop)
+	stopErr := conn.Write(stopCtx, websocket.MessageText, stop)
 	stopCancel()
 	_ = conn.Close(websocket.StatusNormalClosure, "test complete")
 
 	if rb != nil {
 		rb.stop()
 		result.FramesReadBack = rb.frames
-		if !jsonOut {
-			if rb.frames == 0 {
-				fmt.Fprintf(out, "⚠ No frames received back from endpoint — bot→caller path may not be wired\n")
-			} else {
-				fmt.Fprintf(out, "✓ Received %d frames back from endpoint (bot→caller path live)\n", rb.frames)
+		result.PlayAudioFrames = rb.playAudio
+		if !rb.firstAudio.IsZero() {
+			ms := rb.firstAudio.Sub(sendStart).Milliseconds()
+			result.FirstResponseMs = &ms
+		}
+		if rb.frames == 0 {
+			warn("No frames received back from endpoint: the bot→caller path may not be wired")
+		} else if !jsonOut {
+			fmt.Fprintf(out, "✓ Received %d frames back from endpoint (bot→caller path live)\n", rb.frames)
+		}
+		if rb.playAudio > 0 {
+			if !jsonOut {
+				fmt.Fprintf(out, "✓ First playAudio %dms after the first frame (%d playAudio frames)\n",
+					*result.FirstResponseMs, rb.playAudio)
 			}
+		} else if rb.frames > 0 {
+			warn(fmt.Sprintf("%d frames came back but none was playAudio carrying audio", rb.frames))
 		}
 	}
+	if stopErr != nil {
+		warn("Stop frame not sent: " + writeFailure(rb, stopErr).Error())
+	}
 
+	var outcome error
+	if streamsTestExpectAudio && result.PlayAudioFrames == 0 {
+		outcome = &clierr.Error{
+			Code:    clierr.CodeValidation,
+			Message: fmt.Sprintf("no playAudio came back from %s", streamsTestTo),
+			Hint:    "The test audio is a 1 kHz tone, not speech: only an echo-style bot, or one that speaks first, answers it.",
+		}
+	}
 	if jsonOut {
-		return output.JSONSuccess(os.Stdout, result, nil)
+		if err := output.JSONSuccess(os.Stdout, result, nil); err != nil {
+			return err
+		}
+		return outcome
+	}
+	if outcome != nil {
+		return outcome
 	}
 	fmt.Fprintf(out, "\nEndpoint is ready to receive Plivo audio streams.\n")
 	return nil
@@ -220,14 +276,23 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 // agent may send that much in one playAudio.
 const readBackLimit = 1 << 20
 
-// streamsReadBack reads everything the endpoint sends during the test. Its
-// fields are final once stop returns.
+// readBackQuiet ends the wait after the stream early: once audio has come
+// back and the endpoint has sent nothing for this long, it has answered.
+const readBackQuiet = time.Second
+
+// streamsReadBack reads everything the endpoint sends during the test. The
+// counters are guarded by mu while the reader runs; after stop they are
+// final.
 type streamsReadBack struct {
 	cancel context.CancelFunc
 	done   chan struct{}
 
-	frames int   // every message, as frames_read_back has always counted
-	err    error // why reading ended
+	mu         sync.Mutex
+	frames     int       // every message, as frames_read_back has always counted
+	playAudio  int       // playAudio events carrying audio
+	firstAudio time.Time // when the first of those arrived
+	last       time.Time // when the latest message arrived
+	err        error     // why reading ended
 }
 
 // startStreamsReadBack reads conn until the connection closes. Its context
@@ -240,23 +305,51 @@ func startStreamsReadBack(conn *websocket.Conn) *streamsReadBack {
 	go func() {
 		defer close(rb.done)
 		for {
-			if _, _, err := conn.Read(ctx); err != nil {
+			typ, data, err := conn.Read(ctx)
+			now := time.Now()
+			rb.mu.Lock()
+			if err != nil {
 				rb.err = err
+				rb.mu.Unlock()
 				return
 			}
 			rb.frames++
+			rb.last = now
+			if typ == websocket.MessageText && isPlayAudio(data) {
+				rb.playAudio++
+				if rb.firstAudio.IsZero() {
+					rb.firstAudio = now
+				}
+			}
+			rb.mu.Unlock()
 		}
 	}()
 	return rb
 }
 
 // waitForAnswer gives the endpoint up to window after the last media frame
-// to answer, returning early if reading has ended.
+// to answer. It returns early once audio has come back and the endpoint has
+// been quiet for readBackQuiet, or when reading has ended.
 func (rb *streamsReadBack) waitForAnswer(ctx context.Context, window time.Duration) {
-	select {
-	case <-time.After(window):
-	case <-rb.done:
-	case <-ctx.Done():
+	deadline := time.After(window)
+	tick := time.NewTicker(50 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		rb.mu.Lock()
+		answered := rb.playAudio > 0 && time.Since(rb.last) >= readBackQuiet
+		rb.mu.Unlock()
+		if answered {
+			return
+		}
+		select {
+		case <-tick.C:
+		case <-deadline:
+			return
+		case <-rb.done:
+			return
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 
@@ -264,6 +357,18 @@ func (rb *streamsReadBack) waitForAnswer(ctx context.Context, window time.Durati
 func (rb *streamsReadBack) stop() {
 	rb.cancel()
 	<-rb.done
+}
+
+// isPlayAudio reports whether a message is a playAudio event that carries
+// audio: the event a voice agent sends to speak to the caller.
+func isPlayAudio(data []byte) bool {
+	var ev struct {
+		Event string `json:"event"`
+		Media struct {
+			Payload string `json:"payload"`
+		} `json:"media"`
+	}
+	return json.Unmarshal(data, &ev) == nil && ev.Event == "playAudio" && ev.Media.Payload != ""
 }
 
 // writeFailure explains a write the endpoint did not take. When the reader
