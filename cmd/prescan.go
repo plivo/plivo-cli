@@ -18,11 +18,29 @@ func execute(args []string) error {
 	if err != nil && strings.HasPrefix(err.Error(), "unknown command ") {
 		// cobra's own error for a word that is no subcommand (a group's
 		// NoArgs, or root's legacy check) gets the --help path's code and
-		// hint. A leaf's NoArgs says the same and stays as it is.
+		// hint. A command without subcommands says the same for any stray
+		// word; that one is told plainly it takes no arguments.
 		if unknown := unknownSubcommand(args); unknown != nil {
 			return unknown
 		}
+		if stray := strayArgument(args); stray != nil {
+			return stray
+		}
 	}
+	return err
+}
+
+// strayArgument is BAD_INPUT for the first argument given to a command
+// that takes none. cobra has already parsed the command's flags, so its
+// positional arguments are known.
+func strayArgument(args []string) error {
+	cmd, _, _ := rootCmd.Find(args)
+	if cmd == nil || cmd.HasSubCommands() || cmd.Flags().NArg() == 0 {
+		return nil
+	}
+	err := clierr.BadInput(fmt.Sprintf("`%s` takes no arguments; got %q", cmd.CommandPath(), cmd.Flags().Arg(0)))
+	err.Hint = "Run `" + cmd.CommandPath() + " --help` for its flags."
+	err.Context = map[string]any{"command": cmd.CommandPath(), "argument": cmd.Flags().Arg(0)}
 	return err
 }
 

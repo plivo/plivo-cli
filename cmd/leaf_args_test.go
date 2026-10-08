@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/plivo/plivo-cli/internal/api"
+	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/spf13/cobra"
 )
 
@@ -26,8 +27,8 @@ func walkOwnCommands(fn func(c *cobra.Command, path []string)) {
 	walk(rootCmd, nil)
 }
 
-// A command whose Use names no arguments refuses a stray one, before any
-// request, instead of ignoring it.
+// A command whose Use names no arguments refuses a stray one with BAD_INPUT
+// saying so, before any request, instead of ignoring it.
 func TestLeaves_rejectStrayArguments(t *testing.T) {
 	setFakeCreds(t)
 	srv, hits := startCapturingHTTPServer(t, http.StatusOK, `{}`)
@@ -41,9 +42,11 @@ func TestLeaves_rejectStrayArguments(t *testing.T) {
 		}
 		n++
 		t.Run(strings.Join(path, "_"), func(t *testing.T) {
-			err, _, _ := execCmd(t, append(append([]string(nil), path...), "stray-token")...)
-			if err == nil || !strings.Contains(err.Error(), "stray-token") {
-				t.Errorf("plivo %s stray-token: want an error naming it, got %v", strings.Join(path, " "), err)
+			err, _, _ := execCmd(t, append(append([]string(nil), path...), "--dry-run", "stray-token")...)
+			want := "`plivo " + strings.Join(path, " ") + "` takes no arguments; got \"stray-token\""
+			e, ok := err.(*clierr.Error)
+			if !ok || e.Code != clierr.CodeBadInput || e.Message != want || e.Hint == "" {
+				t.Errorf("want BAD_INPUT %q with a hint, got %#v", want, err)
 			}
 		})
 	})
