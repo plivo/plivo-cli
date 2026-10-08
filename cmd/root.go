@@ -329,6 +329,13 @@ func malformedAuthIDHint(authID string) string {
 }
 
 func handleError(ran *cobra.Command, err error) {
+	os.Exit(reportError(ran, err))
+}
+
+// reportError renders err, records it for `feedback --bug` and returns the
+// exit code, which handleError exits with. ran is the command that failed, or
+// the one the arguments reached.
+func reportError(ran *cobra.Command, err error) int {
 	f := output.Resolve(outputFormat, os.Stderr)
 
 	// Convert any error into a *clierr.Error so we render a structured
@@ -375,5 +382,5 @@ func handleError(ran *cobra.Command, err error) {
 	code := exitCodeForAPI(apiErr)
 	// After the output, and best effort: it never changes either.
 	recordLastError(ran, apiErr, code)
-	os.Exit(code)
+	return code
 }

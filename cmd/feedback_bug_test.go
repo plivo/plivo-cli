@@ -97,6 +97,66 @@ func TestRecordLastError_aFailedWriteIsSilent(t *testing.T) {
 	}
 }
 
+// executeQuietly runs one invocation through execute(), the path Execute
+// takes, with its output discarded, and returns the command it reports.
+func executeQuietly(t *testing.T, args ...string) (*cobra.Command, error) {
+	t.Helper()
+	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr := os.Stdout, os.Stderr
+	os.Stdout, os.Stderr = devnull, devnull
+	t.Cleanup(func() {
+		os.Stdout, os.Stderr = stdout, stderr
+		_ = devnull.Close()
+		rootCmd.SetArgs(nil)
+		resetAllFlags(rootCmd)
+	})
+	rootCmd.SetArgs(args)
+	return execute(args)
+}
+
+// The argv pre-scan answers some invocations before cobra runs. Its
+// failures are recorded like any other, naming the command the arguments
+// reached, with the exit code the user got.
+func TestReportError_recordsPrescanFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name, command, code string
+		args                []string
+	}{
+		{"unknown subcommand with --help", "plivo sip trunks", "BAD_INPUT", []string{"sip", "trunks", "bogus", "--help"}},
+		{"--schema with a bad format", "plivo numbers get", "BAD_INPUT", []string{"numbers", "get", "--schema", "-o", "bogus"}},
+		{"--schema with a bad query", "plivo numbers get", "BAD_FLAG", []string{"numbers", "get", "--schema", "--query", "["}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setEmptyHome(t)
+			ran, err := executeQuietly(t, tc.args...)
+			if err == nil {
+				t.Fatal("want an error")
+			}
+			exit := reportError(ran, err)
+			got, _ := feedback.LoadLastError()
+			if got == nil || got.Command != tc.command || got.ErrorCode != tc.code || got.ExitCode != exit || exit != 1 {
+				t.Errorf("recorded %+v (exit %d), want %s / %s / 1", got, exit, tc.command, tc.code)
+			}
+		})
+	}
+}
+
+// Failures cobra itself raises, before any command runs, name the command too.
+func TestReportError_recordsFlagErrors(t *testing.T) {
+	setEmptyHome(t)
+	ran, err := executeQuietly(t, "numbers", "list", "--limit", "abc")
+	if err == nil {
+		t.Fatal("want an error")
+	}
+	reportError(ran, err)
+	if got, _ := feedback.LoadLastError(); got == nil || got.Command != "plivo numbers list" {
+		t.Errorf("recorded %+v, want plivo numbers list", got)
+	}
+}
+
 // bugCollector stands in for the feedback collector. The handler runs on the
 // server's goroutine, so everything it records is behind mu.
 type bugCollector struct {
