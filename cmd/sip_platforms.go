@@ -373,7 +373,8 @@ func (p *sipPlatform) inboundTrunkHint() string {
 	if p.hostSuffix != "" {
 		cmd += " --uri " + p.hostExample()
 	}
-	return "Create the URI first: `" + cmd + "`, then pass its uri_uuid as --uri."
+	return "Create the URI first: `" + cmd + "`, then pass its uri_uuid as --uri. " +
+		"`plivo sip connect plan --number <number> --platform " + p.name + "` prints every step."
 }
 
 // outboundTrunkHint names the command that makes the auth an outbound trunk needs.

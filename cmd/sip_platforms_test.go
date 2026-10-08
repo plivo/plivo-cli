@@ -117,6 +117,8 @@ func TestSIPCreates_platformRefusalsSpendNoRequest(t *testing.T) {
 			[]string{"sip", "uris", "create", "--name", "n", "--uri", "sip.example.com;transport=tcp", "--transport", "tls"}},
 		{"inbound trunk without a URI", string(clierr.CodeBadInput), "sip uris create --name livekit --platform livekit --uri <project>.sip.livekit.cloud",
 			[]string{"sip", "trunks", "create", "--name", "n", "--direction", "inbound", "--platform", "livekit"}},
+		{"inbound trunk hint names the plan", string(clierr.CodeBadInput), "`plivo sip connect plan --number <number> --platform livekit` prints every step",
+			[]string{"sip", "trunks", "create", "--name", "n", "--direction", "inbound", "--platform", "livekit"}},
 		{"outbound vapi trunk without auth", string(clierr.CodeBadInput), "sip ip-acl create --name vapi --platform vapi",
 			[]string{"sip", "trunks", "create", "--name", "n", "--direction", "outbound", "--platform", "vapi"}},
 		{"outbound livekit trunk without auth", string(clierr.CodeBadInput), "sip credentials create",
