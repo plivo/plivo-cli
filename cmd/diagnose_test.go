@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"io"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
+	"github.com/plivo/plivo-cli/internal/output"
+	"gopkg.in/yaml.v3"
 )
 
 // resetDiagnoseGlobals zeros out the package-level ask flags that the
@@ -620,4 +623,63 @@ func TestNewDiagnoseResult_findsTheLastBlock(t *testing.T) {
 			}
 		})
 	}
+}
+
+// diagnose's result goes through output.JSONSuccess, so yaml, csv and --query
+// work on it like on any other command's result.
+func TestDiagnose_resultTakesYAMLCSVAndQuery(t *testing.T) {
+	const likelyCause = "The callee ended the call; nothing failed."
+	cases := []struct {
+		name  string
+		flags []string
+		check func(t *testing.T, stdout string)
+	}{
+		{"yaml", []string{"-o", "yaml"}, func(t *testing.T, stdout string) {
+			var doc struct {
+				Data map[string]any `yaml:"data"`
+			}
+			if err := yaml.Unmarshal([]byte(stdout), &doc); err != nil || doc.Data["likely_cause"] != likelyCause {
+				t.Errorf("-o yaml = %q (%v), want the result as YAML", stdout, err)
+			}
+		}},
+		{"csv", []string{"-o", "csv"}, func(t *testing.T, stdout string) {
+			rows, err := csv.NewReader(strings.NewReader(stdout)).ReadAll()
+			if err != nil || len(rows) != 2 || rows[0][0] != "call_uuid" || rows[1][0] != placeholderUUID {
+				t.Errorf("-o csv = %q (%v), want a header and one row", stdout, err)
+			}
+		}},
+		{"query", []string{"--query", "data.likely_cause"}, func(t *testing.T, stdout string) {
+			if got := decodeString(t, stdout); got != likelyCause {
+				t.Errorf("--query data.likely_cause = %q, want %q", got, likelyCause)
+			}
+		}},
+		{"query with yaml", []string{"-o", "yaml", "--query", "data.confidence"}, func(t *testing.T, stdout string) {
+			if strings.TrimSpace(stdout) != "high" {
+				t.Errorf("-o yaml --query data.confidence = %q, want high", stdout)
+			}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setFakeCreds(t)
+			t.Cleanup(func() { queryFlag = ""; _ = output.Configure("", "") })
+			diagnoseTurn(t, voiceCallRecord, okDiagnoseTurn)
+
+			err, stdout, _ := execCmd(t, append([]string{"voice", "calls", "diagnose", placeholderUUID}, tc.flags...)...)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			tc.check(t, stdout)
+		})
+	}
+}
+
+// decodeString decodes stdout as one JSON string.
+func decodeString(t *testing.T, stdout string) string {
+	t.Helper()
+	var s string
+	if err := json.Unmarshal([]byte(stdout), &s); err != nil {
+		t.Fatalf("stdout is not a JSON string: %v\n%s", err, stdout)
+	}
+	return s
 }

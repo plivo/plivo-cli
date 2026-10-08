@@ -46,6 +46,14 @@ func configureOutput(cmd *cobra.Command) error {
 			return err
 		}
 	}
+	// diagnose prints one result in every other format; its -o jsonl event
+	// stream has nothing to filter.
+	if cmd.Name() == "diagnose" && format == "jsonl" && queryFlag != "" {
+		err := clierr.BadFlag("query", cmd.CommandPath()+" -o jsonl streams one JSON event per line, so there is no single result to filter")
+		err.Hint = "Use --query with -o json, yaml or csv to filter the result, or filter the -o jsonl stream with a JSON tool."
+		err.Context["value"] = queryFlag
+		return err
+	}
 	if err := output.Configure(outputFormat, queryFlag); err != nil {
 		return queryFlagError(err)
 	}
@@ -54,8 +62,9 @@ func configureOutput(cmd *cobra.Command) error {
 
 // streamsEvents reports whether cmd writes the assistant's event stream
 // straight to stdout instead of one JSON result through output.JSONSuccess.
+// Only ask: diagnose prints one result, except with -o jsonl.
 func streamsEvents(cmd *cobra.Command) bool {
-	return cmd == askCmd || cmd.Name() == "diagnose"
+	return cmd == askCmd
 }
 
 // queryFlagError reports a --query that failed to compile or to run as a

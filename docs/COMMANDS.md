@@ -1302,8 +1302,9 @@ With -o json, prints one JSON result when the analysis ends: call_uuid
 (message_uuid for a message), what_happened, likely_cause, timeline[]
 ({at, event, source}), next_steps[], hangup_cause_code and hangup_source (from
 the call record; null for a message), confidence (high, medium or low) and
-answer (the prose). -o jsonl streams the assistant's raw events instead. An
-analysis that fails, escalates or stops early exits 3.
+answer (the prose). -o yaml, -o csv and --query work on that result; -o jsonl
+streams the assistant's raw events instead. An analysis that fails, escalates
+or stops early exits 3.
 
 ```
 plivo messaging mms diagnose <message_uuid>
@@ -1674,8 +1675,9 @@ With -o json, prints one JSON result when the analysis ends: call_uuid
 (message_uuid for a message), what_happened, likely_cause, timeline[]
 ({at, event, source}), next_steps[], hangup_cause_code and hangup_source (from
 the call record; null for a message), confidence (high, medium or low) and
-answer (the prose). -o jsonl streams the assistant's raw events instead. An
-analysis that fails, escalates or stops early exits 3.
+answer (the prose). -o yaml, -o csv and --query work on that result; -o jsonl
+streams the assistant's raw events instead. An analysis that fails, escalates
+or stops early exits 3.
 
 ```
 plivo messaging sms diagnose <message_uuid>
@@ -1992,8 +1994,9 @@ With -o json, prints one JSON result when the analysis ends: call_uuid
 (message_uuid for a message), what_happened, likely_cause, timeline[]
 ({at, event, source}), next_steps[], hangup_cause_code and hangup_source (from
 the call record; null for a message), confidence (high, medium or low) and
-answer (the prose). -o jsonl streams the assistant's raw events instead. An
-analysis that fails, escalates or stops early exits 3.
+answer (the prose). -o yaml, -o csv and --query work on that result; -o jsonl
+streams the assistant's raw events instead. An analysis that fails, escalates
+or stops early exits 3.
 
 ```
 plivo messaging whatsapp diagnose <message_uuid>
@@ -2557,8 +2560,9 @@ With -o json, prints one JSON result when the analysis ends: call_uuid
 (message_uuid for a message), what_happened, likely_cause, timeline[]
 ({at, event, source}), next_steps[], hangup_cause_code and hangup_source (from
 the call record; null for a message), confidence (high, medium or low) and
-answer (the prose). -o jsonl streams the assistant's raw events instead. An
-analysis that fails, escalates or stops early exits 3.
+answer (the prose). -o yaml, -o csv and --query work on that result; -o jsonl
+streams the assistant's raw events instead. An analysis that fails, escalates
+or stops early exits 3.
 
 ```
 plivo sip calls diagnose <call_uuid>
@@ -3389,8 +3393,9 @@ With -o json, prints one JSON result when the analysis ends: call_uuid
 (message_uuid for a message), what_happened, likely_cause, timeline[]
 ({at, event, source}), next_steps[], hangup_cause_code and hangup_source (from
 the call record; null for a message), confidence (high, medium or low) and
-answer (the prose). -o jsonl streams the assistant's raw events instead. An
-analysis that fails, escalates or stops early exits 3.
+answer (the prose). -o yaml, -o csv and --query work on that result; -o jsonl
+streams the assistant's raw events instead. An analysis that fails, escalates
+or stops early exits 3.
 
 ```
 plivo voice calls diagnose <call_uuid>
