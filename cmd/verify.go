@@ -83,8 +83,7 @@ func init() {
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateURL, "url", "", "callback URL for session status events")
 	registerExplainFlag(verifySessionCreateCmd)
 
-	verifySessionListCmd.Flags().IntVar(&vsListLimit, "limit", 20, "results per page")
-	verifySessionListCmd.Flags().IntVar(&vsListOffset, "offset", 0, "pagination offset")
+	registerListFlags(verifySessionListCmd, &vsListLimit, &vsListOffset)
 	verifySessionListCmd.Flags().StringVar(&vsListStatus, "status", "", "filter by status: "+oneOf(verifyStatusValues))
 
 	verifySessionValidateCmd.Flags().StringVar(&vsValidateOTP, "otp", "", "OTP code received by the recipient (required)")

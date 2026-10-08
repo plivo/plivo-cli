@@ -6,7 +6,7 @@ Usage:
 Flags:
       --all          auto-paginate through all pages
   -h, --help         help for list
-      --limit int    results per page (max 20) (default 20)
+      --limit int    results per page (1-20) (default 20)
       --offset int   pagination offset
 
 Global Flags:

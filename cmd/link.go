@@ -52,8 +52,7 @@ var linkDeleteCmd = &cobra.Command{
 }
 
 func init() {
-	linkListCmd.Flags().IntVar(&linkListLimit, "limit", 20, "results per page")
-	linkListCmd.Flags().IntVar(&linkListOffset, "offset", 0, "pagination offset")
+	registerListFlags(linkListCmd, &linkListLimit, &linkListOffset)
 	linkListCmd.Flags().StringVar(&linkListCampaign, "campaign-id", "", "filter by campaign_id")
 	linkListCmd.Flags().StringVar(&linkListNumber, "number", "", "filter by number")
 

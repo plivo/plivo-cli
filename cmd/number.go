@@ -95,8 +95,7 @@ func init() {
 	numberListCmd.Flags().StringVar(&numberListSubaccount, "subaccount", "", "filter by subaccount auth_id")
 	numberListCmd.Flags().StringVar(&numberListAlias, "alias", "", "filter by alias")
 	numberListCmd.Flags().StringVar(&numberListServices, "services", "", "filter by services: voice|sms|mms|voice,sms ...")
-	numberListCmd.Flags().IntVar(&numberListLimit, "limit", 20, "results per page (max 20)")
-	numberListCmd.Flags().IntVar(&numberListOffset, "offset", 0, "pagination offset")
+	registerListFlags(numberListCmd, &numberListLimit, &numberListOffset)
 
 	numberUpdateCmd.Flags().StringVar(&numberUpdateAppID, "app-id", "", "associate an application")
 	numberUpdateCmd.Flags().StringVar(&numberUpdateTrunkID, "trunk-id", "", "route the number to an inbound SIP trunk")
@@ -108,8 +107,7 @@ func init() {
 	numberSearchCmd.Flags().StringVar(&numberSearchType, "type", "", oneOf(numberTypeValues))
 	numberSearchCmd.Flags().StringVar(&numberSearchPattern, "pattern", "", "digit pattern")
 	numberSearchCmd.Flags().StringVar(&numberSearchRegion, "region", "", "region filter")
-	numberSearchCmd.Flags().IntVar(&numberSearchLimit, "limit", 20, "results per page")
-	numberSearchCmd.Flags().IntVar(&numberSearchOffset, "offset", 0, "pagination offset")
+	registerListFlags(numberSearchCmd, &numberSearchLimit, &numberSearchOffset)
 
 	numberBuyCmd.Flags().StringVar(&numberBuyAppID, "app-id", "", "auto-attach to this application after purchase")
 	registerExplainFlag(numberBuyCmd)

@@ -41,8 +41,7 @@ var agentRunsGetCmd = &cobra.Command{
 }
 
 func init() {
-	agentRunsListCmd.Flags().IntVar(&agentRunsListLimit, "limit", 20, "results per page (max 20)")
-	agentRunsListCmd.Flags().IntVar(&agentRunsListOffset, "offset", 0, "pagination offset")
+	registerListFlags(agentRunsListCmd, &agentRunsListLimit, &agentRunsListOffset)
 	registerAllFlag(agentRunsListCmd)
 
 	agentRunsCmd.AddCommand(agentRunsListCmd, agentRunsGetCmd)

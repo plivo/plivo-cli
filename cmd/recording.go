@@ -50,8 +50,7 @@ var recordingDeleteCmd = &cobra.Command{
 }
 
 func init() {
-	recordingListCmd.Flags().IntVar(&recListLimit, "limit", 20, "results per page")
-	recordingListCmd.Flags().IntVar(&recListOffset, "offset", 0, "pagination offset")
+	registerListFlags(recordingListCmd, &recListLimit, &recListOffset)
 	recordingListCmd.Flags().StringVar(&recListCallUUID, "call-uuid", "", "filter by call uuid")
 	recordingListCmd.Flags().StringVar(&recListConf, "conference-name", "", "filter by conference name")
 	recordingListCmd.Flags().StringVar(&recListFromTime, "from-time", "", "filter recordings after this ISO time")

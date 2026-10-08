@@ -174,8 +174,7 @@ func init() {
 	agentCreateCmd.Flags().StringVar(&agentCreateDescription, "description", "", "agent description")
 	agentCreateCmd.Flags().StringVar(&agentCreateFile, "file", "", "JSON file with the flow graph ({name, description, nodes, connections}); flags win over its fields")
 
-	agentListCmd.Flags().IntVar(&agentListLimit, "limit", 20, "results per page (max 20)")
-	agentListCmd.Flags().IntVar(&agentListOffset, "offset", 0, "pagination offset")
+	registerListFlags(agentListCmd, &agentListLimit, &agentListOffset)
 	agentListCmd.Flags().StringVar(&agentListName, "name", "", "filter by name (substring match)")
 	agentListCmd.Flags().StringVar(&agentListState, "state", "", "filter by state: "+oneOf(agentStateValues))
 	registerAllFlag(agentListCmd)

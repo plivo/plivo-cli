@@ -92,8 +92,7 @@ func init() {
 	applicationCreateCmd.Flags().BoolVar(&appCreateLogIncoming, "log-incoming-messages", true, "log inbound SMS content")
 	registerExplainFlag(applicationCreateCmd)
 
-	applicationListCmd.Flags().IntVar(&appListLimit, "limit", 20, "results per page")
-	applicationListCmd.Flags().IntVar(&appListOffset, "offset", 0, "pagination offset")
+	registerListFlags(applicationListCmd, &appListLimit, &appListOffset)
 
 	applicationUpdateCmd.Flags().StringVar(&appUpdateName, "app-name", "", "new application name")
 	applicationUpdateCmd.Flags().StringVar(&appUpdateAnswerURL, "answer-url", "", "new answer URL")

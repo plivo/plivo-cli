@@ -58,8 +58,7 @@ var callMakeCmd = &cobra.Command{
 }
 
 func init() {
-	callListCmd.Flags().IntVar(&callListLimit, "limit", 20, "results per page")
-	callListCmd.Flags().IntVar(&callListOffset, "offset", 0, "pagination offset")
+	registerListFlags(callListCmd, &callListLimit, &callListOffset)
 	callListCmd.Flags().StringVar(&callListFrom, "from", "", "filter by from_number")
 	callListCmd.Flags().StringVar(&callListTo, "to", "", "filter by to_number")
 	callListCmd.Flags().StringVar(&callListDirection, "direction", "", oneOf(directionValues))

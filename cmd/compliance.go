@@ -169,8 +169,7 @@ func init() {
 	complianceListCmd.Flags().StringVar(&compListNumberType, "number-type", "", "filter by number type: "+oneOf(complianceNumTypes))
 	complianceListCmd.Flags().StringVar(&compListUserType, "user-type", "", "filter by user type: "+oneOf(complianceUserTypes))
 	complianceListCmd.Flags().StringVar(&compListAlias, "alias", "", "filter by alias")
-	complianceListCmd.Flags().IntVar(&compListLimit, "limit", 20, "results per page")
-	complianceListCmd.Flags().IntVar(&compListOffset, "offset", 0, "pagination offset")
+	registerListFlags(complianceListCmd, &compListLimit, &compListOffset)
 
 	complianceUpdateCmd.Flags().StringVar(&compUpdateData, "data", "", "updated application JSON; inline or @file.json (required)")
 	complianceUpdateCmd.Flags().StringArrayVar(&compUpdateFiles, "file", nil, "document upload as field=path (repeatable; replaces all documents)")

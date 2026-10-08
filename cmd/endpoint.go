@@ -72,8 +72,7 @@ var epDeleteCmd = &cobra.Command{
 }
 
 func init() {
-	epListCmd.Flags().IntVar(&epListLimit, "limit", 20, "results per page")
-	epListCmd.Flags().IntVar(&epListOffset, "offset", 0, "pagination offset")
+	registerListFlags(epListCmd, &epListLimit, &epListOffset)
 
 	epCreateCmd.Flags().StringVar(&epCreateUsername, "username", "", "SIP username (required)")
 	_ = epCreateCmd.MarkFlagRequired("username")

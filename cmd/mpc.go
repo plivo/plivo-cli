@@ -129,16 +129,14 @@ var mpcPartUnholdCmd = &cobra.Command{
 }
 
 func init() {
-	mpcListCmd.Flags().IntVar(&mpcListLimit, "limit", 20, "results per page")
-	mpcListCmd.Flags().IntVar(&mpcListOffset, "offset", 0, "pagination offset")
+	registerListFlags(mpcListCmd, &mpcListLimit, &mpcListOffset)
 	mpcListCmd.Flags().StringVar(&mpcListStatus, "status", "", "filter by status: "+oneOf(mpcStatusValues))
 
 	mpcCreateCmd.Flags().String("name", "", "ignored")
 	mpcCreateCmd.Flags().Int("max-participants", 0, "ignored")
 	mpcCreateCmd.Flags().Bool("record", false, "ignored")
 
-	mpcPartListCmd.Flags().IntVar(&mpcPartListLimit, "limit", 20, "results per page")
-	mpcPartListCmd.Flags().IntVar(&mpcPartListOffset, "offset", 0, "pagination offset")
+	registerListFlags(mpcPartListCmd, &mpcPartListLimit, &mpcPartListOffset)
 
 	mpcPartAddCmd.Flags().StringVar(&mpcPartAddFrom, "from", "", "source number for the dial-out (required)")
 	_ = mpcPartAddCmd.MarkFlagRequired("from")

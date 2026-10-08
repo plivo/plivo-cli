@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/plivo/plivo-cli/internal/clierr"
+	"github.com/spf13/cobra"
 )
 
 func TestValidateEnum(t *testing.T) {
@@ -180,6 +181,49 @@ func TestComplianceList_tableReadsTheCompliancesKey(t *testing.T) {
 	for _, want := range []string{"00000000-0000-0000-0000-000000000000", "acme-in", "accepted"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("table missing %q:\n%s", want, stdout)
+		}
+	}
+}
+
+// Every list backed by a paged API holds --limit to 1-20 and --offset to 0 or
+// more before any request. Walks the tree, so a list that registers its own
+// --limit instead of the shared one fails here.
+func TestListFlags_everyPagedListChecksThePageFirst(t *testing.T) {
+	var lists []*cobra.Command
+	var walk func(c *cobra.Command)
+	walk = func(c *cobra.Command) {
+		// docs search is local: its --limit caps search hits, not an API page.
+		if c.Flags().Lookup("limit") != nil && c.CommandPath() != "plivo docs search" {
+			lists = append(lists, c)
+		}
+		for _, sub := range c.Commands() {
+			walk(sub)
+		}
+	}
+	walk(rootCmd)
+	if len(lists) < 25 {
+		t.Fatalf("found only %d lists with --limit; did the walk break?", len(lists))
+	}
+	for _, c := range lists {
+		path := strings.Fields(c.CommandPath())[1:]
+		for range strings.Count(c.Use, "<") {
+			path = append(path, "placeholder")
+		}
+		for _, bad := range [][]string{{"--limit", "21"}, {"--limit", "0"}, {"--offset", "-1"}} {
+			args := append(append([]string{}, path...), bad...)
+			t.Run(strings.Join(args, " "), func(t *testing.T) {
+				setFakeCreds(t)
+				_, count := sipServer(t, http.StatusOK, `{"meta":{},"objects":[]}`)
+
+				err, _, _ := execCmd(t, args...)
+				var ce *clierr.Error
+				if !errors.As(err, &ce) || ce.Code != clierr.CodeBadFlag {
+					t.Fatalf("want BAD_FLAG, got %v", err)
+				}
+				if n := count(); n != 0 {
+					t.Fatalf("%d request(s) went out before the page check", n)
+				}
+			})
 		}
 	}
 }

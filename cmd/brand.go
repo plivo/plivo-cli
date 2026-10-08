@@ -73,8 +73,7 @@ var brandUpdateCmd = &cobra.Command{
 }
 
 func init() {
-	brandListCmd.Flags().IntVar(&brandListLimit, "limit", 20, "results per page")
-	brandListCmd.Flags().IntVar(&brandListOffset, "offset", 0, "pagination offset")
+	registerListFlags(brandListCmd, &brandListLimit, &brandListOffset)
 
 	brandCreateCmd.Flags().StringVar(&brandCreateAlias, "alias", "", "human-friendly alias (required)")
 	_ = brandCreateCmd.MarkFlagRequired("alias")

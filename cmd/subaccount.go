@@ -69,8 +69,7 @@ var subDeleteCmd = &cobra.Command{
 }
 
 func init() {
-	subListCmd.Flags().IntVar(&subListLimit, "limit", 20, "results per page")
-	subListCmd.Flags().IntVar(&subListOffset, "offset", 0, "pagination offset")
+	registerListFlags(subListCmd, &subListLimit, &subListOffset)
 
 	subCreateCmd.Flags().StringVar(&subCreateName, "name", "", "subaccount name (required)")
 	_ = subCreateCmd.MarkFlagRequired("name")

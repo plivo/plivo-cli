@@ -6,7 +6,7 @@ Usage:
 Flags:
       --brand-id string   filter by brand_id
   -h, --help              help for list
-      --limit int         results per page (default 20)
+      --limit int         results per page (1-20) (default 20)
       --offset int        pagination offset
 
 Global Flags:

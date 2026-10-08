@@ -19,10 +19,6 @@ import (
 // SIP Trunking lives under the `Zentrunk` API path for historical reasons. The
 // product name is SIP Trunking, so nothing user-facing here says otherwise.
 
-// maxSIPCallLimit is the API's ceiling. Enforced locally so an over-large
-// --limit fails immediately instead of costing a round-trip to learn the same.
-const maxSIPCallLimit = 20
-
 // sipHangupCodesDocsURL is the Zentrunk hangup-code reference.
 const sipHangupCodesDocsURL = "https://www.plivo.com/docs/sip-trunking/troubleshooting/zentrunk-hangup-codes"
 
@@ -139,9 +135,8 @@ var sipACLGetCmd = &cobra.Command{
 }
 
 func init() {
+	registerListFlags(sipCallsListCmd, &sipCallsLimit, &sipCallsOffset)
 	f := sipCallsListCmd.Flags()
-	f.IntVar(&sipCallsLimit, "limit", maxSIPCallLimit, "rows to return (1-20)")
-	f.IntVar(&sipCallsOffset, "offset", 0, "rows to skip")
 	f.StringVar(&sipCallsFrom, "from-number", "", "filter by caller ID")
 	f.StringVar(&sipCallsTo, "to-number", "", "filter by destination")
 	f.StringVar(&sipCallsDirection, "direction", "", oneOf(directionValues))
@@ -151,14 +146,9 @@ func init() {
 	f.StringVar(&sipCallsSource, "hangup-source", "", "who ended the call: "+oneOf(sipHangupSources))
 	f.StringVar(&sipCallsSTIR, "stir-verification", "", oneOf(stirValues))
 
-	tf := sipTrunksListCmd.Flags()
-	tf.IntVar(&sipTrunksLimit, "limit", 20, "rows to return")
-	tf.IntVar(&sipTrunksOffset, "offset", 0, "rows to skip")
-	tf.StringVar(&sipTrunksDirection, "direction", "", oneOf(directionValues))
-
-	af := sipACLListCmd.Flags()
-	af.IntVar(&sipACLLimit, "limit", 20, "rows to return")
-	af.IntVar(&sipACLOffset, "offset", 0, "rows to skip")
+	registerListFlags(sipTrunksListCmd, &sipTrunksLimit, &sipTrunksOffset)
+	sipTrunksListCmd.Flags().StringVar(&sipTrunksDirection, "direction", "", oneOf(directionValues))
+	registerListFlags(sipACLListCmd, &sipACLLimit, &sipACLOffset)
 
 	sipCallsCmd.AddCommand(sipCallsListCmd, sipCallsGetCmd, sipCallsDiagnoseCmd)
 	sipTrunksCmd.AddCommand(sipTrunksListCmd, sipTrunksGetCmd)
@@ -204,9 +194,6 @@ func trimPlus(number string) string {
 }
 
 func runSIPCallsList(cmd *cobra.Command, args []string) error {
-	if sipCallsLimit < 1 || sipCallsLimit > maxSIPCallLimit {
-		return clierr.BadInput(fmt.Sprintf("--limit must be between 1 and %d", maxSIPCallLimit))
-	}
 	if err := validateEnum("direction", &sipCallsDirection, directionValues...); err != nil {
 		return err
 	}

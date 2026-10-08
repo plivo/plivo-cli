@@ -56,8 +56,7 @@ var tfvSubmitCmd = &cobra.Command{
 }
 
 func init() {
-	tfvListCmd.Flags().IntVar(&tfvListLimit, "limit", 20, "results per page")
-	tfvListCmd.Flags().IntVar(&tfvListOffset, "offset", 0, "pagination offset")
+	registerListFlags(tfvListCmd, &tfvListLimit, &tfvListOffset)
 	tfvListCmd.Flags().StringVar(&tfvListStatus, "status", "", "filter by status: "+oneOf(tollfreeStatuses))
 
 	tfvSubmitCmd.Flags().StringVar(&tfvSubmitBizName, "business-name", "", "business name (required)")

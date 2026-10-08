@@ -6,7 +6,35 @@ import (
 	"strings"
 
 	"github.com/plivo/plivo-cli/internal/clierr"
+	"github.com/spf13/cobra"
 )
+
+// maxListLimit is the most rows a list endpoint returns in one page.
+const maxListLimit = 20
+
+// registerListFlags adds --limit and --offset to a list backed by a paged API
+// and checks them before the command runs. Past 20 rows a page the endpoints
+// disagree (some clamp silently, some answer 400, a few return more), so the
+// CLI holds every one of them to 1-20.
+func registerListFlags(cmd *cobra.Command, limit, offset *int) {
+	cmd.Flags().IntVar(limit, "limit", maxListLimit, fmt.Sprintf("results per page (1-%d)", maxListLimit))
+	cmd.Flags().IntVar(offset, "offset", 0, "pagination offset")
+	cmd.PreRunE = func(*cobra.Command, []string) error {
+		return validatePage(*limit, *offset)
+	}
+}
+
+func validatePage(limit, offset int) error {
+	if limit < 1 || limit > maxListLimit {
+		e := clierr.BadFlag("limit", fmt.Sprintf("must be between 1 and %d, got %d", maxListLimit, limit))
+		e.Hint = fmt.Sprintf("A page holds at most %d rows; page through with --offset.", maxListLimit)
+		return e
+	}
+	if offset < 0 {
+		return clierr.BadFlag("offset", fmt.Sprintf("must be 0 or more, got %d", offset))
+	}
+	return nil
+}
 
 // Values the list filters accept, as the API reference documents them (the
 // agents states come from the agents skill). Matching is case-sensitive: the
