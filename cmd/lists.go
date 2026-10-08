@@ -23,8 +23,20 @@ const maxListLimit = 20
 func registerListFlags(cmd *cobra.Command, limit, offset *int) {
 	cmd.Flags().IntVar(limit, "limit", maxListLimit, fmt.Sprintf("results per page (1-%d)", maxListLimit))
 	cmd.Flags().IntVar(offset, "offset", 0, "pagination offset")
-	cmd.PreRunE = func(*cobra.Command, []string) error {
-		return validatePage(*limit, *offset)
+	// Ahead of any hook the command already has, never instead of it. cobra
+	// skips PreRun once PreRunE is set, so a PreRun is chained too.
+	prevE, prev := cmd.PreRunE, cmd.PreRun
+	cmd.PreRunE = func(c *cobra.Command, args []string) error {
+		if err := validatePage(*limit, *offset); err != nil {
+			return err
+		}
+		if prevE != nil {
+			return prevE(c, args)
+		}
+		if prev != nil {
+			prev(c, args)
+		}
+		return nil
 	}
 }
 
