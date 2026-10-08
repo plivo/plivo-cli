@@ -444,6 +444,7 @@ func TestListAll_stopConditions(t *testing.T) {
 		{"total_count ends it on a full page", 40, 40, "20", "0,20"},
 		{"empty first page", 0, 0, "20", "0"},
 		{"advances by rows returned, not by --limit", 7, 7, "5", "0,5"},
+		{"an empty page ends it whatever total_count says", 15, 40, "20", "0,15"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -461,6 +462,43 @@ func TestListAll_stopConditions(t *testing.T) {
 				t.Fatalf("got %d rows, want %d", len(rows), tc.rows)
 			}
 		})
+	}
+}
+
+// Some endpoints return fewer rows than asked for. When meta.total_count is
+// sent, only reaching it ends the walk, so a short page is not taken for the
+// last one.
+func TestListAll_aShortPageDoesNotEndItBeforeTheTotal(t *testing.T) {
+	setFakeCreds(t)
+	var mu sync.Mutex
+	var offsets []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+		mu.Lock()
+		offsets = append(offsets, r.URL.Query().Get("offset"))
+		mu.Unlock()
+		page := []string{}
+		for i := offset; i < offset+10 && i < 25; i++ { // this server's page is 10 rows
+			page = append(page, fmt.Sprintf(`{"id":"row-%d"}`, i))
+		}
+		_, _ = fmt.Fprintf(w, `{"meta":{"total_count":25},"objects":[%s]}`, strings.Join(page, ","))
+	}))
+	t.Cleanup(srv.Close)
+	clientForTest = &api.Client{BaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
+	t.Cleanup(func() { clientForTest = nil })
+
+	err, stdout, _ := execCmd(t, "voice", "calls", "list", "--all", "-o", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	mu.Lock()
+	got := strings.Join(offsets, ",")
+	mu.Unlock()
+	if got != "0,10,20" {
+		t.Fatalf("offsets requested = %s, want 0,10,20", got)
+	}
+	if rows, _ := dataRows(t, stdout, "objects"); len(rows) != 25 {
+		t.Fatalf("got %d rows, want all 25", len(rows))
 	}
 }
 
@@ -639,4 +677,32 @@ func TestListAll_onEveryPagedList(t *testing.T) {
 		}
 	}
 	walk(rootCmd)
+}
+
+// The page check goes in front of a pre-run hook the command already has; it
+// must not replace it. cobra skips PreRun once PreRunE is set, so a PreRun is
+// carried into the chain too.
+func TestRegisterListFlags_keepsAnExistingPreRunHook(t *testing.T) {
+	var limit, offset int
+	var ran []string
+	withE := &cobra.Command{Use: "a", PreRunE: func(*cobra.Command, []string) error {
+		ran = append(ran, "PreRunE")
+		return nil
+	}}
+	plain := &cobra.Command{Use: "b", PreRun: func(*cobra.Command, []string) { ran = append(ran, "PreRun") }}
+	for _, c := range []*cobra.Command{withE, plain} {
+		registerListFlags(c, &limit, &offset)
+		if err := c.PreRunE(c, nil); err != nil {
+			t.Fatalf("%s: unexpected error: %v", c.Use, err)
+		}
+	}
+	if strings.Join(ran, ",") != "PreRunE,PreRun" {
+		t.Fatalf("hooks run = %v, want both", ran)
+	}
+
+	ran, limit = nil, 0
+	var ce *clierr.Error
+	if !errors.As(withE.PreRunE(withE, nil), &ce) || ce.Code != clierr.CodeBadFlag || len(ran) != 0 {
+		t.Fatalf("a bad page must stop before the hook: err %v, ran %v", ce, ran)
+	}
 }
