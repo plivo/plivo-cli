@@ -66,7 +66,8 @@ func isMetadataInvocation(firstCmd string, args []string) bool {
 // invocations (--help/--version/bare plivo) / opted-out users / users
 // who haven't yet hit the first-prompt activity floor.
 func maybePromptFeedback(firstCmd string, args []string) {
-	if !isInteractiveFeedbackSession() {
+	// A dry run sends nothing, feedback included, so it never prompts.
+	if dryRunFlag || !isInteractiveFeedbackSession() {
 		return
 	}
 	if skipPromptCommands[firstCmd] {

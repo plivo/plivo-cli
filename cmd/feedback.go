@@ -46,6 +46,7 @@ var feedbackCmd = &cobra.Command{
 Run interactively to be walked through both prompts. Or pass --rating /
 --message for a one-shot submission (handy in scripts). Either field
 alone is fine — rate without commenting, or comment without rating.
+--dry-run prints the exact request instead of sending it.
 
 --bug sends a bug report instead: your comment plus the last command that
 failed, which the CLI keeps in ~/.plivo/last-error.json (command path, exit
@@ -66,6 +67,7 @@ points it at another one; PLIVO_FEEDBACK_TELEMETRY=0 stops sending.`,
   plivo feedback --message "..."              # one-shot comment only
   plivo feedback --rating 2 --message "..."   # one-shot both
   plivo feedback --rating 5 --yes             # skip pre-submit preview
+  plivo feedback --rating 4 --dry-run         # print the request, send nothing
   plivo feedback --bug --dry-run              # show a bug report, send nothing
   plivo feedback --bug --message "..." --yes  # report the last failure`,
 	Args: cobra.NoArgs,
@@ -112,6 +114,15 @@ func runFeedback(cmd *cobra.Command, args []string) error {
 	}
 	event.Rating = rating
 	event.SetComment(comment)
+
+	if dryRunFlag {
+		baseURL, headers := resolveFeedbackTransport(authID)
+		if err := printFeedbackRequest(cmd.OutOrStderr(), "Feedback, as it would be sent:", event, baseURL, headers); err != nil {
+			return err
+		}
+		fmt.Fprintln(cmd.OutOrStderr(), "Dry run: nothing sent.")
+		return nil
+	}
 
 	if !shouldSkipPreview() {
 		submit, err := showPreviewAndConfirm(event, cmd.InOrStdin(), cmd.OutOrStderr())
@@ -483,15 +494,9 @@ func runBugReport(cmd *cobra.Command) error {
 	}
 
 	baseURL, headers := resolveFeedbackTransport(authID)
-	endpoint, err := feedback.Endpoint(baseURL)
-	if err != nil {
-		return clierr.Wrap(err)
+	if err := printFeedbackRequest(out, "Bug report, as it will be sent:", event, baseURL, headers); err != nil {
+		return err
 	}
-	body, err := json.MarshalIndent(event, "", "  ")
-	if err != nil {
-		return clierr.Wrap(err)
-	}
-	printBugReport(out, endpoint, headers, body)
 
 	if dryRunFlag {
 		fmt.Fprintln(out, "Dry run: nothing sent.")
@@ -522,9 +527,18 @@ func runBugReport(cmd *cobra.Command) error {
 	return nil
 }
 
-// printBugReport shows what Submit will send: the endpoint, the CLI's own
-// headers (the identity ones only while telemetry is on) and the JSON body.
-func printBugReport(out io.Writer, endpoint string, headers map[string]string, body []byte) {
+// printFeedbackRequest shows what Submit sends, under title: the endpoint, the
+// CLI's own headers (the identity ones only while telemetry is on) and the
+// JSON body.
+func printFeedbackRequest(out io.Writer, title string, event *feedback.Event, baseURL string, headers map[string]string) error {
+	endpoint, err := feedback.Endpoint(baseURL)
+	if err != nil {
+		return clierr.Wrap(err)
+	}
+	body, err := json.MarshalIndent(event, "", "  ")
+	if err != nil {
+		return clierr.Wrap(err)
+	}
 	names := make([]string, 0, len(headers))
 	for k, v := range headers {
 		if v != "" {
@@ -532,7 +546,7 @@ func printBugReport(out io.Writer, endpoint string, headers map[string]string, b
 		}
 	}
 	sort.Strings(names)
-	fmt.Fprintf(out, "Bug report, as it will be sent:\n\nPOST %s\n", endpoint)
+	fmt.Fprintf(out, "%s\n\nPOST %s\n", title, endpoint)
 	for _, k := range names {
 		fmt.Fprintf(out, "%s: %s\n", k, headers[k])
 	}
@@ -541,6 +555,7 @@ func printBugReport(out io.Writer, endpoint string, headers map[string]string, b
 		fmt.Fprintln(out, "The Auth-ID, Email, Region and AOM-UUID headers say who sent it, so we can follow up; "+
 			"`plivo config telemetry off` leaves them out.")
 	}
+	return nil
 }
 
 // lastErrorText renders the recorded failure for the report and the issue.

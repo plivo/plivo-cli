@@ -13,6 +13,7 @@ plivo feedback --rating 4                   # one-shot rating only
 plivo feedback --message "..."              # one-shot comment only
 plivo feedback --rating 2 --message "..."   # one-shot both
 plivo feedback --rating 5 --yes             # skip pre-submit confirmation
+plivo feedback --rating 4 --dry-run         # print the request, send nothing
 plivo feedback --bug --dry-run              # show a bug report, send nothing
 plivo feedback --bug --message "..." --yes  # report the last failure
 ```
@@ -26,6 +27,7 @@ plivo feedback --bug --message "..." --yes  # report the last failure
 | `--no-context` | Don't auto-attach CLI version / OS / arch metadata. CLI version still attached (needed for any aggregate). |
 | `--yes` | Skip the pre-submit confirmation step. A bug report sent without a terminal needs it. |
 | `--bug` | Send a bug report: your comment plus the last failed command, printed in full before sending. |
+| `--dry-run` | Print the exact request (endpoint, headers, JSON body) and send nothing. Works on every path, `--bug` included. |
 
 ## What gets sent
 

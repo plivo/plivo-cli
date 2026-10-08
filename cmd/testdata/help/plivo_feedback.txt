@@ -3,6 +3,7 @@ Share feedback about the Plivo CLI — a 1-5 rating and an optional comment.
 Run interactively to be walked through both prompts. Or pass --rating /
 --message for a one-shot submission (handy in scripts). Either field
 alone is fine — rate without commenting, or comment without rating.
+--dry-run prints the exact request instead of sending it.
 
 --bug sends a bug report instead: your comment plus the last command that
 failed, which the CLI keeps in ~/.plivo/last-error.json (command path, exit
@@ -28,6 +29,7 @@ Examples:
   plivo feedback --message "..."              # one-shot comment only
   plivo feedback --rating 2 --message "..."   # one-shot both
   plivo feedback --rating 5 --yes             # skip pre-submit preview
+  plivo feedback --rating 4 --dry-run         # print the request, send nothing
   plivo feedback --bug --dry-run              # show a bug report, send nothing
   plivo feedback --bug --message "..." --yes  # report the last failure
 

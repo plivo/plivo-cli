@@ -446,3 +446,28 @@ func TestResolveFeedbackTransport_sendsClientType(t *testing.T) {
 			headers["Client-Version"], headers["X-Plivo-CLI-Version"])
 	}
 }
+
+// --dry-run used to send plain feedback anyway. Every path now prints the
+// request and sends nothing.
+func TestFeedback_dryRunSendsNothing(t *testing.T) {
+	resetFeedbackFlags(t)
+	setEmptyHome(t)
+	t.Setenv(feedback.MachineIDEnvVar, "test-machine")
+	c := newBugCollector(t, http.StatusNoContent)
+	prev := dryRunFlag
+	t.Cleanup(func() { dryRunFlag = prev })
+	feedbackRating, feedbackMessage, dryRunFlag = 4, "works well", true
+
+	out, err := runWithFakeStdio(t, "")
+	if err != nil {
+		t.Fatalf("dry run: %v", err)
+	}
+	if hits, _, _ := c.snapshot(); hits != 0 {
+		t.Fatalf("--dry-run sent %d request(s)", hits)
+	}
+	for _, want := range []string{"POST " + c.url, `"rating": 4`, "works well", "Dry run: nothing sent."} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the dry run did not print %q:\n%s", want, out)
+		}
+	}
+}
