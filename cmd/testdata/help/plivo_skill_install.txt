@@ -14,6 +14,11 @@ Each skill lands at ~/.claude/skills/<skill>/SKILL.md by default. Use --dir to
 target another agent's skills directory, or --print to write the content to
 stdout so any other tool can capture it; both act on a single skill.
 
+--project installs into the git repository you are in instead, at
+<repo>/.claude/skills/<skill>/SKILL.md, so everyone who clones it gets the
+skill. A project copy that differs from the bundled one may hold your team's
+edits, so it is kept unless you pass --force.
+
 Usage:
   plivo skill install [cli|audio-streaming|sip-trunking|voice-xml|all] [flags]
 
@@ -22,12 +27,15 @@ Examples:
   plivo skill install audio-streaming    # -> ~/.claude/skills/plivo-audio-streaming/
   plivo skill install voice-xml          # -> ~/.claude/skills/plivo-voice-xml/
   plivo skill install all                # every listed skill
+  plivo skill install all --project      # -> <repo>/.claude/skills/, for the whole team
   plivo skill install all --dry-run      # show destinations, write nothing
 
 Flags:
       --dir string   destination directory (default: ~/.claude/skills/<skill>)
+      --force        with --project, overwrite a skill file that differs from the bundled one
   -h, --help         help for install
       --print        write the skill content to stdout instead of installing
+      --project      install into the current git repository's .claude/skills
 
 Global Flags:
       --dry-run            print the HTTP request without sending
