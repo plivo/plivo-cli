@@ -833,3 +833,56 @@ func TestSkillUpdate_readsCRLFAsLF(t *testing.T) {
 		}
 	}
 }
+
+// v1.1.x installed plivo-first-agent, which plivo-audio-streaming replaced.
+// update reports a copy still there with the command that cleans it up, and
+// deletes nothing itself.
+func TestSkillUpdate_reportsARetiredSkill(t *testing.T) {
+	home := skillUpdateHome(t)
+	old := filepath.Join(writeRetiredSkill(t, filepath.Join(home, ".claude", "skills")), skillFileName)
+
+	var retired *skillUpdateRow
+	rows := skillUpdateRows(t)
+	for i := range rows {
+		if rows[i].Result == "retired" {
+			retired = &rows[i]
+		}
+	}
+	if retired == nil || retired.Path != old || retired.Selector != "audio-streaming" ||
+		retired.Hint != "plivo skill install audio-streaming" {
+		t.Fatalf("rows = %+v, want a retired row for %s naming `plivo skill install audio-streaming`", rows, old)
+	}
+	err, stdout, _ := execCmd(t, "skill", "update", "-o", "table")
+	if err != nil || !strings.Contains(stdout, "retired: run plivo skill install audio-streaming") {
+		t.Errorf("the table does not name the fix (err %v):\n%s", err, stdout)
+	}
+	if _, err := os.Stat(old); err != nil {
+		t.Fatalf("update deleted the retired copy: %v", err)
+	}
+
+	// The command it names does clean it up.
+	if err, _, _ := execCmd(t, "skill", "install", "audio-streaming"); err != nil {
+		t.Fatalf("install audio-streaming: %v", err)
+	}
+	for _, r := range skillUpdateRows(t) {
+		if r.Result == "retired" {
+			t.Errorf("still reported after the fix: %+v", r)
+		}
+	}
+}
+
+// A project copy is not the CLI's to remove (no release wrote one there), so
+// the fix it names is the project install plus deleting the old folder.
+func TestSkillUpdate_reportsARetiredSkillInTheProject(t *testing.T) {
+	root, _ := fakeRepo(t, false)
+	old := writeRetiredSkill(t, filepath.Join(root, ".claude", "skills"))
+
+	rows := skillUpdateRows(t)
+	if len(rows) != 1 || rows[0].Result != "retired" ||
+		rows[0].Hint != "plivo skill install audio-streaming --project, then delete "+old {
+		t.Fatalf("rows = %+v", rows)
+	}
+	if _, err := os.Stat(filepath.Join(old, skillFileName)); err != nil {
+		t.Errorf("update deleted the retired project copy: %v", err)
+	}
+}

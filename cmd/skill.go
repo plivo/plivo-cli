@@ -149,7 +149,9 @@ It looks in ~/.claude/skills and, inside a git repository, in
 <repo>/.claude/skills. A copy is replaced only when it matches a version a
 release shipped; anything else is treated as your own edit and kept, and
 --force replaces it too. Skills that are not installed stay that way: add them
-with ` + "`plivo skill install`" + `.`,
+with ` + "`plivo skill install`" + `. A retired skill still installed next to the one
+that replaced it is reported with the command that removes it; update itself
+deletes nothing.`,
 	Example: `  plivo skill update              # update what is installed
   plivo skill update --dry-run    # show what would change, write nothing
   plivo skill update --force      # also replace copies you edited`,
@@ -375,19 +377,23 @@ func installSkill(s bundledSkill, projectRoot string) (kept string, err error) {
 }
 
 // skillUpdateRow is one installed copy `skill update` looked at, and the JSON
-// shape. Result is updated, would_update (--dry-run), up_to_date or kept.
+// shape. Result is updated, would_update (--dry-run), up_to_date, kept or
+// retired; a retired row's Hint is the command that removes it.
 type skillUpdateRow struct {
 	Selector string `json:"selector"`
 	Path     string `json:"path"`
 	Result   string `json:"result"`
 	OldLines int    `json:"old_lines"`
 	NewLines int    `json:"new_lines"`
+	Hint     string `json:"hint,omitempty"`
 }
 
 func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 	var roots []string
+	homeRoot := ""
 	if home, err := os.UserHomeDir(); err == nil {
-		roots = append(roots, filepath.Join(home, ".claude", "skills"))
+		homeRoot = filepath.Join(home, ".claude", "skills")
+		roots = append(roots, homeRoot)
 	}
 	if p, err := projectSkillsRoot(); err == nil && !slices.Contains(roots, p) {
 		roots = append(roots, p)
@@ -422,6 +428,11 @@ func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 			rows = append(rows, row)
 		}
 	}
+	for _, root := range roots {
+		for _, s := range bundledSkills {
+			rows = append(rows, retiredSkillRows(s, root, root == homeRoot)...)
+		}
+	}
 
 	if effectiveFormat() == output.FormatJSON {
 		return output.JSONSuccess(os.Stdout, rows, nil)
@@ -442,6 +453,8 @@ func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 			result = fmt.Sprintf("would update, %d -> %d lines", r.OldLines, r.NewLines)
 		case "kept":
 			result, kept = "kept: local edits", true
+		case "retired":
+			result = "retired: run " + r.Hint
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\n", r.Selector, result, r.Path)
 	}
@@ -454,11 +467,30 @@ func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
+// retiredSkillRows reports the skills s replaced that are still installed in
+// root, so an agent there may load both. Only `skill install` removes them,
+// and only from the home root, which is the one place a release wrote them.
+func retiredSkillRows(s bundledSkill, root string, isHome bool) []skillUpdateRow {
+	var rows []skillUpdateRow
+	for _, name := range s.replaces {
+		dir := filepath.Join(root, name)
+		if _, err := os.Stat(filepath.Join(dir, skillFileName)); err != nil {
+			continue
+		}
+		fix := "plivo skill install " + s.selector
+		if !isHome {
+			fix += " --project, then delete " + dir
+		}
+		rows = append(rows, skillUpdateRow{Selector: s.selector, Path: filepath.Join(dir, skillFileName), Result: "retired", Hint: fix})
+	}
+	return rows
+}
+
 // skillDigest is the sha256 of a SKILL.md with CRLF read as LF, so a copy a
 // Windows checkout converted still matches the version it came from.
 // tools/skillhashes computes the same digest for cmd/skill_hashes.go.
 func skillDigest(b []byte) string {
-	sum := sha256.Sum256(bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n")))
+	sum := sha256.Sum256([]byte(crlfToLF(string(b))))
 	return hex.EncodeToString(sum[:])
 }
 

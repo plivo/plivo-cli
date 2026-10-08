@@ -3148,7 +3148,9 @@ It looks in ~/.claude/skills and, inside a git repository, in
 <repo>/.claude/skills. A copy is replaced only when it matches a version a
 release shipped; anything else is treated as your own edit and kept, and
 --force replaces it too. Skills that are not installed stay that way: add them
-with `plivo skill install`.
+with `plivo skill install`. A retired skill still installed next to the one
+that replaced it is reported with the command that removes it; update itself
+deletes nothing.
 
 ```
 plivo skill update [flags]
