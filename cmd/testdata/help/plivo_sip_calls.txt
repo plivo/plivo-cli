@@ -10,6 +10,7 @@ Aliases:
 Available Commands:
   diagnose    Diagnose what happened on a SIP Trunking call (AI-powered)
   get         Get one SIP Trunking call by UUID
+  insights    Show the call quality Plivo measured on a SIP Trunking call
   list        List SIP Trunking calls
 
 Flags:
