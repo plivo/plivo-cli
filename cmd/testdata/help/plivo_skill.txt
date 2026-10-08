@@ -7,6 +7,7 @@ Usage:
 Available Commands:
   install     Install an agent skill so coding agents auto-load the reference
   list        Show bundled skills and whether each is installed
+  update      Update installed skills to the versions bundled in this binary
 
 Flags:
   -h, --help   help for skill

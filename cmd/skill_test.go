@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 
 	cliskill "github.com/plivo/plivo-cli/cli-skill"
 	"github.com/plivo/plivo-cli/internal/clierr"
+	voicexmlskill "github.com/plivo/plivo-cli/voice-xml-skill"
 )
 
 func TestResolveSkillDir(t *testing.T) {
@@ -607,6 +609,182 @@ func TestSkillHashes_listEveryBundledSkill(t *testing.T) {
 	for dir := range shippedSkillHashes {
 		if !slices.ContainsFunc(bundledSkills, func(s bundledSkill) bool { return s.dirName == dir }) {
 			t.Errorf("cmd/skill_hashes.go lists %q, which is not a bundled skill", dir)
+		}
+	}
+}
+
+// skillUpdateHome points HOME at a temp dir and runs the test from a temp
+// folder outside any repository, so `skill update` sees only that home.
+func skillUpdateHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	wd := t.TempDir()
+	if got, ok := findGitRoot(wd); ok {
+		t.Skipf("the temp dir is inside a git repository (%s)", got)
+	}
+	t.Chdir(wd)
+	return home
+}
+
+// shipVersion makes content count as a released version of the skill that
+// installs into dir, for the length of the test.
+func shipVersion(t *testing.T, dir, content string) {
+	t.Helper()
+	prev := shippedSkillHashes[dir]
+	shippedSkillHashes[dir] = append(slices.Clone(prev), skillDigest([]byte(content)))
+	t.Cleanup(func() { shippedSkillHashes[dir] = prev })
+}
+
+func writeSkillFile(t *testing.T, root, dir, content string) string {
+	t.Helper()
+	p := filepath.Join(root, ".claude", "skills", dir, skillFileName)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func skillUpdateRows(t *testing.T, args ...string) []skillUpdateRow {
+	t.Helper()
+	err, stdout, stderr := execCmd(t, append([]string{"skill", "update", "-o", "json"}, args...)...)
+	if err != nil {
+		t.Fatalf("skill update %v: %v\n%s", args, err, stderr)
+	}
+	var env struct {
+		Data []skillUpdateRow `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &env); err != nil || env.Data == nil {
+		t.Fatalf("decode %q: %v (data must be a list, even an empty one)", stdout, err)
+	}
+	return env.Data
+}
+
+func fileIs(t *testing.T, path, want string) bool {
+	t.Helper()
+	got, err := os.ReadFile(path)
+	return err == nil && string(got) == want
+}
+
+const olderCLISkill = "---\nname: plivo-cli\n---\nan older release\n"
+
+func TestSkillUpdate_replacesAReleasedVersion(t *testing.T) {
+	home := skillUpdateHome(t)
+	shipVersion(t, "plivo-cli", olderCLISkill)
+	p := writeSkillFile(t, home, "plivo-cli", olderCLISkill)
+	newLines := strings.Count(cliskill.SkillMD, "\n")
+
+	err, stdout, _ := execCmd(t, "skill", "update", "-o", "table")
+	if err != nil {
+		t.Fatalf("skill update: %v", err)
+	}
+	if want := fmt.Sprintf("4 -> %d lines", newLines); !strings.Contains(stdout, want) || !strings.Contains(stdout, p) {
+		t.Errorf("want %q and the path in the table, got:\n%s", want, stdout)
+	}
+	if !fileIs(t, p, cliskill.SkillMD) {
+		t.Fatal("the released copy was not replaced")
+	}
+
+	rows := skillUpdateRows(t)
+	if len(rows) != 1 || rows[0].Result != "up_to_date" || rows[0].OldLines != newLines {
+		t.Errorf("second run: %+v, want one up_to_date row", rows)
+	}
+}
+
+func TestSkillUpdate_keepsAnEditedCopyUnlessForced(t *testing.T) {
+	home := skillUpdateHome(t)
+	const mine = "---\nname: plivo-cli\n---\nmy own notes\n"
+	p := writeSkillFile(t, home, "plivo-cli", mine)
+
+	err, _, stderr := execCmd(t, "skill", "update", "-o", "table")
+	if err != nil {
+		t.Fatalf("skill update: %v", err)
+	}
+	if !strings.Contains(stderr, "--force") {
+		t.Errorf("want --force named on stderr, got:\n%s", stderr)
+	}
+	if rows := skillUpdateRows(t); len(rows) != 1 || rows[0].Result != "kept" {
+		t.Errorf("rows = %+v, want one kept row", rows)
+	}
+	if !fileIs(t, p, mine) {
+		t.Fatal("an edited copy was overwritten without --force")
+	}
+
+	if rows := skillUpdateRows(t, "--force"); len(rows) != 1 || rows[0].Result != "updated" {
+		t.Errorf("--force rows = %+v", rows)
+	}
+	if !fileIs(t, p, cliskill.SkillMD) {
+		t.Error("--force did not replace the edited copy")
+	}
+}
+
+func TestSkillUpdate_dryRunWritesNothing(t *testing.T) {
+	home := skillUpdateHome(t)
+	shipVersion(t, "plivo-cli", olderCLISkill)
+	p := writeSkillFile(t, home, "plivo-cli", olderCLISkill)
+
+	rows := skillUpdateRows(t, "--dry-run")
+	if len(rows) != 1 || rows[0].Result != "would_update" || rows[0].OldLines != 4 {
+		t.Errorf("rows = %+v, want one would_update row", rows)
+	}
+	if !fileIs(t, p, olderCLISkill) {
+		t.Error("--dry-run wrote the file")
+	}
+}
+
+func TestSkillUpdate_coversTheProjectInsideARepo(t *testing.T) {
+	root, home := fakeRepo(t, false)
+	const older = "---\nname: plivo-voice-xml\n---\nolder\n"
+	shipVersion(t, "plivo-voice-xml", older)
+	paths := []string{
+		writeSkillFile(t, home, "plivo-voice-xml", older),
+		writeSkillFile(t, root, "plivo-voice-xml", older),
+	}
+
+	rows := skillUpdateRows(t)
+	if len(rows) != 2 {
+		t.Fatalf("rows = %+v, want the home and the project copy", rows)
+	}
+	for _, p := range paths {
+		if !fileIs(t, p, voicexmlskill.SkillMD) {
+			t.Errorf("%s was not updated", p)
+		}
+	}
+}
+
+// update refreshes what is installed; it never installs.
+func TestSkillUpdate_installsNothing(t *testing.T) {
+	home := skillUpdateHome(t)
+	if rows := skillUpdateRows(t); len(rows) != 0 {
+		t.Errorf("rows = %+v, want none", rows)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude")); !os.IsNotExist(err) {
+		t.Errorf("update created skills (stat err: %v)", err)
+	}
+}
+
+// A Windows checkout with autocrlf turns a committed skill's LF into CRLF:
+// that is the same version, not an edit.
+func TestSkillUpdate_readsCRLFAsLF(t *testing.T) {
+	home := skillUpdateHome(t)
+	crlf := strings.ReplaceAll(voicexmlskill.SkillMD, "\n", "\r\n")
+	p := writeSkillFile(t, home, "plivo-voice-xml", crlf)
+	if rows := skillUpdateRows(t); len(rows) != 1 || rows[0].Result != "up_to_date" {
+		t.Errorf("a CRLF copy of the bundled skill: %+v, want up_to_date", rows)
+	}
+	if !fileIs(t, p, crlf) {
+		t.Error("an up-to-date copy was rewritten")
+	}
+
+	shipVersion(t, "plivo-cli", olderCLISkill)
+	writeSkillFile(t, home, "plivo-cli", strings.ReplaceAll(olderCLISkill, "\n", "\r\n"))
+	for _, r := range skillUpdateRows(t) {
+		if r.Selector == "cli" && r.Result != "updated" {
+			t.Errorf("a CRLF copy of a released version: %+v, want updated", r)
 		}
 	}
 }
