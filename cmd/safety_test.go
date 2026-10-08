@@ -15,6 +15,7 @@ import (
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
+	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/zalando/go-keyring"
@@ -63,6 +64,7 @@ func execCmd(t *testing.T, args ...string) (err error, stdout, stderr string) {
 	noColorFlag = false
 	profileFlag = ""
 	outputFormat = ""
+	queryFlag = ""
 	logLevel = "warn"
 	timeoutSec = 30
 	adminServer = ""
@@ -106,6 +108,9 @@ func execCmd(t *testing.T, args ...string) (err error, stdout, stderr string) {
 	// later test (especially help_snapshot_test) sees stale flag values and
 	// fails under `-count >= 2`.
 	resetAllFlags(rootCmd)
+	// The output writers keep the run's -o/--query; put back the default so
+	// a later test that calls a RunE directly gets plain JSON.
+	_ = output.Configure("", "")
 
 	return err, outBuf.String(), errBuf.String()
 }
@@ -377,17 +382,18 @@ func TestSpendVerbs_dryRunAlonePreviews(t *testing.T) {
 	}
 }
 
-// ─── -o yaml / -o tsv → BAD_INPUT (PersistentPreRunE rejection) ─────────────
+// ─── -o tsv / -o xml → BAD_INPUT (PersistentPreRunE rejection) ──────────────
 
-// TestOutputFormat_rejectsUnsupportedValues confirms `-o yaml`, `-o tsv`, etc.
+// TestOutputFormat_rejectsUnsupportedValues confirms `-o tsv`, `-o xml`, etc.
 // are hard errors (BAD_INPUT, exit 2) instead of the previous silent fall-
 // through to JSON rendering. Wired via root.go's PersistentPreRunE so every
 // command — even read-only ones like `numbers list` — sees the rejection
-// before its RunE fires.
+// before its RunE fires. yaml and csv were rejected here too until they
+// became supported formats (see TestOutputFormat_acceptsSupportedValues).
 func TestOutputFormat_rejectsUnsupportedValues(t *testing.T) {
 	setFakeCreds(t)
 
-	cases := []string{"yaml", "tsv", "csv", "xml", "garbage"}
+	cases := []string{"tsv", "xml", "garbage", "yml"}
 	for _, bad := range cases {
 		t.Run("o_"+bad, func(t *testing.T) {
 			err, _, _ := execCmd(t, "-o", bad, "numbers", "list")
@@ -406,7 +412,7 @@ func TestOutputFormat_rejectsUnsupportedValues(t *testing.T) {
 
 func TestOutputFormat_acceptsSupportedValues(t *testing.T) {
 	setFakeCreds(t)
-	for _, ok := range []string{"json", "table", "JSON", "Table"} {
+	for _, ok := range []string{"json", "table", "JSON", "Table", "jsonl", "yaml", "YAML", "csv"} {
 		t.Run("o_"+ok, func(t *testing.T) {
 			// --dry-run keeps us off the network. The Validate step runs in
 			// PersistentPreRunE before the spend-verb gate, so a failing -o

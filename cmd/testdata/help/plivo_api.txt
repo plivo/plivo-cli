@@ -14,6 +14,9 @@ Paths come in two flavours:
 Mutating verbs (POST, PUT, PATCH, DELETE) require --yes (matches the rest of
 the CLI). Use --dry-run to preview without sending. GET and HEAD pass through.
 
+Here --query adds URL query parameters (key=value). It is not the JMESPath
+--query filter other commands take; -o jsonl, yaml and csv still apply.
+
 Examples:
 
   plivo api GET /v1/Account/MA…/            # absolute: the account itself
@@ -31,13 +34,13 @@ Flags:
       --header stringArray   extra header as 'Key: Value' (repeatable; overrides defaults)
   -h, --help                 help for api
       --method string        HTTP method (alternative to the positional arg; useful when piping)
-      --query stringArray    query param as key=value (repeatable)
+      --query stringArray    URL query param as key=value (repeatable; not a JMESPath filter here)
 
 Global Flags:
       --dry-run            print the HTTP request without sending
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
-  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+  -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
       --profile string     named profile from ~/.plivo/config.toml
   -q, --quiet              suppress non-data output
       --timeout int        request timeout in seconds (default 30)

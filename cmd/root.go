@@ -46,7 +46,12 @@ Credentials come from browser OAuth/PKCE login and resolve in order:
   1. --profile flag
   2. active profile in ~/.plivo/config.toml
 
-Run "plivo login" if you have no profile yet.`,
+Run "plivo login" if you have no profile yet.
+
+Output is a table on a terminal and JSON otherwise. -o jsonl writes one JSON
+record per line (a list's objects, or the one result), -o csv one row per
+record, -o yaml the whole JSON envelope. --query filters that envelope with
+JMESPath first, e.g. --query 'data.objects[].number'.`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	Version:       version.Value,
@@ -137,7 +142,7 @@ func Root() *cobra.Command { return rootCmd }
 // invoked subcommand name.
 var valueFlags = map[string]bool{
 	"--profile": true, "--output": true, "-o": true,
-	"--log-level": true, "--timeout": true,
+	"--log-level": true, "--timeout": true, "--query": true,
 }
 
 func init() {
@@ -153,11 +158,12 @@ func init() {
 			err.Context = map[string]any{"flag": "--output", "value": outputFormat}
 			return err
 		}
-		return nil
+		return configureOutput(cmd)
 	}
 
 	rootCmd.PersistentFlags().StringVar(&profileFlag, "profile", "", "named profile from ~/.plivo/config.toml")
-	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "", "output format: table|json (default: table for TTY, json otherwise)")
+	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "", "output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)")
+	rootCmd.PersistentFlags().StringVar(&queryFlag, "query", "", "JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)")
 	rootCmd.PersistentFlags().BoolVarP(&quietFlag, "quiet", "q", false, "suppress non-data output")
 	rootCmd.PersistentFlags().BoolVar(&noColorFlag, "no-color", false, "disable colored output")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "warn", "log level: debug|info|warn|error|none")
@@ -328,7 +334,9 @@ func handleError(err error) {
 	f := output.Resolve(outputFormat, os.Stderr)
 
 	// Convert any error into a *clierr.Error so we render a structured
-	// envelope no matter what the source was.
+	// envelope no matter what the source was. A --query that failed while
+	// running is still a flag error.
+	err = queryFlagError(err)
 	apiErr, ok := err.(*api.APIError)
 	if !ok {
 		apiErr = clierr.Wrap(err)

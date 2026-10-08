@@ -70,8 +70,9 @@ so the assistant can't see your previous questions). In -i, /reset starts a
 fresh conversation, /help lists commands, and /exit or Ctrl-D leaves.
 
 Pass --call-uuid for voice-debug context; --verbose to show the assistant's
-tool calls; -o json to emit each SSE event as one JSONL line (handy for
-scripts and AI agents).`,
+tool calls; -o json or -o jsonl to emit each SSE event as one JSON line
+(handy for scripts and AI agents). A stream has no single result, so -o yaml,
+-o csv and --query are refused.`,
 	Example: `  plivo ask "What does Plivo SMS error code 30007 mean?"
   plivo ask -i
   plivo ask -i "Debug what happened on this call"
@@ -419,10 +420,10 @@ func printREPLHelp(w io.Writer) {
 // cancels the in-flight turn; Ctrl-D or /exit leaves. An optional firstMsg
 // seeds the first turn (`plivo ask -i "..."`).
 func runInteractiveAsk(client *api.Client, url, firstMsg string) error {
-	// Only refuse an EXPLICIT -o json — the non-TTY default (e.g. piped
-	// through `tee`) shouldn't block a session that's still human-driven.
-	if strings.EqualFold(outputFormat, "json") {
-		return clierr.BadInput("interactive mode (-i) can't be combined with -o json")
+	// Only refuse an EXPLICIT -o json or jsonl — the non-TTY default (e.g.
+	// piped through `tee`) shouldn't block a session that's still human-driven.
+	if f := strings.ToLower(outputFormat); f == "json" || f == "jsonl" {
+		return clierr.BadInput("interactive mode (-i) can't be combined with -o " + f)
 	}
 	if dryRunFlag {
 		return clierr.BadInput("--dry-run isn't supported in interactive mode (-i)")
