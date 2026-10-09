@@ -68,8 +68,10 @@ func lookupSkill(selector string) (bundledSkill, error) {
 
 // skill install flags.
 var (
-	skillDir   string
-	skillPrint bool
+	skillDir     string
+	skillPrint   bool
+	skillProject bool
+	skillForce   bool
 )
 
 // skillFileName is the on-disk name of the skill file inside the target dir.
@@ -102,11 +104,17 @@ They are bundled in the binary, so this writes them out without a network call.
 With no argument, installs the CLI skill (unchanged from previous releases).
 Each skill lands at ~/.claude/skills/<skill>/SKILL.md by default. Use --dir to
 target another agent's skills directory, or --print to write the content to
-stdout so any other tool can capture it; both act on a single skill.`,
+stdout so any other tool can capture it; both act on a single skill.
+
+--project installs into the git repository you are in instead, at
+<repo>/.claude/skills/<skill>/SKILL.md, so everyone who clones it gets the
+skill. A project copy that differs from the bundled one may hold your team's
+edits, so it is kept unless you pass --force.`,
 	Example: `  plivo skill install                    # CLI skill -> ~/.claude/skills/plivo-cli/
   plivo skill install audio-streaming    # -> ~/.claude/skills/plivo-audio-streaming/
   plivo skill install voice-xml          # -> ~/.claude/skills/plivo-voice-xml/
   plivo skill install all                # every listed skill
+  plivo skill install all --project      # -> <repo>/.claude/skills/, for the whole team
   plivo skill install all --dry-run      # show destinations, write nothing`,
 	Args:      cobra.MaximumNArgs(1),
 	ValidArgs: []string{"cli", "audio-streaming", "sip-trunking", "voice-xml", "all"},
@@ -126,6 +134,8 @@ var skillListCmd = &cobra.Command{
 func init() {
 	skillInstallCmd.Flags().StringVar(&skillDir, "dir", "", "destination directory (default: ~/.claude/skills/<skill>)")
 	skillInstallCmd.Flags().BoolVar(&skillPrint, "print", false, "write the skill content to stdout instead of installing")
+	skillInstallCmd.Flags().BoolVar(&skillProject, "project", false, "install into the current git repository's .claude/skills")
+	skillInstallCmd.Flags().BoolVar(&skillForce, "force", false, "with --project, overwrite a skill file that differs from the bundled one")
 	skillCmd.AddCommand(skillInstallCmd, skillListCmd)
 	rootCmd.AddCommand(skillCmd)
 }
@@ -135,6 +145,12 @@ func runSkillInstall(cmd *cobra.Command, args []string) error {
 	if len(args) == 1 {
 		selector = args[0]
 	}
+	if skillProject && skillDir != "" {
+		return clierr.BadFlag("project", "can't be combined with --dir; --project installs into the repository's .claude/skills")
+	}
+	if skillForce && !skillProject {
+		return clierr.BadFlag("force", "only applies with --project; a home or --dir install always overwrites")
+	}
 
 	// "all" fans out; --dir and --print each name a single destination, so they
 	// are incompatible with it.
@@ -143,12 +159,7 @@ func runSkillInstall(cmd *cobra.Command, args []string) error {
 			return clierr.Wrap(fmt.Errorf(
 				"--dir and --print act on one skill; name it instead of \"all\""))
 		}
-		for _, s := range bundledSkills {
-			if err := installSkill(s); err != nil {
-				return err
-			}
-		}
-		return nil
+		return installSkills(bundledSkills)
 	}
 
 	s, err := lookupSkill(selector)
@@ -156,20 +167,86 @@ func runSkillInstall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// --print emits the skill to stdout; ignores --dir / --dry-run.
+	// --print emits the skill to stdout; ignores --dir / --project / --dry-run.
 	if skillPrint {
 		_, err := fmt.Fprint(os.Stdout, s.content)
 		return err
 	}
 
-	if err := installSkill(s); err != nil {
-		return err
-	}
-	return nil
+	return installSkills([]bundledSkill{s})
 }
 
-// installSkill writes one skill to its resolved directory, honouring --dir and
-// --dry-run.
+// installSkills installs each skill, into the repository under --project. A
+// project copy that was kept fails the command once the rest are installed.
+func installSkills(skills []bundledSkill) error {
+	projectRoot := ""
+	if skillProject {
+		root, err := projectSkillsRoot()
+		if err != nil {
+			return err
+		}
+		projectRoot = root
+	}
+	var kept []string
+	for _, s := range skills {
+		k, err := installSkill(s, projectRoot)
+		if err != nil {
+			return err
+		}
+		if k != "" {
+			kept = append(kept, k)
+		}
+	}
+	if len(kept) == 0 {
+		return nil
+	}
+	what := kept[0] + ", which differs from the bundled skill"
+	if len(kept) > 1 {
+		what = strings.Join(kept, ", ") + ", which differ from the bundled skills"
+	}
+	e := clierr.DestructiveRefused("overwrite " + what)
+	e.Hint = "A project copy may hold your team's edits. Pass --force to overwrite it, " +
+		"or compare first: plivo skill install <skill> --print | diff <file> -"
+	e.Context = map[string]any{"kept": kept}
+	return e
+}
+
+// projectSkillsRoot returns <repo>/.claude/skills for the git repository the
+// working directory is in.
+func projectSkillsRoot() (string, error) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", clierr.Wrap(fmt.Errorf("resolve working directory: %w", err))
+	}
+	root, ok := findGitRoot(wd)
+	if !ok {
+		e := clierr.BadInput(wd + " is not inside a git repository, so --project has nowhere to install")
+		e.Hint = "Run it from inside the project, or drop --project to install for your user (~/.claude/skills)."
+		return "", e
+	}
+	return filepath.Join(root, ".claude", "skills"), nil
+}
+
+// findGitRoot walks up from dir to the nearest folder holding .git: a
+// directory in a clone, a file in a linked worktree or submodule.
+func findGitRoot(dir string) (string, bool) {
+	dir = filepath.Clean(dir)
+	for {
+		if fi, err := os.Stat(filepath.Join(dir, ".git")); err == nil && (fi.IsDir() || fi.Mode().IsRegular()) {
+			return dir, true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", false
+		}
+		dir = parent
+	}
+}
+
+// crlfToLF reads CRLF line endings as LF. Git for Windows checks text out with
+// CRLF by default, and a copy that differs only in that is the same skill.
+func crlfToLF(s string) string { return strings.ReplaceAll(s, "\r\n", "\n") }
+
 // skillState describes whether a bundled skill is on disk and current.
 // "differs from bundled" is the useful one: it catches a skill written by an
 // older binary, which is the drift embedding the content creates.
@@ -228,33 +305,46 @@ func runSkillList(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func installSkill(s bundledSkill) error {
-	dir, err := resolveSkillDir(skillDir, s.dirName)
-	if err != nil {
-		return err
+// installSkill writes one skill to its resolved directory, honouring --dir and
+// --dry-run; under --project, projectRoot is the repository's skills root. A
+// project copy that differs from the bundled one is left alone unless --force,
+// and its path returned.
+func installSkill(s bundledSkill, projectRoot string) (kept string, err error) {
+	dir := filepath.Join(projectRoot, s.dirName)
+	if projectRoot == "" {
+		if dir, err = resolveSkillDir(skillDir, s.dirName); err != nil {
+			return "", err
+		}
 	}
 	dest := filepath.Join(dir, skillFileName)
+
+	if projectRoot != "" && !skillForce {
+		if b, err := os.ReadFile(dest); err == nil && crlfToLF(string(b)) != crlfToLF(s.content) {
+			return dest, nil
+		}
+	}
 
 	// --dry-run: report the destination without touching disk.
 	if dryRunFlag {
 		fmt.Fprintf(os.Stderr, "Would write skill to %s\n", dest)
 	} else {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return clierr.Wrap(fmt.Errorf("create skill directory %s: %w", dir, err))
+			return "", clierr.Wrap(fmt.Errorf("create skill directory %s: %w", dir, err))
 		}
 		if err := os.WriteFile(dest, []byte(s.content), 0o644); err != nil {
-			return clierr.Wrap(fmt.Errorf("write skill to %s: %w", dest, err))
+			return "", clierr.Wrap(fmt.Errorf("write skill to %s: %w", dest, err))
 		}
 		fmt.Fprintf(os.Stderr, "Installed skill: %s\n", dest)
 	}
 
 	// --dir names this skill's own folder, so there is no telling where an
-	// older copy of a replaced skill would be.
-	if skillDir != "" {
-		return nil
+	// older copy of a replaced skill would be. No release wrote a retired
+	// skill into a project, so a project has none of the CLI's to remove.
+	if skillDir != "" || projectRoot != "" {
+		return "", nil
 	}
 	removeReplacedSkills(s)
-	return nil
+	return "", nil
 }
 
 // removeReplacedSkills removes, from the default skills root, the skills that s
