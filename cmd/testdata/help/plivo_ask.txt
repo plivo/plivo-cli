@@ -12,8 +12,9 @@ so the assistant can't see your previous questions). In -i, /reset starts a
 fresh conversation, /help lists commands, and /exit or Ctrl-D leaves.
 
 Pass --call-uuid for voice-debug context; --verbose to show the assistant's
-tool calls; -o json to emit each SSE event as one JSONL line (handy for
-scripts and AI agents).
+tool calls; -o json or -o jsonl to emit each SSE event as one JSON line
+(handy for scripts and AI agents). A stream has no single result, so -o yaml,
+-o csv and --query are refused.
 
 Usage:
   plivo ask [message] [flags]
@@ -36,8 +37,9 @@ Global Flags:
       --dry-run            print the HTTP request without sending
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
-  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+  -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
       --profile string     named profile from ~/.plivo/config.toml
+      --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts
