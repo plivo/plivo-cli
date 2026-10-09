@@ -316,11 +316,14 @@ func TestRunInteractiveAsk_nonTTYDefault_notRejected(t *testing.T) {
 
 func TestRunInteractiveAsk_explicitJSON_stillRejected(t *testing.T) {
 	orig := outputFormat
-	outputFormat = "json"
 	defer func() { outputFormat = orig }()
 
-	err := runInteractiveAsk(&api.Client{}, "http://example.invalid/chat", "")
-	if err == nil || !strings.Contains(err.Error(), "can't be combined with -o json") {
-		t.Errorf("expected the -o json rejection, got: %v", err)
+	// jsonl is the same event stream as json for ask, so it is refused too.
+	for _, f := range []string{"json", "jsonl"} {
+		outputFormat = f
+		err := runInteractiveAsk(&api.Client{}, "http://example.invalid/chat", "")
+		if err == nil || !strings.Contains(err.Error(), "can't be combined with -o "+f) {
+			t.Errorf("expected the -o %s rejection, got: %v", f, err)
+		}
 	}
 }

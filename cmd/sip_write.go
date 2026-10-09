@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -24,26 +25,55 @@ const (
 
 // ─── helpers shared by the write verbs ───────────────────────────────────────
 
-// listTrunks fetches every trunk, so a delete can say what it would break.
-// Best-effort: a failure returns nil and the caller skips the preview rather
-// than blocking a legitimate delete on a read it does not strictly need.
-func listTrunks(client *api.Client) []api.SIPTrunk {
-	q := url.Values{}
-	q.Set("limit", "20")
-	var all []api.SIPTrunk
-	for offset := 0; offset < 200; offset += 20 {
-		q.Set("offset", strconv.Itoa(offset))
-		var resp api.SIPTrunkList
-		apiErr, err := client.Do("GET", client.AccountURL("Zentrunk", "Trunk"), nil, q, &resp)
-		if err != nil || apiErr != nil {
-			return all
+// sipDeleteForce backs --force on the SIP deletes: delete even though something
+// depends on the object. It only counts on top of --yes.
+var sipDeleteForce bool
+
+// trunkFilters are the trunk-list filters that find the trunks using an object,
+// keyed by the API path segment of the object being deleted.
+var trunkFilters = map[string][]string{
+	"URI":                 {"primary_uri_uuid", "fallback_uri_uuid"},
+	"Credential":          {"credential_uuid"},
+	"IPAccessControlList": {"ipacl_uuid"},
+}
+
+// trunksUsing names every trunk that points at an object. It reads the trunk
+// list through the filters, every page, under --dry-run too, and checks each
+// match again here, so a filter the server ignored cannot add a trunk that does
+// not use the object. An error means the check did not finish.
+func trunksUsing(client *api.Client, segment, uuid string) ([]string, error) {
+	var used []string
+	seen := map[string]bool{}
+	err := readThrough(client, func() error {
+		for _, filter := range trunkFilters[segment] {
+			q := url.Values{}
+			q.Set("limit", strconv.Itoa(maxListLimit))
+			q.Set(filter, uuid)
+			var decodeErr error
+			_, _, err := walkPages(client, client.AccountURL("Zentrunk", "Trunk"), q, "objects", 0,
+				func(rows []json.RawMessage) bool {
+					for _, row := range rows {
+						var t api.SIPTrunk
+						if decodeErr = json.Unmarshal(row, &t); decodeErr != nil {
+							return false
+						}
+						if ref := trunksReferencing([]api.SIPTrunk{t}, uuid); len(ref) > 0 && !seen[t.TrunkID] {
+							seen[t.TrunkID] = true
+							used = append(used, ref...)
+						}
+					}
+					return true
+				})
+			if err == nil && decodeErr != nil {
+				err = clierr.Upstream("a trunk in the list could not be read: " + decodeErr.Error())
+			}
+			if err != nil {
+				return err
+			}
 		}
-		all = append(all, resp.Objects...)
-		if len(resp.Objects) < 20 {
-			break
-		}
-	}
-	return all
+		return nil
+	})
+	return used, err
 }
 
 // trunksReferencing names every trunk pointing at uuid, so the user sees what a
@@ -65,42 +95,88 @@ func trunksReferencing(trunks []api.SIPTrunk, uuid string) []string {
 	return out
 }
 
-// numbersOnTrunk counts numbers routed to a trunk. A number carries its trunk in
-// `application` as a Zentrunk resource path, not in a trunk_id field.
-func numbersOnTrunk(client *api.Client, trunkID string) int {
-	q := url.Values{}
-	q.Set("limit", "20")
+// firstNumberOnTrunk reads the account's numbers page by page, under --dry-run
+// too, and returns the first one routed to the trunk: one is enough to refuse.
+// "" means every page was read and none is. No filter finds numbers by trunk,
+// so a large account is many pages, and progress goes to stderr. An error
+// means the check did not finish.
+func firstNumberOnTrunk(client *api.Client, trunkID string) (string, error) {
+	// A number carries its trunk in `application` as a Zentrunk resource path,
+	// not in a trunk_id field.
 	marker := "/Zentrunk/Trunk/" + trunkID + "/"
-	count := 0
-	for offset := 0; offset < 400; offset += 20 {
-		q.Set("offset", strconv.Itoa(offset))
-		var resp api.NumberList
-		apiErr, err := client.Do("GET", client.AccountURL("Number"), nil, q, &resp)
-		if err != nil || apiErr != nil {
-			return count
-		}
-		for _, n := range resp.Objects {
-			if strings.Contains(n.Application, marker) {
-				count++
-			}
-		}
-		if len(resp.Objects) < 20 {
-			break
-		}
+	q := url.Values{}
+	q.Set("limit", strconv.Itoa(maxListLimit))
+	var found string
+	var decodeErr error
+	read, pages := 0, 0
+	err := readThrough(client, func() error {
+		_, _, err := walkPages(client, client.AccountURL("Number"), q, "objects", 0,
+			func(rows []json.RawMessage) bool {
+				for _, row := range rows {
+					var n struct {
+						Number      string `json:"number"`
+						Application string `json:"application"`
+					}
+					if decodeErr = json.Unmarshal(row, &n); decodeErr != nil {
+						return false
+					}
+					if strings.Contains(n.Application, marker) {
+						found = n.Number
+						return false
+					}
+				}
+				read += len(rows)
+				if pages++; pages%10 == 0 && !quietFlag {
+					fmt.Fprintf(os.Stderr, "Checked %d numbers so far for routing to this trunk...\n", read)
+				}
+				return true
+			})
+		return err
+	})
+	if err == nil && decodeErr != nil {
+		err = clierr.Upstream("a number in the list could not be read: " + decodeErr.Error())
 	}
-	return count
+	if err == nil && found == "" && !quietFlag {
+		fmt.Fprintf(os.Stderr, "None of the %d numbers on the account is routed to this trunk.\n", read)
+	}
+	return found, err
 }
 
-// confirmDestructive refuses without --yes, naming what would be affected.
-func confirmDestructive(action string, affected []string, extra string) error {
-	if yesFlag {
+// confirmDelete lets a delete through only with --yes, and one that would break
+// something only with --force on top: deleting an in-use URI also deletes its
+// trunks, and deleting a trunk stops calls to every number routed to it.
+func confirmDelete(action string, dependents []string) error {
+	if len(dependents) == 0 {
+		if !yesFlag {
+			return clierr.DestructiveRefused(action)
+		}
 		return nil
 	}
-	reportDependents(affected)
-	if extra != "" {
-		fmt.Fprintf(os.Stderr, "%s\n", extra)
+	if yesFlag && sipDeleteForce {
+		return nil
 	}
-	return clierr.DestructiveRefused(action)
+	e := clierr.DestructiveRefused(action)
+	e.Message += ": it is in use"
+	e.Hint = "Repoint or remove what depends on it first, or pass --yes --force to delete it anyway."
+	e.Context = map[string]any{"dependents": dependents}
+	return e
+}
+
+// checkFailed stops a delete whose dependents could not all be read: deleting
+// blind is how an in-use URI takes its trunks with it. The read's own error
+// comes through (code, exit code, retryable flag, request id, hint), so a
+// rejected login still exits 2 and a rate limit 4; only the message and hint
+// add what was refused.
+func checkFailed(action string, err error) error {
+	var read *clierr.Error
+	if !errors.As(err, &read) {
+		// No answer from the API, or none it could parse: a transport failure.
+		read = clierr.NetworkError("the Plivo API", err)
+	}
+	e := *read
+	e.Message = fmt.Sprintf("refusing to %s: could not check what depends on it: %s", action, read.Message)
+	e.Hint = strings.TrimSpace(read.Hint + " Nothing was deleted.")
+	return &e
 }
 
 // reportDependents names what a delete would detach. Printed on every delete,
@@ -185,6 +261,7 @@ trunk_domain is only returned on a read, so this reads the trunk back and prints
 it: that domain is what you paste into your platform.`,
 	Example: `  plivo sip trunks create --name my-trunk --direction inbound --uri <uri_uuid>
   plivo sip trunks create --name out --direction outbound --credential <uuid>`,
+	Args: cobra.NoArgs,
 	RunE: runSIPTrunksCreate,
 }
 
@@ -207,8 +284,10 @@ var sipTrunksDeleteCmd = &cobra.Command{
 	Short: "Delete a trunk (requires --yes)",
 	Long: `Delete a trunk.
 
-Reports how many numbers are routed to it first: deleting a trunk detaches every
-one of them, and inbound calls to those numbers stop.`,
+Reads every number on the account first: deleting a trunk detaches every number
+routed to it, and inbound calls to those numbers stop. If one is routed there,
+the delete is refused unless --force is added to --yes. If the check cannot
+read every page, the delete is refused.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runSIPTrunksDelete,
 }
@@ -332,17 +411,22 @@ func runSIPTrunksUpdate(cmd *cobra.Command, args []string) error {
 
 func runSIPTrunksDelete(cmd *cobra.Command, args []string) error {
 	id := args[0]
+	action := "delete trunk " + id
 	client, _, err := getClient()
 	if err != nil {
 		return err
 	}
-	extra := ""
-	if n := numbersOnTrunk(client, id); n > 0 {
-		extra = fmt.Sprintf("%d number(s) are routed to this trunk and will be detached.", n)
-		fmt.Fprintf(os.Stderr, "%s\n", extra)
+	routed, err := firstNumberOnTrunk(client, id)
+	if err != nil {
+		return checkFailed(action, err)
 	}
-	if !yesFlag {
-		return confirmDestructive("delete trunk "+id, nil, extra)
+	var dependents []string
+	if routed != "" {
+		fmt.Fprintf(os.Stderr, "Number %s is routed to this trunk; deleting the trunk detaches it and any other number routed there.\n", routed)
+		dependents = []string{"number " + routed}
+	}
+	if err := confirmDelete(action, dependents); err != nil {
+		return err
 	}
 	if err := deleteSIP(client, "Zentrunk", "Trunk", id); err != nil {
 		return err
@@ -384,10 +468,11 @@ It is checked before sending: a space, a bad port, an unknown transport or a
 malformed host is refused. A missing port is fine: the platform decides the
 default.`,
 	Example: `  plivo sip uris create --name eleven --uri sip.rtc.elevenlabs.io:5060;transport=tcp`,
+	Args:    cobra.NoArgs,
 	RunE:    runSIPURIsCreate,
 }
 
-var sipURIsListCmd = &cobra.Command{Use: "list", Short: "List origination URIs", RunE: runSIPURIsList}
+var sipURIsListCmd = &cobra.Command{Use: "list", Short: "List origination URIs", Args: cobra.NoArgs, RunE: runSIPURIsList}
 var sipURIsGetCmd = &cobra.Command{Use: "get <uri_uuid>", Short: "Get one origination URI", Args: cobra.ExactArgs(1), RunE: runSIPURIsGet}
 
 var sipURIsUpdateCmd = &cobra.Command{
@@ -403,9 +488,11 @@ var sipURIsUpdateCmd = &cobra.Command{
 var sipURIsDeleteCmd = &cobra.Command{
 	Use:   "delete <uri_uuid>",
 	Short: "Delete an origination URI (requires --yes)",
-	Long:  "Names any trunk using it as a primary or fallback URI before deleting.",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runSIPURIsDelete,
+	Long: `Names any trunk using it as a primary or fallback URI first. Deleting a URI
+also deletes those trunks, so an in-use URI needs --force on top of --yes. If
+the check fails, the delete is refused.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runSIPURIsDelete,
 }
 
 // normalizeSIPURI keeps whatever shape the user gave. A bare host is legal, so
@@ -457,18 +544,14 @@ func runSIPURIsList(cmd *cobra.Command, args []string) error {
 	q.Set("limit", strconv.Itoa(uriListLimit))
 	q.Set("offset", strconv.Itoa(uriListOffset))
 	var resp api.SIPTrunkURIList
-	apiErr, err := client.Do("GET", client.AccountURL("Zentrunk", "URI"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Zentrunk", "URI"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"URI_UUID", "NAME", "URI", "AUTHENTICATION_NEEDED", "USERNAME"}}
 	for _, u := range resp.Objects {
@@ -574,7 +657,8 @@ func runSIPURIsDelete(cmd *cobra.Command, args []string) error {
 }
 
 // deleteSIPObject is the shared delete for URIs, credentials and IP ACLs: name
-// every trunk pointing at the object, then refuse without --yes.
+// every trunk pointing at the object, then refuse without --yes, or without
+// --force when a trunk uses it.
 func deleteSIPObject(cmd *cobra.Command, uuid, segment, action string) error {
 	client, _, err := getClient()
 	if err != nil {
@@ -583,10 +667,13 @@ func deleteSIPObject(cmd *cobra.Command, uuid, segment, action string) error {
 	// Always read the dependents. --yes skips the confirmation, never the check:
 	// the whole point is to know what a delete detaches, and that matters most
 	// when nobody is there to be asked.
-	used := trunksReferencing(listTrunks(client), uuid)
+	used, err := trunksUsing(client, segment, uuid)
+	if err != nil {
+		return checkFailed(action+uuid, err)
+	}
 	reportDependents(used)
-	if !yesFlag {
-		return confirmDestructive(action+uuid, nil, "")
+	if err := confirmDelete(action+uuid, used); err != nil {
+		return err
 	}
 	if err := deleteSIP(client, "Zentrunk", segment, uuid); err != nil {
 		return err
@@ -640,10 +727,11 @@ The password is read from stdin only. There is no --password flag: a password in
 an argument lands in shell history, process listings and CI logs. It is never
 echoed, never printed back, and never generated for you.`,
 	Example: `  printf '%s' "$SIP_PASSWORD" | plivo sip credentials create --name c1 --username u1 --password-stdin`,
+	Args:    cobra.NoArgs,
 	RunE:    runSIPCredsCreate,
 }
 
-var sipCredsListCmd = &cobra.Command{Use: "list", Short: "List credentials", RunE: runSIPCredsList}
+var sipCredsListCmd = &cobra.Command{Use: "list", Short: "List credentials", Args: cobra.NoArgs, RunE: runSIPCredsList}
 var sipCredsGetCmd = &cobra.Command{Use: "get <credential_uuid>", Short: "Get one credential", Args: cobra.ExactArgs(1), RunE: runSIPCredsGet}
 
 var sipCredsUpdateCmd = &cobra.Command{
@@ -657,7 +745,7 @@ var sipCredsUpdateCmd = &cobra.Command{
 var sipCredsDeleteCmd = &cobra.Command{
 	Use:   "delete <credential_uuid>",
 	Short: "Delete a credential (requires --yes)",
-	Long:  "Names any trunk using it before deleting.",
+	Long:  "Names any trunk using it first; an in-use one needs --force on top of --yes. If the check fails, the delete is refused.",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runSIPCredsDelete,
 }
@@ -713,18 +801,14 @@ func runSIPCredsList(cmd *cobra.Command, args []string) error {
 	q.Set("limit", strconv.Itoa(credListLimit))
 	q.Set("offset", strconv.Itoa(credListOffset))
 	var resp api.SIPTrunkCredentialList
-	apiErr, err := client.Do("GET", client.AccountURL("Zentrunk", "Credential"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Zentrunk", "Credential"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"CREDENTIAL_UUID", "NAME", "USERNAME"}}
 	for _, c := range resp.Objects {
@@ -831,6 +915,7 @@ comma-separated list is refused rather than split. A range that allows the
 whole internet is reported but not blocked: it is occasionally deliberate, and
 refusing it outright would push people to the console instead.`,
 	Example: `  plivo sip ip-acl create --name platform --ip 203.0.113.4 --ip 198.51.100.0/24`,
+	Args:    cobra.NoArgs,
 	RunE:    runSIPACLCreate,
 }
 
@@ -845,7 +930,7 @@ var sipACLUpdateCmd = &cobra.Command{
 var sipACLDeleteCmd = &cobra.Command{
 	Use:   "delete <ipacl_uuid>",
 	Short: "Delete an IP access control list (requires --yes)",
-	Long:  "Names any trunk using it before deleting.",
+	Long:  "Names any trunk using it first; an in-use one needs --force on top of --yes. If the check fails, the delete is refused.",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runSIPACLDelete,
 }
@@ -965,8 +1050,7 @@ func init() {
 	ucf.StringVar(&uriCreateUsername, "username", "", "username when authentication is needed")
 	ucf.BoolVar(&uriCreatePasswordStdin, "password-stdin", false, "read the URI password from stdin")
 	ucf.BoolVar(&uriCreateAuthNeeded, "authentication-needed", false, "require authentication")
-	sipURIsListCmd.Flags().IntVar(&uriListLimit, "limit", 20, "rows to return")
-	sipURIsListCmd.Flags().IntVar(&uriListOffset, "offset", 0, "rows to skip")
+	registerListFlags(sipURIsListCmd, &uriListLimit, &uriListOffset)
 	uuf := sipURIsUpdateCmd.Flags()
 	uuf.StringVar(&uriUpdateName, "name", "", "URI name")
 	uuf.StringVar(&uriUpdateURI, "uri", "", "origination URI")
@@ -978,8 +1062,7 @@ func init() {
 	ccf.StringVar(&credCreateName, "name", "", "credential name")
 	ccf.StringVar(&credCreateUsername, "username", "", "SIP username (required)")
 	ccf.BoolVar(&credCreatePasswordStdin, "password-stdin", false, "read the password from stdin (required)")
-	sipCredsListCmd.Flags().IntVar(&credListLimit, "limit", 20, "rows to return")
-	sipCredsListCmd.Flags().IntVar(&credListOffset, "offset", 0, "rows to skip")
+	registerListFlags(sipCredsListCmd, &credListLimit, &credListOffset)
 	cuf := sipCredsUpdateCmd.Flags()
 	cuf.StringVar(&credUpdateName, "name", "", "credential name")
 	cuf.StringVar(&credUpdateUsername, "username", "", "SIP username")
@@ -991,6 +1074,10 @@ func init() {
 	auf := sipACLUpdateCmd.Flags()
 	auf.StringVar(&aclUpdateName, "name", "", "list name")
 	auf.StringArrayVar(&aclUpdateIPs, "ip", nil, "IP or CIDR (repeatable; replaces the list)")
+
+	for _, c := range []*cobra.Command{sipTrunksDeleteCmd, sipURIsDeleteCmd, sipCredsDeleteCmd, sipACLDeleteCmd} {
+		c.Flags().BoolVar(&sipDeleteForce, "force", false, "delete even though something depends on it (with --yes)")
+	}
 
 	sipTrunksCmd.AddCommand(sipTrunksCreateCmd, sipTrunksUpdateCmd, sipTrunksDeleteCmd)
 	sipURIsCmd.AddCommand(sipURIsCreateCmd, sipURIsListCmd, sipURIsGetCmd, sipURIsUpdateCmd, sipURIsDeleteCmd)

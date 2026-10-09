@@ -1,0 +1,29 @@
+Show the call quality Plivo measured on a SIP Trunking call: round-trip time,
+jitter, packet loss, post-dial delay and the Plivo quality score, with the
+hangup cause and source and the carrier and region of each leg.
+
+Values are printed as the API returns them, with units; nothing is computed
+here. A quality score outside the documented 1-5 range is labelled as such.
+The table ends with which side ended the call, as in `sip calls get`.
+-o json returns the API response unchanged.
+
+Usage:
+  plivo sip calls insights <call_uuid> [flags]
+
+Examples:
+  plivo sip calls insights 8f3c1a2e-0d44-4a6f-9c31-2b7e5a90d1f7
+
+Flags:
+  -h, --help   help for insights
+
+Global Flags:
+      --dry-run            print the HTTP request without sending
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+      --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
+  -q, --quiet              suppress non-data output
+      --schema             describe the command (arguments, flags, output fields) instead of running it
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts

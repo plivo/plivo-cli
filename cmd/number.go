@@ -34,6 +34,7 @@ var (
 var numberListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List numbers rented to your account",
+	Args:  cobra.NoArgs,
 	RunE:  runNumberList,
 }
 
@@ -70,6 +71,7 @@ var (
 var numberSearchCmd = &cobra.Command{
 	Use:   "search",
 	Short: "Search available numbers to rent",
+	Args:  cobra.NoArgs,
 	RunE:  runNumberSearch,
 }
 
@@ -90,13 +92,12 @@ var numberReleaseCmd = &cobra.Command{
 }
 
 func init() {
-	numberListCmd.Flags().StringVar(&numberListType, "type", "", "filter by type: local|tollfree|mobile|fixed")
+	numberListCmd.Flags().StringVar(&numberListType, "type", "", "filter by type: "+oneOf(numberTypeValues))
 	numberListCmd.Flags().StringVar(&numberListStartswith, "starts-with", "", "prefix filter on E.164")
 	numberListCmd.Flags().StringVar(&numberListSubaccount, "subaccount", "", "filter by subaccount auth_id")
 	numberListCmd.Flags().StringVar(&numberListAlias, "alias", "", "filter by alias")
 	numberListCmd.Flags().StringVar(&numberListServices, "services", "", "filter by services: voice|sms|mms|voice,sms ...")
-	numberListCmd.Flags().IntVar(&numberListLimit, "limit", 20, "results per page (max 20)")
-	numberListCmd.Flags().IntVar(&numberListOffset, "offset", 0, "pagination offset")
+	registerListFlags(numberListCmd, &numberListLimit, &numberListOffset)
 
 	numberUpdateCmd.Flags().StringVar(&numberUpdateAppID, "app-id", "", "associate an application")
 	numberUpdateCmd.Flags().StringVar(&numberUpdateTrunkID, "trunk-id", "", "route the number to an inbound SIP trunk")
@@ -105,11 +106,10 @@ func init() {
 
 	numberSearchCmd.Flags().StringVar(&numberSearchCountry, "country", "", "ISO country code, e.g. US (required)")
 	_ = numberSearchCmd.MarkFlagRequired("country")
-	numberSearchCmd.Flags().StringVar(&numberSearchType, "type", "", "local|tollfree|mobile|fixed")
+	numberSearchCmd.Flags().StringVar(&numberSearchType, "type", "", oneOf(numberTypeValues))
 	numberSearchCmd.Flags().StringVar(&numberSearchPattern, "pattern", "", "digit pattern")
 	numberSearchCmd.Flags().StringVar(&numberSearchRegion, "region", "", "region filter")
-	numberSearchCmd.Flags().IntVar(&numberSearchLimit, "limit", 20, "results per page")
-	numberSearchCmd.Flags().IntVar(&numberSearchOffset, "offset", 0, "pagination offset")
+	registerPageFlags(numberSearchCmd, &numberSearchLimit, &numberSearchOffset)
 
 	numberBuyCmd.Flags().StringVar(&numberBuyAppID, "app-id", "", "auto-attach to this application after purchase")
 	registerExplainFlag(numberBuyCmd)
@@ -146,6 +146,12 @@ func runNumberRelease(cmd *cobra.Command, args []string) error {
 }
 
 func runNumberList(cmd *cobra.Command, args []string) error {
+	if err := validateEnum("type", &numberListType, numberTypeValues...); err != nil {
+		return err
+	}
+	if err := validateEnumList("services", &numberListServices, numberServices...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -170,12 +176,8 @@ func runNumberList(cmd *cobra.Command, args []string) error {
 	q.Set("offset", strconv.Itoa(numberListOffset))
 
 	var resp api.NumberList
-	apiErr, err := client.Do("GET", client.AccountURL("Number"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Number"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
@@ -185,7 +187,7 @@ func runNumberList(cmd *cobra.Command, args []string) error {
 
 func renderNumberList(resp api.NumberList) error {
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"NUMBER", "TYPE", "COUNTRY", "APP_ID", "ALIAS"}}
 	for _, n := range resp.Objects {
@@ -323,6 +325,9 @@ func runNumberBuy(cmd *cobra.Command, args []string) error {
 }
 
 func runNumberSearch(cmd *cobra.Command, args []string) error {
+	if err := validateEnum("type", &numberSearchType, numberTypeValues...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -18,10 +19,6 @@ import (
 
 // SIP Trunking lives under the `Zentrunk` API path for historical reasons. The
 // product name is SIP Trunking, so nothing user-facing here says otherwise.
-
-// maxSIPCallLimit is the API's ceiling. Enforced locally so an over-large
-// --limit fails immediately instead of costing a round-trip to learn the same.
-const maxSIPCallLimit = 20
 
 // sipHangupCodesDocsURL is the Zentrunk hangup-code reference.
 const sipHangupCodesDocsURL = "https://www.plivo.com/docs/sip-trunking/troubleshooting/zentrunk-hangup-codes"
@@ -86,6 +83,7 @@ var sipCallsListCmd = &cobra.Command{
 	Example: `  plivo sip calls list --limit 20
   plivo sip calls list --direction outbound --since 2026-09-01
   plivo sip calls list --hangup-source carrier -o json`,
+	Args: cobra.NoArgs,
 	RunE: runSIPCallsList,
 }
 
@@ -97,24 +95,46 @@ var sipCallsDiagnoseCmd = &cobra.Command{
 SIP ladder and trunk configuration and explain what happened.
 
 Only SIP Trunking calls. For a Voice call use ` + "`plivo voice calls diagnose`" + `:
-the two read different stores, so neither can answer for the other.`,
+the two read different stores, so neither can answer for the other.` + diagnoseOutputHelp,
 	Example: `  plivo sip calls diagnose 8f3c1a2e-0d44-4a6f-9c31-2b7e5a90d1f7`,
 	Args:    cobra.ExactArgs(1),
 	RunE:    runSIPCallsDiagnose,
 }
 
 var sipCallsGetCmd = &cobra.Command{
-	Use:     "get <call_uuid>",
-	Short:   "Get one SIP Trunking call by UUID",
+	Use:   "get <call_uuid>",
+	Short: "Get one SIP Trunking call by UUID",
+	Long: `Get one SIP Trunking call by UUID.
+
+The table ends with which side ended the call: Plivo's hangup cause, code and
+source, then the platform's final SIP response. No API returns that response,
+so it shows as not available; the console's SIP logs have it.`,
 	Example: `  plivo sip calls get 8f3c1a2e-0d44-4a6f-9c31-2b7e5a90d1f7`,
 	Args:    cobra.ExactArgs(1),
 	RunE:    runSIPCallsGet,
+}
+
+var sipCallsInsightsCmd = &cobra.Command{
+	Use:   "insights <call_uuid>",
+	Short: "Show the call quality Plivo measured on a SIP Trunking call",
+	Long: `Show the call quality Plivo measured on a SIP Trunking call: round-trip time,
+jitter, packet loss, post-dial delay and the Plivo quality score, with the
+hangup cause and source and the carrier and region of each leg.
+
+Values are printed as the API returns them, with units; nothing is computed
+here. A quality score outside the documented 1-5 range is labelled as such.
+The table ends with which side ended the call, as in ` + "`sip calls get`" + `.
+-o json returns the API response unchanged.`,
+	Example: `  plivo sip calls insights 8f3c1a2e-0d44-4a6f-9c31-2b7e5a90d1f7`,
+	Args:    cobra.ExactArgs(1),
+	RunE:    runSIPCallsInsights,
 }
 
 var sipTrunksListCmd = &cobra.Command{
 	Use:     "list",
 	Short:   "List trunks",
 	Example: `  plivo sip trunks list --direction outbound`,
+	Args:    cobra.NoArgs,
 	RunE:    runSIPTrunksList,
 }
 
@@ -128,6 +148,7 @@ var sipTrunksGetCmd = &cobra.Command{
 var sipACLListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List IP access control lists",
+	Args:  cobra.NoArgs,
 	RunE:  runSIPACLList,
 }
 
@@ -139,28 +160,22 @@ var sipACLGetCmd = &cobra.Command{
 }
 
 func init() {
+	registerListFlags(sipCallsListCmd, &sipCallsLimit, &sipCallsOffset)
 	f := sipCallsListCmd.Flags()
-	f.IntVar(&sipCallsLimit, "limit", maxSIPCallLimit, "rows to return (1-20)")
-	f.IntVar(&sipCallsOffset, "offset", 0, "rows to skip")
 	f.StringVar(&sipCallsFrom, "from-number", "", "filter by caller ID")
 	f.StringVar(&sipCallsTo, "to-number", "", "filter by destination")
-	f.StringVar(&sipCallsDirection, "direction", "", "inbound|outbound")
+	f.StringVar(&sipCallsDirection, "direction", "", oneOf(directionValues))
 	f.StringVar(&sipCallsSince, "since", "", "calls ending at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]])")
 	f.StringVar(&sipCallsUntil, "until", "", "calls ending at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]])")
 	f.IntVar(&sipCallsCauseCode, "hangup-cause-code", 0, "filter by numeric hangup cause code")
-	f.StringVar(&sipCallsSource, "hangup-source", "", "who ended the call: customer|carrier|zentrunk")
-	f.StringVar(&sipCallsSTIR, "stir-verification", "", `"Verified"|"Not Verified"|"Not Applicable"`)
+	f.StringVar(&sipCallsSource, "hangup-source", "", "who ended the call: "+oneOf(sipHangupSources))
+	f.StringVar(&sipCallsSTIR, "stir-verification", "", oneOf(stirValues))
 
-	tf := sipTrunksListCmd.Flags()
-	tf.IntVar(&sipTrunksLimit, "limit", 20, "rows to return")
-	tf.IntVar(&sipTrunksOffset, "offset", 0, "rows to skip")
-	tf.StringVar(&sipTrunksDirection, "direction", "", "inbound|outbound")
+	registerListFlags(sipTrunksListCmd, &sipTrunksLimit, &sipTrunksOffset)
+	sipTrunksListCmd.Flags().StringVar(&sipTrunksDirection, "direction", "", oneOf(directionValues))
+	registerListFlags(sipACLListCmd, &sipACLLimit, &sipACLOffset)
 
-	af := sipACLListCmd.Flags()
-	af.IntVar(&sipACLLimit, "limit", 20, "rows to return")
-	af.IntVar(&sipACLOffset, "offset", 0, "rows to skip")
-
-	sipCallsCmd.AddCommand(sipCallsListCmd, sipCallsGetCmd, sipCallsDiagnoseCmd)
+	sipCallsCmd.AddCommand(sipCallsListCmd, sipCallsGetCmd, sipCallsDiagnoseCmd, sipCallsInsightsCmd)
 	sipTrunksCmd.AddCommand(sipTrunksListCmd, sipTrunksGetCmd)
 	sipACLCmd.AddCommand(sipACLListCmd, sipACLGetCmd)
 	sipCmd.AddCommand(sipCallsCmd, sipTrunksCmd, sipACLCmd)
@@ -204,8 +219,14 @@ func trimPlus(number string) string {
 }
 
 func runSIPCallsList(cmd *cobra.Command, args []string) error {
-	if sipCallsLimit < 1 || sipCallsLimit > maxSIPCallLimit {
-		return clierr.BadInput(fmt.Sprintf("--limit must be between 1 and %d", maxSIPCallLimit))
+	if err := validateEnum("direction", &sipCallsDirection, directionValues...); err != nil {
+		return err
+	}
+	if err := validateEnum("hangup-source", &sipCallsSource, sipHangupSources...); err != nil {
+		return err
+	}
+	if err := validateEnum("stir-verification", &sipCallsSTIR, stirValues...); err != nil {
+		return err
 	}
 	// The API refuses an upper time bound without a lower one. Say so here
 	// rather than let it come back as a 400 naming raw filter names.
@@ -246,18 +267,14 @@ func runSIPCallsList(cmd *cobra.Command, args []string) error {
 	}
 
 	var resp api.SIPTrunkCallList
-	apiErr, err := client.Do("GET", client.AccountURL("Zentrunk", "Call"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Zentrunk", "Call"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"CALL_UUID", "FROM", "TO", "DIR", "DUR", "CAUSE", "HUNG_UP_BY", "END_TIME"}}
 	for _, c := range resp.Objects {
@@ -290,6 +307,9 @@ func runSIPCallsGet(cmd *cobra.Command, args []string) error {
 	}
 	if err := output.KV(os.Stdout, sipCallKV(c)); err != nil {
 		return err
+	}
+	if !quietFlag {
+		fmt.Fprint(os.Stdout, "\n"+output.SafeText(sipHangupSides(c.HangupCauseName, c.HangupCauseCode, c.HangupSource)))
 	}
 	// Point at the hangup-code reference rather than at `voice calls diagnose`:
 	// a trunk CDR is not a Voice CDR and that command cannot read it.
@@ -329,7 +349,111 @@ func sipCallKV(c api.SIPTrunkCall) [][2]string {
 	}
 }
 
+func runSIPCallsInsights(cmd *cobra.Command, args []string) error {
+	client, _, err := getClient()
+	if err != nil {
+		return err
+	}
+	var in api.SIPCallInsights
+	apiErr, err := client.Do("GET", client.AccountURL("Zentrunk", "Call", args[0], "Insights"), nil, nil, &in)
+	if err != nil {
+		return err
+	}
+	if apiErr != nil {
+		return apiErr
+	}
+	if dryRunFlag {
+		return nil
+	}
+	if effectiveFormat() == output.FormatJSON {
+		return output.JSONRaw(os.Stdout, in.Raw())
+	}
+	if err := output.KV(os.Stdout, sipInsightsKV(in)); err != nil {
+		return err
+	}
+	// Insights carries no hangup code, so the Plivo line has none either.
+	if !quietFlag {
+		fmt.Fprint(os.Stdout, "\n"+output.SafeText(sipHangupSides(string(in.HangupCause), 0, string(in.HangupSource))))
+	}
+	return nil
+}
+
+// sipHangupSourceMeaning is the documented meaning of the hangup_source values
+// that read as something else in a sentence. "carrier" says what it means.
+var sipHangupSourceMeaning = map[string]string{
+	"customer": "your infrastructure",
+	"zentrunk": "Plivo's SIP trunking platform",
+}
+
+// sipHangupSides says which side ended a call, each line labelled with where
+// its answer came from. No API returns the platform's final SIP response (the
+// console's SIP logs are the only place it shows), so that line says it is
+// not available rather than guessing.
+func sipHangupSides(cause string, code int, source string) string {
+	var parts []string
+	what := cause
+	if code != 0 {
+		what = strings.TrimSpace(fmt.Sprintf("%s (%d)", cause, code))
+	}
+	if what != "" {
+		parts = append(parts, what)
+	}
+	if source != "" {
+		by := "hung up by " + source
+		if m := sipHangupSourceMeaning[source]; m != "" {
+			by += " (" + m + ")"
+		}
+		parts = append(parts, by)
+	}
+	plivo := "not available"
+	if len(parts) > 0 {
+		plivo = strings.Join(parts, ", ")
+	}
+	return "Plivo: " + plivo + "\nPlatform's final SIP response: not available\n"
+}
+
+// sipInsightsKV shows the record as returned. It adds units and the range
+// label on the score, and derives nothing.
+func sipInsightsKV(in api.SIPCallInsights) [][2]string {
+	return [][2]string{
+		{"call_uuid", string(in.CallUUID)},
+		{"rtt", withUnit(in.RTT, " ms")},
+		{"jitter", withUnit(in.Jitter, " ms")},
+		{"packet_loss", withUnit(in.PacketLoss, "%")},
+		{"post_dial_delay", withUnit(in.PostDialDelay, " ms")},
+		{"plivo_quality_score", qualityScore(in.PlivoQualityScore)},
+		{"hangup_cause", string(in.HangupCause)},
+		{"hangup_source", string(in.HangupSource)},
+		{"from_number", string(in.From.Number)},
+		{"from_carrier", string(in.From.Carrier)},
+		{"from_region", string(in.From.Region)},
+		{"to_number", string(in.To.Number)},
+		{"to_carrier", string(in.To.Carrier)},
+		{"to_region", string(in.To.Region)},
+	}
+}
+
+func withUnit(v api.FlexString, unit string) string {
+	if v == "" {
+		return ""
+	}
+	return string(v) + unit
+}
+
+// qualityScore labels a score outside the documented 1-5 range rather than let
+// it pass for a grade: Insights has returned "0" on an answered call.
+func qualityScore(v api.FlexString) string {
+	s := string(v)
+	if f, err := strconv.ParseFloat(s, 64); err == nil && (f < 1 || f > 5) {
+		return s + " (outside the documented 1-5 range)"
+	}
+	return s
+}
+
 func runSIPTrunksList(cmd *cobra.Command, args []string) error {
+	if err := validateEnum("direction", &sipTrunksDirection, directionValues...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -341,18 +465,14 @@ func runSIPTrunksList(cmd *cobra.Command, args []string) error {
 		q.Set("trunk_direction", sipTrunksDirection)
 	}
 	var resp api.SIPTrunkList
-	apiErr, err := client.Do("GET", client.AccountURL("Zentrunk", "Trunk"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Zentrunk", "Trunk"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"TRUNK_ID", "NAME", "TRUNK_DIRECTION", "TRUNK_STATUS", "TRUNK_DOMAIN", "PRIMARY_URI_UUID"}}
 	for _, t := range resp.Objects {
@@ -422,18 +542,14 @@ func runSIPACLList(cmd *cobra.Command, args []string) error {
 	q.Set("limit", strconv.Itoa(sipACLLimit))
 	q.Set("offset", strconv.Itoa(sipACLOffset))
 	var resp api.SIPTrunkACLList
-	apiErr, err := client.Do("GET", client.AccountURL("Zentrunk", "IPAccessControlList"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Zentrunk", "IPAccessControlList"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"IPACL_UUID", "NAME", "IP_ADDRESSES"}}
 	for _, a := range resp.Objects {
@@ -473,55 +589,102 @@ func runSIPACLGet(cmd *cobra.Command, args []string) error {
 // the trunk debugger reads a different store and would answer about nothing.
 func runSIPCallsDiagnose(cmd *cobra.Command, args []string) error {
 	callUUID := args[0]
-	if !dryRunFlag {
-		client, _, err := getClient()
-		if err != nil {
-			return err
-		}
-		if !resourceExists(client, "Zentrunk", "Call", callUUID) {
-			if resourceExists(client, "Call", callUUID) {
-				return &clierr.Error{
-					Code:       clierr.CodeBadInput,
-					Message:    fmt.Sprintf("%s is a Voice call, not a SIP Trunking call", callUUID),
-					Hint:       fmt.Sprintf("Run `plivo voice calls diagnose %s`.", callUUID),
-					StatusCode: http.StatusNotFound,
-				}
-			}
+	client, _, err := getClient()
+	if err != nil {
+		return err
+	}
+	// Read under --dry-run too (a GET is not a write), and keep the record:
+	// -o json takes the hangup facts from it.
+	record, status := readRecord(client, "Zentrunk", "Call", callUUID)
+	if status == 0 || status == http.StatusNotFound {
+		if resourceExists(client, "Call", callUUID) {
 			return &clierr.Error{
-				Code:       clierr.CodeResourceNotFound,
-				Message:    fmt.Sprintf("SIP Trunking call %s not found on this account", callUUID),
-				Hint:       "Check the call id. `plivo sip calls list` lists recent ones.",
+				Code:       clierr.CodeBadInput,
+				Message:    fmt.Sprintf("%s is a Voice call, not a SIP Trunking call", callUUID),
+				Hint:       fmt.Sprintf("Run `plivo voice calls diagnose %s`.", callUUID),
 				StatusCode: http.StatusNotFound,
 			}
+		}
+		return &clierr.Error{
+			Code:       clierr.CodeResourceNotFound,
+			Message:    fmt.Sprintf("SIP Trunking call %s not found on this account", callUUID),
+			Hint:       "Check the call id. `plivo sip calls list` lists recent ones.",
+			StatusCode: http.StatusNotFound,
 		}
 	}
 	askCallUUID = callUUID
 	prompt := "Help me debug this SIP Trunking call. Walk the SIP ladder and the trunk " +
 		"configuration, and tell me what happened and whether anything is wrong." +
 		diagnoseClientConstraints
-	if err := runAsk(cmd, []string{prompt}); err != nil {
-		return err
-	}
-	return diagnoseOutcome(callUUID)
+	return runDiagnose(cmd, prompt, diagnoseTarget{label: "call", uuid: callUUID, getCmd: "sip calls get", record: record})
 }
 
 // diagnoseClientConstraints is appended to every diagnose turn. The assistant
 // otherwise offers console-only remedies to a terminal user, and files support
 // tickets on its own initiative — `diagnose` is a read, and a command that
 // opens a ticket every time it cannot answer is worse than one that says so.
-const diagnoseClientConstraints = " The caller is a terminal, not the Plivo Console: never suggest reloading a page or clicking anything in a browser. Do not raise a support ticket; if you cannot complete the analysis, say so plainly and stop."
+// The ANALYSIS_INCOMPLETE line is how a give-up in prose reaches the exit code.
+const diagnoseClientConstraints = " The caller is a terminal, not the Plivo Console: never suggest reloading a page or clicking anything in a browser. Do not raise a support ticket. If you cannot complete the analysis (for example, the trace is unavailable), say so plainly, end your reply with a line of the form `" + analysisIncompleteMarker + ": <reason>`, and stop."
+
+// analysisIncompleteMarker starts the line the assistant is asked to end with
+// when it cannot finish.
+const analysisIncompleteMarker = "ANALYSIS_INCOMPLETE"
+
+// analysisIncompleteLine finds the marker at the start of a line, after any
+// whitespace or markdown (**, >, -, a heading or a backtick), so an answer that
+// quotes the instruction mid-sentence does not fail a good analysis. The
+// reason is the rest of that line.
+var analysisIncompleteLine = regexp.MustCompile("(?m)^[ \\t>*_#+`-]*" + analysisIncompleteMarker + "[*_`]*[ \\t]*:([^\\n]*)")
+
+// analysisIncomplete returns the reason from the answer's ANALYSIS_INCOMPLETE
+// line, and whether it has one.
+func analysisIncomplete(answer string) (string, bool) {
+	m := analysisIncompleteLine.FindStringSubmatch(answer)
+	if m == nil {
+		return "", false
+	}
+	if reason := strings.Trim(m[1], " \t*_`"); reason != "" {
+		return reason, true
+	}
+	return "no reason given", true
+}
 
 // diagnoseOutcome turns a failed investigation into a non-zero exit. The stream
 // itself succeeds, so without this the command reported success while telling
 // the user it had learned nothing — and a script could not tell the difference.
-func diagnoseOutcome(uuid string) error {
-	if !lastAskEscalated {
-		return nil
+// It judges both output modes alike. askErr is runAsk's result; label and uuid
+// name the record, and getCmd is the command that reads it directly.
+func diagnoseOutcome(askErr error, label, uuid, getCmd string) error {
+	if askErr != nil && !lastAsk.errored {
+		return askErr // the turn never ran: auth, HTTP or network trouble
 	}
-	return &clierr.Error{
+	if dryRunFlag {
+		return nil // nothing was sent, so there is no analysis to judge
+	}
+	e := &clierr.Error{
 		Code:       clierr.CodeUpstreamError,
-		Message:    fmt.Sprintf("the assistant could not analyse call %s and escalated instead", uuid),
-		Hint:       "`plivo sip calls get " + uuid + "` shows the hangup cause and SIP details directly.",
+		Hint:       fmt.Sprintf("Run `plivo %s %s` to read the %s record directly.", getCmd, uuid, label),
 		StatusCode: http.StatusBadGateway,
 	}
+	switch {
+	case lastAsk.errored:
+		msg := strings.TrimSpace(lastAsk.errorMsg)
+		if msg == "" {
+			msg = "the service returned an error"
+		}
+		e.Message = fmt.Sprintf("the analysis of %s %s failed: %s", label, uuid, msg)
+		e.Retryable = true
+	case lastAsk.escalated:
+		e.Message = fmt.Sprintf("the assistant could not analyse %s %s and escalated instead", label, uuid)
+	case !lastAsk.finished:
+		e.Message = fmt.Sprintf("the analysis of %s %s stopped before it finished", label, uuid)
+		e.Retryable = true
+	default:
+		reason, incomplete := analysisIncomplete(lastAsk.answer)
+		if !incomplete {
+			return nil
+		}
+		e.Message = fmt.Sprintf("the assistant could not complete the analysis of %s %s: %s", label, uuid, reason)
+	}
+	return e
 }
