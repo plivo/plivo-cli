@@ -80,6 +80,7 @@ func resetWriteFlags(t *testing.T) {
 		credCreatePasswordStdin, credUpdatePasswordStdin = false, false
 		aclCreateName, aclUpdateName = "", ""
 		aclCreateIPs, aclUpdateIPs = nil, nil
+		trunkCreatePlatform, uriCreatePlatform, uriCreateTransport, aclCreatePlatform = "", "", "", ""
 		numberUpdateTrunkID, numberUpdateAppID = "", ""
 		readAllStdin = defaultReadAllStdin
 	})
@@ -250,6 +251,10 @@ func TestSIPURIsCreate_acceptsEveryDocumentedURIShape(t *testing.T) {
 		"sip.example.com:5060",
 		"sip.example.com;transport=tcp",
 		"sip:user@sip.example.com",
+		"sip:sip.example.com;transport=tls",
+		"sips:sip.example.com",
+		"203.0.113.4:5060",
+		"[2001:db8::1]:5061;transport=tls",
 	} {
 		t.Run(uri, func(t *testing.T) {
 			setFakeCreds(t)

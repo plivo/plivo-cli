@@ -12,8 +12,10 @@ Aliases:
 
 Available Commands:
   calls       Inspect SIP Trunking calls (CDRs)
+  connect     Plan how to connect a number to a voice-agent platform
   credentials Trunk credentials
   ip-acl      IP access control lists
+  test        Check that a SIP URI is reachable from this machine (places no call)
   trunks      Inbound and outbound trunks
   uris        Origination URIs
 

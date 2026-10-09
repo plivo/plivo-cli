@@ -1,0 +1,35 @@
+Print everything needed to connect a number to a voice-agent platform over SIP
+Trunking: the origination URI, the credential or IP access control list, the
+inbound and outbound trunks, the numbers update that routes the number, and
+what to set up on the platform's side. It only reads, and changes nothing.
+
+It checks the number first: it must be on this account, with voice enabled.
+An India (+91) number must pass the compliance check `numbers update` runs,
+and the platform must support Indian numbers: Vapi does not. The plan stops at
+the first check that fails and exits non-zero.
+
+Each printed command ends in --dry-run: run it to preview the request, then
+again without --dry-run to create. -o json returns checks[], requests[] and
+next_actions[].
+
+Usage:
+  plivo sip connect plan [flags]
+
+Examples:
+  plivo sip connect plan --number +14155551234 --platform livekit
+  plivo sip connect plan --number +14155551234 --platform vapi -o json
+
+Flags:
+  -h, --help              help for plan
+      --number string     number to connect, e.g. +14155551234 (required)
+      --platform string   livekit|elevenlabs|retell|vapi (required)
+
+Global Flags:
+      --dry-run            print the HTTP request without sending
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+  -q, --quiet              suppress non-data output
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts

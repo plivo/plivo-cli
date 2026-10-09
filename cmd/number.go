@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
@@ -49,13 +51,20 @@ var (
 	numberUpdateTrunkID    string
 	numberUpdateAlias      string
 	numberUpdateSubaccount string
+	numberUpdateForce      bool
 )
 
 var numberUpdateCmd = &cobra.Command{
 	Use:   "update <number>",
 	Short: "Update settings on a rented number",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runNumberUpdate,
+	Long: `Update settings on a rented number.
+
+Routing an India (+91) number with --app-id or --trunk-id first reads its
+compliance application. The update is refused when that application is not
+accepted or cannot be read, and goes ahead with a warning when none is
+attached. --force skips only this check; Plivo still enforces KYC.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runNumberUpdate,
 }
 
 var (
@@ -73,7 +82,10 @@ var numberSearchCmd = &cobra.Command{
 	RunE:  runNumberSearch,
 }
 
-var numberBuyAppID string
+var (
+	numberBuyAppID        string
+	numberBuyComplianceID string
+)
 
 var numberBuyCmd = &cobra.Command{
 	Use:   "buy <number>",
@@ -102,6 +114,7 @@ func init() {
 	numberUpdateCmd.Flags().StringVar(&numberUpdateTrunkID, "trunk-id", "", "route the number to an inbound SIP trunk")
 	numberUpdateCmd.Flags().StringVar(&numberUpdateAlias, "alias", "", "set alias")
 	numberUpdateCmd.Flags().StringVar(&numberUpdateSubaccount, "subaccount", "", "move under subaccount")
+	numberUpdateCmd.Flags().BoolVar(&numberUpdateForce, "force", false, "skip the India compliance check on --app-id/--trunk-id (Plivo still enforces KYC)")
 
 	numberSearchCmd.Flags().StringVar(&numberSearchCountry, "country", "", "ISO country code, e.g. US (required)")
 	_ = numberSearchCmd.MarkFlagRequired("country")
@@ -112,6 +125,7 @@ func init() {
 	numberSearchCmd.Flags().IntVar(&numberSearchOffset, "offset", 0, "pagination offset")
 
 	numberBuyCmd.Flags().StringVar(&numberBuyAppID, "app-id", "", "auto-attach to this application after purchase")
+	numberBuyCmd.Flags().StringVar(&numberBuyComplianceID, "compliance-application-id", "", "accepted compliance application to attach; if unset, Plivo picks your most recent applicable one")
 	registerExplainFlag(numberBuyCmd)
 	registerExplainFlag(numberReleaseCmd)
 
@@ -258,6 +272,15 @@ func runNumberUpdate(cmd *cobra.Command, args []string) error {
 	if len(body) == 0 {
 		return clierr.BadInput("pass at least one of --app-id, --trunk-id, --alias, --subaccount")
 	}
+	if _, routing := body["app_id"]; routing && !numberUpdateForce {
+		warning, err := checkIndiaCompliance(client, number)
+		if err != nil {
+			return err
+		}
+		if warning != "" {
+			fmt.Fprintf(os.Stderr, "Warning: %s\n", warning)
+		}
+	}
 	var resp api.GenericResponse
 	apiErr, err := client.Do("POST", client.AccountURL("Number", number), body, nil, &resp)
 	if err != nil {
@@ -275,6 +298,14 @@ func runNumberUpdate(cmd *cobra.Command, args []string) error {
 
 func runNumberBuy(cmd *cobra.Command, args []string) error {
 	number := args[0]
+	// Checked whenever the flag is passed: an empty value (an unset shell
+	// variable) would otherwise let Plivo pick the application itself.
+	complianceID := strings.TrimSpace(numberBuyComplianceID)
+	if cmd.Flags().Changed("compliance-application-id") && !looksLikeUUID(complianceID) {
+		e := clierr.BadFlag("compliance-application-id", fmt.Sprintf("expected a compliance application UUID, got %q", complianceID))
+		e.Hint = "`plivo numbers compliance list --status accepted` shows your application ids."
+		return e
+	}
 	proceed, dryRun, gerr := guardSpend("buy number " + number)
 	if !proceed {
 		return gerr
@@ -287,6 +318,9 @@ func runNumberBuy(cmd *cobra.Command, args []string) error {
 	body := map[string]any{}
 	if numberBuyAppID != "" {
 		body["app_id"] = numberBuyAppID
+	}
+	if complianceID != "" {
+		body["compliance_application_id"] = complianceID
 	}
 	if explainFlag {
 		fmt.Fprintf(os.Stderr, "Will POST %s (rent number %s)\n", client.AccountURL("PhoneNumber", number), number)
@@ -386,4 +420,102 @@ func requireInboundTrunk(client *api.Client, trunkID string) error {
 			"trunk %s is outbound; a number can only be routed to an inbound trunk", trunkID))
 	}
 	return nil
+}
+
+// indiaKYCDocsURL is Plivo's India KYC guide; the API's own compliance errors
+// link to it.
+const indiaKYCDocsURL = "https://www.plivo.com/docs/numbers/rent-india-numbers"
+
+// checkIndiaCompliance is the India KYC rule for routing a rented number to an
+// application or a trunk. Commands that route a number call it rather than
+// restating the rule.
+//
+// Numbers outside +91 pass without a request. For an India number it reads the
+// number and, when one is attached, its compliance application:
+//
+//   - accepted: no warning, no error
+//   - none attached: a warning for the caller to print; routing goes ahead
+//   - any other status, or any read failing: a refusal whose hint lists the
+//     KYC steps
+//
+// Both reads go through readThrough, so --dry-run runs the same check.
+func checkIndiaCompliance(client *api.Client, number string) (warning string, err error) {
+	// E.164 digits; no other country code starts with 91.
+	if !strings.HasPrefix(strings.TrimPrefix(strings.TrimSpace(number), "+"), "91") {
+		return "", nil
+	}
+	var n struct {
+		// Not in the API docs, but on every number record: null when no
+		// application is attached. Absent is not the same as null.
+		ComplianceID json.RawMessage `json:"compliance_application_id"`
+	}
+	if e := getForCheck(client, client.AccountURL("Number", number), &n); e != nil {
+		e.Message = "could not read the number to check its compliance application: " + e.Message
+		return "", kycRefusal(e, number, "")
+	}
+	var id string
+	if json.Unmarshal(n.ComplianceID, &id) != nil {
+		return "", kycRefusal(&clierr.Error{Code: clierr.CodeValidation,
+			Message: "the number's record has no readable compliance_application_id"}, number, "")
+	}
+	if id == "" {
+		return fmt.Sprintf("%s has no compliance application attached; Plivo needs an accepted one before an India number can place calls. "+
+			"`plivo numbers compliance list --country IN --status accepted` lists yours, and "+
+			"`plivo numbers compliance link --link %s=<compliance_id>` attaches one.", number, number), nil
+	}
+	var app struct {
+		Status string `json:"status"`
+		// The documented response nests the application under "compliance".
+		Compliance struct {
+			Status string `json:"status"`
+		} `json:"compliance"`
+	}
+	if e := getForCheck(client, client.AccountURL("PhoneNumber", "Compliance", id), &app); e != nil {
+		e.Message = fmt.Sprintf("could not read its compliance application %s: %s", id, e.Message)
+		return "", kycRefusal(e, number, id)
+	}
+	status := app.Compliance.Status
+	if status == "" {
+		status = app.Status
+	}
+	switch {
+	case status == "":
+		return "", kycRefusal(&clierr.Error{Code: clierr.CodeValidation,
+			Message: fmt.Sprintf("its compliance application %s came back without a status", id)}, number, id)
+	case !strings.EqualFold(status, "accepted"):
+		return "", kycRefusal(&clierr.Error{Code: clierr.CodeValidation,
+			Message: fmt.Sprintf("its compliance application %s is %q, not \"accepted\"", id, status)}, number, id)
+	}
+	return "", nil
+}
+
+// getForCheck reads endpoint into out, even under --dry-run, and returns a
+// failed read of either kind (transport or API) as one error.
+func getForCheck(client *api.Client, endpoint string, out any) *clierr.Error {
+	var apiErr *api.APIError
+	if err := readThrough(client, func() error {
+		var e error
+		apiErr, e = client.Do("GET", endpoint, nil, nil, out)
+		return e
+	}); err != nil {
+		return clierr.Wrap(err)
+	}
+	return apiErr
+}
+
+// kycRefusal turns e into the refusal of a routing change: the reason in the
+// message, and the India KYC steps, as CLI commands, in the hint.
+func kycRefusal(e *clierr.Error, number, appID string) *clierr.Error {
+	e.Message = fmt.Sprintf("refusing to route %s: %s", number, e.Message)
+	see := "`plivo numbers compliance list --country IN` lists your applications"
+	if appID != "" {
+		see = fmt.Sprintf("`plivo numbers compliance get %s` shows its status and any rejection reason", appID)
+	}
+	e.Hint = fmt.Sprintf("India numbers need an accepted compliance application (KYC): 1) %s; "+
+		"2) `plivo numbers compliance create --data @app.json --file documents[0].file=@doc.pdf` submits one "+
+		"(`plivo numbers compliance update <compliance_id>` with the same flags resubmits a rejected one); "+
+		"3) `plivo numbers compliance link --link %s=<compliance_id>` attaches an accepted one. "+
+		"`plivo numbers update --force` skips this check; Plivo still enforces KYC.", see, number)
+	e.DocsURL = indiaKYCDocsURL
+	return e
 }
