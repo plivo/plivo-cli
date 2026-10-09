@@ -7,11 +7,11 @@ description: Runs Plivo tasks with the plivo CLI instead of raw curl, covering S
 
 `plivo` is a single binary. Prefer it to curl: it authenticates from a saved login, previews with `--dry-run`, and returns a stable JSON envelope with typed errors. For an endpoint it does not wrap, use `plivo api <METHOD> <path>`.
 
-`plivo <command> --help` is the source of truth for commands and flags: read it before running a command you have not used, and never guess a flag. `plivo docs search <keywords>` and `plivo docs show <url, path or title>` read the Plivo docs (API parameters, XML, error codes) from the terminal, with no login.
+`plivo <command> --help` is the source of truth for commands and flags: read it before running a command you have not used, and never guess a flag. To survey many commands (v1.2.0+), `plivo --map -o json` prints every command with its arguments and flags (large: narrow it with `--query`) and `plivo <command> --schema` prints one command's arguments, flags and output fields: use them instead of repeated `--help`. `plivo docs search <keywords>` and `plivo docs show <url, path or title>` read the Plivo docs (API parameters, XML, error codes) from the terminal, with no login.
 
 ## Installation
 
-Not on PATH: `brew install plivo/tap/plivo`, or `curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | bash`, then `plivo --version`. This skill ships inside the binary: `plivo skill list` shows whether the installed copy is stale, and `plivo skill install` refreshes it.
+Not on PATH: `brew install plivo/tap/plivo`, or `curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | bash`, then `plivo --version`. This skill ships inside the binary: `plivo skill list` shows whether the installed copy is stale, and `plivo skill update` (v1.2.0+) or `plivo skill install` refreshes it.
 
 ## Rules
 
@@ -20,10 +20,11 @@ Not on PATH: `brew install plivo/tap/plivo`, or `curl -fsSL https://raw.githubus
   - Spend commands (`calls make`, `messaging * send`, `numbers buy|cnam`, `masking sessions create`, 10DLC `brands|campaigns create`, `verify sessions create`, `multiparty participant add`, mutating `plivo api` verbs) preview with `--dry-run` alone.
   - Destructive commands (`numbers release`, `calls hangup`, `conferences hangup`, `calls streams stop`, `powerpacks numbers remove`, and every `delete`, `kick` and `end`) refuse `--dry-run` alone with exit 5, although the hint suggests it. Preview them with `--yes --dry-run` (`--dry-run` wins). For `sip * delete`, run it without `--yes`: it names what it would detach, then refuses.
   - `plivo lookup` is billed per lookup and has no `--yes` gate: ask first.
-  - `--dry-run` only holds back Plivo API writes. Commands that change local state or talk to something else ignore it and act for real: `login`, `logout`, `auth use`, `auth remove`, `config set`, `config telemetry`, `feedback` (submits), `upgrade` (installs; use `upgrade --check`) and `voice streams test` (connects to the WebSocket; no call). `skill install --dry-run` is the exception: it writes nothing.
-- **Output.** Pass `-o json`. Reads and creates print `{"data": <API response verbatim>}` on stdout; list rows are at `data.objects`, paging at `data.meta`. Many writes (`numbers update|release`, `calls hangup|transfer`, `account applications update`, `multiparty participant add`) print nothing on stdout: check the exit code, read the result back with a `get`, and never retry a spend command because stdout was empty.
+  - `--dry-run` only holds back Plivo API writes. Commands that change local state or talk to something else ignore it and act for real: `login`, `logout`, `auth use`, `auth remove`, `config set`, `config telemetry`, `upgrade` (installs; use `upgrade --check`) and `voice streams test` (connects to the WebSocket; no call); before v1.2.0 also `feedback` (submits). `skill install --dry-run` is the exception, and from v1.2.0 so are `skill update` and `feedback`: they write and send nothing.
+- **Output.** Pass `-o json`. Reads and creates print `{"data": <API response verbatim>}` on stdout; list rows are at `data.objects`, paging at `data.meta`. From v1.2.0, `-o jsonl|yaml|csv` and `--query '<JMESPath>'` (over the whole envelope, e.g. `--query 'data.objects[].number'`; implies `-o json`) reshape it; `plivo api` keeps its own `--query key=value`, which adds URL parameters. Many writes (`numbers update|release`, `calls hangup|transfer`, `account applications update`, `multiparty participant add`) print nothing on stdout: check the exit code, read the result back with a `get`, and never retry a spend command because stdout was empty.
+- **Lists.** A page holds at most 20 rows. From v1.2.0, `--limit` is 1-20 (more is refused), `--all` reads every page (not with `--offset`), and an unknown filter value (`--direction`, `--status`, `--type`) is refused before any request.
 - **Errors** go to stderr as `{"error": {"code", "message", "hint", "retryable", "status_code"}}` with a non-zero exit. Switch on `code` (exit codes below), never on message text.
-- **No prompts.** Never run bare `plivo feedback` or `plivo ask -i`, and pass `-y` to `voice streams forward`. `export PLIVO_FEEDBACK_PROMPT=0 CI=1 PLIVO_NO_UPDATE_CHECK=1` silences the rating prompt and the update hint.
+- **No prompts.** Never run bare `plivo feedback` or `plivo ask -i`, and pass `-y` to `voice streams forward`. To report a CLI bug (v1.2.0+), `plivo feedback --bug --dry-run` prints the report (a comment plus the last failed command's path and codes, never its arguments) and sends nothing; add `--yes` only once the human has seen it. `export PLIVO_FEEDBACK_PROMPT=0 CI=1 PLIVO_NO_UPDATE_CHECK=1` silences the rating prompt and the update hint.
 
 ## Top-level command map
 
@@ -42,8 +43,8 @@ lookup      carrier lookup for an E.164 number
 messaging   get | sms | mms | whatsapp   (aliases: message, msg, sms)
 numbers     buy | cnam | compliance | get | list | masking | release | search | update
 open        console | calls | call <uuid> | sip-call <uuid> | numbers | docs [path]   (v1.2.0+)
-sip         calls | credentials | ip-acl | trunks | uris
-skill       install | list
+sip         calls | credentials | ip-acl | test | trunks | uris   (test: v1.2.0+)
+skill       install [--project] | list | update   (update, --project: v1.2.0+)
 support     past support escalations
 upgrade     self-update
 verify      sessions (create | get | list | validate)
@@ -60,9 +61,9 @@ voice       calls | conferences | endpoints | multiparty | recordings | streams
 - `voice multiparty create` is retired and hidden: an MPC starts when its first participant is added, with `voice multiparty participant add <name> --from <number> --to <number>`.
 - `voice streams forward` points the app's answer URL, and so every number on that app, at a tunnel while it runs, then restores it on exit. Use a dedicated test app. Preview with `--dry-run` (it shows the URL it would replace) and get approval. Then run it in the background with `-y -o table` and wait for its `Ready` line; in JSON mode it prints nothing, not even the tunnel URL, until it exits. Stop it with SIGINT or SIGTERM: SIGKILL skips the restore. It does not notice a dropped tunnel, so restart it.
 - `account applications update` has no `--fallback-answer-url`: set it with `plivo api POST /Application/<app_id>/`. `account applications delete` also deletes the app's endpoints, with or without `--cascade`: the API cascades by default.
-- `sip`: quote `--uri "host;transport=tcp"` (the help example does not). Passwords go only through `--password-stdin`; to preview a password change, pass `--username` too. Deleting a URI deletes the trunks that use it. Route a number to an inbound trunk with `numbers update <number> --trunk-id <trunk_id>`.
+- `sip`: quote `--uri "host;transport=tcp"`. Passwords go only through `--password-stdin`; to preview a password change, pass `--username` too. Deleting a URI deletes the trunks that use it. Route a number to an inbound trunk with `numbers update <number> --trunk-id <trunk_id>`.
 - `plivo api` reports every HTTP error as `UPSTREAM_ERROR` (exit 3) with the real status in `status_code`: switch on that. Its `--dry-run`, `--explain` and `--log-level debug` print the request body unredacted, so never send a secret through it. `/Message/` expands to `/v1/Account/<auth_id>/Message/`; a `/v1/...` path is used as-is.
-- `plivo ask` and the `diagnose` commands share a small per-account rate limit: on `RATE_LIMITED`, wait as long as the message says.
+- `plivo ask` and the `diagnose` commands share a small per-account rate limit: on `RATE_LIMITED`, wait as long as the message says. From v1.2.0, `diagnose -o json` prints one result with fixed fields under `data` (`what_happened`, `likely_cause`, `timeline`, `next_steps`, `hangup_cause_code`, `hangup_source`, `confidence`, `answer`) and `-o jsonl` the event stream that `-o json` printed before; an analysis that fails or stops early exits 3.
 - `docs show` prints a JSON envelope when piped: add `-o table`, or use `jq -r .data.body`. `docs search` rows are at `data`, not `data.objects`.
 
 ## Known issues
@@ -96,7 +97,7 @@ Pick a sending number: `plivo numbers list --services sms -o json | jq -r '.data
 
 ## Exit codes
 
-`1` user, flag, validation, not-found, conflict or account-policy error (`USER_ERROR`, `BAD_FLAG`, `BAD_INPUT`, `VALIDATION_ERROR`, `RESOURCE_NOT_FOUND`, `RESOURCE_CONFLICT`, `GEO_PERMISSION_DENIED`, `OUTBOUND_DISABLED`, `INSUFFICIENT_FUNDS`); typed commands also report a network failure as `USER_ERROR`, with a message starting `http:`. `2` auth (`AUTH_*`). `3` network or upstream, retryable (`NETWORK_ERROR`, `UPSTREAM_*`, `INTERNAL_ERROR`). `4` `RATE_LIMITED`: back off. `5` `DESTRUCTIVE_REFUSED`: needs `--yes`. `6` `CLI_TOO_OLD`: the human should upgrade (`plivo upgrade`, or `brew upgrade plivo`).
+`1` user, flag, validation, not-found, conflict or account-policy error (`USER_ERROR`, `BAD_FLAG`, `BAD_INPUT`, `VALIDATION_ERROR`, `RESOURCE_NOT_FOUND`, `RESOURCE_CONFLICT`, `GEO_PERMISSION_DENIED`, `OUTBOUND_DISABLED`, `INSUFFICIENT_FUNDS`); typed commands also report a network failure as `USER_ERROR`, with a message starting `http:`. `2` auth (`AUTH_*`). `3` network or upstream, retryable (`NETWORK_ERROR`, `UPSTREAM_*`, `INTERNAL_ERROR`). `4` `RATE_LIMITED`: back off. `5` `DESTRUCTIVE_REFUSED`: refused without confirmation: add the flag the hint names (`--yes`, or `--force` on top of it, v1.2.0+). `6` `CLI_TOO_OLD`: the human should upgrade (`plivo upgrade`, or `brew upgrade plivo`).
 
 ## Other Plivo skills
 
