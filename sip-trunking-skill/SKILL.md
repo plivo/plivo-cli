@@ -16,7 +16,7 @@ Evidence rule: say calls **will break** only when a documented rule or a known f
 - Commands: `plivo sip uris|trunks|credentials|ip-acl|calls` and `plivo numbers update <number> --trunk-id <id>`. `plivo sip <group> <verb> --help` is the source of truth for flags; never invent one. Call Insights: `plivo sip calls insights <call_uuid>` (v1.2.0+; older binaries: `plivo api GET /Zentrunk/Call/<call_uuid>/Insights/ -o json`).
 - `plivo docs show <path>` prints a JSON envelope outside a terminal (agent shells too): add `-o table`. Its source drops field names from attribute lists: for those, read `https://www.plivo.com/docs/<path>.md`.
 - Pass numbers to `numbers` commands as digits without `+` (`14155551234`).
-- List commands return 20 rows by default (`--limit` is 1-20): page with `--offset`, or add `--all` (v1.2.0+), before concluding something is missing.
+- List commands return 20 rows by default (`--limit` is 1-20): page with `--offset`, or add `--all` (v1.2.0+; it stops at 2,000 rows and sets `meta.truncated: true`), before concluding something is missing.
 - Passwords go in on stdin only (`--password-stdin`), never on a command line, in a file or in chat. Ask the user to run `read -rs SIP_PASSWORD && export SIP_PASSWORD` in the shell that runs you, or to run the command themselves.
 - Quote every `--uri` value: the `;` in `host;transport=tcp` otherwise ends the shell command.
 
