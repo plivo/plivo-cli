@@ -462,8 +462,11 @@ var sipURIsCreateCmd = &cobra.Command{
 	Short: "Create an origination URI",
 	Long: `Create an origination URI.
 
---uri accepts host, host:port, host;transport=tcp, or sip:user@host. A missing
-port is fine and is never rejected here: the platform decides the default.`,
+--uri accepts host, host:port, host;transport=udp|tcp|tls, sip:user@host or
+sips:host. The host is a name, an IPv4 address or an IPv6 address in brackets.
+It is checked before sending: a space, a bad port, an unknown transport or a
+malformed host is refused. A missing port is fine: the platform decides the
+default.`,
 	Example: `  plivo sip uris create --name eleven --uri sip.rtc.elevenlabs.io:5060;transport=tcp`,
 	Args:    cobra.NoArgs,
 	RunE:    runSIPURIsCreate,
@@ -475,9 +478,11 @@ var sipURIsGetCmd = &cobra.Command{Use: "get <uri_uuid>", Short: "Get one origin
 var sipURIsUpdateCmd = &cobra.Command{
 	Use:   "update <uri_uuid>",
 	Short: "Update an origination URI",
-	Long:  "--authentication-needed takes a value so it reverses: --authentication-needed=false turns it off.",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runSIPURIsUpdate,
+	Long: `--authentication-needed takes a value so it reverses: --authentication-needed=false turns it off.
+
+--uri is checked before sending, as on create.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runSIPURIsUpdate,
 }
 
 var sipURIsDeleteCmd = &cobra.Command{
@@ -497,6 +502,9 @@ func normalizeSIPURI(v string) string { return strings.TrimSpace(v) }
 func runSIPURIsCreate(cmd *cobra.Command, args []string) error {
 	if normalizeSIPURI(uriCreateURI) == "" {
 		return clierr.BadInput("--uri is required (host, host:port, host;transport=…, or sip:user@host)")
+	}
+	if _, err := parseURIFlag(uriCreateURI); err != nil {
+		return err
 	}
 	if uriCreateAuthNeeded && uriCreateUsername == "" {
 		return errAuthNeedsUsername
@@ -582,6 +590,11 @@ func runSIPURIsGet(cmd *cobra.Command, args []string) error {
 }
 
 func runSIPURIsUpdate(cmd *cobra.Command, args []string) error {
+	if cmd.Flags().Changed("uri") {
+		if _, err := parseURIFlag(uriUpdateURI); err != nil {
+			return err
+		}
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -897,9 +910,10 @@ var sipACLCreateCmd = &cobra.Command{
 	Short: "Create an IP access control list",
 	Long: `Create an IP access control list.
 
---ip is repeatable. A range that allows the whole internet is reported but not
-blocked: it is occasionally deliberate, and refusing it outright would push
-people to the console instead.`,
+--ip is repeatable and takes one IPv4 or IPv6 address or CIDR range each. A
+comma-separated list is refused rather than split. A range that allows the
+whole internet is reported but not blocked: it is occasionally deliberate, and
+refusing it outright would push people to the console instead.`,
 	Example: `  plivo sip ip-acl create --name platform --ip 203.0.113.4 --ip 198.51.100.0/24`,
 	Args:    cobra.NoArgs,
 	RunE:    runSIPACLCreate,
@@ -955,6 +969,9 @@ func runSIPACLCreate(cmd *cobra.Command, args []string) error {
 	if len(aclCreateIPs) == 0 {
 		return clierr.BadInput("at least one --ip is required")
 	}
+	if err := checkACLEntries(aclCreateIPs); err != nil {
+		return err
+	}
 	warnRiskyIPs(aclCreateIPs)
 	client, _, err := getClient()
 	if err != nil {
@@ -973,6 +990,11 @@ func runSIPACLCreate(cmd *cobra.Command, args []string) error {
 }
 
 func runSIPACLUpdate(cmd *cobra.Command, args []string) error {
+	if cmd.Flags().Changed("ip") {
+		if err := checkACLEntries(aclUpdateIPs); err != nil {
+			return err
+		}
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err

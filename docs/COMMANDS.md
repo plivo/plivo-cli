@@ -2824,9 +2824,10 @@ Create an IP access control list
 
 Create an IP access control list.
 
---ip is repeatable. A range that allows the whole internet is reported but not
-blocked: it is occasionally deliberate, and refusing it outright would push
-people to the console instead.
+--ip is repeatable and takes one IPv4 or IPv6 address or CIDR range each. A
+comma-separated list is refused rather than split. A range that allows the
+whole internet is reported but not blocked: it is occasionally deliberate, and
+refusing it outright would push people to the console instead.
 
 ```
 plivo sip ip-acl create [flags]
@@ -3092,8 +3093,11 @@ Create an origination URI
 
 Create an origination URI.
 
---uri accepts host, host:port, host;transport=tcp, or sip:user@host. A missing
-port is fine and is never rejected here: the platform decides the default.
+--uri accepts host, host:port, host;transport=udp|tcp|tls, sip:user@host or
+sips:host. The host is a name, an IPv4 address or an IPv6 address in brackets.
+It is checked before sending: a space, a bad port, an unknown transport or a
+malformed host is refused. A missing port is fine: the platform decides the
+default.
 
 ```
 plivo sip uris create [flags]
@@ -3170,6 +3174,8 @@ Flags:
 Update an origination URI
 
 --authentication-needed takes a value so it reverses: --authentication-needed=false turns it off.
+
+--uri is checked before sending, as on create.
 
 ```
 plivo sip uris update <uri_uuid> [flags]

@@ -1,5 +1,7 @@
 --authentication-needed takes a value so it reverses: --authentication-needed=false turns it off.
 
+--uri is checked before sending, as on create.
+
 Usage:
   plivo sip uris update <uri_uuid> [flags]
 
