@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/plivo/plivo-cli/internal/output"
@@ -175,12 +176,19 @@ func Upstream(message string) *Error {
 // FromHTTP classifies an upstream HTTP response into an Error. It looks at both
 // the status code and the body text to pick a specific Code where possible
 // (e.g. distinguishing GEO_PERMISSION_DENIED from a generic 403).
+//
+// A JSON body is also kept, parsed, as context.upstream {status, body}, the
+// shape `plivo api` emits: the message is one field of it, and -o json readers
+// may want the rest (api_id and the like).
 func FromHTTP(statusCode int, requestID string, body []byte) *Error {
-	msg := extractMessage(body)
+	msg, parsed := extractMessage(body)
 	e := &Error{
 		StatusCode: statusCode,
 		RequestID:  requestID,
 		Message:    msg,
+	}
+	if parsed != nil {
+		e.Context = map[string]any{"upstream": map[string]any{"status": statusCode, "body": parsed}}
 	}
 
 	// Body-text fingerprinting first — these win over status-code defaults.
@@ -281,49 +289,139 @@ func Wrap(err error) *Error {
 
 // extractMessage pulls a human-readable error string from Plivo's various
 // response shapes ({"error": "..."}, {"message": "..."}, {"data": {"error": ...}},
-// nested validation maps, etc).
-func extractMessage(body []byte) string {
+// nested validation maps, etc), and returns the parsed body alongside it (nil
+// when the body is not JSON).
+//
+// Keys match case-insensitively. SIP Trunking answers {"Error": "..."}, and an
+// exact match missed it, so the whole body became the message: raw JSON in a
+// terminal, escaped JSON inside the -o json envelope.
+func extractMessage(body []byte) (string, any) {
 	trimmed := strings.TrimSpace(string(body))
 	if trimmed == "" {
+		return "", nil
+	}
+	var parsed any
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		// Not JSON — return raw, truncated.
+		return truncate(trimmed), nil
+	}
+	if msg := messageFrom(parsed); msg != "" {
+		return msg, parsed
+	}
+	// Last resort: serialise the whole thing.
+	if b, err := output.Marshal(parsed); err == nil {
+		return truncate(string(b)), parsed
+	}
+	return truncate(trimmed), parsed
+}
+
+// messageFrom finds the message in a parsed error body. Order matters —
+// most-specific first.
+func messageFrom(v any) string {
+	if s, ok := v.(string); ok {
+		return strings.TrimSpace(s)
+	}
+	m, ok := v.(map[string]any)
+	if !ok {
 		return ""
 	}
-	var generic map[string]any
-	if err := json.Unmarshal(body, &generic); err != nil {
-		// Not JSON — return raw if short enough, else truncated.
-		if len(trimmed) > 400 {
-			return trimmed[:400] + "…"
-		}
-		return trimmed
+	if s := firstString(m, "error", "global_error", "message", "detail"); s != "" {
+		return s
 	}
-
-	// Order matters — most-specific first.
-	for _, key := range []string{"error", "global_error", "message"} {
-		if v, ok := generic[key].(string); ok && v != "" {
-			return v
+	// {"error": {"message": "..."}} envelope.
+	if inner := object(m, "error"); inner != nil {
+		if s := firstString(inner, "message", "detail"); s != "" {
+			return s
 		}
 	}
 	// nested data.error / data.message envelope.
-	if data, ok := generic["data"].(map[string]any); ok {
-		for _, key := range []string{"error", "message", "global_error"} {
-			if v, ok := data[key].(string); ok && v != "" {
-				return v
+	if data := object(m, "data"); data != nil {
+		if s := firstString(data, "error", "message", "global_error"); s != "" {
+			return s
+		}
+	}
+	// errors.global_error envelope, else per-field {"errors": {"name": ["..."]}}.
+	if errs := object(m, "errors"); errs != nil {
+		if s := firstString(errs, "global_error"); s != "" {
+			return s
+		}
+		return fieldErrors(errs)
+	}
+	return ""
+}
+
+// matchingKeys returns the keys of m equal to key ignoring case, sorted so the
+// pick never depends on map order.
+func matchingKeys(m map[string]any, key string) []string {
+	var keys []string
+	for k := range m {
+		if strings.EqualFold(k, key) {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// firstString returns the first non-blank string value under any of keys.
+func firstString(m map[string]any, keys ...string) string {
+	for _, key := range keys {
+		for _, k := range matchingKeys(m, key) {
+			if s, ok := m[k].(string); ok && strings.TrimSpace(s) != "" {
+				return strings.TrimSpace(s)
 			}
 		}
 	}
-	// errors.global_error envelope.
-	if errs, ok := generic["errors"].(map[string]any); ok {
-		if v, ok := errs["global_error"].(string); ok && v != "" {
-			return v
+	return ""
+}
+
+// object returns the first object value under key.
+func object(m map[string]any, key string) map[string]any {
+	for _, k := range matchingKeys(m, key) {
+		if o, ok := m[k].(map[string]any); ok {
+			return o
 		}
 	}
-	// Last resort: serialise the whole thing.
-	if b, err := output.Marshal(generic); err == nil {
-		if len(b) > 400 {
-			return string(b[:400]) + "…"
-		}
-		return string(b)
+	return nil
+}
+
+// fieldErrors renders per-field validation errors as "field: reason" pairs
+// joined by "; ", fields sorted so the message is stable.
+func fieldErrors(errs map[string]any) string {
+	fields := make([]string, 0, len(errs))
+	for f := range errs {
+		fields = append(fields, f)
 	}
-	return trimmed
+	sort.Strings(fields)
+	var parts []string
+	for _, f := range fields {
+		reasons := []any{errs[f]}
+		if list, ok := errs[f].([]any); ok {
+			reasons = list
+		}
+		for _, r := range reasons {
+			if s, ok := r.(string); ok && strings.TrimSpace(s) != "" {
+				parts = append(parts, f+": "+strings.TrimSpace(s))
+			}
+		}
+	}
+	return strings.Join(parts, "; ")
+}
+
+// maxMessageRunes caps a message built from a raw body.
+const maxMessageRunes = 400
+
+// truncate cuts s to maxMessageRunes characters. It counts runes, not bytes,
+// so a cut never lands inside a multi-byte character.
+func truncate(s string) string {
+	n := 0
+	for i := range s {
+		if n == maxMessageRunes {
+			return s[:i] + "…"
+		}
+		n++
+	}
+	return s
 }
 
 func isRetryable(statusCode int) bool {
