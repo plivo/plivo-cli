@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/plivo/plivo-cli/internal/clierr"
@@ -123,6 +124,8 @@ func openTargetURL(args []string) (string, error) {
 			return "", openInputError(fmt.Sprintf("plivo open %s needs a call UUID, got %q", name, arg), usage)
 		case t.arg == "[path]" && strings.Contains(arg, "://"):
 			return "", openInputError("plivo open docs takes a docs path, not a URL", usage)
+		case t.arg == "[path]" && !inDocs(arg):
+			return "", openInputError(fmt.Sprintf("plivo open docs takes a path that must stay under /docs/, got %q", arg), usage)
 		}
 		link := t.url(arg)
 		if err := checkPlivoURL(link); err != nil {
@@ -144,26 +147,43 @@ func openInputError(msg, hint string) *clierr.Error {
 	return err
 }
 
-// docsPageURL builds a docs page URL from its path, with or without the
-// leading docs/ and slashes.
-func docsPageURL(path string) string {
-	path = strings.Trim(strings.TrimPrefix(strings.Trim(path, "/"), "docs/"), "/")
-	if path == "" {
+// docsPath resolves a docs page path the way the browser would ("a/../b"
+// is "b"), with or without the leading docs/ and slashes. ok is false when
+// the path climbs out of /docs/.
+func docsPath(p string) (clean string, ok bool) {
+	clean = path.Clean("/docs/" + strings.TrimPrefix(strings.Trim(p, "/"), "docs/"))
+	if clean == "/docs" {
+		return "", true
+	}
+	return strings.CutPrefix(clean, "/docs/")
+}
+
+func inDocs(p string) bool {
+	_, ok := docsPath(p)
+	return ok
+}
+
+// docsPageURL builds a docs page URL from its path. openTargetURL has
+// already refused a path that leaves /docs/.
+func docsPageURL(p string) string {
+	clean, _ := docsPath(p)
+	if clean == "" {
 		return docsBaseURL
 	}
-	parts := strings.Split(path, "/")
-	for i, p := range parts {
-		parts[i] = url.PathEscape(p)
+	parts := strings.Split(clean, "/")
+	for i, part := range parts {
+		parts[i] = url.PathEscape(part)
 	}
 	return docsBaseURL + strings.Join(parts, "/")
 }
 
 // checkPlivoURL is the last check before a URL reaches the browser: https,
-// and the console or docs host. The table only builds such URLs, so a
-// failure here is a bug, never the user's input.
+// and the console host or the docs host under /docs/. The table only builds
+// such URLs, so a failure here is a bug, never the user's input.
 func checkPlivoURL(link string) error {
 	u, err := url.Parse(link)
-	if err == nil && u.Scheme == "https" && (u.Host == "cx.plivo.com" || u.Host == "www.plivo.com") {
+	if err == nil && u.Scheme == "https" &&
+		(u.Host == "cx.plivo.com" || (u.Host == "www.plivo.com" && strings.HasPrefix(path.Clean(u.Path)+"/", "/docs/"))) {
 		return nil
 	}
 	return &clierr.Error{Code: clierr.CodeInternalError, Message: "refusing to open " + link + ": not a Plivo console or docs URL"}

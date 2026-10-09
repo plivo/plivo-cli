@@ -58,6 +58,8 @@ func TestOpen_targets(t *testing.T) {
 		{[]string{"docs", "voice/api/calls"}, "https://www.plivo.com/docs/voice/api/calls"},
 		{[]string{"docs", "/docs/voice/api/calls/"}, "https://www.plivo.com/docs/voice/api/calls"},
 		{[]string{"docs", "a b/c?d#e"}, "https://www.plivo.com/docs/a%20b/c%3Fd%23e"},
+		// Dot segments resolve the way the browser would, inside /docs/.
+		{[]string{"docs", "voice/../sip-trunking/./concepts"}, "https://www.plivo.com/docs/sip-trunking/concepts"},
 	}
 	for _, tc := range cases {
 		t.Run(strings.Join(append([]string{"open"}, tc.args...), " "), func(t *testing.T) {
@@ -126,6 +128,9 @@ func TestOpen_rejectsBadInput(t *testing.T) {
 		{[]string{"call", "00000000-0000-0000-0000-000000000000/x"}, "needs a call UUID"},
 		{[]string{"console", "extra"}, "takes no argument"},
 		{[]string{"docs", "https://example.com/docs/x"}, "not a URL"},
+		{[]string{"docs", "../../../x"}, "stay under /docs/"},
+		{[]string{"docs", "voice/../../x"}, "stay under /docs/"},
+		{[]string{"docs", "/docs/.."}, "stay under /docs/"},
 		{[]string{"docs", "a", "b"}, "accepts at most 2 arg(s)"},
 	}
 	for _, tc := range cases {
@@ -151,7 +156,8 @@ func TestOpen_hostCheck(t *testing.T) {
 			t.Errorf("%s builds %s, which fails the host check", target.name, link)
 		}
 	}
-	for _, bad := range []string{"http://cx.plivo.com/home", "https://cx.plivo.com.example.com/", "https://example.com/docs/", "javascript:alert(1)", "https://user@evil.example/"} {
+	for _, bad := range []string{"http://cx.plivo.com/home", "https://cx.plivo.com.example.com/", "https://example.com/docs/", "javascript:alert(1)", "https://user@evil.example/",
+		"https://www.plivo.com/docs/../../x", "https://www.plivo.com/pricing", "https://www.plivo.com/docsx"} {
 		if checkPlivoURL(bad) == nil {
 			t.Errorf("checkPlivoURL(%q) passed", bad)
 		}
