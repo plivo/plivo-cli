@@ -5,27 +5,133 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.0] - 2026-10-09
+
+### Added
+
+- `-o jsonl` (one record per line), `-o yaml` and `-o csv` on every command,
+  and `--query '<JMESPath>'` to pick fields, such as
+  `--query 'data.objects[].number'` (it implies `-o json`). `plivo api` keeps
+  its own `--query key=value` for URL parameters.
+- `plivo --map` prints every command with its arguments and flags as JSON, and
+  `--schema` on a command describes just that one, with the response fields
+  the CLI reads. Neither needs a login.
+- `plivo open` opens the console or docs page for `console`, `calls`,
+  `call <call_uuid>`, `sip-call <call_uuid>`, `numbers` or `docs [path]`. It
+  prints the URL first; `--dry-run` only prints it.
+- `--all` on every paged list reads every page into one result. It stops at 100
+  pages (2,000 rows at `--limit 20`) with a warning and `meta.truncated: true`,
+  and can't be combined with `--offset`. `numbers search` doesn't take it.
+- `plivo sip test --uri` checks from your machine that a SIP URI answers before
+  a call goes to it: DNS, then a TCP or TLS connect (certificate verified,
+  expiry shown) or one SIP OPTIONS over UDP. It never sends an INVITE and needs
+  no login. Exit 0 when reachable, 3 when not; a silent UDP port reports
+  `unknown` and also exits 3.
+- `plivo sip calls insights <call_uuid>` shows the call quality Plivo measured:
+  round-trip time, jitter, packet loss, post-dial delay and the quality score.
+  `sip calls get` and `insights` also end with which side hung up (Plivo's
+  cause, code and source). No API returns the platform's final SIP response, so
+  that line reads "not available".
+- `--platform livekit|elevenlabs|retell|vapi` on `sip uris create` fills in the
+  host, port and transport from Plivo's integration guide, and on
+  `sip ip-acl create` (Vapi) the published IPs. On `sip trunks create` it only
+  checks the trunk against the guide. Flags you pass win. A preset never turns
+  on `--secure`, which is billed per minute: the CLI prints
+  `recommended: --secure` where the guide uses it. `sip uris create` also takes
+  `--transport`.
+- `numbers buy --compliance-application-id` attaches a specific compliance
+  application: needed for accounts that keep one per customer, and for India
+  numbers when Plivo has none to attach by itself. A malformed id is refused
+  before any request.
+- `voice streams test` reports `latency_ms`, `first_response_ms`,
+  `play_audio_frames` and `warnings`, and `--expect-audio` exits 1 when the
+  endpoint sends no audio back, so it can gate a CI job.
+- `plivo skill install --project` installs skills into the current git
+  repository for everyone who clones it; a copy that differs from the bundled
+  one is kept unless you add `--force`. `plivo skill update` brings installed
+  skills (home and repository) up to the version in your binary, keeps copies
+  you edited unless you add `--force`, reports any retired skill still
+  installed with the command that removes it, and writes nothing under
+  `--dry-run`.
+- `plivo feedback --bug` sends a bug report: your comment plus the last failed
+  command. The CLI now keeps that command's path, exit code, error code, request
+  id, CLI version and OS in `~/.plivo/last-error.json`, never its arguments or
+  message. The report is printed exactly as it will be sent and you confirm it
+  (`--yes` without a terminal, `--dry-run` to only print). If sending fails you
+  get a prefilled GitHub issue link.
 
 ### Changed
 
+- `sip trunks|uris|credentials|ip-acl delete` check every dependent. The old
+  check stopped at 200 trunks or 400 numbers and let the delete through when a
+  read failed, which could delete live routing. Now every page is read (under
+  `--dry-run` too), a check that can't finish stops with the read's own exit
+  code (2, 3 or 4), and an object that something depends on is refused with
+  exit 5 unless you add `--force` to `--yes`.
+- `diagnose` (voice calls, SIP calls and messaging) prints one result when the
+  output is JSON (`-o json`, or piped): `what_happened`, `likely_cause`,
+  `timeline`, `next_steps`, `hangup_cause_code`, `hangup_source`, `confidence`
+  and `answer`. The event stream is now `-o jsonl`, so a script that reads
+  events needs that flag. Its call lookup also runs under `--dry-run`.
+- `diagnose` exits 3 when the analysis fails, escalates or stops early. It used
+  to exit 0 in `-o json`, on messaging, on a cut-off stream, and when the
+  assistant said in prose it could not finish. `ask -o json` also exits 3 on an
+  error event.
+- `--limit` is held to 1-20 and `--offset` to 0 or more on every paged list;
+  anything else is refused before any request. Lists used to disagree: some
+  clamped, some failed with a 400, some returned more.
+- A filter value a list doesn't accept (`--direction`, `--status`, `--type`,
+  `--services` and so on) is refused with the allowed values, where it used to
+  return an empty list. Toll-free `IN_REVIEW` and Verify `pending` are not
+  statuses the API has, so they are refused too.
+- `sip ip-acl create|update` refuse an `--ip` that isn't one address or CIDR
+  range (a comma-separated list included: repeat `--ip`).
+  `sip uris create|update` refuse a `--uri` with a space, a bad port, an
+  unknown or repeated transport, an empty `;param`, a malformed host,
+  `user@host` without `sip:`, or `sips:` with `transport=udp`. All of these
+  used to be sent. `agents list --all` with `--offset` is refused too.
+- A mistyped subcommand or a stray argument fails with `BAD_INPUT` (exit 1) and
+  a suggestion. `plivo sip trunks diagnose --help` used to print the trunks help
+  and exit 0, and `plivo sip trunks list bogus` listed trunks.
+- API errors from typed commands carry the upstream response in
+  `context.upstream` as `{status, body}`, the shape `plivo api` already used.
+- `voice streams test` sends `stop` before it closes (with `--bidirectional` it
+  used to drop the connection first) and exits 3 on the first failed write
+  instead of tolerating up to five.
+- Every request carries `Client-Type: cli` and `Client-Version` headers next to
+  the `X-Plivo-CLI-*` ones, so Plivo can tell CLI traffic apart and see it by
+  version. They name the client, not you, and go out even with telemetry off.
 - The audio-streaming skill now runs one guided flow for new and existing
   users: it checks credit, KYC and the number, builds an echo bot or Pipecat's
   OpenAI bot or reuses the user's own bot, exposes it through ngrok or
   Cloudflare Tunnel, creates an `audio-stream-<bot>-<n>` application, links
   the number and places a test call.
+- The bundled skills cover the new commands, each marked `(v1.2.0+)`, and the
+  audio-streaming skill regains content the v1.1.3 trim dropped.
+- Built with Go 1.26.9, which fixes advisories in `net/http`, `net/textproto`
+  and `crypto/tls`.
+
+### Fixed
+
+- `-o json` error messages are readable: SIP Trunking answers
+  `{"Error": "..."}`, which the CLI missed, so `message` held the whole body as
+  escaped JSON. Other shapes (`error.message`, `detail`, per-field `errors`) are
+  read too.
+- `numbers compliance list -o table` printed only its header and
+  `numbers compliance get` printed blank fields; both now show the data.
+  `-o json` was fine.
+- Empty lists print `[]` in `-o json`; the SIP IP ACL list sent `null`.
+- `plivo feedback --dry-run` posted the feedback anyway; it now prints the
+  request and sends nothing. `plivo feedback -y` failed with an unknown flag.
+- `plivo voice streams forward` no longer says "All cleaned up" and exits 0
+  when it can't put the app's answer URL back. It exits non-zero, and the
+  restore command it prints now sets the answer method back too.
 
 ### Removed
 
 - The `first-agent` skill: the audio-streaming flow replaces it. Installing
   audio-streaming into the default skills folder (`plivo skill install` or
   `skills.sh`) removes the `plivo-first-agent` skill that v1.1.3 put there.
-
-### Fixed
-
-- `plivo voice streams forward` no longer says "All cleaned up" and exits 0
-  when it can't put the app's answer URL back. It exits non-zero, and the
-  restore command it prints now sets the answer method back too.
 
 ## [1.1.3] - 2026-10-01
 
