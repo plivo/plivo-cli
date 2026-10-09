@@ -13,7 +13,7 @@ import (
 	"github.com/plivo/plivo-cli/internal/clierr"
 )
 
-const zeroUUID = "00000000-0000-0000-0000-000000000000"
+const placeholderComplianceID = "00000000-0000-0000-0000-000000000000"
 
 // Resellers hold one compliance application per end customer, so renting an
 // Indian number for one of them means naming that customer's application.
@@ -21,12 +21,12 @@ func TestNumbersBuy_complianceApplicationID(t *testing.T) {
 	t.Run("sends the id, trimmed", func(t *testing.T) {
 		setFakeCreds(t)
 		reqs := sipWriteServer(t, trunksUsingU1)
-		err, _, _ := execCmd(t, "numbers", "buy", "+14155551234", "--compliance-application-id", " "+zeroUUID+" ", "--yes")
+		err, _, _ := execCmd(t, "numbers", "buy", "+14155551234", "--compliance-application-id", " "+placeholderComplianceID+" ", "--yes")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		p := post(reqs(), "/PhoneNumber/")
-		if p == nil || p.body["compliance_application_id"] != zeroUUID {
+		if p == nil || p.body["compliance_application_id"] != placeholderComplianceID {
 			t.Fatalf("compliance_application_id not sent: %v", p)
 		}
 	})
@@ -65,11 +65,11 @@ func TestNumbersBuy_complianceApplicationID(t *testing.T) {
 	t.Run("dry-run previews it", func(t *testing.T) {
 		setFakeCreds(t)
 		reqs := sipWriteServer(t, trunksUsingU1)
-		err, _, stderr := execCmd(t, "numbers", "buy", "+14155551234", "--compliance-application-id", zeroUUID, "--dry-run")
+		err, _, stderr := execCmd(t, "numbers", "buy", "+14155551234", "--compliance-application-id", placeholderComplianceID, "--dry-run")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if !strings.Contains(stderr, `"compliance_application_id": "`+zeroUUID+`"`) {
+		if !strings.Contains(stderr, `"compliance_application_id": "`+placeholderComplianceID+`"`) {
 			t.Errorf("preview does not show the field, stderr:\n%s", stderr)
 		}
 		if len(reqs()) != 0 {
@@ -80,9 +80,9 @@ func TestNumbersBuy_complianceApplicationID(t *testing.T) {
 
 const (
 	indiaNumber   = "910000000000"
-	numberWithApp = `{"number":"910000000000","compliance_application_id":"` + zeroUUID + `"}`
+	numberWithApp = `{"number":"910000000000","compliance_application_id":"` + placeholderComplianceID + `"}`
 	numberNoApp   = `{"number":"910000000000","compliance_application_id":null}`
-	appRejected   = `{"api_id":"x","compliance":{"compliance_id":"` + zeroUUID + `","status":"rejected"}}`
+	appRejected   = `{"api_id":"x","compliance":{"compliance_id":"` + placeholderComplianceID + `","status":"rejected"}}`
 )
 
 // complianceFixture is what the server holds for one India number: the number
@@ -168,7 +168,7 @@ func TestNumbersUpdate_indiaComplianceRule(t *testing.T) {
 			if posted := hit(reqs(), "POST", "/Number/"); posted == tc.refused {
 				t.Errorf("update sent = %v, want %v (requests: %v)", posted, !tc.refused, reqs())
 			}
-			if tc.fx.app != "" && !hit(reqs(), "GET", "/PhoneNumber/Compliance/"+zeroUUID+"/") {
+			if tc.fx.app != "" && !hit(reqs(), "GET", "/PhoneNumber/Compliance/"+placeholderComplianceID+"/") {
 				t.Errorf("the attached application was not read: %v", reqs())
 			}
 			if warned := strings.Contains(stderr, "Warning:"); warned != tc.warned {
