@@ -2518,6 +2518,13 @@ Flags:
 
 Update settings on a rented number
 
+Update settings on a rented number.
+
+Routing an India (+91) number with --app-id or --trunk-id first reads its
+compliance application. The update is refused when that application is not
+accepted or cannot be read, and goes ahead with a warning when none is
+attached. --force skips only this check; Plivo still enforces KYC.
+
 ```
 plivo numbers update <number> [flags]
 ```
@@ -2527,6 +2534,7 @@ Flags:
 ```
       --alias string        set alias
       --app-id string       associate an application
+      --force               skip the India compliance check on --app-id/--trunk-id (Plivo still enforces KYC)
       --subaccount string   move under subaccount
       --trunk-id string     route the number to an inbound SIP trunk
 ```
