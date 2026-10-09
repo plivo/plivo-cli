@@ -47,7 +47,7 @@ func sipServer(t *testing.T, status int, body string) (func() []string, func() i
 func resetSIPFlags(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {
-		sipCallsLimit, sipCallsOffset = maxSIPCallLimit, 0
+		sipCallsLimit, sipCallsOffset = maxListLimit, 0
 		sipCallsFrom, sipCallsTo, sipCallsDirection = "", "", ""
 		sipCallsSince, sipCallsUntil = "", ""
 		sipCallsCauseCode, sipCallsSource, sipCallsSTIR = 0, "", ""
@@ -444,7 +444,7 @@ func diagnoseRouter(t *testing.T, trunkKnown, voiceKnown bool) func() []string {
 		switch {
 		case strings.Contains(r.URL.Path, "/chat"):
 			w.Header().Set("Content-Type", "text/event-stream")
-			_, _ = w.Write([]byte("event: final\ndata: {\"answer\":\"ok\",\"latency_ms\":1}\n\n"))
+			_, _ = w.Write([]byte(okDiagnoseTurn))
 		case isTrunk && trunkKnown, !isTrunk && voiceKnown:
 			_, _ = w.Write([]byte(`{"call_uuid":"abc"}`))
 		default:
@@ -524,4 +524,139 @@ func TestDiagnose_eachCommandRefusesTheOtherCallType(t *testing.T) {
 			t.Error("expected the assistant to be called")
 		}
 	})
+}
+
+// sipInsightsBody follows the documented Insights example, with placeholder
+// ids, numbers and carriers.
+const sipInsightsBody = `{"api_id":"00000000-0000-0000-0000-000000000000",
+"call_uuid":"00000000-0000-0000-0000-000000000000",
+"from":{"carrier":"Example Mobile","number":"+14155551234","region":"US"},
+"to":{"carrier":"Example Telecom","number":"+13125551234","region":"US"},
+"hangup_cause":"normal_hangup","hangup_source":"customer",
+"rtt":"24","jitter":"3","packet_loss":"0","post_dial_delay":1000.0,
+"plivo_quality_score":"4.2"}`
+
+// Insights prints what the API measured, as returned, with units: nothing is
+// computed or rounded on the way.
+func TestSIPCallsInsights_printsTheMetricsAsReturnedWithUnits(t *testing.T) {
+	setFakeCreds(t)
+	resetSIPFlags(t)
+	urls, _ := sipServer(t, http.StatusOK, sipInsightsBody)
+
+	err, stdout, _ := execCmd(t, "sip", "calls", "insights", "00000000-0000-0000-0000-000000000000", "-o", "table")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := urls(); len(got) != 1 || !strings.HasSuffix(got[0], "/Zentrunk/Call/00000000-0000-0000-0000-000000000000/Insights/") {
+		t.Fatalf("expected one Insights request, got %v", got)
+	}
+	for _, want := range []string{
+		"24 ms", "3 ms", "0%", "1000.0 ms", "4.2",
+		"normal_hangup", "customer",
+		"+14155551234", "Example Mobile", "+13125551234", "Example Telecom", "US",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("missing %q:\n%s", want, stdout)
+		}
+	}
+	if strings.Contains(stdout, "outside the documented") {
+		t.Errorf("a score inside 1-5 must not be labelled:\n%s", stdout)
+	}
+}
+
+// A score outside the documented 1-5 range is labelled, never read as a grade.
+// Insights has returned "0" on an answered trunk call.
+func TestSIPCallsInsights_labelsAScoreOutsideTheDocumentedRange(t *testing.T) {
+	for _, tc := range []struct {
+		score    string
+		labelled bool
+	}{
+		{"0", true}, {"5.1", true}, {"1", false}, {"5", false}, {"3.7", false}, {"", false}, {"n/a", false},
+	} {
+		t.Run(tc.score, func(t *testing.T) {
+			if got := strings.Contains(qualityScore(api.FlexString(tc.score)), "outside the documented 1-5 range"); got != tc.labelled {
+				t.Errorf("qualityScore(%q) labelled=%v, want %v", tc.score, got, tc.labelled)
+			}
+		})
+	}
+}
+
+// -o json is the API response itself, including fields the CLI does not model.
+func TestSIPCallsInsights_jsonIsTheRawResponse(t *testing.T) {
+	setFakeCreds(t)
+	resetSIPFlags(t)
+	sipServer(t, http.StatusOK, `{"call_uuid":"00000000-0000-0000-0000-000000000000","rtt":"24","a_field_we_do_not_model":"keep me"}`)
+
+	err, stdout, _ := execCmd(t, "sip", "calls", "insights", "00000000-0000-0000-0000-000000000000", "-o", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout, `"a_field_we_do_not_model": "keep me"`) || strings.Contains(stdout, "24 ms") {
+		t.Fatalf("-o json should be the raw response:\n%s", stdout)
+	}
+}
+
+// Each side is labelled with where its answer came from. "customer" and
+// "zentrunk" are API values that read as something else in prose, so the
+// documented meaning travels with them.
+func TestSIPHangupSides(t *testing.T) {
+	for _, tc := range []struct {
+		cause, source string
+		code          int
+		want          string
+	}{
+		{"normal_hangup", "carrier", 3000, "Plivo: normal_hangup (3000), hung up by carrier"},
+		{"normal_hangup", "customer", 0, "Plivo: normal_hangup, hung up by customer (your infrastructure)"},
+		{"rtp_timeout", "zentrunk", 3020, "Plivo: rtp_timeout (3020), hung up by zentrunk (Plivo's SIP trunking platform)"},
+		{"", "", 0, "Plivo: not available"},
+	} {
+		got := sipHangupSides(tc.cause, tc.code, tc.source)
+		if !strings.Contains(got, tc.want+"\n") {
+			t.Errorf("sipHangupSides(%q, %d, %q) =\n%s\nwant a line %q", tc.cause, tc.code, tc.source, got, tc.want)
+		}
+		if !strings.Contains(got, "Platform's final SIP response: not available\n") {
+			t.Errorf("the platform's side must say it is not available, never guess:\n%s", got)
+		}
+	}
+}
+
+const sipCDRBody = `{"call_uuid":"00000000-0000-0000-0000-000000000000",
+"from_number":"+14155551234","to_number":"+13125551234","call_direction":"inbound",
+"hangup_cause_name":"normal_hangup","hangup_cause_code":3000,"hangup_source":"carrier"}`
+
+// Both tables say which side ended the call; JSON stays the API response.
+func TestSIPCalls_showWhichSideEndedTheCall(t *testing.T) {
+	for _, tc := range []struct {
+		name, body, plivo string
+		args              []string
+	}{
+		{"get", sipCDRBody, "Plivo: normal_hangup (3000), hung up by carrier",
+			[]string{"sip", "calls", "get", "00000000-0000-0000-0000-000000000000"}},
+		{"insights", sipInsightsBody, "Plivo: normal_hangup, hung up by customer (your infrastructure)",
+			[]string{"sip", "calls", "insights", "00000000-0000-0000-0000-000000000000"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setFakeCreds(t)
+			resetSIPFlags(t)
+			sipServer(t, http.StatusOK, tc.body)
+
+			err, stdout, _ := execCmd(t, append(tc.args, "-o", "table")...)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			for _, want := range []string{tc.plivo, "Platform's final SIP response: not available"} {
+				if !strings.Contains(stdout, want) {
+					t.Errorf("table missing %q:\n%s", want, stdout)
+				}
+			}
+
+			err, stdout, _ = execCmd(t, append(tc.args, "-o", "json")...)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if strings.Contains(stdout, "final SIP response") || strings.Contains(stdout, "hung up by") {
+				t.Errorf("-o json must stay the API response:\n%s", stdout)
+			}
+		})
+	}
 }

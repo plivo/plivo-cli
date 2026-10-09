@@ -28,6 +28,7 @@ var (
 var tfvListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List toll-free verification profiles",
+	Args:  cobra.NoArgs,
 	RunE:  runTfvList,
 }
 
@@ -52,13 +53,13 @@ var (
 var tfvSubmitCmd = &cobra.Command{
 	Use:   "submit",
 	Short: "Submit a new toll-free verification profile",
+	Args:  cobra.NoArgs,
 	RunE:  runTfvSubmit,
 }
 
 func init() {
-	tfvListCmd.Flags().IntVar(&tfvListLimit, "limit", 20, "results per page")
-	tfvListCmd.Flags().IntVar(&tfvListOffset, "offset", 0, "pagination offset")
-	tfvListCmd.Flags().StringVar(&tfvListStatus, "status", "", "filter by status: SUBMITTED|IN_REVIEW|APPROVED|REJECTED")
+	registerListFlags(tfvListCmd, &tfvListLimit, &tfvListOffset)
+	tfvListCmd.Flags().StringVar(&tfvListStatus, "status", "", "filter by status: "+oneOf(tollfreeStatuses))
 
 	tfvSubmitCmd.Flags().StringVar(&tfvSubmitBizName, "business-name", "", "business name (required)")
 	_ = tfvSubmitCmd.MarkFlagRequired("business-name")
@@ -76,6 +77,9 @@ func init() {
 }
 
 func runTfvList(cmd *cobra.Command, args []string) error {
+	if err := validateEnum("status", &tfvListStatus, tollfreeStatuses...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -87,18 +91,14 @@ func runTfvList(cmd *cobra.Command, args []string) error {
 		q.Set("status", tfvListStatus)
 	}
 	var resp api.TollFreeVerificationList
-	apiErr, err := client.Do("GET", client.AccountURL("TollfreeVerification"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("TollfreeVerification"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"PROFILE_UUID", "BUSINESS", "USE_CASE", "VOLUME", "STATUS", "CREATED"}}
 	for _, t := range resp.Objects {

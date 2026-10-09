@@ -91,6 +91,7 @@ var (
 var messagingSmsSendCmd = &cobra.Command{
 	Use:   "send",
 	Short: "Send an SMS (requires --yes; spends money — use --dry-run to preview)",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runMessageSendForChannel(cmd, "sms", smsSendSrc, smsSendDst, smsSendText, smsSendURL, smsSendMethod, nil)
 	},
@@ -99,6 +100,7 @@ var messagingSmsSendCmd = &cobra.Command{
 var messagingWhatsappSendCmd = &cobra.Command{
 	Use:   "send",
 	Short: "Send a WhatsApp message (requires --yes; spends money — use --dry-run to preview)",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runMessageSendForChannel(cmd, "whatsapp", whatsappSendSrc, whatsappSendDst, whatsappSendText, whatsappSendURL, whatsappSendMethod, nil)
 	},
@@ -107,6 +109,7 @@ var messagingWhatsappSendCmd = &cobra.Command{
 var messagingMmsSendCmd = &cobra.Command{
 	Use:   "send",
 	Short: "Send an MMS (requires --yes; spends money — use --dry-run to preview)",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runMessageSendForChannel(cmd, "mms", mmsSendSrc, mmsSendDst, mmsSendText, mmsSendURL, mmsSendMethod, mmsSendMediaURLs)
 	},
@@ -117,6 +120,7 @@ var messagingMmsSendCmd = &cobra.Command{
 var messagingSmsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List SMS messages",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runMessageListForChannel(cmd, "sms",
 			smsListLimit, smsListOffset, smsListState, smsListDirection, smsListFrom, smsListTo)
@@ -126,6 +130,7 @@ var messagingSmsListCmd = &cobra.Command{
 var messagingWhatsappListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List WhatsApp messages",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runMessageListForChannel(cmd, "whatsapp",
 			whatsappListLimit, whatsappListOffset, whatsappListState, whatsappListDirection, whatsappListFrom, whatsappListTo)
@@ -135,6 +140,7 @@ var messagingWhatsappListCmd = &cobra.Command{
 var messagingMmsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List MMS messages",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runMessageListForChannel(cmd, "mms",
 			mmsListLimit, mmsListOffset, mmsListState, mmsListDirection, mmsListFrom, mmsListTo)
@@ -161,9 +167,9 @@ func init() {
 	registerExplainFlag(messagingMmsSendCmd)
 
 	// SMS list flags
-	registerListFlags(messagingSmsListCmd, &smsListLimit, &smsListOffset, &smsListState, &smsListDirection, &smsListFrom, &smsListTo)
-	registerListFlags(messagingWhatsappListCmd, &whatsappListLimit, &whatsappListOffset, &whatsappListState, &whatsappListDirection, &whatsappListFrom, &whatsappListTo)
-	registerListFlags(messagingMmsListCmd, &mmsListLimit, &mmsListOffset, &mmsListState, &mmsListDirection, &mmsListFrom, &mmsListTo)
+	registerMessageListFlags(messagingSmsListCmd, &smsListLimit, &smsListOffset, &smsListState, &smsListDirection, &smsListFrom, &smsListTo)
+	registerMessageListFlags(messagingWhatsappListCmd, &whatsappListLimit, &whatsappListOffset, &whatsappListState, &whatsappListDirection, &whatsappListFrom, &whatsappListTo)
+	registerMessageListFlags(messagingMmsListCmd, &mmsListLimit, &mmsListOffset, &mmsListState, &mmsListDirection, &mmsListFrom, &mmsListTo)
 
 	// Wire per-channel verbs onto each subgroup
 	messagingSmsCmd.AddCommand(messagingSmsSendCmd, messagingSmsListCmd, sms10dlcCmd)
@@ -191,13 +197,12 @@ func registerSendFlags(cmd *cobra.Command, src, dst, text, urlFlag, method *stri
 	cmd.Flags().StringVar(method, "method", "POST", "callback method GET|POST")
 }
 
-// registerListFlags adds the shared list-flag set (channel filter is set
+// registerMessageListFlags adds the shared list-flag set (channel filter is set
 // internally per command, not exposed as a flag).
-func registerListFlags(cmd *cobra.Command, limit, offset *int, state, direction, fromN, toN *string) {
-	cmd.Flags().IntVar(limit, "limit", 20, "results per page")
-	cmd.Flags().IntVar(offset, "offset", 0, "pagination offset")
-	cmd.Flags().StringVar(state, "state", "", "queued|sent|delivered|undelivered|failed|received")
-	cmd.Flags().StringVar(direction, "direction", "", "inbound|outbound")
+func registerMessageListFlags(cmd *cobra.Command, limit, offset *int, state, direction, fromN, toN *string) {
+	registerListFlags(cmd, limit, offset)
+	cmd.Flags().StringVar(state, "state", "", oneOf(messageStateValues))
+	cmd.Flags().StringVar(direction, "direction", "", oneOf(directionValues))
 	cmd.Flags().StringVar(fromN, "from", "", "filter by from_number")
 	cmd.Flags().StringVar(toN, "to", "", "filter by to_number")
 }
@@ -267,6 +272,12 @@ func runMessageSendForChannel(cmd *cobra.Command, channel, src, dst, text, urlFl
 func runMessageListForChannel(cmd *cobra.Command, channel string,
 	limit, offset int, state, direction, fromN, toN string,
 ) error {
+	if err := validateEnum("state", &state, messageStateValues...); err != nil {
+		return err
+	}
+	if err := validateEnum("direction", &direction, directionValues...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -289,18 +300,14 @@ func runMessageListForChannel(cmd *cobra.Command, channel string,
 	}
 
 	var resp api.MessageList
-	apiErr, err := client.Do("GET", client.AccountURL("Message"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Message"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"UUID", "FROM", "TO", "STATE", "TYPE", "TIME"}}
 	for _, m := range resp.Objects {
