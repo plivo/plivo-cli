@@ -30,6 +30,7 @@ var (
 var linkListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List number→campaign links",
+	Args:  cobra.NoArgs,
 	RunE:  runLinkList,
 }
 
@@ -41,6 +42,7 @@ var (
 var linkCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Link a number to a campaign",
+	Args:  cobra.NoArgs,
 	RunE:  runLinkCreate,
 }
 
@@ -52,8 +54,7 @@ var linkDeleteCmd = &cobra.Command{
 }
 
 func init() {
-	linkListCmd.Flags().IntVar(&linkListLimit, "limit", 20, "results per page")
-	linkListCmd.Flags().IntVar(&linkListOffset, "offset", 0, "pagination offset")
+	registerListFlags(linkListCmd, &linkListLimit, &linkListOffset)
 	linkListCmd.Flags().StringVar(&linkListCampaign, "campaign-id", "", "filter by campaign_id")
 	linkListCmd.Flags().StringVar(&linkListNumber, "number", "", "filter by number")
 
@@ -81,18 +82,14 @@ func runLinkList(cmd *cobra.Command, args []string) error {
 		q.Set("number", linkListNumber)
 	}
 	var resp api.NumberLink10DLCList
-	apiErr, err := client.Do("GET", client.AccountURL("10dlc", "NumberLinking"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("10dlc", "NumberLinking"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"LINK_ID", "NUMBER", "CAMPAIGN_ID", "STATUS", "CREATED"}}
 	for _, l := range resp.Objects {

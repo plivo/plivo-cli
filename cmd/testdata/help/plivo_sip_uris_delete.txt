@@ -1,17 +1,22 @@
-Names any trunk using it as a primary or fallback URI before deleting.
+Names any trunk using it as a primary or fallback URI first. Deleting a URI
+also deletes those trunks, so an in-use URI needs --force on top of --yes. If
+the check fails, the delete is refused.
 
 Usage:
   plivo sip uris delete <uri_uuid> [flags]
 
 Flags:
-  -h, --help   help for delete
+      --force   delete even though something depends on it (with --yes)
+  -h, --help    help for delete
 
 Global Flags:
       --dry-run            print the HTTP request without sending
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
-  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+  -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
       --profile string     named profile from ~/.plivo/config.toml
+      --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
+      --schema             describe the command (arguments, flags, output fields) instead of running it
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts

@@ -1,6 +1,11 @@
 Open a WebSocket to --to, send a Plivo-format start frame, stream synthetic
-audio for --duration seconds, then stop. Reports connection latency,
-frame send rate, and any disconnects.
+audio (a 1 kHz tone) for --duration seconds, then send stop and close.
+Reports the connection time (latency_ms) and any warnings.
+
+With --bidirectional it also reads what the endpoint sends back, while the
+audio streams and for up to --duration seconds after, and times the first
+playAudio from the first frame sent (first_response_ms). --expect-audio
+does the same and exits 1 when no playAudio comes back.
 
 No call is placed and no Plivo backend interaction occurs — this is a
 pure-client tool that verifies your handler can accept the Plivo stream
@@ -14,11 +19,13 @@ Examples:
   plivo voice streams test --to ws://localhost:7860/ws --duration 5
   plivo voice streams test --to wss://localhost:7860/ws --insecure   # self-signed dev cert
   plivo voice streams test --to wss://my-bot.example.com/ws --bidirectional
+  plivo voice streams test --to ws://localhost:8765/ws --expect-audio   # exit 1 unless playAudio comes back
 
 Flags:
       --bidirectional   also read frames back from the endpoint (test bot→caller path)
       --codec string    audio codec: mulaw | l16 (default "mulaw")
       --duration int    seconds of synthetic audio to stream (max 30) (default 3)
+      --expect-audio    exit 1 unless playAudio comes back (implies --bidirectional); the test audio is a tone, not speech, so only an echo-style bot or one that speaks first answers
   -h, --help            help for test
       --insecure        skip TLS verification (self-signed dev certs only)
       --rate int        sample rate in Hz (mulaw: 8000; l16: 8000 or 16000) (default 8000)
@@ -28,8 +35,10 @@ Global Flags:
       --dry-run            print the HTTP request without sending
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
-  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+  -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
       --profile string     named profile from ~/.plivo/config.toml
+      --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
+      --schema             describe the command (arguments, flags, output fields) instead of running it
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts

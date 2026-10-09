@@ -284,7 +284,7 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 	}
 
 	if resp.StatusCode >= 400 {
-		return parseError(resp.StatusCode, resp.Header.Get("X-Request-ID"), respBytes), nil
+		return parseError(resp.StatusCode, resp.Header, respBytes), nil
 	}
 
 	if resp.StatusCode == 204 || len(respBytes) == 0 {
@@ -382,7 +382,7 @@ func (c *Client) DoMultipart(method, fullURL string, dataJSON []byte, files map[
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 	if resp.StatusCode >= 400 {
-		return parseError(resp.StatusCode, resp.Header.Get("X-Request-ID"), respBytes), nil
+		return parseError(resp.StatusCode, resp.Header, respBytes), nil
 	}
 	if resp.StatusCode == 204 || len(respBytes) == 0 {
 		return nil, nil
