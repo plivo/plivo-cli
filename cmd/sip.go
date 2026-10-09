@@ -109,6 +109,21 @@ var sipCallsGetCmd = &cobra.Command{
 	RunE:    runSIPCallsGet,
 }
 
+var sipCallsInsightsCmd = &cobra.Command{
+	Use:   "insights <call_uuid>",
+	Short: "Show the call quality Plivo measured on a SIP Trunking call",
+	Long: `Show the call quality Plivo measured on a SIP Trunking call: round-trip time,
+jitter, packet loss, post-dial delay and the Plivo quality score, with the
+hangup cause and source and the carrier and region of each leg.
+
+Values are printed as the API returns them, with units; nothing is computed
+here. A quality score outside the documented 1-5 range is labelled as such.
+-o json returns the API response unchanged.`,
+	Example: `  plivo sip calls insights 8f3c1a2e-0d44-4a6f-9c31-2b7e5a90d1f7`,
+	Args:    cobra.ExactArgs(1),
+	RunE:    runSIPCallsInsights,
+}
+
 var sipTrunksListCmd = &cobra.Command{
 	Use:     "list",
 	Short:   "List trunks",
@@ -154,7 +169,7 @@ func init() {
 	sipTrunksListCmd.Flags().StringVar(&sipTrunksDirection, "direction", "", oneOf(directionValues))
 	registerListFlags(sipACLListCmd, &sipACLLimit, &sipACLOffset)
 
-	sipCallsCmd.AddCommand(sipCallsListCmd, sipCallsGetCmd, sipCallsDiagnoseCmd)
+	sipCallsCmd.AddCommand(sipCallsListCmd, sipCallsGetCmd, sipCallsDiagnoseCmd, sipCallsInsightsCmd)
 	sipTrunksCmd.AddCommand(sipTrunksListCmd, sipTrunksGetCmd)
 	sipACLCmd.AddCommand(sipACLListCmd, sipACLGetCmd)
 	sipCmd.AddCommand(sipCallsCmd, sipTrunksCmd, sipACLCmd)
@@ -323,6 +338,66 @@ func sipCallKV(c api.SIPTrunkCall) [][2]string {
 		{"cnam_lookup", strconv.FormatBool(c.CnamLookup)},
 		{"cnam_lookup_rate", c.CnamLookupRate},
 	}
+}
+
+func runSIPCallsInsights(cmd *cobra.Command, args []string) error {
+	client, _, err := getClient()
+	if err != nil {
+		return err
+	}
+	var in api.SIPCallInsights
+	apiErr, err := client.Do("GET", client.AccountURL("Zentrunk", "Call", args[0], "Insights"), nil, nil, &in)
+	if err != nil {
+		return err
+	}
+	if apiErr != nil {
+		return apiErr
+	}
+	if dryRunFlag {
+		return nil
+	}
+	if effectiveFormat() == output.FormatJSON {
+		return output.JSONRaw(os.Stdout, in.Raw())
+	}
+	return output.KV(os.Stdout, sipInsightsKV(in))
+}
+
+// sipInsightsKV shows the record as returned. It adds units and the range
+// label on the score, and derives nothing.
+func sipInsightsKV(in api.SIPCallInsights) [][2]string {
+	return [][2]string{
+		{"call_uuid", string(in.CallUUID)},
+		{"rtt", withUnit(in.RTT, " ms")},
+		{"jitter", withUnit(in.Jitter, " ms")},
+		{"packet_loss", withUnit(in.PacketLoss, "%")},
+		{"post_dial_delay", withUnit(in.PostDialDelay, " ms")},
+		{"plivo_quality_score", qualityScore(in.PlivoQualityScore)},
+		{"hangup_cause", string(in.HangupCause)},
+		{"hangup_source", string(in.HangupSource)},
+		{"from_number", string(in.From.Number)},
+		{"from_carrier", string(in.From.Carrier)},
+		{"from_region", string(in.From.Region)},
+		{"to_number", string(in.To.Number)},
+		{"to_carrier", string(in.To.Carrier)},
+		{"to_region", string(in.To.Region)},
+	}
+}
+
+func withUnit(v api.FlexString, unit string) string {
+	if v == "" {
+		return ""
+	}
+	return string(v) + unit
+}
+
+// qualityScore labels a score outside the documented 1-5 range rather than let
+// it pass for a grade: Insights has returned "0" on an answered call.
+func qualityScore(v api.FlexString) string {
+	s := string(v)
+	if f, err := strconv.ParseFloat(s, 64); err == nil && (f < 1 || f > 5) {
+		return s + " (outside the documented 1-5 range)"
+	}
+	return s
 }
 
 func runSIPTrunksList(cmd *cobra.Command, args []string) error {

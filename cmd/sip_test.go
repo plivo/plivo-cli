@@ -525,3 +525,73 @@ func TestDiagnose_eachCommandRefusesTheOtherCallType(t *testing.T) {
 		}
 	})
 }
+
+// sipInsightsBody follows the documented Insights example, with placeholder
+// ids, numbers and carriers.
+const sipInsightsBody = `{"api_id":"00000000-0000-0000-0000-000000000000",
+"call_uuid":"00000000-0000-0000-0000-000000000000",
+"from":{"carrier":"Example Mobile","number":"+14155551234","region":"US"},
+"to":{"carrier":"Example Telecom","number":"+13125551234","region":"US"},
+"hangup_cause":"normal_hangup","hangup_source":"customer",
+"rtt":"24","jitter":"3","packet_loss":"0","post_dial_delay":1000.0,
+"plivo_quality_score":"4.2"}`
+
+// Insights prints what the API measured, as returned, with units: nothing is
+// computed or rounded on the way.
+func TestSIPCallsInsights_printsTheMetricsAsReturnedWithUnits(t *testing.T) {
+	setFakeCreds(t)
+	resetSIPFlags(t)
+	urls, _ := sipServer(t, http.StatusOK, sipInsightsBody)
+
+	err, stdout, _ := execCmd(t, "sip", "calls", "insights", "00000000-0000-0000-0000-000000000000", "-o", "table")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := urls(); len(got) != 1 || !strings.HasSuffix(got[0], "/Zentrunk/Call/00000000-0000-0000-0000-000000000000/Insights/") {
+		t.Fatalf("expected one Insights request, got %v", got)
+	}
+	for _, want := range []string{
+		"24 ms", "3 ms", "0%", "1000.0 ms", "4.2",
+		"normal_hangup", "customer",
+		"+14155551234", "Example Mobile", "+13125551234", "Example Telecom", "US",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("missing %q:\n%s", want, stdout)
+		}
+	}
+	if strings.Contains(stdout, "outside the documented") {
+		t.Errorf("a score inside 1-5 must not be labelled:\n%s", stdout)
+	}
+}
+
+// A score outside the documented 1-5 range is labelled, never read as a grade.
+// Insights has returned "0" on an answered trunk call.
+func TestSIPCallsInsights_labelsAScoreOutsideTheDocumentedRange(t *testing.T) {
+	for _, tc := range []struct {
+		score    string
+		labelled bool
+	}{
+		{"0", true}, {"5.1", true}, {"1", false}, {"5", false}, {"3.7", false}, {"", false}, {"n/a", false},
+	} {
+		t.Run(tc.score, func(t *testing.T) {
+			if got := strings.Contains(qualityScore(api.FlexString(tc.score)), "outside the documented 1-5 range"); got != tc.labelled {
+				t.Errorf("qualityScore(%q) labelled=%v, want %v", tc.score, got, tc.labelled)
+			}
+		})
+	}
+}
+
+// -o json is the API response itself, including fields the CLI does not model.
+func TestSIPCallsInsights_jsonIsTheRawResponse(t *testing.T) {
+	setFakeCreds(t)
+	resetSIPFlags(t)
+	sipServer(t, http.StatusOK, `{"call_uuid":"00000000-0000-0000-0000-000000000000","rtt":"24","a_field_we_do_not_model":"keep me"}`)
+
+	err, stdout, _ := execCmd(t, "sip", "calls", "insights", "00000000-0000-0000-0000-000000000000", "-o", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout, `"a_field_we_do_not_model": "keep me"`) || strings.Contains(stdout, "24 ms") {
+		t.Fatalf("-o json should be the raw response:\n%s", stdout)
+	}
+}

@@ -1,20 +1,19 @@
-Inspect SIP Trunking calls (CDRs)
+Show the call quality Plivo measured on a SIP Trunking call: round-trip time,
+jitter, packet loss, post-dial delay and the Plivo quality score, with the
+hangup cause and source and the carrier and region of each leg.
+
+Values are printed as the API returns them, with units; nothing is computed
+here. A quality score outside the documented 1-5 range is labelled as such.
+-o json returns the API response unchanged.
 
 Usage:
-  plivo sip calls [flags]
-  plivo sip calls [command]
+  plivo sip calls insights <call_uuid> [flags]
 
-Aliases:
-  calls, call, cdrs
-
-Available Commands:
-  diagnose    Diagnose what happened on a SIP Trunking call (AI-powered)
-  get         Get one SIP Trunking call by UUID
-  insights    Show the call quality Plivo measured on a SIP Trunking call
-  list        List SIP Trunking calls
+Examples:
+  plivo sip calls insights 8f3c1a2e-0d44-4a6f-9c31-2b7e5a90d1f7
 
 Flags:
-  -h, --help   help for calls
+  -h, --help   help for insights
 
 Global Flags:
       --dry-run            print the HTTP request without sending
@@ -27,5 +26,3 @@ Global Flags:
       --schema             describe the command (arguments, flags, output fields) instead of running it
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts
-
-Use "plivo sip calls [command] --help" for more information about a command.
