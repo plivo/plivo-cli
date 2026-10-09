@@ -17,7 +17,7 @@ const (
 	indiaNumberRecord = `{"number":"910000000000","country":"India","voice_enabled":true,` +
 		`"application":"","compliance_application_id":null}`
 	indiaNumberWithApp = `{"number":"910000000000","country":"India","voice_enabled":true,` +
-		`"compliance_application_id":"` + zeroUUID + `"}`
+		`"compliance_application_id":"` + placeholderComplianceID + `"}`
 )
 
 func decodeConnectPlan(t *testing.T, stdout string) connectPlan {
