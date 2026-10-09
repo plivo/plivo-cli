@@ -34,6 +34,7 @@ var (
 var numberListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List numbers rented to your account",
+	Args:  cobra.NoArgs,
 	RunE:  runNumberList,
 }
 
@@ -70,6 +71,7 @@ var (
 var numberSearchCmd = &cobra.Command{
 	Use:   "search",
 	Short: "Search available numbers to rent",
+	Args:  cobra.NoArgs,
 	RunE:  runNumberSearch,
 }
 

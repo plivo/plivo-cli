@@ -58,6 +58,7 @@ silently appends " 1", " 2", etc.) — the stored name is always shown.`,
 	Example: `  plivo agents create --name "Order Status Agent"
   plivo agents create --name "Order Status Agent" --file flow.json
   plivo agents create --file flow.json   # flow.json supplies "name" itself`,
+	Args: cobra.NoArgs,
 	RunE: runAgentCreate,
 }
 
@@ -71,6 +72,7 @@ var (
 var agentListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List agent flows",
+	Args:  cobra.NoArgs,
 	RunE:  runAgentList,
 }
 

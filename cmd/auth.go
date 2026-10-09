@@ -23,6 +23,7 @@ var authCmd = &cobra.Command{
 var authListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List configured profiles",
+	Args:  cobra.NoArgs,
 	RunE:  runAuthList,
 }
 
@@ -43,6 +44,7 @@ var authRemoveCmd = &cobra.Command{
 var authWhoamiCmd = &cobra.Command{
 	Use:   "whoami",
 	Short: "Verify credentials and print active account",
+	Args:  cobra.NoArgs,
 	RunE:  runAuthWhoami,
 }
 

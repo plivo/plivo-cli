@@ -28,6 +28,7 @@ var (
 var tfvListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List toll-free verification profiles",
+	Args:  cobra.NoArgs,
 	RunE:  runTfvList,
 }
 
@@ -52,6 +53,7 @@ var (
 var tfvSubmitCmd = &cobra.Command{
 	Use:   "submit",
 	Short: "Submit a new toll-free verification profile",
+	Args:  cobra.NoArgs,
 	RunE:  runTfvSubmit,
 }
 

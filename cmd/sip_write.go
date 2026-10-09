@@ -185,6 +185,7 @@ trunk_domain is only returned on a read, so this reads the trunk back and prints
 it: that domain is what you paste into your platform.`,
 	Example: `  plivo sip trunks create --name my-trunk --direction inbound --uri <uri_uuid>
   plivo sip trunks create --name out --direction outbound --credential <uuid>`,
+	Args: cobra.NoArgs,
 	RunE: runSIPTrunksCreate,
 }
 
@@ -381,10 +382,11 @@ var sipURIsCreateCmd = &cobra.Command{
 --uri accepts host, host:port, host;transport=tcp, or sip:user@host. A missing
 port is fine and is never rejected here: the platform decides the default.`,
 	Example: `  plivo sip uris create --name eleven --uri sip.rtc.elevenlabs.io:5060;transport=tcp`,
+	Args:    cobra.NoArgs,
 	RunE:    runSIPURIsCreate,
 }
 
-var sipURIsListCmd = &cobra.Command{Use: "list", Short: "List origination URIs", RunE: runSIPURIsList}
+var sipURIsListCmd = &cobra.Command{Use: "list", Short: "List origination URIs", Args: cobra.NoArgs, RunE: runSIPURIsList}
 var sipURIsGetCmd = &cobra.Command{Use: "get <uri_uuid>", Short: "Get one origination URI", Args: cobra.ExactArgs(1), RunE: runSIPURIsGet}
 
 var sipURIsUpdateCmd = &cobra.Command{
@@ -627,10 +629,11 @@ The password is read from stdin only. There is no --password flag: a password in
 an argument lands in shell history, process listings and CI logs. It is never
 echoed, never printed back, and never generated for you.`,
 	Example: `  printf '%s' "$SIP_PASSWORD" | plivo sip credentials create --name c1 --username u1 --password-stdin`,
+	Args:    cobra.NoArgs,
 	RunE:    runSIPCredsCreate,
 }
 
-var sipCredsListCmd = &cobra.Command{Use: "list", Short: "List credentials", RunE: runSIPCredsList}
+var sipCredsListCmd = &cobra.Command{Use: "list", Short: "List credentials", Args: cobra.NoArgs, RunE: runSIPCredsList}
 var sipCredsGetCmd = &cobra.Command{Use: "get <credential_uuid>", Short: "Get one credential", Args: cobra.ExactArgs(1), RunE: runSIPCredsGet}
 
 var sipCredsUpdateCmd = &cobra.Command{
@@ -817,6 +820,7 @@ var sipACLCreateCmd = &cobra.Command{
 blocked: it is occasionally deliberate, and refusing it outright would push
 people to the console instead.`,
 	Example: `  plivo sip ip-acl create --name platform --ip 203.0.113.4 --ip 198.51.100.0/24`,
+	Args:    cobra.NoArgs,
 	RunE:    runSIPACLCreate,
 }
 
