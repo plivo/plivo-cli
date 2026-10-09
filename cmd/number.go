@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
@@ -75,7 +76,10 @@ var numberSearchCmd = &cobra.Command{
 	RunE:  runNumberSearch,
 }
 
-var numberBuyAppID string
+var (
+	numberBuyAppID        string
+	numberBuyComplianceID string
+)
 
 var numberBuyCmd = &cobra.Command{
 	Use:   "buy <number>",
@@ -112,6 +116,7 @@ func init() {
 	registerPageFlags(numberSearchCmd, &numberSearchLimit, &numberSearchOffset)
 
 	numberBuyCmd.Flags().StringVar(&numberBuyAppID, "app-id", "", "auto-attach to this application after purchase")
+	numberBuyCmd.Flags().StringVar(&numberBuyComplianceID, "compliance-application-id", "", "accepted compliance application to attach; if unset, Plivo picks your most recent applicable one")
 	registerExplainFlag(numberBuyCmd)
 	registerExplainFlag(numberReleaseCmd)
 
@@ -277,6 +282,14 @@ func runNumberUpdate(cmd *cobra.Command, args []string) error {
 
 func runNumberBuy(cmd *cobra.Command, args []string) error {
 	number := args[0]
+	// Checked whenever the flag is passed: an empty value (an unset shell
+	// variable) would otherwise let Plivo pick the application itself.
+	complianceID := strings.TrimSpace(numberBuyComplianceID)
+	if cmd.Flags().Changed("compliance-application-id") && !looksLikeUUID(complianceID) {
+		e := clierr.BadFlag("compliance-application-id", fmt.Sprintf("expected a compliance application UUID, got %q", complianceID))
+		e.Hint = "`plivo numbers compliance list --status accepted` shows your application ids."
+		return e
+	}
 	proceed, dryRun, gerr := guardSpend("buy number " + number)
 	if !proceed {
 		return gerr
@@ -289,6 +302,9 @@ func runNumberBuy(cmd *cobra.Command, args []string) error {
 	body := map[string]any{}
 	if numberBuyAppID != "" {
 		body["app_id"] = numberBuyAppID
+	}
+	if complianceID != "" {
+		body["compliance_application_id"] = complianceID
 	}
 	if explainFlag {
 		fmt.Fprintf(os.Stderr, "Will POST %s (rent number %s)\n", client.AccountURL("PhoneNumber", number), number)
