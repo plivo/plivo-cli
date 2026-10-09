@@ -4,7 +4,7 @@ Usage:
   plivo agents runs list <agent_id> [flags]
 
 Flags:
-      --all          auto-paginate through all pages
+      --all          fetch every page (stops after 100 pages)
   -h, --help         help for list
       --limit int    results per page (1-20) (default 20)
       --offset int   pagination offset

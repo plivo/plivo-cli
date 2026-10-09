@@ -4,6 +4,7 @@ Usage:
   plivo messaging sms 10dlc campaigns list [flags]
 
 Flags:
+      --all               fetch every page (stops after 100 pages)
       --brand-id string   filter by brand_id
   -h, --help              help for list
       --limit int         results per page (1-20) (default 20)

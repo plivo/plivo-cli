@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/plivo/plivo-cli/internal/output"
 )
@@ -72,6 +73,9 @@ type Error struct {
 	RequestID  string         `json:"request_id,omitempty"`
 	DocsURL    string         `json:"docs_url,omitempty"`
 	Context    map[string]any `json:"context,omitempty"`
+	// RetryAfter is the wait the response's Retry-After header asked for, 0
+	// when it sent none. Read by the list page walk; never rendered.
+	RetryAfter time.Duration `json:"-"`
 }
 
 // Error implements the error interface.

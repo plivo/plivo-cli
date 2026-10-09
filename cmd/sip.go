@@ -246,12 +246,8 @@ func runSIPCallsList(cmd *cobra.Command, args []string) error {
 	}
 
 	var resp api.SIPTrunkCallList
-	apiErr, err := client.Do("GET", client.AccountURL("Zentrunk", "Call"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Zentrunk", "Call"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
@@ -344,12 +340,8 @@ func runSIPTrunksList(cmd *cobra.Command, args []string) error {
 		q.Set("trunk_direction", sipTrunksDirection)
 	}
 	var resp api.SIPTrunkList
-	apiErr, err := client.Do("GET", client.AccountURL("Zentrunk", "Trunk"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Zentrunk", "Trunk"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
@@ -425,12 +417,8 @@ func runSIPACLList(cmd *cobra.Command, args []string) error {
 	q.Set("limit", strconv.Itoa(sipACLLimit))
 	q.Set("offset", strconv.Itoa(sipACLOffset))
 	var resp api.SIPTrunkACLList
-	apiErr, err := client.Do("GET", client.AccountURL("Zentrunk", "IPAccessControlList"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Zentrunk", "IPAccessControlList"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil

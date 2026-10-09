@@ -4,6 +4,7 @@ Usage:
   plivo voice recordings list [flags]
 
 Flags:
+      --all                      fetch every page (stops after 100 pages)
       --call-uuid string         filter by call uuid
       --conference-name string   filter by conference name
       --from-time string         filter recordings after this ISO time

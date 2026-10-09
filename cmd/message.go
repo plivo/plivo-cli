@@ -300,12 +300,8 @@ func runMessageListForChannel(cmd *cobra.Command, channel string,
 	}
 
 	var resp api.MessageList
-	apiErr, err := client.Do("GET", client.AccountURL("Message"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Message"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil

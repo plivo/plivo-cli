@@ -15,7 +15,7 @@ import (
 // registerAllFlag in root.go). These tests prove the opposite for the two
 // agents list commands: WITHOUT --all only the first page is fetched, and
 // WITH --all every page is fetched and merged — in both the typed rows
-// (table mode) and the raw JSON envelope (-o json, via accumulateRawObjects).
+// (table mode) and the raw JSON envelope (-o json, via fetchList's merge).
 
 // agentsPageServer replies with byOffset[offset] (falling back to
 // byOffset["0"] for a request with no offset param) and wires clientForTest

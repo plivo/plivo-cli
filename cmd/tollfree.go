@@ -91,12 +91,8 @@ func runTfvList(cmd *cobra.Command, args []string) error {
 		q.Set("status", tfvListStatus)
 	}
 	var resp api.TollFreeVerificationList
-	apiErr, err := client.Do("GET", client.AccountURL("TollfreeVerification"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("TollfreeVerification"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil

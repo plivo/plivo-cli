@@ -9,6 +9,7 @@ Examples:
   plivo sip calls list --hangup-source carrier -o json
 
 Flags:
+      --all                        fetch every page (stops after 100 pages)
       --direction string           inbound|outbound
       --from-number string         filter by caller ID
       --hangup-cause-code int      filter by numeric hangup cause code

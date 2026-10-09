@@ -137,12 +137,8 @@ func runCampaignList(cmd *cobra.Command, args []string) error {
 		q.Set("brand_id", campListBrand)
 	}
 	var resp api.Campaign10DLCList
-	apiErr, err := client.Do("GET", client.AccountURL("10dlc", "Campaign"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("10dlc", "Campaign"), q, "campaigns", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil

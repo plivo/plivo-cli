@@ -82,12 +82,8 @@ func runLinkList(cmd *cobra.Command, args []string) error {
 		q.Set("number", linkListNumber)
 	}
 	var resp api.NumberLink10DLCList
-	apiErr, err := client.Do("GET", client.AccountURL("10dlc", "NumberLinking"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("10dlc", "NumberLinking"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil

@@ -93,12 +93,8 @@ func runSubList(cmd *cobra.Command, args []string) error {
 	q.Set("limit", strconv.Itoa(subListLimit))
 	q.Set("offset", strconv.Itoa(subListOffset))
 	var resp api.SubaccountList
-	apiErr, err := client.Do("GET", client.AccountURL("Subaccount"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Subaccount"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil

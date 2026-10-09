@@ -179,7 +179,6 @@ func init() {
 	registerListFlags(agentListCmd, &agentListLimit, &agentListOffset)
 	agentListCmd.Flags().StringVar(&agentListName, "name", "", "filter by name (substring match)")
 	agentListCmd.Flags().StringVar(&agentListState, "state", "", "filter by state: "+oneOf(agentStateValues))
-	registerAllFlag(agentListCmd)
 
 	agentUpdateCmd.Flags().StringVar(&agentUpdateName, "name", "", "rename the agent")
 	agentUpdateCmd.Flags().StringVar(&agentUpdateDescription, "description", "", "new description (must be paired with --file — see above)")
@@ -294,44 +293,6 @@ func runAgentCreate(cmd *cobra.Command, args []string) error {
 	})
 }
 
-// accumulateRawObjects folds page's raw "objects" array onto dst's raw
-// envelope. dst.Objects (the typed slice) already has every row --all
-// fetched, which is all table mode needs; but -o json now renders straight
-// from the captured bytes (see RawBody/JSONRaw), so without this a page
-// walk would leave -o json showing only the first page — the exact "claims
-// to paginate, doesn't" defect that got the old --all removed, just moved
-// to the JSON path instead of table.
-//
-// Best-effort: leaves dst's raw body untouched (still valid JSON, just
-// first-page-only) if either side isn't the expected {"objects": [...]}
-// shape.
-func accumulateRawObjects(dst, page api.RawCapturer) {
-	var env map[string]json.RawMessage
-	if err := json.Unmarshal(dst.Raw(), &env); err != nil {
-		return
-	}
-	var objects []json.RawMessage
-	if err := json.Unmarshal(env["objects"], &objects); err != nil {
-		return
-	}
-	var pageEnv map[string]json.RawMessage
-	if err := json.Unmarshal(page.Raw(), &pageEnv); err != nil {
-		return
-	}
-	var pageObjects []json.RawMessage
-	if err := json.Unmarshal(pageEnv["objects"], &pageObjects); err != nil {
-		return
-	}
-	merged, err := output.Marshal(append(objects, pageObjects...))
-	if err != nil {
-		return
-	}
-	env["objects"] = merged
-	if out, err := output.Marshal(env); err == nil {
-		dst.SetRaw(out)
-	}
-}
-
 func runAgentList(cmd *cobra.Command, args []string) error {
 	if err := validateEnum("state", &agentListState, agentStateValues...); err != nil {
 		return err
@@ -355,42 +316,8 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 	}
 
 	var resp api.AgentList
-	apiErr, err := client.Do("GET", client.AccountURL("AgentFlow"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("AgentFlow"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
-	}
-	// --all was a declared-but-unconsumed root flag, so it advertised
-	// auto-pagination on every command and delivered it nowhere. The server caps
-	// limit at 20 (clamping, not rejecting), so >20 agents is ordinary and a
-	// silently truncated list is the worst outcome. Walk the pages here.
-	if allFlag && !dryRunFlag {
-		offset := agentListOffset + len(resp.Objects)
-		for len(resp.Objects) < resp.Meta.TotalCount {
-			pq := url.Values{}
-			for k, v := range q {
-				pq[k] = v
-			}
-			pq.Set("offset", strconv.Itoa(offset))
-			var page api.AgentList
-			apiErr, err = client.Do("GET", client.AccountURL("AgentFlow"), nil, pq, &page)
-			if err != nil {
-				return err
-			}
-			if apiErr != nil {
-				return apiErr
-			}
-			// Defensive: without this a server that stops returning rows before
-			// total_count is reached would spin forever.
-			if len(page.Objects) == 0 {
-				break
-			}
-			resp.Objects = append(resp.Objects, page.Objects...)
-			accumulateRawObjects(&resp, &page)
-			offset += len(page.Objects)
-		}
 	}
 	if dryRunFlag {
 		return nil

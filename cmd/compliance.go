@@ -353,12 +353,8 @@ func runComplianceList(cmd *cobra.Command, args []string) error {
 		}
 	}
 	var resp api.ComplianceApplicationList
-	apiErr, err := client.Do("GET", client.AccountURL("PhoneNumber", "Compliance"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("PhoneNumber", "Compliance"), q, "compliances", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
