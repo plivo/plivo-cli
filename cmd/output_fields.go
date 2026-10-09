@@ -11,7 +11,9 @@ import (
 // outputTypes maps each get and list command to the api type its response
 // decodes into, so --schema can list the fields the CLI maps. -o json passes
 // the raw response through, so they are a subset of what comes back.
-// TestOutputTypes_coverEveryGetAndList names the get/list commands left out.
+// TestOutputTypes_coverEveryGetAndList names the get/list commands left out,
+// among them numbers compliance get: its response nests the application under
+// "compliance", which ComplianceApplication does not describe.
 var outputTypes = map[string]reflect.Type{
 	"plivo account applications get":              reflect.TypeFor[api.Application](),
 	"plivo account applications list":             reflect.TypeFor[api.ApplicationList](),
@@ -38,7 +40,6 @@ var outputTypes = map[string]reflect.Type{
 	"plivo messaging sms tollfree get":            reflect.TypeFor[api.TollFreeVerification](),
 	"plivo messaging sms tollfree list":           reflect.TypeFor[api.TollFreeVerificationList](),
 	"plivo messaging whatsapp list":               reflect.TypeFor[api.MessageList](),
-	"plivo numbers compliance get":                reflect.TypeFor[api.ComplianceApplication](),
 	"plivo numbers compliance list":               reflect.TypeFor[api.ComplianceApplicationList](),
 	"plivo numbers get":                           reflect.TypeFor[api.Number](),
 	"plivo numbers list":                          reflect.TypeFor[api.NumberList](),
