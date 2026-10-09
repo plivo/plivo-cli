@@ -260,11 +260,14 @@ func TestSchema_unknownCommandIsCobrasError(t *testing.T) {
 }
 
 // Every get and list command decodes into an api type and is in
-// outputTypes, except these, which read local data rather than the API.
+// outputTypes, except these: the ones that read local data rather than the
+// API, and numbers compliance get, whose response nests the application in
+// a shape its api type does not describe.
 func TestOutputTypes_coverEveryGetAndList(t *testing.T) {
-	wantGaps := []string{"plivo auth list", "plivo config get", "plivo docs list", "plivo skill list"}
+	wantGaps := []string{"plivo auth list", "plivo config get", "plivo docs list", "plivo numbers compliance get", "plivo skill list"}
 	if c, _, err := rootCmd.Find([]string{"auth", "token", "list"}); err == nil && c.Name() == "list" {
 		wantGaps = append(wantGaps, c.CommandPath()) // internal build only; prints its raw body
+		sort.Strings(wantGaps)
 	}
 	var gaps []string
 	var walk func(c *cobra.Command)

@@ -85,15 +85,16 @@ func TestUnknownSubcommand_helpAndCompletionUnchanged(t *testing.T) {
 		{[]string{"sip", "trunks", "list", "--help"}, "plivo sip trunks list [flags]"},
 		{[]string{"__complete", "sip", "tr"}, "trunks"},
 		{[]string{"help", "sip", "trunks"}, "plivo sip trunks [command]"},
-		// cobra binds the script's writer when it adds the command, before
-		// this test captures stdout; smoke.sh checks the script itself.
-		{[]string{"completion", "zsh"}, ""},
+		{[]string{"completion", "zsh"}, "compdef"},
 		{[]string{"completion", "--help"}, "plivo completion [command]"},
 		{[]string{"help", "--help"}, "plivo help [command]"},
 		{[]string{"help", "sip", "-h"}, "plivo help [command]"},
 	}
 	for _, tc := range cases {
 		t.Run(strings.Join(tc.args, "_"), func(t *testing.T) {
+			if tc.args[0] == "completion" {
+				freshCompletionCmd(t)
+			}
 			err, stdout, _ := execCmd(t, tc.args...)
 			if err != nil {
 				t.Fatalf("want success, got %v", err)
@@ -112,4 +113,25 @@ func TestUnknownSubcommand_schemaOfAMistypedPath(t *testing.T) {
 	if e, ok := err.(*clierr.Error); !ok || e.Code != clierr.CodeBadInput || stdout != "" {
 		t.Errorf("want BAD_INPUT and no schema, got %#v / %q", err, stdout)
 	}
+}
+
+// freshCompletionCmd has the next run build cobra's completion command
+// again, on that run's stdout. cobra binds the command's writer when it
+// builds it, and without the snapshot tests' warm-up (the internal build)
+// the first run to build it is another test's, whose stdout pipe is closed
+// by now. The command is rebuilt on the default writer afterwards.
+func freshCompletionCmd(t *testing.T) {
+	t.Helper()
+	remove := func() {
+		for _, c := range rootCmd.Commands() {
+			if c.Name() == "completion" {
+				rootCmd.RemoveCommand(c)
+			}
+		}
+	}
+	remove()
+	t.Cleanup(func() {
+		remove()
+		rootCmd.InitDefaultCompletionCmd()
+	})
 }
