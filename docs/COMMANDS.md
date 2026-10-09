@@ -1302,6 +1302,14 @@ outcome.
 Equivalent to:
   plivo ask "Help me debug this MMS: <message_uuid>"
 
+With -o json, prints one JSON result when the analysis ends: call_uuid
+(message_uuid for a message), what_happened, likely_cause, timeline[]
+({at, event, source}), next_steps[], hangup_cause_code and hangup_source (from
+the call record; null for a message), confidence (high, medium or low) and
+answer (the prose). -o yaml, -o csv and --query work on that result; -o jsonl
+streams the assistant's raw events instead. An analysis that fails, escalates
+or stops early exits 3.
+
 ```
 plivo messaging mms diagnose <message_uuid>
 ```
@@ -1667,6 +1675,14 @@ a bad sender?
 Equivalent to:
   plivo ask "Help me debug this message: <message_uuid>"
 
+With -o json, prints one JSON result when the analysis ends: call_uuid
+(message_uuid for a message), what_happened, likely_cause, timeline[]
+({at, event, source}), next_steps[], hangup_cause_code and hangup_source (from
+the call record; null for a message), confidence (high, medium or low) and
+answer (the prose). -o yaml, -o csv and --query work on that result; -o jsonl
+streams the assistant's raw events instead. An analysis that fails, escalates
+or stops early exits 3.
+
 ```
 plivo messaging sms diagnose <message_uuid>
 ```
@@ -1675,7 +1691,8 @@ Examples:
 
 ```
   plivo messaging sms diagnose 788444ec-5bc1-4de0-aafc-a0a06e0b0089
-  plivo messaging sms diagnose <uuid> -o json   # JSONL
+  plivo messaging sms diagnose <uuid> -o json    # one JSON result
+  plivo messaging sms diagnose <uuid> -o jsonl   # the raw event stream
 ```
 
 Aliases: `diag`
@@ -1976,6 +1993,14 @@ look up the delivery / read receipt and explain the outcome.
 
 Equivalent to:
   plivo ask "Help me debug this WhatsApp message: <message_uuid>"
+
+With -o json, prints one JSON result when the analysis ends: call_uuid
+(message_uuid for a message), what_happened, likely_cause, timeline[]
+({at, event, source}), next_steps[], hangup_cause_code and hangup_source (from
+the call record; null for a message), confidence (high, medium or low) and
+answer (the prose). -o yaml, -o csv and --query work on that result; -o jsonl
+streams the assistant's raw events instead. An analysis that fails, escalates
+or stops early exits 3.
 
 ```
 plivo messaging whatsapp diagnose <message_uuid>
@@ -2568,6 +2593,14 @@ SIP ladder and trunk configuration and explain what happened.
 
 Only SIP Trunking calls. For a Voice call use `plivo voice calls diagnose`:
 the two read different stores, so neither can answer for the other.
+
+With -o json, prints one JSON result when the analysis ends: call_uuid
+(message_uuid for a message), what_happened, likely_cause, timeline[]
+({at, event, source}), next_steps[], hangup_cause_code and hangup_source (from
+the call record; null for a message), confidence (high, medium or low) and
+answer (the prose). -o yaml, -o csv and --query work on that result; -o jsonl
+streams the assistant's raw events instead. An analysis that fails, escalates
+or stops early exits 3.
 
 ```
 plivo sip calls diagnose <call_uuid>
@@ -3394,6 +3427,14 @@ Equivalent to:
 …just shorter. Streams the answer as it comes; expect 30–120s for the
 full investigation since the debugger does live log lookups.
 
+With -o json, prints one JSON result when the analysis ends: call_uuid
+(message_uuid for a message), what_happened, likely_cause, timeline[]
+({at, event, source}), next_steps[], hangup_cause_code and hangup_source (from
+the call record; null for a message), confidence (high, medium or low) and
+answer (the prose). -o yaml, -o csv and --query work on that result; -o jsonl
+streams the assistant's raw events instead. An analysis that fails, escalates
+or stops early exits 3.
+
 ```
 plivo voice calls diagnose <call_uuid>
 ```
@@ -3403,7 +3444,8 @@ Examples:
 ```
   plivo voice calls diagnose 01fe1ff8-fd57-4901-a150-d55b8dfd669b
   plivo voice call diagnose 01fe1ff8-fd57-4901-a150-d55b8dfd669b   # alias
-  plivo voice calls diagnose <uuid> -o json                        # JSONL
+  plivo voice calls diagnose <uuid> -o json                        # one JSON result
+  plivo voice calls diagnose <uuid> -o jsonl                       # the raw event stream
 ```
 
 Aliases: `diag`

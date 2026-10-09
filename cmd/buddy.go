@@ -34,6 +34,10 @@ var (
 	askVerbose     bool
 	askDebug       bool
 	askInteractive bool
+
+	// askDiscardEvents keeps the event stream off stdout. diagnose -o json
+	// sets it for its turn: it prints one result afterwards instead.
+	askDiscardEvents bool
 )
 
 const (
@@ -179,6 +183,9 @@ func runAsk(cmd *cobra.Command, args []string) error {
 	}()
 
 	r := newBuddyRenderer(effectiveFormat() == output.FormatJSON)
+	if askDiscardEvents {
+		r.out = io.Discard
+	}
 	sseErr := client.StreamSSE(streamCtx, "POST", url, body, func(ev api.SSEEvent) bool {
 		if askDebug {
 			fmt.Fprintf(os.Stderr, "[sse] event=%q data=%s\n", ev.Event, ev.Data)

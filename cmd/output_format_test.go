@@ -23,7 +23,8 @@ import (
 const zeroUUID = "00000000-0000-0000-0000-000000000000"
 
 // streamCommands are the commands that write the assistant's event stream
-// straight to stdout rather than one result through output.JSONSuccess.
+// straight to stdout: ask always, diagnose with -o jsonl (its other formats
+// print one result through output.JSONSuccess).
 var streamCommands = [][]string{
 	{"ask", "what does error 30007 mean?"},
 	{"voice", "calls", "diagnose", zeroUUID},
@@ -34,18 +35,17 @@ var streamCommands = [][]string{
 }
 
 // Every command either honours each output format or rejects it with
-// BAD_FLAG before running. Streams take json and jsonl (the same event
-// stream) and refuse yaml, csv and --query; everything else takes them all,
-// because its JSON goes through output.JSONSuccess/JSONRaw, which encode
-// every format (TestOutputFormats_listCommandsHonourEveryFormat runs them).
-// cobra's help and completion print text, not data, so they are left out.
+// BAD_FLAG before running. ask is a stream: it takes json and jsonl (the same
+// event stream) and refuses yaml, csv and --query. diagnose has one result, so
+// it takes them all except --query on its -o jsonl event stream. Everything
+// else takes them all, because its JSON goes through output.JSONSuccess/JSONRaw,
+// which encode every format (TestOutputFormats_listCommandsHonourEveryFormat
+// runs them). cobra's help and completion print text, not data, so they are
+// left out.
 func TestOutputFormats_everyCommandHonoursOrRejects(t *testing.T) {
 	t.Cleanup(func() { outputFormat, queryFlag = "", ""; _ = output.Configure("", "") })
 
-	wantStreams := map[string]bool{}
-	for _, args := range streamCommands {
-		wantStreams["plivo "+strings.Join(args[:len(args)-1], " ")] = true
-	}
+	wantStreams := map[string]bool{"plivo ask": true}
 	var gotStreams []string
 	var walk func(c *cobra.Command)
 	walk = func(c *cobra.Command) {
@@ -59,6 +59,7 @@ func TestOutputFormats_everyCommandHonoursOrRejects(t *testing.T) {
 			return
 		}
 		stream := wantStreams[c.CommandPath()]
+		diagnose := c.Name() == "diagnose"
 		if streamsEvents(c) {
 			gotStreams = append(gotStreams, c.CommandPath())
 		}
@@ -67,7 +68,8 @@ func TestOutputFormats_everyCommandHonoursOrRejects(t *testing.T) {
 				outputFormat, queryFlag = f, q
 				err := configureOutput(c)
 				reject := f == "table" && q != "" ||
-					stream && (f == "yaml" || f == "csv" || q != "")
+					stream && (f == "yaml" || f == "csv" || q != "") ||
+					diagnose && f == "jsonl" && q != ""
 				switch {
 				case reject && !isBadFlag(err):
 					t.Errorf("%s -o %q --query %q: want BAD_FLAG, got %v", c.CommandPath(), f, q, err)
@@ -231,10 +233,17 @@ func viaJSON(t *testing.T, v any) any {
 	return out
 }
 
-func TestOutputFormats_streamCommandsRejectYAMLCSVAndQuery(t *testing.T) {
+// ask refuses what a stream cannot encode before sending anything: yaml, csv
+// and --query. diagnose has one result, so it refuses only --query on its
+// -o jsonl event stream.
+func TestOutputFormats_streamCommandsRejectWhatTheyCannotEncode(t *testing.T) {
 	setFakeCreds(t)
 	for _, args := range streamCommands {
-		for _, flags := range [][]string{{"-o", "yaml"}, {"-o", "csv"}, {"--query", "data"}, {"-o", "jsonl", "--query", "data"}} {
+		refused := [][]string{{"-o", "jsonl", "--query", "data"}}
+		if args[0] == "ask" {
+			refused = append(refused, []string{"-o", "yaml"}, []string{"-o", "csv"}, []string{"--query", "data"})
+		}
+		for _, flags := range refused {
 			name := strings.Join(args[:len(args)-1], " ") + " " + strings.Join(flags, " ")
 			t.Run(name, func(t *testing.T) {
 				_, paths := diagnoseServer(t, http.StatusOK)
@@ -253,8 +262,9 @@ func TestOutputFormats_streamCommandsRejectYAMLCSVAndQuery(t *testing.T) {
 	}
 }
 
-// Until the stream commands get a fixed JSON result, -o jsonl and -o json
-// are the same event stream, one JSON event per line.
+// -o jsonl is the event stream, one JSON event per line. For ask, -o json is
+// that same stream; diagnose has a fixed result, so its -o json is one JSON
+// document instead.
 func TestOutputFormats_streamCommandsTreatJSONLAsTheEventStream(t *testing.T) {
 	setFakeCreds(t)
 	t.Setenv("PLIVO_BUDDY_URL", "")
@@ -269,8 +279,17 @@ func TestOutputFormats_streamCommandsTreatJSONLAsTheEventStream(t *testing.T) {
 			if err != nil {
 				t.Fatalf("-o jsonl: %v", err)
 			}
-			if asJSONL != asJSON || !strings.Contains(asJSONL, `"event":"final"`) {
-				t.Errorf("-o jsonl = %q, want the -o json stream %q", asJSONL, asJSON)
+			if !strings.Contains(asJSONL, `"event":"final"`) {
+				t.Errorf("-o jsonl = %q, want the event stream", asJSONL)
+			}
+			if args[0] == "ask" {
+				if asJSONL != asJSON {
+					t.Errorf("ask -o jsonl = %q, want the -o json stream %q", asJSONL, asJSON)
+				}
+				return
+			}
+			if data, _ := decodeOne(t, asJSON)["data"].(map[string]any); data["what_happened"] == nil {
+				t.Errorf("diagnose -o json = %q, want one result", asJSON)
 			}
 		})
 	}

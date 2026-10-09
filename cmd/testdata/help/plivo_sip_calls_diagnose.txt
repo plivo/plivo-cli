@@ -4,6 +4,14 @@ SIP ladder and trunk configuration and explain what happened.
 Only SIP Trunking calls. For a Voice call use `plivo voice calls diagnose`:
 the two read different stores, so neither can answer for the other.
 
+With -o json, prints one JSON result when the analysis ends: call_uuid
+(message_uuid for a message), what_happened, likely_cause, timeline[]
+({at, event, source}), next_steps[], hangup_cause_code and hangup_source (from
+the call record; null for a message), confidence (high, medium or low) and
+answer (the prose). -o yaml, -o csv and --query work on that result; -o jsonl
+streams the assistant's raw events instead. An analysis that fails, escalates
+or stops early exits 3.
+
 Usage:
   plivo sip calls diagnose <call_uuid> [flags]
 

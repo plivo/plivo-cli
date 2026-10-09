@@ -1,14 +1,20 @@
 package cmd
 
 import (
+	"encoding/csv"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
+	"github.com/plivo/plivo-cli/internal/output"
+	"gopkg.in/yaml.v3"
 )
 
 // resetDiagnoseGlobals zeros out the package-level ask flags that the
@@ -164,14 +170,31 @@ func sseTurn(pairs ...string) string {
 // reaches the assistant, and serves the assistant's turn from the fixture.
 func diagnoseStream(t *testing.T, stream string) {
 	t.Helper()
+	diagnoseTurn(t, `{}`, stream)
+}
+
+// diagnoseTurn answers every call lookup with record and the assistant with
+// turn. It returns the messages the assistant was sent.
+func diagnoseTurn(t *testing.T, record, turn string) func() []string {
+	t.Helper()
 	resetDiagnoseGlobals(t)
+	var mu sync.Mutex
+	var sent []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "/chat") {
+		switch {
+		case strings.Contains(r.URL.Path, "/chat"):
+			var req api.BuddyChatRequest
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			mu.Lock()
+			sent = append(sent, req.Message)
+			mu.Unlock()
 			w.Header().Set("Content-Type", "text/event-stream")
-			_, _ = w.Write([]byte(stream))
-			return
+			_, _ = w.Write([]byte(turn))
+		case strings.Contains(r.URL.Path, "/Call/"):
+			_, _ = w.Write([]byte(record))
+		default:
+			_, _ = w.Write([]byte(`{}`))
 		}
-		_, _ = w.Write([]byte(`{}`))
 	}))
 	t.Cleanup(srv.Close)
 	clientForTest = &api.Client{
@@ -179,7 +202,29 @@ func diagnoseStream(t *testing.T, stream string) {
 		AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{},
 	}
 	t.Cleanup(func() { clientForTest = nil })
+	return func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string(nil), sent...)
+	}
 }
+
+// payload marshals an event's payload, escaping the text as JSON needs.
+func payload(fields map[string]any) string {
+	b, _ := json.Marshal(fields)
+	return string(b)
+}
+
+// testResultBlock is a valid -o json result block, as the diagnose prompt asks
+// the assistant to end its answer with.
+const testResultBlock = "```json\n" + `{"what_happened": "The callee answered and hung up after 32 seconds.",` +
+	` "likely_cause": "The callee ended the call; nothing failed.", "timeline": [],` +
+	` "next_steps": ["Nothing to fix."], "confidence": "high"}` + "\n```"
+
+// okDiagnoseTurn is a complete turn whose answer ends with a valid result
+// block, so diagnose exits 0 in every output mode.
+var okDiagnoseTurn = sseTurn("final", payload(map[string]any{
+	"answer": "Nothing unusual on this call.\n\n" + testResultBlock, "latency_ms": 1}))
 
 const placeholderUUID = "00000000-0000-0000-0000-000000000000"
 
@@ -249,11 +294,13 @@ func TestDiagnose_failedAnalysisExitsNonZero(t *testing.T) {
 func TestDiagnose_completeAnalysisExitsZero(t *testing.T) {
 	streams := map[string]string{
 		"tokens then final": sseTurn(
-			"token", `{"text":"The callee hung up after 32 seconds; nothing unusual."}`,
+			"token", `{"text":"The callee hung up after 32 seconds; nothing unusual.\n\n"}`,
+			"token", payload(map[string]any{"text": testResultBlock}),
 			"final", `{"answer":"","latency_ms":1}`),
 		"message then done": sseTurn(
-			"message", `{"text":"Delivered to the handset."}`,
+			"message", payload(map[string]any{"text": "Delivered to the handset.\n\n" + testResultBlock}),
 			"done", `{}`),
+		"final answer only": okDiagnoseTurn,
 	}
 	for name, stream := range streams {
 		for _, c := range diagnoseCommands {
@@ -332,4 +379,307 @@ func TestAnalysisIncomplete(t *testing.T) {
 			t.Errorf("analysisIncomplete(%q) = (%q, %v), want (%q, %v)", tc.answer, reason, ok, tc.reason, tc.ok)
 		}
 	}
+}
+
+// Call records as the pre-check reads them, ids replaced with placeholders.
+// Voice CDR times carry an offset; SIP Trunking ones are UTC without one.
+const (
+	voiceCallRecord = `{"api_id":"` + placeholderUUID + `","call_uuid":"` + placeholderUUID + `",` +
+		`"hangup_cause_code":4000,"hangup_cause_name":"Normal Hangup","hangup_source":"Callee",` +
+		`"initiation_time":"2026-01-02 10:00:00+05:30","answer_time":"2026-01-02 10:00:05+05:30",` +
+		`"end_time":"2026-01-02 10:00:37+05:30"}`
+	sipCallRecord = `{"call_uuid":"` + placeholderUUID + `","hangup_cause_code":3000,` +
+		`"hangup_cause_name":"Normal Hangup","hangup_source":"carrier","initiation_time":"2026-01-02 04:30:00",` +
+		`"answer_time":"2026-01-02 04:30:05","end_time":"2026-01-02 04:30:37"}`
+)
+
+// resultTurn is a turn whose answer is prose followed by a result block
+// holding block.
+func resultTurn(block string) string {
+	return sseTurn(
+		"token", `{"text":"The callee answered, talked for 32 seconds and hung up.\n\n"}`,
+		"token", payload(map[string]any{"text": "```json\n" + block + "\n```"}),
+		"final", `{"answer":"","latency_ms":1}`)
+}
+
+// decodeOne decodes stdout as exactly one JSON document.
+func decodeOne(t *testing.T, stdout string) map[string]any {
+	t.Helper()
+	dec := json.NewDecoder(strings.NewReader(stdout))
+	var doc map[string]any
+	if err := dec.Decode(&doc); err != nil {
+		t.Fatalf("stdout is not one JSON document: %v\n%s", err, stdout)
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		t.Fatalf("stdout holds more than one JSON document:\n%s", stdout)
+	}
+	return doc
+}
+
+// With -o json a diagnosis is one fixed result, not the event stream: the
+// assistant's analysis, plus the hangup facts and timeline anchors from the
+// call's own record, merged into one timeline oldest first.
+func TestDiagnose_jsonPrintsOneResult(t *testing.T) {
+	cases := []struct {
+		name, record, block string
+		args                []string
+		wantCode            float64
+		wantSource          string
+		wantAt              []string
+	}{
+		{"voice", voiceCallRecord,
+			`{"what_happened": "The callee answered and hung up after 32 seconds.", "likely_cause": "The callee ended the call.",` +
+				` "timeline": [{"at": "2026-01-02T04:30:30Z", "event": "BYE from the callee"},` +
+				` {"at": "2026-01-02 10:00:01", "event": "180 Ringing"}, {"at": null, "event": "codec PCMU"}],` +
+				` "next_steps": ["Nothing to fix."], "confidence": "High", "extra": "ignored"}`,
+			[]string{"voice", "calls", "diagnose", placeholderUUID}, 4000, "Callee",
+			[]string{"2026-01-02 10:00:00+05:30", "2026-01-02 10:00:01", "2026-01-02 10:00:05+05:30",
+				"2026-01-02T04:30:30Z", "2026-01-02 10:00:37+05:30", ""}},
+		{"sip", sipCallRecord,
+			`{"what_happened": "The callee answered and hung up after 32 seconds.", "likely_cause": "The callee ended the call.",` +
+				` "timeline": [{"at": "2026-01-02 04:30:01", "event": "180 Ringing"}, {"at": "2026-01-02 04:30:30", "event": "BYE from the callee"},` +
+				` {"at": null, "event": "codec PCMU"}], "next_steps": ["Nothing to fix."], "confidence": "high"}`,
+			[]string{"sip", "calls", "diagnose", placeholderUUID}, 3000, "carrier",
+			[]string{"2026-01-02 04:30:00", "2026-01-02 04:30:01", "2026-01-02 04:30:05",
+				"2026-01-02 04:30:30", "2026-01-02 04:30:37", ""}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setFakeCreds(t)
+			diagnoseTurn(t, tc.record, resultTurn(tc.block))
+
+			err, stdout, _ := execCmd(t, append(tc.args, "-o", "json")...)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			data, _ := decodeOne(t, stdout)["data"].(map[string]any)
+			if data["call_uuid"] != placeholderUUID || data["confidence"] != "high" ||
+				data["what_happened"] != "The callee answered and hung up after 32 seconds." ||
+				data["likely_cause"] != "The callee ended the call." {
+				t.Errorf("analysis fields wrong: %v", data)
+			}
+			if data["hangup_cause_code"] != tc.wantCode || data["hangup_source"] != tc.wantSource {
+				t.Errorf("hangup fields = %v / %v, want %v / %v from the call record",
+					data["hangup_cause_code"], data["hangup_source"], tc.wantCode, tc.wantSource)
+			}
+			if steps, _ := data["next_steps"].([]any); len(steps) != 1 || steps[0] != "Nothing to fix." {
+				t.Errorf("next_steps = %v", data["next_steps"])
+			}
+			if answer, _ := data["answer"].(string); answer != "The callee answered, talked for 32 seconds and hung up." {
+				t.Errorf("answer = %q, want the prose without the result block", answer)
+			}
+			timeline, _ := data["timeline"].([]any)
+			var gotAt, gotSource []string
+			for _, e := range timeline {
+				entry, _ := e.(map[string]any)
+				at, _ := entry["at"].(string)
+				gotAt = append(gotAt, at)
+				gotSource = append(gotSource, entry["source"].(string))
+			}
+			if strings.Join(gotAt, "|") != strings.Join(tc.wantAt, "|") {
+				t.Errorf("timeline order:\n got %q\nwant %q", gotAt, tc.wantAt)
+			}
+			if want := "call_record|assistant|call_record|assistant|call_record|assistant"; strings.Join(gotSource, "|") != want {
+				t.Errorf("timeline sources = %q, want %q", gotSource, want)
+			}
+		})
+	}
+}
+
+// A message has no call record behind it: the hangup fields are present and
+// null, and the id is message_uuid.
+func TestDiagnose_messagingJSONResultHasNullHangupFields(t *testing.T) {
+	setFakeCreds(t)
+	diagnoseTurn(t, `{}`, okDiagnoseTurn)
+
+	err, stdout, _ := execCmd(t, "messaging", "sms", "diagnose", placeholderUUID, "-o", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	data, _ := decodeOne(t, stdout)["data"].(map[string]any)
+	for _, key := range []string{"hangup_cause_code", "hangup_source"} {
+		if v, ok := data[key]; !ok || v != nil {
+			t.Errorf("%s = %v (present: %v), want null", key, v, ok)
+		}
+	}
+	if data["message_uuid"] != placeholderUUID {
+		t.Errorf("message_uuid = %v", data["message_uuid"])
+	}
+	if _, ok := data["call_uuid"]; ok {
+		t.Error("a message result should not carry call_uuid")
+	}
+}
+
+// -o jsonl keeps the raw event stream, and only -o json asks the assistant for
+// a result block; table mode is unchanged.
+func TestDiagnose_jsonlStreamsEventsAndOnlyJSONAsksForABlock(t *testing.T) {
+	for _, format := range []string{"json", "jsonl", "table"} {
+		t.Run(format, func(t *testing.T) {
+			setFakeCreds(t)
+			sent := diagnoseTurn(t, voiceCallRecord, okDiagnoseTurn)
+
+			err, stdout, _ := execCmd(t, "voice", "calls", "diagnose", placeholderUUID, "-o", format)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			msgs := sent()
+			if len(msgs) != 1 {
+				t.Fatalf("assistant got %d turns, want 1", len(msgs))
+			}
+			asked := strings.Contains(msgs[0], "```json")
+			if asked != (format == "json") {
+				t.Errorf("result block requested = %v for -o %s", asked, format)
+			}
+			if format == "json" && !strings.Contains(msgs[0], "initiation, answer and end") {
+				t.Error("a call's prompt should leave the record's anchors to the CLI")
+			}
+			streamed := strings.Contains(stdout, `"event":"final"`)
+			if streamed != (format == "jsonl") {
+				t.Errorf("event stream on stdout = %v for -o %s:\n%s", streamed, format, stdout)
+			}
+		})
+	}
+}
+
+func TestDiagnose_messagePromptHasNoCallAnchors(t *testing.T) {
+	setFakeCreds(t)
+	sent := diagnoseTurn(t, `{}`, okDiagnoseTurn)
+	if err, _, _ := execCmd(t, "messaging", "sms", "diagnose", placeholderUUID, "-o", "json"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if msgs := sent(); len(msgs) != 1 || strings.Contains(msgs[0], "initiation, answer and end") {
+		t.Errorf("a message has no call record anchors to leave out: %q", msgs)
+	}
+}
+
+// A missing or invalid result block is an error, never a result with empty
+// fields. The answer is kept in the error's context, since the run is long.
+func TestDiagnose_missingOrInvalidResultBlockFails(t *testing.T) {
+	valid := map[string]any{"what_happened": "x", "likely_cause": "y", "timeline": []any{}, "next_steps": []any{"z"}, "confidence": "low"}
+	without := func(key string, value any) string {
+		m := map[string]any{}
+		for k, v := range valid {
+			m[k] = v
+		}
+		if value == nil {
+			delete(m, key)
+		} else {
+			m[key] = value
+		}
+		return payload(m)
+	}
+	cases := map[string]struct{ turn, want string }{
+		"no block":         {sseTurn("token", `{"text":"The callee hung up."}`, "final", `{"answer":"","latency_ms":1}`), "no JSON result block"},
+		"not JSON":         {resultTurn(`{"what_happened": "x",`), "not valid JSON"},
+		"no likely_cause":  {resultTurn(without("likely_cause", nil)), "without likely_cause"},
+		"blank what":       {resultTurn(without("what_happened", " ")), "without what_happened"},
+		"no timeline":      {resultTurn(without("timeline", nil)), "without timeline"},
+		"no next_steps":    {resultTurn(without("next_steps", nil)), "without next_steps"},
+		"bad confidence":   {resultTurn(without("confidence", "certain")), `confidence "certain"`},
+		"event-less entry": {resultTurn(without("timeline", []any{map[string]any{"at": nil}})), "timeline entry without an event"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			setFakeCreds(t)
+			diagnoseTurn(t, voiceCallRecord, tc.turn)
+
+			err, stdout, _ := execCmd(t, "voice", "calls", "diagnose", placeholderUUID, "-o", "json")
+			var ce *clierr.Error
+			if !errors.As(err, &ce) || ce.Code != clierr.CodeUpstreamError || ce.ExitCode() != 3 {
+				t.Fatalf("err = %v, want %s (exit 3)", err, clierr.CodeUpstreamError)
+			}
+			if !strings.Contains(ce.Message, tc.want) {
+				t.Errorf("message = %q, want it to contain %q", ce.Message, tc.want)
+			}
+			if !strings.Contains(ce.Hint, "-o table") || !strings.Contains(ce.Hint, "plivo voice calls get "+placeholderUUID) {
+				t.Errorf("hint = %q, want the prose and record commands", ce.Hint)
+			}
+			if answer, _ := ce.Context["answer"].(string); !strings.Contains(answer, "The callee") {
+				t.Errorf("context.answer = %q, want the assistant's answer", answer)
+			}
+			if stdout != "" {
+				t.Errorf("a failed result should print nothing on stdout, got:\n%s", stdout)
+			}
+		})
+	}
+}
+
+// The block may come untagged or tagged JSON; the last block is the result,
+// so an example earlier in the prose does not count.
+func TestNewDiagnoseResult_findsTheLastBlock(t *testing.T) {
+	block := `{"what_happened": "w", "likely_cause": "c", "timeline": [], "next_steps": [], "confidence": "medium"}`
+	for name, answer := range map[string]string{
+		"untagged":        "Prose.\n```\n" + block + "\n```",
+		"uppercase tag":   "Prose.\n```JSON\n" + block + "\n```",
+		"example earlier": "Prose with an example:\n```json\n{\"what_happened\": \"example\"}\n```\nMore prose.\n```json\n" + block + "\n```",
+	} {
+		t.Run(name, func(t *testing.T) {
+			res, err := newDiagnoseResult(answer, diagnoseTarget{label: "message", uuid: placeholderUUID, getCmd: "messaging get"})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if res.WhatHappened != "w" || res.Confidence != "medium" || res.Timeline == nil || res.NextSteps == nil {
+				t.Errorf("result = %+v", res)
+			}
+		})
+	}
+}
+
+// diagnose's result goes through output.JSONSuccess, so yaml, csv and --query
+// work on it like on any other command's result.
+func TestDiagnose_resultTakesYAMLCSVAndQuery(t *testing.T) {
+	const likelyCause = "The callee ended the call; nothing failed."
+	cases := []struct {
+		name  string
+		flags []string
+		check func(t *testing.T, stdout string)
+	}{
+		{"yaml", []string{"-o", "yaml"}, func(t *testing.T, stdout string) {
+			var doc struct {
+				Data map[string]any `yaml:"data"`
+			}
+			if err := yaml.Unmarshal([]byte(stdout), &doc); err != nil || doc.Data["likely_cause"] != likelyCause {
+				t.Errorf("-o yaml = %q (%v), want the result as YAML", stdout, err)
+			}
+		}},
+		{"csv", []string{"-o", "csv"}, func(t *testing.T, stdout string) {
+			rows, err := csv.NewReader(strings.NewReader(stdout)).ReadAll()
+			if err != nil || len(rows) != 2 || rows[0][0] != "call_uuid" || rows[1][0] != placeholderUUID {
+				t.Errorf("-o csv = %q (%v), want a header and one row", stdout, err)
+			}
+		}},
+		{"query", []string{"--query", "data.likely_cause"}, func(t *testing.T, stdout string) {
+			if got := decodeString(t, stdout); got != likelyCause {
+				t.Errorf("--query data.likely_cause = %q, want %q", got, likelyCause)
+			}
+		}},
+		{"query with yaml", []string{"-o", "yaml", "--query", "data.confidence"}, func(t *testing.T, stdout string) {
+			if strings.TrimSpace(stdout) != "high" {
+				t.Errorf("-o yaml --query data.confidence = %q, want high", stdout)
+			}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setFakeCreds(t)
+			t.Cleanup(func() { queryFlag = ""; _ = output.Configure("", "") })
+			diagnoseTurn(t, voiceCallRecord, okDiagnoseTurn)
+
+			err, stdout, _ := execCmd(t, append([]string{"voice", "calls", "diagnose", placeholderUUID}, tc.flags...)...)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			tc.check(t, stdout)
+		})
+	}
+}
+
+// decodeString decodes stdout as one JSON string.
+func decodeString(t *testing.T, stdout string) string {
+	t.Helper()
+	var s string
+	if err := json.Unmarshal([]byte(stdout), &s); err != nil {
+		t.Fatalf("stdout is not a JSON string: %v\n%s", err, stdout)
+	}
+	return s
 }

@@ -99,7 +99,7 @@ var sipCallsDiagnoseCmd = &cobra.Command{
 SIP ladder and trunk configuration and explain what happened.
 
 Only SIP Trunking calls. For a Voice call use ` + "`plivo voice calls diagnose`" + `:
-the two read different stores, so neither can answer for the other.`,
+the two read different stores, so neither can answer for the other.` + diagnoseOutputHelp,
 	Example: `  plivo sip calls diagnose 8f3c1a2e-0d44-4a6f-9c31-2b7e5a90d1f7`,
 	Args:    cobra.ExactArgs(1),
 	RunE:    runSIPCallsDiagnose,
@@ -477,33 +477,34 @@ func runSIPACLGet(cmd *cobra.Command, args []string) error {
 // the trunk debugger reads a different store and would answer about nothing.
 func runSIPCallsDiagnose(cmd *cobra.Command, args []string) error {
 	callUUID := args[0]
-	if !dryRunFlag {
-		client, _, err := getClient()
-		if err != nil {
-			return err
-		}
-		if !resourceExists(client, "Zentrunk", "Call", callUUID) {
-			if resourceExists(client, "Call", callUUID) {
-				return &clierr.Error{
-					Code:       clierr.CodeBadInput,
-					Message:    fmt.Sprintf("%s is a Voice call, not a SIP Trunking call", callUUID),
-					Hint:       fmt.Sprintf("Run `plivo voice calls diagnose %s`.", callUUID),
-					StatusCode: http.StatusNotFound,
-				}
-			}
+	client, _, err := getClient()
+	if err != nil {
+		return err
+	}
+	// Read under --dry-run too (a GET is not a write), and keep the record:
+	// -o json takes the hangup facts from it.
+	record, status := readRecord(client, "Zentrunk", "Call", callUUID)
+	if status == 0 || status == http.StatusNotFound {
+		if resourceExists(client, "Call", callUUID) {
 			return &clierr.Error{
-				Code:       clierr.CodeResourceNotFound,
-				Message:    fmt.Sprintf("SIP Trunking call %s not found on this account", callUUID),
-				Hint:       "Check the call id. `plivo sip calls list` lists recent ones.",
+				Code:       clierr.CodeBadInput,
+				Message:    fmt.Sprintf("%s is a Voice call, not a SIP Trunking call", callUUID),
+				Hint:       fmt.Sprintf("Run `plivo voice calls diagnose %s`.", callUUID),
 				StatusCode: http.StatusNotFound,
 			}
+		}
+		return &clierr.Error{
+			Code:       clierr.CodeResourceNotFound,
+			Message:    fmt.Sprintf("SIP Trunking call %s not found on this account", callUUID),
+			Hint:       "Check the call id. `plivo sip calls list` lists recent ones.",
+			StatusCode: http.StatusNotFound,
 		}
 	}
 	askCallUUID = callUUID
 	prompt := "Help me debug this SIP Trunking call. Walk the SIP ladder and the trunk " +
 		"configuration, and tell me what happened and whether anything is wrong." +
 		diagnoseClientConstraints
-	return diagnoseOutcome(runAsk(cmd, []string{prompt}), "call", callUUID, "sip calls get")
+	return runDiagnose(cmd, prompt, diagnoseTarget{label: "call", uuid: callUUID, getCmd: "sip calls get", record: record})
 }
 
 // diagnoseClientConstraints is appended to every diagnose turn. The assistant
