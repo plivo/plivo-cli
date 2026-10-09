@@ -20,13 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `call <call_uuid>`, `sip-call <call_uuid>`, `numbers` or `docs [path]`. It
   prints the URL first; `--dry-run` only prints it.
 - `--all` on every paged list reads every page into one result. It stops at 100
-  pages (2,000 rows) with a warning and `meta.truncated: true`, and can't be
-  combined with `--offset`. `numbers search` doesn't take it.
+  pages (2,000 rows at `--limit 20`) with a warning and `meta.truncated: true`,
+  and can't be combined with `--offset`. `numbers search` doesn't take it.
 - `plivo sip test --uri` checks from your machine that a SIP URI answers before
   a call goes to it: DNS, then a TCP or TLS connect (certificate verified,
   expiry shown) or one SIP OPTIONS over UDP. It never sends an INVITE and needs
-  no login. Exit 0 when reachable, 3 when not; a silent UDP port is reported as
-  `unknown`.
+  no login. Exit 0 when reachable, 3 when not; a silent UDP port reports
+  `unknown` and also exits 3.
 - `plivo sip calls insights <call_uuid>` shows the call quality Plivo measured:
   round-trip time, jitter, packet loss, post-dial delay and the quality score.
   `sip calls get` and `insights` also end with which side hung up (Plivo's
@@ -50,8 +50,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   repository for everyone who clones it; a copy that differs from the bundled
   one is kept unless you add `--force`. `plivo skill update` brings installed
   skills (home and repository) up to the version in your binary, keeps copies
-  you edited unless you add `--force`, reports a retired skill left next to its
-  replacement, and writes nothing under `--dry-run`.
+  you edited unless you add `--force`, reports any retired skill still
+  installed with the command that removes it, and writes nothing under
+  `--dry-run`.
 - `plivo feedback --bug` sends a bug report: your comment plus the last failed
   command. The CLI now keeps that command's path, exit code, error code, request
   id, CLI version and OS in `~/.plivo/last-error.json`, never its arguments or
