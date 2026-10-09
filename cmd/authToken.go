@@ -61,6 +61,7 @@ TTL accepts Go-style durations plus 'd' for days: 30m, 1h, 6h, 24h, 7d.
 
 Example:
   plivo auth token mint --modules number.read,message.send --ttl 1h --label "demo"`,
+	Args: cobra.NoArgs,
 	RunE: runAuthTokenMint,
 }
 
@@ -74,6 +75,7 @@ In a TTY, renders as a table:
   stk_abc…    demo      number.read, message.send   42m
 
 Piped / --output json: returns the raw response.`,
+	Args: cobra.NoArgs,
 	RunE: runAuthTokenList,
 }
 
