@@ -34,6 +34,7 @@ var (
 var applicationCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a new application",
+	Args:  cobra.NoArgs,
 	RunE:  runAppCreate,
 }
 
@@ -45,6 +46,7 @@ var (
 var applicationListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List applications",
+	Args:  cobra.NoArgs,
 	RunE:  runAppList,
 }
 
@@ -92,8 +94,7 @@ func init() {
 	applicationCreateCmd.Flags().BoolVar(&appCreateLogIncoming, "log-incoming-messages", true, "log inbound SMS content")
 	registerExplainFlag(applicationCreateCmd)
 
-	applicationListCmd.Flags().IntVar(&appListLimit, "limit", 20, "results per page")
-	applicationListCmd.Flags().IntVar(&appListOffset, "offset", 0, "pagination offset")
+	registerListFlags(applicationListCmd, &appListLimit, &appListOffset)
 
 	applicationUpdateCmd.Flags().StringVar(&appUpdateName, "app-name", "", "new application name")
 	applicationUpdateCmd.Flags().StringVar(&appUpdateAnswerURL, "answer-url", "", "new answer URL")
@@ -171,18 +172,14 @@ func runAppList(cmd *cobra.Command, args []string) error {
 	q.Set("offset", strconv.Itoa(appListOffset))
 
 	var resp api.ApplicationList
-	apiErr, err := client.Do("GET", client.AccountURL("Application"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Application"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"APP_ID", "NAME", "ANSWER_URL", "MESSAGE_URL", "ENABLED"}}
 	for _, a := range resp.Objects {

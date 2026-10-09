@@ -41,6 +41,7 @@ var (
 var maskingSessionCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a masking session (spends money — requires --yes)",
+	Args:  cobra.NoArgs,
 	RunE:  runMaskingCreate,
 }
 
@@ -59,6 +60,7 @@ var (
 var maskingSessionListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List masking sessions",
+	Args:  cobra.NoArgs,
 	RunE:  runMaskingList,
 }
 
@@ -80,8 +82,7 @@ func init() {
 	maskingSessionCreateCmd.Flags().IntVar(&msCreateTimeLimit, "call-time-limit", 0, "max per-call duration in seconds")
 	maskingSessionCreateCmd.Flags().BoolVar(&msCreateRecord, "record", false, "record calls in this session")
 
-	maskingSessionListCmd.Flags().IntVar(&msListLimit, "limit", 20, "results per page")
-	maskingSessionListCmd.Flags().IntVar(&msListOffset, "offset", 0, "pagination offset")
+	registerListFlags(maskingSessionListCmd, &msListLimit, &msListOffset)
 
 	maskingSessionCmd.AddCommand(maskingSessionCreateCmd, maskingSessionGetCmd, maskingSessionListCmd, maskingSessionDeleteCmd)
 	maskingCmd.AddCommand(maskingSessionCmd)
@@ -183,18 +184,14 @@ func runMaskingList(cmd *cobra.Command, args []string) error {
 	q.Set("limit", strconv.Itoa(msListLimit))
 	q.Set("offset", strconv.Itoa(msListOffset))
 	var resp api.MaskingSessionList
-	apiErr, err := client.Do("GET", client.AccountURL("Masking", "Session"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Masking", "Session"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"SESSION_UUID", "FIRST", "SECOND", "VIRTUAL", "MODE", "STATUS"}}
 	for _, s := range resp.Objects {

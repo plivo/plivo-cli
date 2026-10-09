@@ -40,6 +40,7 @@ var (
 var verifySessionCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a Verify session (spends money — requires --yes)",
+	Args:  cobra.NoArgs,
 	RunE:  runVerifySessionCreate,
 }
 
@@ -59,6 +60,7 @@ var (
 var verifySessionListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List Verify sessions",
+	Args:  cobra.NoArgs,
 	RunE:  runVerifySessionList,
 }
 
@@ -83,9 +85,8 @@ func init() {
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateURL, "url", "", "callback URL for session status events")
 	registerExplainFlag(verifySessionCreateCmd)
 
-	verifySessionListCmd.Flags().IntVar(&vsListLimit, "limit", 20, "results per page")
-	verifySessionListCmd.Flags().IntVar(&vsListOffset, "offset", 0, "pagination offset")
-	verifySessionListCmd.Flags().StringVar(&vsListStatus, "status", "", "filter by status: pending|verified|expired")
+	registerListFlags(verifySessionListCmd, &vsListLimit, &vsListOffset)
+	verifySessionListCmd.Flags().StringVar(&vsListStatus, "status", "", "filter by status: "+oneOf(verifyStatusValues))
 
 	verifySessionValidateCmd.Flags().StringVar(&vsValidateOTP, "otp", "", "OTP code received by the recipient (required)")
 	_ = verifySessionValidateCmd.MarkFlagRequired("otp")
@@ -189,6 +190,9 @@ func runVerifySessionGet(cmd *cobra.Command, args []string) error {
 }
 
 func runVerifySessionList(cmd *cobra.Command, args []string) error {
+	if err := validateEnum("status", &vsListStatus, verifyStatusValues...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -200,18 +204,14 @@ func runVerifySessionList(cmd *cobra.Command, args []string) error {
 		q.Set("status", vsListStatus)
 	}
 	var resp api.VerifySessionList
-	apiErr, err := client.Do("GET", client.AccountURL("Verify", "Session"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Verify", "Session"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"SESSION_UUID", "RECIPIENT", "CHANNEL", "STATUS", "ATTEMPTS", "CREATED"}}
 	for _, s := range resp.Objects {

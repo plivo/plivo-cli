@@ -135,7 +135,7 @@ machine needs a profile that was logged in on it already.
 Output is a human table on a TTY and JSON when piped, so you can do:
 
 ```bash
-plivo voice calls list --limit 50 | jq '.[] | select(.hangup_cause != "NORMAL_CLEARING")'
+plivo voice calls list --limit 20 | jq '.data.objects[] | {call_uuid, hangup_cause_name}'
 ```
 
 Force either format with `-o table|json`. Spend operations default to a dry run and require `--yes` to execute.

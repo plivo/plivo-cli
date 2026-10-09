@@ -51,6 +51,7 @@ shape before you wire it up to a real number.`,
   plivo voice streams test --to wss://localhost:7860/ws --insecure   # self-signed dev cert
   plivo voice streams test --to wss://my-bot.example.com/ws --bidirectional
   plivo voice streams test --to ws://localhost:8765/ws --expect-audio   # exit 1 unless playAudio comes back`,
+	Args: cobra.NoArgs,
 	RunE: runVoiceStreamsTest,
 }
 

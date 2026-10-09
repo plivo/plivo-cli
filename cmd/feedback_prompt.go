@@ -39,6 +39,8 @@ var metadataFlags = map[string]bool{
 	"-h":        true,
 	"--version": true,
 	"-v":        true,
+	"--map":     true,
+	"--schema":  true,
 }
 
 // isMetadataInvocation returns true when the argv is purely a help /

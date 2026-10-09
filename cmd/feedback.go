@@ -54,6 +54,7 @@ wired" message instead of dropping the submission silently.`,
   plivo feedback --message "..."              # one-shot comment only
   plivo feedback --rating 2 --message "..."   # one-shot both
   plivo feedback --rating 5 --yes             # skip pre-submit preview`,
+	Args: cobra.NoArgs,
 	RunE: runFeedback,
 }
 
