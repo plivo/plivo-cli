@@ -11,7 +11,7 @@ Flags:
       --services string      filter by services: voice|sms|mms|voice,sms ...
       --starts-with string   prefix filter on E.164
       --subaccount string    filter by subaccount auth_id
-      --type string          filter by type: local|tollfree|mobile|fixed
+      --type string          filter by type: local|mobile|fixed|national|tollfree
 
 Global Flags:
       --dry-run            print the HTTP request without sending

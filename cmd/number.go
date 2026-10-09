@@ -92,7 +92,7 @@ var numberReleaseCmd = &cobra.Command{
 }
 
 func init() {
-	numberListCmd.Flags().StringVar(&numberListType, "type", "", "filter by type: local|tollfree|mobile|fixed")
+	numberListCmd.Flags().StringVar(&numberListType, "type", "", "filter by type: "+oneOf(numberTypeValues))
 	numberListCmd.Flags().StringVar(&numberListStartswith, "starts-with", "", "prefix filter on E.164")
 	numberListCmd.Flags().StringVar(&numberListSubaccount, "subaccount", "", "filter by subaccount auth_id")
 	numberListCmd.Flags().StringVar(&numberListAlias, "alias", "", "filter by alias")
@@ -107,7 +107,7 @@ func init() {
 
 	numberSearchCmd.Flags().StringVar(&numberSearchCountry, "country", "", "ISO country code, e.g. US (required)")
 	_ = numberSearchCmd.MarkFlagRequired("country")
-	numberSearchCmd.Flags().StringVar(&numberSearchType, "type", "", "local|tollfree|mobile|fixed")
+	numberSearchCmd.Flags().StringVar(&numberSearchType, "type", "", oneOf(numberTypeValues))
 	numberSearchCmd.Flags().StringVar(&numberSearchPattern, "pattern", "", "digit pattern")
 	numberSearchCmd.Flags().StringVar(&numberSearchRegion, "region", "", "region filter")
 	numberSearchCmd.Flags().IntVar(&numberSearchLimit, "limit", 20, "results per page")
@@ -148,6 +148,12 @@ func runNumberRelease(cmd *cobra.Command, args []string) error {
 }
 
 func runNumberList(cmd *cobra.Command, args []string) error {
+	if err := validateEnum("type", &numberListType, numberTypeValues...); err != nil {
+		return err
+	}
+	if err := validateEnumList("services", &numberListServices, numberServices...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -325,6 +331,9 @@ func runNumberBuy(cmd *cobra.Command, args []string) error {
 }
 
 func runNumberSearch(cmd *cobra.Command, args []string) error {
+	if err := validateEnum("type", &numberSearchType, numberTypeValues...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err

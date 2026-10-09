@@ -60,7 +60,7 @@ var tfvSubmitCmd = &cobra.Command{
 func init() {
 	tfvListCmd.Flags().IntVar(&tfvListLimit, "limit", 20, "results per page")
 	tfvListCmd.Flags().IntVar(&tfvListOffset, "offset", 0, "pagination offset")
-	tfvListCmd.Flags().StringVar(&tfvListStatus, "status", "", "filter by status: SUBMITTED|IN_REVIEW|APPROVED|REJECTED")
+	tfvListCmd.Flags().StringVar(&tfvListStatus, "status", "", "filter by status: "+oneOf(tollfreeStatuses))
 
 	tfvSubmitCmd.Flags().StringVar(&tfvSubmitBizName, "business-name", "", "business name (required)")
 	_ = tfvSubmitCmd.MarkFlagRequired("business-name")
@@ -78,6 +78,9 @@ func init() {
 }
 
 func runTfvList(cmd *cobra.Command, args []string) error {
+	if err := validateEnum("status", &tfvListStatus, tollfreeStatuses...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err

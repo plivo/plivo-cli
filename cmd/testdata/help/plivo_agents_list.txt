@@ -9,7 +9,7 @@ Flags:
       --limit int      results per page (max 20) (default 20)
       --name string    filter by name (substring match)
       --offset int     pagination offset
-      --state string   filter by state (e.g. DRAFT, ACTIVE)
+      --state string   filter by state: DRAFT|ACTIVE|PAUSED
 
 Global Flags:
       --dry-run            print the HTTP request without sending

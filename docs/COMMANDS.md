@@ -644,7 +644,7 @@ Flags:
       --limit int      results per page (max 20) (default 20)
       --name string    filter by name (substring match)
       --offset int     pagination offset
-      --state string   filter by state (e.g. DRAFT, ACTIVE)
+      --state string   filter by state: DRAFT|ACTIVE|PAUSED
 ```
 
 ---
@@ -1937,7 +1937,7 @@ Flags:
 ```
       --limit int       results per page (default 20)
       --offset int      pagination offset
-      --status string   filter by status: SUBMITTED|IN_REVIEW|APPROVED|REJECTED
+      --status string   filter by status: SUBMITTED|PROCESSING|APPROVED|REJECTED|UPDATE_REQUIRED
 ```
 
 ---
@@ -2259,10 +2259,10 @@ Flags:
       --alias string         filter by alias
       --country string       filter by ISO country code
       --limit int            results per page (default 20)
-      --number-type string   filter by number type
+      --number-type string   filter by number type: local|mobile|tollfree
       --offset int           pagination offset
-      --status string        filter by status
-      --user-type string     filter by user type
+      --status string        filter by status: draft|submitted|accepted|rejected|suspended|expired
+      --user-type string     filter by user type: individual|business
 ```
 
 ---
@@ -2348,7 +2348,7 @@ Flags:
       --services string      filter by services: voice|sms|mms|voice,sms ...
       --starts-with string   prefix filter on E.164
       --subaccount string    filter by subaccount auth_id
-      --type string          filter by type: local|tollfree|mobile|fixed
+      --type string          filter by type: local|mobile|fixed|national|tollfree
 ```
 
 ---
@@ -2481,7 +2481,7 @@ Flags:
       --offset int       pagination offset
       --pattern string   digit pattern
       --region string    region filter
-      --type string      local|tollfree|mobile|fixed
+      --type string      local|mobile|fixed|national|tollfree
 ```
 
 ---
@@ -3342,7 +3342,7 @@ Flags:
 ```
       --limit int       results per page (default 20)
       --offset int      pagination offset
-      --status string   filter by status: pending|verified|expired
+      --status string   filter by status: in-progress|verified|expired
 ```
 
 ---

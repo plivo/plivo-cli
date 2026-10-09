@@ -202,8 +202,8 @@ func registerSendFlags(cmd *cobra.Command, src, dst, text, urlFlag, method *stri
 func registerListFlags(cmd *cobra.Command, limit, offset *int, state, direction, fromN, toN *string) {
 	cmd.Flags().IntVar(limit, "limit", 20, "results per page")
 	cmd.Flags().IntVar(offset, "offset", 0, "pagination offset")
-	cmd.Flags().StringVar(state, "state", "", "queued|sent|delivered|undelivered|failed|received")
-	cmd.Flags().StringVar(direction, "direction", "", "inbound|outbound")
+	cmd.Flags().StringVar(state, "state", "", oneOf(messageStateValues))
+	cmd.Flags().StringVar(direction, "direction", "", oneOf(directionValues))
 	cmd.Flags().StringVar(fromN, "from", "", "filter by from_number")
 	cmd.Flags().StringVar(toN, "to", "", "filter by to_number")
 }
@@ -273,6 +273,12 @@ func runMessageSendForChannel(cmd *cobra.Command, channel, src, dst, text, urlFl
 func runMessageListForChannel(cmd *cobra.Command, channel string,
 	limit, offset int, state, direction, fromN, toN string,
 ) error {
+	if err := validateEnum("state", &state, messageStateValues...); err != nil {
+		return err
+	}
+	if err := validateEnum("direction", &direction, directionValues...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err

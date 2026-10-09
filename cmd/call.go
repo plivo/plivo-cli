@@ -64,7 +64,7 @@ func init() {
 	callListCmd.Flags().IntVar(&callListOffset, "offset", 0, "pagination offset")
 	callListCmd.Flags().StringVar(&callListFrom, "from", "", "filter by from_number")
 	callListCmd.Flags().StringVar(&callListTo, "to", "", "filter by to_number")
-	callListCmd.Flags().StringVar(&callListDirection, "direction", "", "inbound|outbound")
+	callListCmd.Flags().StringVar(&callListDirection, "direction", "", oneOf(directionValues))
 
 	callMakeCmd.Flags().StringVar(&callMakeFrom, "from", "", "source number (E.164) — must be on your account (required)")
 	_ = callMakeCmd.MarkFlagRequired("from")
@@ -490,6 +490,9 @@ func runCallMake(cmd *cobra.Command, args []string) error {
 }
 
 func runCallList(cmd *cobra.Command, args []string) error {
+	if err := validateEnum("direction", &callListDirection, directionValues...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err

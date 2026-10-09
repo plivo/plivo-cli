@@ -10,7 +10,7 @@ Flags:
       --offset int       pagination offset
       --pattern string   digit pattern
       --region string    region filter
-      --type string      local|tollfree|mobile|fixed
+      --type string      local|mobile|fixed|national|tollfree
 
 Global Flags:
       --dry-run            print the HTTP request without sending
