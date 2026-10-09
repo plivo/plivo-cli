@@ -9,25 +9,28 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// execute runs one invocation: the argv pre-scan, then cobra.
-func execute(args []string) error {
+// execute runs one invocation: the argv pre-scan, then cobra. It also returns
+// the command that ran, or the one the arguments reached, which handleError
+// records for `feedback --bug`.
+func execute(args []string) (*cobra.Command, error) {
 	if done, err := scanArgs(args); done {
-		return err
+		cmd, _, _ := rootCmd.Find(args)
+		return cmd, err
 	}
-	err := rootCmd.Execute()
+	cmd, err := rootCmd.ExecuteC()
 	if err != nil && strings.HasPrefix(err.Error(), "unknown command ") {
 		// cobra's own error for a word that is no subcommand (a group's
 		// NoArgs, or root's legacy check) gets the --help path's code and
 		// hint. A command without subcommands says the same for any stray
 		// word; that one is told plainly it takes no arguments.
 		if unknown := unknownSubcommand(args); unknown != nil {
-			return unknown
+			return cmd, unknown
 		}
 		if stray := strayArgument(args); stray != nil {
-			return stray
+			return cmd, stray
 		}
 	}
-	return err
+	return cmd, err
 }
 
 // strayArgument is BAD_INPUT for the first argument given to a command

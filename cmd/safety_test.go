@@ -96,7 +96,7 @@ func execCmd(t *testing.T, args ...string) (err error, stdout, stderr string) {
 		close(done)
 	}()
 
-	err = execute(args)
+	_, err = execute(args)
 
 	_ = wOut.Close()
 	_ = wErr.Close()

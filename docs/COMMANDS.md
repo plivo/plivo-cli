@@ -1117,14 +1117,21 @@ Share feedback about the Plivo CLI — a 1-5 rating and an optional comment.
 Run interactively to be walked through both prompts. Or pass --rating /
 --message for a one-shot submission (handy in scripts). Either field
 alone is fine — rate without commenting, or comment without rating.
+--dry-run prints the exact request instead of sending it.
+
+--bug sends a bug report instead: your comment plus the last command that
+failed, which the CLI keeps in ~/.plivo/last-error.json (command path, exit
+code, error code, request id, CLI version, OS; never your arguments or the
+error text). It prints the exact request, headers and body, and asks
+before sending: without a terminal pass --yes, or --dry-run to print it
+and send nothing. If sending fails, it prints a prefilled GitHub issue
+link instead.
 
 Comments are scrubbed client-side for phone numbers, auth tokens,
-emails and similar PII patterns before being sent. The collector
-re-runs the same scrub server-side.
+emails and similar PII patterns before being sent.
 
-The feedback collector endpoint is configured via the PLIVO_FEEDBACK_ENDPOINT
-environment variable. When unset, the command surfaces a clear "not yet
-wired" message instead of dropping the submission silently.
+Feedback goes to the Plivo CLI feedback collector. PLIVO_FEEDBACK_ENDPOINT
+points it at another one; PLIVO_FEEDBACK_TELEMETRY=0 stops sending.
 
 ```
 plivo feedback [flags]
@@ -1138,15 +1145,18 @@ Examples:
   plivo feedback --message "..."              # one-shot comment only
   plivo feedback --rating 2 --message "..."   # one-shot both
   plivo feedback --rating 5 --yes             # skip pre-submit preview
+  plivo feedback --rating 4 --dry-run         # print the request, send nothing
+  plivo feedback --bug --dry-run              # show a bug report, send nothing
+  plivo feedback --bug --message "..." --yes  # report the last failure
 ```
 
 Flags:
 
 ```
+      --bug              report a bug: your comment plus the last failed command, printed in full before sending
       --message string   one-shot comment. Skip the interactive prompt.
       --no-context       don't auto-attach CLI version / OS / arch metadata
       --rating int       one-shot rating (1-5). Skip the interactive prompt.
-      --yes              skip the pre-submit preview / confirmation (default: confirm in interactive)
 ```
 
 ---

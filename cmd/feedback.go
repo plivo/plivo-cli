@@ -3,13 +3,17 @@ package cmd
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/plivo/plivo-cli/internal/api"
@@ -26,7 +30,7 @@ var (
 	feedbackRating    int    // 1-5; 0 = unset
 	feedbackMessage   string // free text; "" = unset
 	feedbackNoContext bool   // skip auto-attached context
-	feedbackYes       bool   // skip pre-submit preview
+	feedbackBug       bool   // send a bug report with the last failure
 )
 
 // feedbackCmd handles the explicit-channel feedback submission. Future
@@ -41,19 +45,29 @@ var feedbackCmd = &cobra.Command{
 Run interactively to be walked through both prompts. Or pass --rating /
 --message for a one-shot submission (handy in scripts). Either field
 alone is fine — rate without commenting, or comment without rating.
+--dry-run prints the exact request instead of sending it.
+
+--bug sends a bug report instead: your comment plus the last command that
+failed, which the CLI keeps in ~/.plivo/last-error.json (command path, exit
+code, error code, request id, CLI version, OS; never your arguments or the
+error text). It prints the exact request, headers and body, and asks
+before sending: without a terminal pass --yes, or --dry-run to print it
+and send nothing. If sending fails, it prints a prefilled GitHub issue
+link instead.
 
 Comments are scrubbed client-side for phone numbers, auth tokens,
-emails and similar PII patterns before being sent. The collector
-re-runs the same scrub server-side.
+emails and similar PII patterns before being sent.
 
-The feedback collector endpoint is configured via the PLIVO_FEEDBACK_ENDPOINT
-environment variable. When unset, the command surfaces a clear "not yet
-wired" message instead of dropping the submission silently.`,
+Feedback goes to the Plivo CLI feedback collector. PLIVO_FEEDBACK_ENDPOINT
+points it at another one; PLIVO_FEEDBACK_TELEMETRY=0 stops sending.`,
 	Example: `  plivo feedback                              # interactive
   plivo feedback --rating 4                   # one-shot rating only
   plivo feedback --message "..."              # one-shot comment only
   plivo feedback --rating 2 --message "..."   # one-shot both
-  plivo feedback --rating 5 --yes             # skip pre-submit preview`,
+  plivo feedback --rating 5 --yes             # skip pre-submit preview
+  plivo feedback --rating 4 --dry-run         # print the request, send nothing
+  plivo feedback --bug --dry-run              # show a bug report, send nothing
+  plivo feedback --bug --message "..." --yes  # report the last failure`,
 	Args: cobra.NoArgs,
 	RunE: runFeedback,
 }
@@ -65,14 +79,17 @@ func init() {
 		"one-shot comment. Skip the interactive prompt.")
 	feedbackCmd.Flags().BoolVar(&feedbackNoContext, "no-context", false,
 		"don't auto-attach CLI version / OS / arch metadata")
-	feedbackCmd.Flags().BoolVar(&feedbackYes, "yes", false,
-		"skip the pre-submit preview / confirmation (default: confirm in interactive)")
+	feedbackCmd.Flags().BoolVar(&feedbackBug, "bug", false,
+		"report a bug: your comment plus the last failed command, printed in full before sending")
 	rootCmd.AddCommand(feedbackCmd)
 }
 
 func runFeedback(cmd *cobra.Command, args []string) error {
 	if err := validateFeedbackFlags(); err != nil {
 		return err
+	}
+	if feedbackBug {
+		return runBugReport(cmd)
 	}
 
 	authID := resolveAuthIDForFeedback()
@@ -93,6 +110,15 @@ func runFeedback(cmd *cobra.Command, args []string) error {
 	}
 	event.Rating = rating
 	event.SetComment(comment)
+
+	if dryRunFlag {
+		baseURL, headers := resolveFeedbackTransport(authID)
+		if err := printFeedbackRequest(cmd.OutOrStderr(), "Feedback, as it would be sent:", event, baseURL, headers); err != nil {
+			return err
+		}
+		fmt.Fprintln(cmd.OutOrStderr(), "Dry run: nothing sent.")
+		return nil
+	}
 
 	if !shouldSkipPreview() {
 		submit, err := showPreviewAndConfirm(event, cmd.InOrStdin(), cmd.OutOrStderr())
@@ -353,11 +379,11 @@ func endOfInputKey(goos string) string {
 	return "Ctrl-D"
 }
 
-// shouldSkipPreview returns true if --yes was passed OR if we're in
-// non-interactive mode (one-shot flags + no TTY → no point asking for
-// confirmation, nothing reads the response).
+// shouldSkipPreview returns true if --yes (the global flag, so -y works
+// too) was passed OR if we're in non-interactive mode (one-shot flags + no
+// TTY → no point asking for confirmation, nothing reads the response).
 func shouldSkipPreview() bool {
-	if feedbackYes {
+	if yesFlag {
 		return true
 	}
 	return !isTTY(os.Stdin)
@@ -386,8 +412,13 @@ func showPreviewAndConfirm(event *feedback.Event, in io.Reader, out io.Writer) (
 	if !feedbackNoContext {
 		fmt.Fprintf(out, "   Metadata: CLI %s, %s/%s\n", event.Context.CLIVersion, event.Context.OS, event.Context.Arch)
 	}
-	fmt.Fprint(out, " Submit? [Y/n] ")
-	reader := bufio.NewReader(in)
+	return confirmSubmit(bufio.NewReader(in), out, "Submit?")
+}
+
+// confirmSubmit asks question; Y / Enter / 'y' = submit, anything else
+// cancels, which returns false with no error.
+func confirmSubmit(reader *bufio.Reader, out io.Writer, question string) (bool, error) {
+	fmt.Fprintf(out, " %s [Y/n] ", question)
 	line, err := reader.ReadString('\n')
 	if err != nil && err != io.EOF {
 		return false, fmt.Errorf("read confirmation: %w", err)
@@ -398,6 +429,175 @@ func showPreviewAndConfirm(event *feedback.Event, in io.Reader, out io.Writer) (
 	}
 	fmt.Fprintln(out, "Cancelled, nothing sent.")
 	return false, nil
+}
+
+// recordLastError saves the failure handleError just rendered, for `feedback
+// --bug`: the command path and the error's category, never argument values or
+// the message, which can echo what the user typed. Best effort, so a failed
+// write changes neither the output nor the exit code. A failing `feedback`
+// keeps the failure it was trying to report.
+func recordLastError(ran *cobra.Command, e *clierr.Error, exitCode int) {
+	if ran == nil || ran == feedbackCmd {
+		return
+	}
+	_ = feedback.SaveLastError(feedback.LastError{
+		Command:    ran.CommandPath(),
+		ExitCode:   exitCode,
+		ErrorCode:  string(e.Code),
+		RequestID:  e.RequestID,
+		CLIVersion: versionValue(),
+		OS:         runtimeOS(),
+		Arch:       runtimeArch(),
+		Timestamp:  time.Now().UTC(),
+	})
+}
+
+// runBugReport sends the comment plus the last recorded failure. It prints the
+// exact request first; then a terminal is asked, anything else needs --yes,
+// and --dry-run stops there.
+func runBugReport(cmd *cobra.Command) error {
+	in, out := cmd.InOrStdin(), cmd.OutOrStderr()
+	reader := bufio.NewReader(in)
+	last, _ := feedback.LoadLastError()
+
+	comment := feedbackMessage
+	if comment == "" && isTTY(in) {
+		c, err := promptComment(reader, out, 1) // a low rating asks "What's going wrong?"
+		if err != nil {
+			return err
+		}
+		comment = c
+	}
+	if last == nil && strings.TrimSpace(comment) == "" {
+		fmt.Fprintln(out, "Nothing to report: no failed command is recorded. Describe the bug with --message.")
+		return nil
+	}
+
+	authID := resolveAuthIDForFeedback()
+	event := feedback.NewEvent(authID)
+	event.Trigger = feedback.TriggerBugReport
+	event.Rating = feedbackRating
+	if feedbackNoContext {
+		event.Context = stripContextToMinimum(event.Context)
+	}
+	event.SetComment(comment)
+	scrubbed := event.Comment
+	// The collector keeps only the comment, so the failure travels in it. It
+	// goes in after the scrub, which would read the request id as a token;
+	// every field is the CLI's own, none typed by the user.
+	if last != nil {
+		event.Comment = strings.TrimSpace(scrubbed + "\n\n" + lastErrorText(last))
+	}
+
+	baseURL, headers := resolveFeedbackTransport(authID)
+	if err := printFeedbackRequest(out, "Bug report, as it will be sent:", event, baseURL, headers); err != nil {
+		return err
+	}
+
+	if dryRunFlag {
+		fmt.Fprintln(out, "Dry run: nothing sent.")
+		return nil
+	}
+	if !yesFlag {
+		if !isTTY(in) {
+			e := clierr.DestructiveRefused("send a bug report")
+			e.Hint = "Check the report above, then pass --yes to send it. --dry-run prints it without sending."
+			return e
+		}
+		if send, err := confirmSubmit(reader, out, "Send this report?"); err != nil || !send {
+			return err
+		}
+	}
+
+	if err := event.Submit(context.Background(), baseURL, headers); err != nil {
+		if errors.Is(err, feedback.ErrTelemetryDisabled) {
+			printIssueLink(out, "Feedback sending is off (PLIVO_FEEDBACK_TELEMETRY=0), so nothing was sent. To file it on GitHub:", scrubbed, last)
+			return nil
+		}
+		printIssueLink(out, "Could not send the report. To file it on GitHub instead (no account details included):", scrubbed, last)
+		return clierr.NetworkError("submitting feedback", err)
+	}
+	fmt.Fprintln(out, "✓ Bug report sent. Thanks!")
+	return nil
+}
+
+// printFeedbackRequest shows what Submit sends, under title: the endpoint, the
+// CLI's own headers (the identity ones only while telemetry is on) and the
+// JSON body.
+func printFeedbackRequest(out io.Writer, title string, event *feedback.Event, baseURL string, headers map[string]string) error {
+	endpoint, err := feedback.Endpoint(baseURL)
+	if err != nil {
+		return clierr.Wrap(err)
+	}
+	body, err := json.MarshalIndent(event, "", "  ")
+	if err != nil {
+		return clierr.Wrap(err)
+	}
+	names := make([]string, 0, len(headers))
+	for k, v := range headers {
+		if v != "" {
+			names = append(names, k)
+		}
+	}
+	sort.Strings(names)
+	fmt.Fprintf(out, "%s\n\nPOST %s\n", title, endpoint)
+	for _, k := range names {
+		fmt.Fprintf(out, "%s: %s\n", k, headers[k])
+	}
+	fmt.Fprintf(out, "\n%s\n\n", body)
+	if headers["X-Plivo-CLI-Auth-ID"] != "" || headers["X-Plivo-CLI-Email"] != "" {
+		fmt.Fprintln(out, "The Auth-ID, Email, Region and AOM-UUID headers say who sent it, so we can follow up; "+
+			"`plivo config telemetry off` leaves them out.")
+	}
+	return nil
+}
+
+// printIssueLink offers the GitHub route for a report that was not sent.
+func printIssueLink(out io.Writer, lead, comment string, last *feedback.LastError) {
+	fmt.Fprintln(out, lead)
+	fmt.Fprintln(out, "  "+bugIssueURL(comment, last))
+	fmt.Fprintln(out, "If the issue form opens without the report, paste the one printed above.")
+}
+
+// lastErrorText renders the recorded failure for the report and the issue.
+func lastErrorText(e *feedback.LastError) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Last failed command, as the CLI recorded it:\ncommand: %s\nexit code: %d\nerror code: %s\n",
+		e.Command, e.ExitCode, e.ErrorCode)
+	if e.RequestID != "" {
+		fmt.Fprintf(&b, "request id: %s\n", e.RequestID)
+	}
+	fmt.Fprintf(&b, "CLI: %s (%s/%s)\nat: %s\n", e.CLIVersion, e.OS, e.Arch, e.Timestamp.Format(time.RFC3339))
+	return b.String()
+}
+
+// maxIssueURLLen keeps the issue link well inside what browsers and GitHub
+// accept; GitHub answers 414 past its own limit.
+const maxIssueURLLen = 2000
+
+// bugIssueURL returns a prefilled new-issue link on the CLI's repository: the
+// scrubbed comment and the recorded failure, nothing that identifies the user.
+// The repository takes issues only from a template, so the link names one, and
+// the comment is cut to keep the link under maxIssueURLLen.
+func bugIssueURL(comment string, last *feedback.LastError) string {
+	title, failure := "Bug report from the CLI", ""
+	if last != nil {
+		title = fmt.Sprintf("Bug: %s failed (%s)", last.Command, last.ErrorCode)
+		failure = "\n\n```\n" + lastErrorText(last) + "```\n"
+	}
+	build := func(c string) string {
+		q := url.Values{}
+		q.Set("template", "bug_report.md")
+		q.Set("title", title)
+		q.Set("body", "**What happened**\n"+c+failure)
+		return "https://github.com/plivo/plivo-cli/issues/new?" + q.Encode()
+	}
+	if link := build(comment); len(link) <= maxIssueURLLen {
+		return link
+	}
+	r := []rune(comment)
+	n := sort.Search(len(r)+1, func(i int) bool { return len(build(string(r[:i])+"…")) > maxIssueURLLen }) - 1
+	return build(string(r[:max(n, 0)]) + "…")
 }
 
 // isTTY returns true if r is a *os.File on a terminal. Defensive: any
