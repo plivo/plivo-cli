@@ -2636,6 +2636,12 @@ Aliases: `diag`
 
 Get one SIP Trunking call by UUID
 
+Get one SIP Trunking call by UUID.
+
+The table ends with which side ended the call: Plivo's hangup cause, code and
+source, then the platform's final SIP response. No API returns that response,
+so it shows as not available; the console's SIP logs have it.
+
 ```
 plivo sip calls get <call_uuid>
 ```
@@ -2658,6 +2664,7 @@ hangup cause and source and the carrier and region of each leg.
 
 Values are printed as the API returns them, with units; nothing is computed
 here. A quality score outside the documented 1-5 range is labelled as such.
+The table ends with which side ended the call, as in `sip calls get`.
 -o json returns the API response unchanged.
 
 ```

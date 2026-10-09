@@ -102,8 +102,13 @@ the two read different stores, so neither can answer for the other.` + diagnoseO
 }
 
 var sipCallsGetCmd = &cobra.Command{
-	Use:     "get <call_uuid>",
-	Short:   "Get one SIP Trunking call by UUID",
+	Use:   "get <call_uuid>",
+	Short: "Get one SIP Trunking call by UUID",
+	Long: `Get one SIP Trunking call by UUID.
+
+The table ends with which side ended the call: Plivo's hangup cause, code and
+source, then the platform's final SIP response. No API returns that response,
+so it shows as not available; the console's SIP logs have it.`,
 	Example: `  plivo sip calls get 8f3c1a2e-0d44-4a6f-9c31-2b7e5a90d1f7`,
 	Args:    cobra.ExactArgs(1),
 	RunE:    runSIPCallsGet,
@@ -118,6 +123,7 @@ hangup cause and source and the carrier and region of each leg.
 
 Values are printed as the API returns them, with units; nothing is computed
 here. A quality score outside the documented 1-5 range is labelled as such.
+The table ends with which side ended the call, as in ` + "`sip calls get`" + `.
 -o json returns the API response unchanged.`,
 	Example: `  plivo sip calls insights 8f3c1a2e-0d44-4a6f-9c31-2b7e5a90d1f7`,
 	Args:    cobra.ExactArgs(1),
@@ -302,6 +308,9 @@ func runSIPCallsGet(cmd *cobra.Command, args []string) error {
 	if err := output.KV(os.Stdout, sipCallKV(c)); err != nil {
 		return err
 	}
+	if !quietFlag {
+		fmt.Fprint(os.Stdout, "\n"+output.SafeText(sipHangupSides(c.HangupCauseName, c.HangupCauseCode, c.HangupSource)))
+	}
 	// Point at the hangup-code reference rather than at `voice calls diagnose`:
 	// a trunk CDR is not a Voice CDR and that command cannot read it.
 	if !quietFlag && c.HangupCauseName != "" {
@@ -359,7 +368,48 @@ func runSIPCallsInsights(cmd *cobra.Command, args []string) error {
 	if effectiveFormat() == output.FormatJSON {
 		return output.JSONRaw(os.Stdout, in.Raw())
 	}
-	return output.KV(os.Stdout, sipInsightsKV(in))
+	if err := output.KV(os.Stdout, sipInsightsKV(in)); err != nil {
+		return err
+	}
+	// Insights carries no hangup code, so the Plivo line has none either.
+	if !quietFlag {
+		fmt.Fprint(os.Stdout, "\n"+output.SafeText(sipHangupSides(string(in.HangupCause), 0, string(in.HangupSource))))
+	}
+	return nil
+}
+
+// sipHangupSourceMeaning is the documented meaning of the hangup_source values
+// that read as something else in a sentence. "carrier" says what it means.
+var sipHangupSourceMeaning = map[string]string{
+	"customer": "your infrastructure",
+	"zentrunk": "Plivo's SIP trunking platform",
+}
+
+// sipHangupSides says which side ended a call, each line labelled with where
+// its answer came from. No API returns the platform's final SIP response (the
+// console's SIP logs are the only place it shows), so that line says it is
+// not available rather than guessing.
+func sipHangupSides(cause string, code int, source string) string {
+	var parts []string
+	what := cause
+	if code != 0 {
+		what = strings.TrimSpace(fmt.Sprintf("%s (%d)", cause, code))
+	}
+	if what != "" {
+		parts = append(parts, what)
+	}
+	if source != "" {
+		by := "hung up by " + source
+		if m := sipHangupSourceMeaning[source]; m != "" {
+			by += " (" + m + ")"
+		}
+		parts = append(parts, by)
+	}
+	plivo := "not available"
+	if len(parts) > 0 {
+		plivo = strings.Join(parts, ", ")
+	}
+	return "Plivo: " + plivo + "\nPlatform's final SIP response: not available\n"
 }
 
 // sipInsightsKV shows the record as returned. It adds units and the range
