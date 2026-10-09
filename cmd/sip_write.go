@@ -241,6 +241,7 @@ var (
 	trunkCreateURI, trunkCreateFallbackURI  string
 	trunkCreateCredential, trunkCreateIPACL string
 	trunkCreateSecure                       bool
+	trunkCreatePlatform                     string
 	trunkUpdateName, trunkUpdateStatus      string
 	trunkUpdateURI, trunkUpdateFallbackURI  string
 	trunkUpdateCredential, trunkUpdateIPACL string
@@ -258,9 +259,16 @@ IP access control list to authenticate your platform. Both are checked here
 before the request, because the API's own error does not say which is missing.
 
 trunk_domain is only returned on a read, so this reads the trunk back and prints
-it: that domain is what you paste into your platform.`,
+it: that domain is what you paste into your platform.
+
+--platform livekit|elevenlabs|retell|vapi checks the trunk against Plivo's guide
+for that platform: it warns when the authentication is not the guide's, names
+the command that makes a missing URI, credential or IP list, and prints
+"recommended: --secure" where the guide uses secure trunking. It never turns
+secure trunking on: that is billed per minute.`,
 	Example: `  plivo sip trunks create --name my-trunk --direction inbound --uri <uri_uuid>
-  plivo sip trunks create --name out --direction outbound --credential <uuid>`,
+  plivo sip trunks create --name out --direction outbound --credential <uuid>
+  plivo sip trunks create --name agent-out --direction outbound --platform livekit --credential <uuid> --secure`,
 	Args: cobra.NoArgs,
 	RunE: runSIPTrunksCreate,
 }
@@ -293,17 +301,32 @@ read every page, the delete is refused.`,
 }
 
 func runSIPTrunksCreate(cmd *cobra.Command, args []string) error {
+	p, err := sipPlatformFlag(trunkCreatePlatform)
+	if err != nil {
+		return err
+	}
 	switch trunkCreateDirection {
 	case dirInbound:
 		if trunkCreateURI == "" {
-			return clierr.BadInput("an inbound trunk needs --uri (the origination URI calls arrive on)")
+			e := clierr.BadInput("an inbound trunk needs --uri (the origination URI calls arrive on)")
+			if p != nil {
+				e.Hint = p.inboundTrunkHint()
+			}
+			return e
 		}
 	case dirOutbound:
 		if trunkCreateCredential == "" && trunkCreateIPACL == "" {
-			return clierr.BadInput("an outbound trunk needs --credential or --ip-acl to authenticate your platform")
+			e := clierr.BadInput("an outbound trunk needs --credential or --ip-acl to authenticate your platform")
+			if p != nil {
+				e.Hint = p.outboundTrunkHint()
+			}
+			return e
 		}
 	default:
 		return clierr.BadInput("--direction must be inbound or outbound")
+	}
+	if p != nil {
+		p.checkTrunk(trunkCreateDirection, trunkCreateCredential, trunkCreateIPACL, cmd.Flags().Changed("secure"))
 	}
 
 	client, _, err := getClient()
@@ -442,6 +465,7 @@ func runSIPTrunksDelete(cmd *cobra.Command, args []string) error {
 
 var (
 	uriCreateName, uriCreateURI, uriCreateUsername string
+	uriCreatePlatform, uriCreateTransport          string
 	uriCreateAuthNeeded, uriCreatePasswordStdin    bool
 	uriUpdatePasswordStdin                         bool
 	uriUpdateName, uriUpdateURI, uriUpdateUsername string
@@ -466,10 +490,18 @@ var sipURIsCreateCmd = &cobra.Command{
 sips:host. The host is a name, an IPv4 address or an IPv6 address in brackets.
 It is checked before sending: a space, a bad port, an unknown transport or a
 malformed host is refused. A missing port is fine: the platform decides the
-default.`,
-	Example: `  plivo sip uris create --name eleven --uri sip.rtc.elevenlabs.io:5060;transport=tcp`,
-	Args:    cobra.NoArgs,
-	RunE:    runSIPURIsCreate,
+default. --transport adds ;transport= to --uri.
+
+--platform livekit|elevenlabs|retell|vapi fills in what Plivo's guide for that
+platform gives: host, port and transport, so you add only your own details,
+such as a LiveKit project host or a regional host with --uri. Flags you pass
+always win; a host or transport the guide does not list is used as given,
+with a warning.`,
+	Example: `  plivo sip uris create --name eleven --uri "sip.rtc.elevenlabs.io:5060;transport=tcp"
+  plivo sip uris create --name eleven --platform elevenlabs
+  plivo sip uris create --name agent --platform livekit --uri <project>.sip.livekit.cloud`,
+	Args: cobra.NoArgs,
+	RunE: runSIPURIsCreate,
 }
 
 var sipURIsListCmd = &cobra.Command{Use: "list", Short: "List origination URIs", Args: cobra.NoArgs, RunE: runSIPURIsList}
@@ -500,11 +532,25 @@ the check fails, the delete is refused.`,
 func normalizeSIPURI(v string) string { return strings.TrimSpace(v) }
 
 func runSIPURIsCreate(cmd *cobra.Command, args []string) error {
-	if normalizeSIPURI(uriCreateURI) == "" {
+	p, err := sipPlatformFlag(uriCreatePlatform)
+	if err != nil {
+		return err
+	}
+	if err := checkTransportFlag(uriCreateTransport); err != nil {
+		return err
+	}
+	uri, err := presetURI(p, uriCreateURI, uriCreateTransport)
+	if err != nil {
+		return err
+	}
+	if uri == "" {
 		return clierr.BadInput("--uri is required (host, host:port, host;transport=…, or sip:user@host)")
 	}
-	if _, err := parseURIFlag(uriCreateURI); err != nil {
+	if _, err := parseURIFlag(uri); err != nil {
 		return err
+	}
+	if p != nil {
+		p.begin()
 	}
 	if uriCreateAuthNeeded && uriCreateUsername == "" {
 		return errAuthNeedsUsername
@@ -513,7 +559,7 @@ func runSIPURIsCreate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	body := map[string]any{"name": uriCreateName, "uri": normalizeSIPURI(uriCreateURI)}
+	body := map[string]any{"name": uriCreateName, "uri": uri}
 	boolFlagPatch(cmd, "authentication-needed", "authentication_needed", uriCreateAuthNeeded, body)
 	if uriCreateUsername != "" {
 		body["username"] = uriCreateUsername
@@ -899,10 +945,11 @@ func runSIPCredsDelete(cmd *cobra.Command, args []string) error {
 // ─── ip-acl: create / update / delete ────────────────────────────────────────
 
 var (
-	aclCreateName string
-	aclCreateIPs  []string
-	aclUpdateName string
-	aclUpdateIPs  []string
+	aclCreateName     string
+	aclCreateIPs      []string
+	aclCreatePlatform string
+	aclUpdateName     string
+	aclUpdateIPs      []string
 )
 
 var sipACLCreateCmd = &cobra.Command{
@@ -913,10 +960,15 @@ var sipACLCreateCmd = &cobra.Command{
 --ip is repeatable and takes one IPv4 or IPv6 address or CIDR range each. A
 comma-separated list is refused rather than split. A range that allows the
 whole internet is reported but not blocked: it is occasionally deliberate, and
-refusing it outright would push people to the console instead.`,
-	Example: `  plivo sip ip-acl create --name platform --ip 203.0.113.4 --ip 198.51.100.0/24`,
-	Args:    cobra.NoArgs,
-	RunE:    runSIPACLCreate,
+refusing it outright would push people to the console instead.
+
+--platform vapi fills --ip with the addresses Plivo's Vapi guide allows. The
+other platforms authenticate with a credential, so they have none to fill.
+--ip you pass always wins.`,
+	Example: `  plivo sip ip-acl create --name platform --ip 203.0.113.4 --ip 198.51.100.0/24
+  plivo sip ip-acl create --name vapi --platform vapi`,
+	Args: cobra.NoArgs,
+	RunE: runSIPACLCreate,
 }
 
 var sipACLUpdateCmd = &cobra.Command{
@@ -966,19 +1018,32 @@ func warnRiskyIPs(ips []string) {
 }
 
 func runSIPACLCreate(cmd *cobra.Command, args []string) error {
-	if len(aclCreateIPs) == 0 {
-		return clierr.BadInput("at least one --ip is required")
-	}
-	if err := checkACLEntries(aclCreateIPs); err != nil {
+	p, err := sipPlatformFlag(aclCreatePlatform)
+	if err != nil {
 		return err
 	}
-	warnRiskyIPs(aclCreateIPs)
+	ips := aclCreateIPs
+	if p != nil {
+		if ips, err = p.presetIPs(ips); err != nil {
+			return err
+		}
+	}
+	if len(ips) == 0 {
+		return clierr.BadInput("at least one --ip is required")
+	}
+	if err := checkACLEntries(ips); err != nil {
+		return err
+	}
+	if p != nil {
+		p.begin()
+	}
+	warnRiskyIPs(ips)
 	client, _, err := getClient()
 	if err != nil {
 		return err
 	}
 	created, err := postSIP(client, map[string]any{
-		"name": aclCreateName, "ip_addresses": aclCreateIPs,
+		"name": aclCreateName, "ip_addresses": ips,
 	}, "Zentrunk", "IPAccessControlList")
 	if err != nil {
 		return err
@@ -1033,6 +1098,7 @@ func init() {
 	cf.StringVar(&trunkCreateCredential, "credential", "", "credential uuid (outbound)")
 	cf.StringVar(&trunkCreateIPACL, "ip-acl", "", "IP access control list uuid (outbound)")
 	cf.BoolVar(&trunkCreateSecure, "secure", false, "enable TLS/SRTP")
+	cf.StringVar(&trunkCreatePlatform, "platform", "", "check against a platform's guide: livekit|elevenlabs|retell|vapi")
 
 	uf := sipTrunksUpdateCmd.Flags()
 	uf.StringVar(&trunkUpdateName, "name", "", "trunk name")
@@ -1050,6 +1116,8 @@ func init() {
 	ucf.StringVar(&uriCreateUsername, "username", "", "username when authentication is needed")
 	ucf.BoolVar(&uriCreatePasswordStdin, "password-stdin", false, "read the URI password from stdin")
 	ucf.BoolVar(&uriCreateAuthNeeded, "authentication-needed", false, "require authentication")
+	ucf.StringVar(&uriCreatePlatform, "platform", "", "fill in a platform's published values: livekit|elevenlabs|retell|vapi")
+	ucf.StringVar(&uriCreateTransport, "transport", "", "udp|tcp|tls, added to --uri as ;transport=")
 	registerListFlags(sipURIsListCmd, &uriListLimit, &uriListOffset)
 	uuf := sipURIsUpdateCmd.Flags()
 	uuf.StringVar(&uriUpdateName, "name", "", "URI name")
@@ -1071,6 +1139,7 @@ func init() {
 	acf := sipACLCreateCmd.Flags()
 	acf.StringVar(&aclCreateName, "name", "", "list name")
 	acf.StringArrayVar(&aclCreateIPs, "ip", nil, "IP or CIDR (repeatable)")
+	acf.StringVar(&aclCreatePlatform, "platform", "", "fill --ip with a platform's published addresses: vapi")
 	auf := sipACLUpdateCmd.Flags()
 	auf.StringVar(&aclUpdateName, "name", "", "list name")
 	auf.StringArrayVar(&aclUpdateIPs, "ip", nil, "IP or CIDR (repeatable; replaces the list)")

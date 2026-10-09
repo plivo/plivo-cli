@@ -2864,6 +2864,10 @@ comma-separated list is refused rather than split. A range that allows the
 whole internet is reported but not blocked: it is occasionally deliberate, and
 refusing it outright would push people to the console instead.
 
+--platform vapi fills --ip with the addresses Plivo's Vapi guide allows. The
+other platforms authenticate with a credential, so they have none to fill.
+--ip you pass always wins.
+
 ```
 plivo sip ip-acl create [flags]
 ```
@@ -2872,13 +2876,15 @@ Examples:
 
 ```
   plivo sip ip-acl create --name platform --ip 203.0.113.4 --ip 198.51.100.0/24
+  plivo sip ip-acl create --name vapi --platform vapi
 ```
 
 Flags:
 
 ```
-      --ip stringArray   IP or CIDR (repeatable)
-      --name string      list name
+      --ip stringArray    IP or CIDR (repeatable)
+      --name string       list name
+      --platform string   fill --ip with a platform's published addresses: vapi
 ```
 
 ---
@@ -3022,6 +3028,12 @@ before the request, because the API's own error does not say which is missing.
 trunk_domain is only returned on a read, so this reads the trunk back and prints
 it: that domain is what you paste into your platform.
 
+--platform livekit|elevenlabs|retell|vapi checks the trunk against Plivo's guide
+for that platform: it warns when the authentication is not the guide's, names
+the command that makes a missing URI, credential or IP list, and prints
+"recommended: --secure" where the guide uses secure trunking. It never turns
+secure trunking on: that is billed per minute.
+
 ```
 plivo sip trunks create [flags]
 ```
@@ -3031,6 +3043,7 @@ Examples:
 ```
   plivo sip trunks create --name my-trunk --direction inbound --uri <uri_uuid>
   plivo sip trunks create --name out --direction outbound --credential <uuid>
+  plivo sip trunks create --name agent-out --direction outbound --platform livekit --credential <uuid> --secure
 ```
 
 Flags:
@@ -3041,6 +3054,7 @@ Flags:
       --fallback-uri string   fallback origination URI uuid
       --ip-acl string         IP access control list uuid (outbound)
       --name string           trunk name
+      --platform string       check against a platform's guide: livekit|elevenlabs|retell|vapi
       --secure                enable TLS/SRTP
       --uri string            primary origination URI uuid (inbound)
 ```
@@ -3172,7 +3186,13 @@ Create an origination URI.
 sips:host. The host is a name, an IPv4 address or an IPv6 address in brackets.
 It is checked before sending: a space, a bad port, an unknown transport or a
 malformed host is refused. A missing port is fine: the platform decides the
-default.
+default. --transport adds ;transport= to --uri.
+
+--platform livekit|elevenlabs|retell|vapi fills in what Plivo's guide for that
+platform gives: host, port and transport, so you add only your own details,
+such as a LiveKit project host or a regional host with --uri. Flags you pass
+always win; a host or transport the guide does not list is used as given,
+with a warning.
 
 ```
 plivo sip uris create [flags]
@@ -3181,7 +3201,9 @@ plivo sip uris create [flags]
 Examples:
 
 ```
-  plivo sip uris create --name eleven --uri sip.rtc.elevenlabs.io:5060;transport=tcp
+  plivo sip uris create --name eleven --uri "sip.rtc.elevenlabs.io:5060;transport=tcp"
+  plivo sip uris create --name eleven --platform elevenlabs
+  plivo sip uris create --name agent --platform livekit --uri <project>.sip.livekit.cloud
 ```
 
 Flags:
@@ -3190,6 +3212,8 @@ Flags:
       --authentication-needed   require authentication
       --name string             URI name
       --password-stdin          read the URI password from stdin
+      --platform string         fill in a platform's published values: livekit|elevenlabs|retell|vapi
+      --transport string        udp|tcp|tls, added to --uri as ;transport=
       --uri string              host, host:port, host;transport=…, or sip:user@host
       --username string         username when authentication is needed
 ```

@@ -4,19 +4,29 @@ Create an origination URI.
 sips:host. The host is a name, an IPv4 address or an IPv6 address in brackets.
 It is checked before sending: a space, a bad port, an unknown transport or a
 malformed host is refused. A missing port is fine: the platform decides the
-default.
+default. --transport adds ;transport= to --uri.
+
+--platform livekit|elevenlabs|retell|vapi fills in what Plivo's guide for that
+platform gives: host, port and transport, so you add only your own details,
+such as a LiveKit project host or a regional host with --uri. Flags you pass
+always win; a host or transport the guide does not list is used as given,
+with a warning.
 
 Usage:
   plivo sip uris create [flags]
 
 Examples:
-  plivo sip uris create --name eleven --uri sip.rtc.elevenlabs.io:5060;transport=tcp
+  plivo sip uris create --name eleven --uri "sip.rtc.elevenlabs.io:5060;transport=tcp"
+  plivo sip uris create --name eleven --platform elevenlabs
+  plivo sip uris create --name agent --platform livekit --uri <project>.sip.livekit.cloud
 
 Flags:
       --authentication-needed   require authentication
   -h, --help                    help for create
       --name string             URI name
       --password-stdin          read the URI password from stdin
+      --platform string         fill in a platform's published values: livekit|elevenlabs|retell|vapi
+      --transport string        udp|tcp|tls, added to --uri as ;transport=
       --uri string              host, host:port, host;transport=…, or sip:user@host
       --username string         username when authentication is needed
 
