@@ -58,8 +58,7 @@ var tfvSubmitCmd = &cobra.Command{
 }
 
 func init() {
-	tfvListCmd.Flags().IntVar(&tfvListLimit, "limit", 20, "results per page")
-	tfvListCmd.Flags().IntVar(&tfvListOffset, "offset", 0, "pagination offset")
+	registerListFlags(tfvListCmd, &tfvListLimit, &tfvListOffset)
 	tfvListCmd.Flags().StringVar(&tfvListStatus, "status", "", "filter by status: "+oneOf(tollfreeStatuses))
 
 	tfvSubmitCmd.Flags().StringVar(&tfvSubmitBizName, "business-name", "", "business name (required)")
@@ -103,7 +102,7 @@ func runTfvList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"PROFILE_UUID", "BUSINESS", "USE_CASE", "VOLUME", "STATUS", "CREATED"}}
 	for _, t := range resp.Objects {

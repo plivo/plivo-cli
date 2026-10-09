@@ -387,7 +387,7 @@ plivo account applications list [flags]
 Flags:
 
 ```
-      --limit int    results per page (default 20)
+      --limit int    results per page (1-20) (default 20)
       --offset int   pagination offset
 ```
 
@@ -492,7 +492,7 @@ plivo account subaccounts list [flags]
 Flags:
 
 ```
-      --limit int    results per page (default 20)
+      --limit int    results per page (1-20) (default 20)
       --offset int   pagination offset
 ```
 
@@ -641,7 +641,7 @@ Flags:
 
 ```
       --all            auto-paginate through all pages
-      --limit int      results per page (max 20) (default 20)
+      --limit int      results per page (1-20) (default 20)
       --name string    filter by name (substring match)
       --offset int     pagination offset
       --state string   filter by state: DRAFT|ACTIVE|PAUSED
@@ -761,7 +761,7 @@ Flags:
 
 ```
       --all          auto-paginate through all pages
-      --limit int    results per page (max 20) (default 20)
+      --limit int    results per page (1-20) (default 20)
       --offset int   pagination offset
 ```
 
@@ -1337,7 +1337,7 @@ Flags:
 ```
       --direction string   inbound|outbound
       --from string        filter by from_number
-      --limit int          results per page (default 20)
+      --limit int          results per page (1-20) (default 20)
       --offset int         pagination offset
       --state string       queued|sent|delivered|undelivered|failed|received
       --to string          filter by to_number
@@ -1472,7 +1472,7 @@ plivo messaging sms 10dlc brands list [flags]
 Flags:
 
 ```
-      --limit int    results per page (default 20)
+      --limit int    results per page (1-20) (default 20)
       --offset int   pagination offset
 ```
 
@@ -1573,7 +1573,7 @@ Flags:
 
 ```
       --brand-id string   filter by brand_id
-      --limit int         results per page (default 20)
+      --limit int         results per page (1-20) (default 20)
       --offset int        pagination offset
 ```
 
@@ -1656,7 +1656,7 @@ Flags:
 
 ```
       --campaign-id string   filter by campaign_id
-      --limit int            results per page (default 20)
+      --limit int            results per page (1-20) (default 20)
       --number string        filter by number
       --offset int           pagination offset
 ```
@@ -1712,7 +1712,7 @@ Flags:
 ```
       --direction string   inbound|outbound
       --from string        filter by from_number
-      --limit int          results per page (default 20)
+      --limit int          results per page (1-20) (default 20)
       --offset int         pagination offset
       --state string       queued|sent|delivered|undelivered|failed|received
       --to string          filter by to_number
@@ -1794,7 +1794,7 @@ plivo messaging sms powerpacks list [flags]
 Flags:
 
 ```
-      --limit int    results per page (default 20)
+      --limit int    results per page (1-20) (default 20)
       --offset int   pagination offset
 ```
 
@@ -1840,7 +1840,7 @@ plivo messaging sms powerpacks numbers list <uuid> [flags]
 Flags:
 
 ```
-      --limit int    results per page (default 20)
+      --limit int    results per page (1-20) (default 20)
       --offset int   pagination offset
 ```
 
@@ -1935,7 +1935,7 @@ plivo messaging sms tollfree list [flags]
 Flags:
 
 ```
-      --limit int       results per page (default 20)
+      --limit int       results per page (1-20) (default 20)
       --offset int      pagination offset
       --status string   filter by status: SUBMITTED|PROCESSING|APPROVED|REJECTED|UPDATE_REQUIRED
 ```
@@ -2030,7 +2030,7 @@ Flags:
 ```
       --direction string   inbound|outbound
       --from string        filter by from_number
-      --limit int          results per page (default 20)
+      --limit int          results per page (1-20) (default 20)
       --offset int         pagination offset
       --state string       queued|sent|delivered|undelivered|failed|received
       --to string          filter by to_number
@@ -2258,7 +2258,7 @@ Flags:
 ```
       --alias string         filter by alias
       --country string       filter by ISO country code
-      --limit int            results per page (default 20)
+      --limit int            results per page (1-20) (default 20)
       --number-type string   filter by number type: local|mobile|tollfree
       --offset int           pagination offset
       --status string        filter by status: draft|submitted|accepted|rejected|suspended|expired
@@ -2343,7 +2343,7 @@ Flags:
 
 ```
       --alias string         filter by alias
-      --limit int            results per page (max 20) (default 20)
+      --limit int            results per page (1-20) (default 20)
       --offset int           pagination offset
       --services string      filter by services: voice|sms|mms|voice,sms ...
       --starts-with string   prefix filter on E.164
@@ -2443,7 +2443,7 @@ plivo numbers masking sessions list [flags]
 Flags:
 
 ```
-      --limit int    results per page (default 20)
+      --limit int    results per page (1-20) (default 20)
       --offset int   pagination offset
 ```
 
@@ -2477,7 +2477,7 @@ Flags:
 
 ```
       --country string   ISO country code, e.g. US (required)
-      --limit int        results per page (default 20)
+      --limit int        results per page (1-20) (default 20)
       --offset int       pagination offset
       --pattern string   digit pattern
       --region string    region filter
@@ -2655,8 +2655,8 @@ Flags:
       --from-number string         filter by caller ID
       --hangup-cause-code int      filter by numeric hangup cause code
       --hangup-source string       who ended the call: customer|carrier|zentrunk
-      --limit int                  rows to return (1-20) (default 20)
-      --offset int                 rows to skip
+      --limit int                  results per page (1-20) (default 20)
+      --offset int                 pagination offset
       --since string               calls ending at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
       --stir-verification string   "Verified"|"Not Verified"|"Not Applicable"
       --to-number string           filter by destination
@@ -2749,8 +2749,8 @@ plivo sip credentials list [flags]
 Flags:
 
 ```
-      --limit int    rows to return (default 20)
-      --offset int   rows to skip
+      --limit int    results per page (1-20) (default 20)
+      --offset int   pagination offset
 ```
 
 ---
@@ -2858,8 +2858,8 @@ plivo sip ip-acl list [flags]
 Flags:
 
 ```
-      --limit int    rows to return (default 20)
-      --offset int   rows to skip
+      --limit int    results per page (1-20) (default 20)
+      --offset int   pagination offset
 ```
 
 ---
@@ -2985,8 +2985,8 @@ Flags:
 
 ```
       --direction string   inbound|outbound
-      --limit int          rows to return (default 20)
-      --offset int         rows to skip
+      --limit int          results per page (1-20) (default 20)
+      --offset int         pagination offset
 ```
 
 ---
@@ -3112,8 +3112,8 @@ plivo sip uris list [flags]
 Flags:
 
 ```
-      --limit int    rows to return (default 20)
-      --offset int   rows to skip
+      --limit int    results per page (1-20) (default 20)
+      --offset int   pagination offset
 ```
 
 ---
@@ -3340,7 +3340,7 @@ plivo verify sessions list [flags]
 Flags:
 
 ```
-      --limit int       results per page (default 20)
+      --limit int       results per page (1-20) (default 20)
       --offset int      pagination offset
       --status string   filter by status: in-progress|verified|expired
 ```
@@ -3502,7 +3502,7 @@ Flags:
 ```
       --direction string   inbound|outbound
       --from string        filter by from_number
-      --limit int          results per page (default 20)
+      --limit int          results per page (1-20) (default 20)
       --offset int         pagination offset
       --to string          filter by to_number
 ```
@@ -3998,7 +3998,7 @@ plivo voice endpoints list [flags]
 Flags:
 
 ```
-      --limit int    results per page (default 20)
+      --limit int    results per page (1-20) (default 20)
       --offset int   pagination offset
 ```
 
@@ -4073,7 +4073,7 @@ plivo voice multiparty list [flags]
 Flags:
 
 ```
-      --limit int       results per page (default 20)
+      --limit int       results per page (1-20) (default 20)
       --offset int      pagination offset
       --status string   filter by status: active|initialized|ended
 ```
@@ -4152,7 +4152,7 @@ plivo voice multiparty participant list <mpc_uuid_or_name> [flags]
 Flags:
 
 ```
-      --limit int    results per page (default 20)
+      --limit int    results per page (1-20) (default 20)
       --offset int   pagination offset
 ```
 
@@ -4241,7 +4241,7 @@ Flags:
       --call-uuid string         filter by call uuid
       --conference-name string   filter by conference name
       --from-time string         filter recordings after this ISO time
-      --limit int                results per page (default 20)
+      --limit int                results per page (1-20) (default 20)
       --offset int               pagination offset
       --to-time string           filter recordings before this ISO time
 ```

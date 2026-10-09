@@ -86,8 +86,7 @@ var campUpdateCmd = &cobra.Command{
 }
 
 func init() {
-	campListCmd.Flags().IntVar(&campListLimit, "limit", 20, "results per page")
-	campListCmd.Flags().IntVar(&campListOffset, "offset", 0, "pagination offset")
+	registerListFlags(campListCmd, &campListLimit, &campListOffset)
 	campListCmd.Flags().StringVar(&campListBrand, "brand-id", "", "filter by brand_id")
 
 	campCreateCmd.Flags().StringVar(&campCreateAlias, "alias", "", "human-friendly alias (required)")
@@ -149,7 +148,7 @@ func runCampaignList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "campaigns")
 	}
 	rows := [][]string{{"CAMPAIGN_ID", "ALIAS", "BRAND_ID", "USECASE", "STATUS"}}
 	for _, c := range resp.Campaigns {

@@ -1028,6 +1028,9 @@ func runSupport(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	items := resp.Data.Escalations
+	if items == nil {
+		items = []api.BuddyEscalation{} // -o json: [] rather than null
+	}
 	if effectiveFormat() == output.FormatJSON {
 		return output.JSONSuccess(os.Stdout, items, nil)
 	}

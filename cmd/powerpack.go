@@ -111,8 +111,7 @@ var ppNumRemoveCmd = &cobra.Command{
 }
 
 func init() {
-	ppListCmd.Flags().IntVar(&ppListLimit, "limit", 20, "results per page")
-	ppListCmd.Flags().IntVar(&ppListOffset, "offset", 0, "pagination offset")
+	registerListFlags(ppListCmd, &ppListLimit, &ppListOffset)
 
 	ppCreateCmd.Flags().StringVar(&ppCreateName, "name", "", "powerpack name (required)")
 	_ = ppCreateCmd.MarkFlagRequired("name")
@@ -126,8 +125,7 @@ func init() {
 	ppUpdateCmd.Flags().StringVar(&ppUpdateStickySender, "sticky-sender", "", "true|false")
 	ppUpdateCmd.Flags().StringVar(&ppUpdateLocalConnect, "local-connect", "", "true|false")
 
-	ppNumListCmd.Flags().IntVar(&ppNumListLimit, "limit", 20, "results per page")
-	ppNumListCmd.Flags().IntVar(&ppNumListOffset, "offset", 0, "pagination offset")
+	registerListFlags(ppNumListCmd, &ppNumListLimit, &ppNumListOffset)
 
 	ppNumberCmd.AddCommand(ppNumListCmd, ppNumAddCmd, ppNumRemoveCmd)
 	powerpackCmd.AddCommand(ppListCmd, ppGetCmd, ppCreateCmd, ppUpdateCmd, ppDeleteCmd, ppNumberCmd)
@@ -154,7 +152,7 @@ func runPowerpackList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"UUID", "NAME", "STICKY", "LOCAL", "APP_TYPE", "CREATED"}}
 	for _, p := range resp.Objects {
@@ -330,7 +328,7 @@ func runPowerpackNumberList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"NUMBER", "COUNTRY", "TYPE", "ADDED"}}
 	for _, n := range resp.Objects {

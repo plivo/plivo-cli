@@ -187,7 +187,7 @@ func runConferenceList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "conferences")
 	}
 	if len(resp.Conferences) == 0 {
 		fmt.Fprintln(os.Stdout, "(no active conferences)")

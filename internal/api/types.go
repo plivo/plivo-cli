@@ -408,11 +408,13 @@ type ComplianceApplication struct {
 	LinkedNumbers   []ComplianceLinkedNumber `json:"linked_numbers,omitempty"`
 }
 
+// ComplianceApplicationList carries its rows under "compliances", not the
+// "objects" the other lists use.
 type ComplianceApplicationList struct {
 	RawBody
 	APIID   string                  `json:"api_id"`
 	Meta    ListMeta                `json:"meta"`
-	Objects []ComplianceApplication `json:"objects"`
+	Objects []ComplianceApplication `json:"compliances"`
 }
 
 // ComplianceCreateResp — POST /PhoneNumber/Compliance/ (auto-submits).

@@ -47,7 +47,7 @@ func sipServer(t *testing.T, status int, body string) (func() []string, func() i
 func resetSIPFlags(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {
-		sipCallsLimit, sipCallsOffset = maxSIPCallLimit, 0
+		sipCallsLimit, sipCallsOffset = maxListLimit, 0
 		sipCallsFrom, sipCallsTo, sipCallsDirection = "", "", ""
 		sipCallsSince, sipCallsUntil = "", ""
 		sipCallsCauseCode, sipCallsSource, sipCallsSTIR = 0, "", ""

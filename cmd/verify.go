@@ -85,8 +85,7 @@ func init() {
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateURL, "url", "", "callback URL for session status events")
 	registerExplainFlag(verifySessionCreateCmd)
 
-	verifySessionListCmd.Flags().IntVar(&vsListLimit, "limit", 20, "results per page")
-	verifySessionListCmd.Flags().IntVar(&vsListOffset, "offset", 0, "pagination offset")
+	registerListFlags(verifySessionListCmd, &vsListLimit, &vsListOffset)
 	verifySessionListCmd.Flags().StringVar(&vsListStatus, "status", "", "filter by status: "+oneOf(verifyStatusValues))
 
 	verifySessionValidateCmd.Flags().StringVar(&vsValidateOTP, "otp", "", "OTP code received by the recipient (required)")
@@ -216,7 +215,7 @@ func runVerifySessionList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"SESSION_UUID", "RECIPIENT", "CHANNEL", "STATUS", "ATTEMPTS", "CREATED"}}
 	for _, s := range resp.Objects {

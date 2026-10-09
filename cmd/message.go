@@ -167,9 +167,9 @@ func init() {
 	registerExplainFlag(messagingMmsSendCmd)
 
 	// SMS list flags
-	registerListFlags(messagingSmsListCmd, &smsListLimit, &smsListOffset, &smsListState, &smsListDirection, &smsListFrom, &smsListTo)
-	registerListFlags(messagingWhatsappListCmd, &whatsappListLimit, &whatsappListOffset, &whatsappListState, &whatsappListDirection, &whatsappListFrom, &whatsappListTo)
-	registerListFlags(messagingMmsListCmd, &mmsListLimit, &mmsListOffset, &mmsListState, &mmsListDirection, &mmsListFrom, &mmsListTo)
+	registerMessageListFlags(messagingSmsListCmd, &smsListLimit, &smsListOffset, &smsListState, &smsListDirection, &smsListFrom, &smsListTo)
+	registerMessageListFlags(messagingWhatsappListCmd, &whatsappListLimit, &whatsappListOffset, &whatsappListState, &whatsappListDirection, &whatsappListFrom, &whatsappListTo)
+	registerMessageListFlags(messagingMmsListCmd, &mmsListLimit, &mmsListOffset, &mmsListState, &mmsListDirection, &mmsListFrom, &mmsListTo)
 
 	// Wire per-channel verbs onto each subgroup
 	messagingSmsCmd.AddCommand(messagingSmsSendCmd, messagingSmsListCmd, sms10dlcCmd)
@@ -197,11 +197,10 @@ func registerSendFlags(cmd *cobra.Command, src, dst, text, urlFlag, method *stri
 	cmd.Flags().StringVar(method, "method", "POST", "callback method GET|POST")
 }
 
-// registerListFlags adds the shared list-flag set (channel filter is set
+// registerMessageListFlags adds the shared list-flag set (channel filter is set
 // internally per command, not exposed as a flag).
-func registerListFlags(cmd *cobra.Command, limit, offset *int, state, direction, fromN, toN *string) {
-	cmd.Flags().IntVar(limit, "limit", 20, "results per page")
-	cmd.Flags().IntVar(offset, "offset", 0, "pagination offset")
+func registerMessageListFlags(cmd *cobra.Command, limit, offset *int, state, direction, fromN, toN *string) {
+	registerListFlags(cmd, limit, offset)
 	cmd.Flags().StringVar(state, "state", "", oneOf(messageStateValues))
 	cmd.Flags().StringVar(direction, "direction", "", oneOf(directionValues))
 	cmd.Flags().StringVar(fromN, "from", "", "filter by from_number")
@@ -312,7 +311,7 @@ func runMessageListForChannel(cmd *cobra.Command, channel string,
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"UUID", "FROM", "TO", "STATE", "TYPE", "TIME"}}
 	for _, m := range resp.Objects {

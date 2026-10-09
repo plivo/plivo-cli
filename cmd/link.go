@@ -54,8 +54,7 @@ var linkDeleteCmd = &cobra.Command{
 }
 
 func init() {
-	linkListCmd.Flags().IntVar(&linkListLimit, "limit", 20, "results per page")
-	linkListCmd.Flags().IntVar(&linkListOffset, "offset", 0, "pagination offset")
+	registerListFlags(linkListCmd, &linkListLimit, &linkListOffset)
 	linkListCmd.Flags().StringVar(&linkListCampaign, "campaign-id", "", "filter by campaign_id")
 	linkListCmd.Flags().StringVar(&linkListNumber, "number", "", "filter by number")
 
@@ -94,7 +93,7 @@ func runLinkList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"LINK_ID", "NUMBER", "CAMPAIGN_ID", "STATUS", "CREATED"}}
 	for _, l := range resp.Objects {

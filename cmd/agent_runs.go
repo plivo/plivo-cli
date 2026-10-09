@@ -41,8 +41,7 @@ var agentRunsGetCmd = &cobra.Command{
 }
 
 func init() {
-	agentRunsListCmd.Flags().IntVar(&agentRunsListLimit, "limit", 20, "results per page (max 20)")
-	agentRunsListCmd.Flags().IntVar(&agentRunsListOffset, "offset", 0, "pagination offset")
+	registerListFlags(agentRunsListCmd, &agentRunsListLimit, &agentRunsListOffset)
 	registerAllFlag(agentRunsListCmd)
 
 	agentRunsCmd.AddCommand(agentRunsListCmd, agentRunsGetCmd)
@@ -98,7 +97,7 @@ func runAgentRunsList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"RUN_ID", "STATUS", "STARTED_AT", "ENDED_AT", "PLAYGROUND"}}
 	for _, r := range resp.Objects {

@@ -8,7 +8,7 @@ Flags:
       --conference-name string   filter by conference name
       --from-time string         filter recordings after this ISO time
   -h, --help                     help for list
-      --limit int                results per page (default 20)
+      --limit int                results per page (1-20) (default 20)
       --offset int               pagination offset
       --to-time string           filter recordings before this ISO time
 

@@ -131,16 +131,14 @@ var mpcPartUnholdCmd = &cobra.Command{
 }
 
 func init() {
-	mpcListCmd.Flags().IntVar(&mpcListLimit, "limit", 20, "results per page")
-	mpcListCmd.Flags().IntVar(&mpcListOffset, "offset", 0, "pagination offset")
+	registerListFlags(mpcListCmd, &mpcListLimit, &mpcListOffset)
 	mpcListCmd.Flags().StringVar(&mpcListStatus, "status", "", "filter by status: "+oneOf(mpcStatusValues))
 
 	mpcCreateCmd.Flags().String("name", "", "ignored")
 	mpcCreateCmd.Flags().Int("max-participants", 0, "ignored")
 	mpcCreateCmd.Flags().Bool("record", false, "ignored")
 
-	mpcPartListCmd.Flags().IntVar(&mpcPartListLimit, "limit", 20, "results per page")
-	mpcPartListCmd.Flags().IntVar(&mpcPartListOffset, "offset", 0, "pagination offset")
+	registerListFlags(mpcPartListCmd, &mpcPartListLimit, &mpcPartListOffset)
 
 	mpcPartAddCmd.Flags().StringVar(&mpcPartAddFrom, "from", "", "source number for the dial-out (required)")
 	_ = mpcPartAddCmd.MarkFlagRequired("from")
@@ -180,7 +178,7 @@ func runMPCList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"MPC_UUID", "NAME", "STATUS", "BILLING", "CREATED"}}
 	for _, m := range resp.Objects {
@@ -271,7 +269,7 @@ func runMPCPartList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"PARTICIPANT_ID", "FROM", "TO", "CALL_UUID", "MUTED", "HOLD", "ROLE"}}
 	for _, p := range resp.Objects {

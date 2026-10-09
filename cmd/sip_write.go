@@ -462,7 +462,7 @@ func runSIPURIsList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"URI_UUID", "NAME", "URI", "AUTHENTICATION_NEEDED", "USERNAME"}}
 	for _, u := range resp.Objects {
@@ -714,7 +714,7 @@ func runSIPCredsList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"CREDENTIAL_UUID", "NAME", "USERNAME"}}
 	for _, c := range resp.Objects {
@@ -947,8 +947,7 @@ func init() {
 	ucf.StringVar(&uriCreateUsername, "username", "", "username when authentication is needed")
 	ucf.BoolVar(&uriCreatePasswordStdin, "password-stdin", false, "read the URI password from stdin")
 	ucf.BoolVar(&uriCreateAuthNeeded, "authentication-needed", false, "require authentication")
-	sipURIsListCmd.Flags().IntVar(&uriListLimit, "limit", 20, "rows to return")
-	sipURIsListCmd.Flags().IntVar(&uriListOffset, "offset", 0, "rows to skip")
+	registerListFlags(sipURIsListCmd, &uriListLimit, &uriListOffset)
 	uuf := sipURIsUpdateCmd.Flags()
 	uuf.StringVar(&uriUpdateName, "name", "", "URI name")
 	uuf.StringVar(&uriUpdateURI, "uri", "", "origination URI")
@@ -960,8 +959,7 @@ func init() {
 	ccf.StringVar(&credCreateName, "name", "", "credential name")
 	ccf.StringVar(&credCreateUsername, "username", "", "SIP username (required)")
 	ccf.BoolVar(&credCreatePasswordStdin, "password-stdin", false, "read the password from stdin (required)")
-	sipCredsListCmd.Flags().IntVar(&credListLimit, "limit", 20, "rows to return")
-	sipCredsListCmd.Flags().IntVar(&credListOffset, "offset", 0, "rows to skip")
+	registerListFlags(sipCredsListCmd, &credListLimit, &credListOffset)
 	cuf := sipCredsUpdateCmd.Flags()
 	cuf.StringVar(&credUpdateName, "name", "", "credential name")
 	cuf.StringVar(&credUpdateUsername, "username", "", "SIP username")

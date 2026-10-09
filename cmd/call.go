@@ -60,8 +60,7 @@ var callMakeCmd = &cobra.Command{
 }
 
 func init() {
-	callListCmd.Flags().IntVar(&callListLimit, "limit", 20, "results per page")
-	callListCmd.Flags().IntVar(&callListOffset, "offset", 0, "pagination offset")
+	registerListFlags(callListCmd, &callListLimit, &callListOffset)
 	callListCmd.Flags().StringVar(&callListFrom, "from", "", "filter by from_number")
 	callListCmd.Flags().StringVar(&callListTo, "to", "", "filter by to_number")
 	callListCmd.Flags().StringVar(&callListDirection, "direction", "", oneOf(directionValues))
@@ -522,7 +521,7 @@ func runCallList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"UUID", "FROM", "TO", "DIR", "DUR", "TIME", "AMOUNT"}}
 	for _, c := range resp.Objects {

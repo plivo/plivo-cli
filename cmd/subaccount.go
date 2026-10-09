@@ -71,8 +71,7 @@ var subDeleteCmd = &cobra.Command{
 }
 
 func init() {
-	subListCmd.Flags().IntVar(&subListLimit, "limit", 20, "results per page")
-	subListCmd.Flags().IntVar(&subListOffset, "offset", 0, "pagination offset")
+	registerListFlags(subListCmd, &subListLimit, &subListOffset)
 
 	subCreateCmd.Flags().StringVar(&subCreateName, "name", "", "subaccount name (required)")
 	_ = subCreateCmd.MarkFlagRequired("name")
@@ -105,7 +104,7 @@ func runSubList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"AUTH_ID", "NAME", "ENABLED", "CREATED"}}
 	for _, s := range resp.Objects {

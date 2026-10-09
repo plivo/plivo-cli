@@ -82,8 +82,7 @@ func init() {
 	maskingSessionCreateCmd.Flags().IntVar(&msCreateTimeLimit, "call-time-limit", 0, "max per-call duration in seconds")
 	maskingSessionCreateCmd.Flags().BoolVar(&msCreateRecord, "record", false, "record calls in this session")
 
-	maskingSessionListCmd.Flags().IntVar(&msListLimit, "limit", 20, "results per page")
-	maskingSessionListCmd.Flags().IntVar(&msListOffset, "offset", 0, "pagination offset")
+	registerListFlags(maskingSessionListCmd, &msListLimit, &msListOffset)
 
 	maskingSessionCmd.AddCommand(maskingSessionCreateCmd, maskingSessionGetCmd, maskingSessionListCmd, maskingSessionDeleteCmd)
 	maskingCmd.AddCommand(maskingSessionCmd)
@@ -196,7 +195,7 @@ func runMaskingList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"SESSION_UUID", "FIRST", "SECOND", "VIRTUAL", "MODE", "STATUS"}}
 	for _, s := range resp.Objects {

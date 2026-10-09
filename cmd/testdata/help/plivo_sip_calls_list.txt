@@ -14,8 +14,8 @@ Flags:
       --hangup-cause-code int      filter by numeric hangup cause code
       --hangup-source string       who ended the call: customer|carrier|zentrunk
   -h, --help                       help for list
-      --limit int                  rows to return (1-20) (default 20)
-      --offset int                 rows to skip
+      --limit int                  results per page (1-20) (default 20)
+      --offset int                 pagination offset
       --since string               calls ending at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
       --stir-verification string   "Verified"|"Not Verified"|"Not Applicable"
       --to-number string           filter by destination
