@@ -58,7 +58,7 @@ JMESPath first, e.g. --query 'data.objects[].number'.`,
 }
 
 func Execute() {
-	cmdErr := rootCmd.Execute()
+	cmdErr := execute(os.Args[1:])
 	if cmdErr != nil {
 		handleError(cmdErr)
 	}
@@ -152,18 +152,16 @@ func init() {
 	// directly see the same gate humans do.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		api.CLICommand = commandPath(cmd)
-		if reason := output.Validate(outputFormat); reason != "" {
-			err := clierr.BadInput(reason)
-			err.Hint = "Supported formats: " + strings.Join(output.SupportedFormats, ", ") + " (default: table for TTY, json otherwise)."
-			err.Context = map[string]any{"flag": "--output", "value": outputFormat}
-			return err
-		}
 		return configureOutput(cmd)
 	}
+	// Set here, not in the literal: runRoot walks rootCmd itself.
+	rootCmd.RunE = runRoot
 
 	rootCmd.PersistentFlags().StringVar(&profileFlag, "profile", "", "named profile from ~/.plivo/config.toml")
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "", "output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)")
 	rootCmd.PersistentFlags().StringVar(&queryFlag, "query", "", "JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)")
+	rootCmd.PersistentFlags().BoolVar(&schemaFlag, "schema", false, "describe the command (arguments, flags, output fields) instead of running it")
+	rootCmd.Flags().BoolVar(&mapFlag, "map", false, "print every command with its arguments and flags")
 	rootCmd.PersistentFlags().BoolVarP(&quietFlag, "quiet", "q", false, "suppress non-data output")
 	rootCmd.PersistentFlags().BoolVar(&noColorFlag, "no-color", false, "disable colored output")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "warn", "log level: debug|info|warn|error|none")

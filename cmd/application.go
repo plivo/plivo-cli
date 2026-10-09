@@ -34,6 +34,7 @@ var (
 var applicationCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a new application",
+	Args:  cobra.NoArgs,
 	RunE:  runAppCreate,
 }
 
@@ -45,6 +46,7 @@ var (
 var applicationListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List applications",
+	Args:  cobra.NoArgs,
 	RunE:  runAppList,
 }
 

@@ -170,8 +170,13 @@ func TestOutputFormats_listCommandsHonourEveryFormat(t *testing.T) {
 	}
 }
 
+// notSwept are list commands the sweep cannot run: docs list reads the
+// public docs site, not the API, and the internal build's auth token list
+// needs a session of its own.
+var notSwept = map[string]bool{"plivo docs list": true, "plivo auth token list": true}
+
 // listCommandPaths finds every list command that runs with no argument and
-// no required flag. docs list reads the public docs site, not the API.
+// no required flag, minus notSwept.
 func listCommandPaths() [][]string {
 	var out [][]string
 	var walk func(c *cobra.Command)
@@ -179,7 +184,7 @@ func listCommandPaths() [][]string {
 		for _, child := range c.Commands() {
 			walk(child)
 		}
-		if c.Name() != "list" || !c.Runnable() || c.CommandPath() == "plivo docs list" {
+		if c.Name() != "list" || !c.Runnable() || notSwept[c.CommandPath()] {
 			return
 		}
 		if c.Args != nil && c.Args(c, nil) != nil {

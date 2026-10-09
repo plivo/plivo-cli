@@ -32,6 +32,7 @@ var (
 var recordingListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List recordings",
+	Args:  cobra.NoArgs,
 	RunE:  runRecordingList,
 }
 

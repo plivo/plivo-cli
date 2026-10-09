@@ -40,6 +40,7 @@ var (
 var verifySessionCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a Verify session (spends money — requires --yes)",
+	Args:  cobra.NoArgs,
 	RunE:  runVerifySessionCreate,
 }
 
@@ -59,6 +60,7 @@ var (
 var verifySessionListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List Verify sessions",
+	Args:  cobra.NoArgs,
 	RunE:  runVerifySessionList,
 }
 

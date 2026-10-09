@@ -46,6 +46,7 @@ If you installed via Homebrew this command will refuse — use ` + "`brew upgrad
   plivo upgrade --check         # check only, don't install
   plivo upgrade --version v0.2.0
   plivo upgrade --force         # reinstall even if already on latest`,
+	Args: cobra.NoArgs,
 	RunE: runUpgrade,
 }
 
