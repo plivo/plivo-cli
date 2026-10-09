@@ -265,6 +265,7 @@ func TestOutputTypes_coverEveryGetAndList(t *testing.T) {
 	wantGaps := []string{"plivo auth list", "plivo config get", "plivo docs list", "plivo skill list"}
 	if c, _, err := rootCmd.Find([]string{"auth", "token", "list"}); err == nil && c.Name() == "list" {
 		wantGaps = append(wantGaps, c.CommandPath()) // internal build only; prints its raw body
+		sort.Strings(wantGaps)
 	}
 	var gaps []string
 	var walk func(c *cobra.Command)
