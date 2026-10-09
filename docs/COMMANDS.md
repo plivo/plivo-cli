@@ -2735,10 +2735,16 @@ Flags:
 
 Delete a credential (requires --yes)
 
-Names any trunk using it before deleting.
+Names any trunk using it first; an in-use one needs --force on top of --yes. If the check fails, the delete is refused.
 
 ```
-plivo sip credentials delete <credential_uuid>
+plivo sip credentials delete <credential_uuid> [flags]
+```
+
+Flags:
+
+```
+      --force   delete even though something depends on it (with --yes)
 ```
 
 ---
@@ -2845,10 +2851,16 @@ Flags:
 
 Delete an IP access control list (requires --yes)
 
-Names any trunk using it before deleting.
+Names any trunk using it first; an in-use one needs --force on top of --yes. If the check fails, the delete is refused.
 
 ```
-plivo sip ip-acl delete <ipacl_uuid>
+plivo sip ip-acl delete <ipacl_uuid> [flags]
+```
+
+Flags:
+
+```
+      --force   delete even though something depends on it (with --yes)
 ```
 
 ---
@@ -2965,11 +2977,19 @@ Delete a trunk (requires --yes)
 
 Delete a trunk.
 
-Reports how many numbers are routed to it first: deleting a trunk detaches every
-one of them, and inbound calls to those numbers stop.
+Reads every number on the account first: deleting a trunk detaches every number
+routed to it, and inbound calls to those numbers stop. If one is routed there,
+the delete is refused unless --force is added to --yes. If the check cannot
+read every page, the delete is refused.
 
 ```
-plivo sip trunks delete <trunk_id>
+plivo sip trunks delete <trunk_id> [flags]
+```
+
+Flags:
+
+```
+      --force   delete even though something depends on it (with --yes)
 ```
 
 ---
@@ -3101,10 +3121,18 @@ Flags:
 
 Delete an origination URI (requires --yes)
 
-Names any trunk using it as a primary or fallback URI before deleting.
+Names any trunk using it as a primary or fallback URI first. Deleting a URI
+also deletes those trunks, so an in-use URI needs --force on top of --yes. If
+the check fails, the delete is refused.
 
 ```
-plivo sip uris delete <uri_uuid>
+plivo sip uris delete <uri_uuid> [flags]
+```
+
+Flags:
+
+```
+      --force   delete even though something depends on it (with --yes)
 ```
 
 ---

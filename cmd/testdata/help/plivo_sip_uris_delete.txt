@@ -1,10 +1,13 @@
-Names any trunk using it as a primary or fallback URI before deleting.
+Names any trunk using it as a primary or fallback URI first. Deleting a URI
+also deletes those trunks, so an in-use URI needs --force on top of --yes. If
+the check fails, the delete is refused.
 
 Usage:
   plivo sip uris delete <uri_uuid> [flags]
 
 Flags:
-  -h, --help   help for delete
+      --force   delete even though something depends on it (with --yes)
+  -h, --help    help for delete
 
 Global Flags:
       --dry-run            print the HTTP request without sending

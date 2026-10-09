@@ -2,13 +2,17 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/plivo/plivo-cli/internal/api"
+	"github.com/plivo/plivo-cli/internal/clierr"
 )
 
 type sipReq struct {
@@ -190,8 +194,9 @@ func TestSIPTrunksUpdate_booleansOnlyTravelWhenPassed(t *testing.T) {
 	})
 }
 
-// Deleting a trunk detaches every number routed to it, so say how many first.
-func TestSIPTrunksDelete_refusesWithoutYesAndCountsNumbers(t *testing.T) {
+// Deleting a trunk detaches every number routed to it, so say so first. One
+// routed number is enough to refuse, so the check names the first it finds.
+func TestSIPTrunksDelete_refusesWithoutYesAndNamesARoutedNumber(t *testing.T) {
 	setFakeCreds(t)
 	resetWriteFlags(t)
 	reqs := sipWriteServer(t, trunksUsingU1)
@@ -200,8 +205,8 @@ func TestSIPTrunksDelete_refusesWithoutYesAndCountsNumbers(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected a refusal without --yes")
 	}
-	if !strings.Contains(stderr, "2 number(s)") {
-		t.Errorf("should report attached numbers, stderr:\n%s", stderr)
+	if !strings.Contains(stderr, "Number 1 is routed to this trunk") {
+		t.Errorf("should name a routed number, stderr:\n%s", stderr)
 	}
 	for _, r := range reqs() {
 		if r.method == "DELETE" {
@@ -536,7 +541,7 @@ func TestSIPDelete_readsDependentsEvenWithYes(t *testing.T) {
 	t.Cleanup(func() { yesFlag = false })
 	reqs := sipWriteServer(t, trunksUsingU1)
 
-	err, _, stderr := execCmd(t, "sip", "uris", "delete", "U1", "--yes")
+	err, _, stderr := execCmd(t, "sip", "uris", "delete", "U1", "--yes", "--force")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -584,7 +589,7 @@ func TestSIPWrites_emitJSONOnStdout(t *testing.T) {
 		args       []string
 	}{
 		{"update", `"updated"`, []string{"sip", "trunks", "update", "T1", "--status", "disabled", "-o", "json"}},
-		{"delete", `"deleted"`, []string{"sip", "uris", "delete", "U1", "--yes", "-o", "json"}},
+		{"delete", `"deleted"`, []string{"sip", "uris", "delete", "U1", "--yes", "--force", "-o", "json"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setFakeCreds(t)
@@ -734,4 +739,312 @@ func TestSIPURIsUpdate_passwordRotationRestatesWhatTheAPIDemands(t *testing.T) {
 	if body["username"] != "stored-user" {
 		t.Errorf("stored username not carried across: %v", body)
 	}
+}
+
+// deleteServer serves the reads a SIP delete makes: count numbers generated
+// page by page (the one at index routed, when >= 0, routed to trunk T1) and the
+// trunks body for every trunk list. fail, when it returns a status, answers a
+// request with it instead. Returns every request as "METHOD path?query".
+func deleteServer(t *testing.T, count, routed int, trunks string, fail func(r *http.Request) int) func() []string {
+	t.Helper()
+	var mu sync.Mutex
+	var seen []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seen = append(seen, r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery)
+		mu.Unlock()
+		if fail != nil {
+			if status := fail(r); status != 0 {
+				w.Header().Set("X-Request-ID", "req-placeholder")
+				w.WriteHeader(status)
+				_, _ = w.Write([]byte(`{"error":"unavailable"}`))
+				return
+			}
+		}
+		switch {
+		case r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/Number/"):
+			limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+			offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+			rows := []string{}
+			for i := offset; i < offset+limit && i < count; i++ {
+				app := "/v1/Account/A/Application/1/"
+				if i == routed {
+					app = "/v1/Account/A/Zentrunk/Trunk/T1/"
+				}
+				rows = append(rows, fmt.Sprintf(`{"number":"1415555%04d","application":%q}`, i, app))
+			}
+			_, _ = fmt.Fprintf(w, `{"meta":{"total_count":%d},"objects":[%s]}`, count, strings.Join(rows, ","))
+		case r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/Zentrunk/Trunk/"):
+			_, _ = w.Write([]byte(trunks))
+		default:
+			_, _ = w.Write([]byte(`{}`))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	clientForTest = &api.Client{BaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
+	t.Cleanup(func() { clientForTest = nil })
+	return func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string(nil), seen...)
+	}
+}
+
+func countRequests(reqs []string, prefix string) int {
+	n := 0
+	for _, r := range reqs {
+		if strings.HasPrefix(r, prefix) {
+			n++
+		}
+	}
+	return n
+}
+
+// wantRefused fails unless err is a DESTRUCTIVE_REFUSED (exit 5), and returns
+// its envelope for the caller to inspect.
+func wantRefused(t *testing.T, err error) clierr.Error {
+	t.Helper()
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeDestructiveRefused {
+		t.Fatalf("want DESTRUCTIVE_REFUSED (exit 5), got %v", err)
+	}
+	return *ce
+}
+
+// No server filter finds numbers by trunk, so proving none are routed means
+// reading every page, with no page cap: an account with more than 2,000
+// numbers must still be deletable.
+func TestSIPTrunksDelete_readsEveryPageToProveNoneIsRouted(t *testing.T) {
+	setFakeCreds(t)
+	resetWriteFlags(t)
+	reqs := deleteServer(t, 2500, -1, `{}`, nil)
+
+	err, _, stderr := execCmd(t, "sip", "trunks", "delete", "T1", "--yes")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n := countRequests(reqs(), "GET /v1/Account/CIFAKEPLACEHOLDER001/Number/"); n != 125 {
+		t.Fatalf("read %d pages of numbers, want all 125", n)
+	}
+	if countRequests(reqs(), "DELETE ") != 1 {
+		t.Fatal("the trunk was not deleted")
+	}
+	if !strings.Contains(stderr, "None of the 2500 numbers") {
+		t.Errorf("no summary of the check on stderr:\n%s", stderr)
+	}
+}
+
+func TestSIPTrunksDelete_stopsAtTheFirstRoutedNumber(t *testing.T) {
+	setFakeCreds(t)
+	resetWriteFlags(t)
+	reqs := deleteServer(t, 100, 45, `{}`, nil)
+
+	err, _, stderr := execCmd(t, "sip", "trunks", "delete", "T1", "--yes")
+	ce := wantRefused(t, err)
+	if n := countRequests(reqs(), "GET "); n != 3 {
+		t.Fatalf("read %d pages, want 3: the routed number is on the third", n)
+	}
+	if countRequests(reqs(), "DELETE ") != 0 {
+		t.Fatal("deleted a trunk that numbers are routed to")
+	}
+	if !strings.Contains(stderr, "14155550045") || !strings.Contains(ce.Hint, "--force") {
+		t.Errorf("want the number named and --force in the hint; stderr:\n%s\nhint: %s", stderr, ce.Hint)
+	}
+}
+
+func TestSIPTrunksDelete_forceDeletesARoutedTrunk(t *testing.T) {
+	setFakeCreds(t)
+	resetWriteFlags(t)
+	reqs := deleteServer(t, 30, 0, `{}`, nil)
+
+	if err, _, _ := execCmd(t, "sip", "trunks", "delete", "T1", "--yes", "--force"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if countRequests(reqs(), "DELETE ") != 1 {
+		t.Fatal("--yes --force did not delete")
+	}
+}
+
+// Deleting an in-use URI also deletes its trunks, so --yes alone is not enough.
+func TestSIPDeletes_refuseAnInUseObjectWithoutForce(t *testing.T) {
+	for _, args := range [][]string{
+		{"sip", "uris", "delete", "U1", "--yes"},
+		{"sip", "credentials", "delete", "C1", "--yes"},
+		{"sip", "ip-acl", "delete", "A1", "--yes"},
+	} {
+		t.Run(args[1], func(t *testing.T) {
+			setFakeCreds(t)
+			resetWriteFlags(t)
+			reqs := deleteServer(t, 0, -1, trunksUsingU1, nil)
+
+			err, _, _ := execCmd(t, args...)
+			ce := wantRefused(t, err)
+			if !strings.Contains(ce.Hint, "--force") || ce.Context["dependents"] == nil {
+				t.Errorf("want --force in the hint and the dependents in context: %+v", ce)
+			}
+			if countRequests(reqs(), "DELETE ") != 0 {
+				t.Fatal("deleted an object a trunk uses")
+			}
+		})
+	}
+}
+
+// Each delete asks the trunk list for exactly the trunks that use the object.
+func TestSIPDeletes_askTheTrunkListByFilter(t *testing.T) {
+	cases := []struct {
+		args []string
+		want []string
+	}{
+		{[]string{"sip", "uris", "delete", "U9", "--yes"}, []string{"primary_uri_uuid=U9", "fallback_uri_uuid=U9"}},
+		{[]string{"sip", "credentials", "delete", "C9", "--yes"}, []string{"credential_uuid=C9"}},
+		{[]string{"sip", "ip-acl", "delete", "A9", "--yes"}, []string{"ipacl_uuid=A9"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.args[1], func(t *testing.T) {
+			setFakeCreds(t)
+			resetWriteFlags(t)
+			reqs := deleteServer(t, 0, -1, `{"meta":{"total_count":0},"objects":[]}`, nil)
+
+			if err, _, _ := execCmd(t, tc.args...); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			var lists []string
+			for _, r := range reqs() {
+				if strings.HasPrefix(r, "GET ") {
+					lists = append(lists, r)
+				}
+			}
+			if len(lists) != len(tc.want) {
+				t.Fatalf("trunk lists read = %v, want one per filter %v", lists, tc.want)
+			}
+			for i, w := range tc.want {
+				if !strings.Contains(lists[i], w) {
+					t.Errorf("request %s does not filter by %s", lists[i], w)
+				}
+			}
+		})
+	}
+}
+
+// A filter the server ignored returns trunks that do not use the object; the
+// client-side check keeps them out of the dependents.
+func TestSIPDeletes_checkEachMatchClientSide(t *testing.T) {
+	setFakeCreds(t)
+	resetWriteFlags(t)
+	reqs := deleteServer(t, 0, -1, trunksUsingU1, nil)
+
+	err, _, stderr := execCmd(t, "sip", "credentials", "delete", "C9", "--yes")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(stderr, "In use by") || countRequests(reqs(), "DELETE ") != 1 {
+		t.Fatalf("an unrelated trunk was counted as a dependent:\n%s", stderr)
+	}
+}
+
+// A check that cannot finish stops the delete, even with --yes --force:
+// deleting blind is how an in-use URI takes its trunks with it. The read's own
+// error comes through, so a rejected login still exits 2 and a rate limit 4;
+// only the message and hint say that nothing was deleted.
+func TestSIPDeletes_stopWhenTheCheckFails(t *testing.T) {
+	cases := []struct {
+		name      string
+		status    int
+		code      clierr.Code
+		exit      int
+		retryable bool
+	}{
+		{"server error", http.StatusInternalServerError, clierr.CodeUpstreamError, 3, true},
+		{"rejected login", http.StatusUnauthorized, clierr.CodeAuthInvalid, 2, false},
+		{"rate limited past the retries", http.StatusTooManyRequests, clierr.CodeRateLimited, 4, true},
+	}
+	for _, tc := range cases {
+		for _, args := range [][]string{
+			{"sip", "trunks", "delete", "T1", "--yes", "--force"},
+			{"sip", "uris", "delete", "U1", "--yes", "--force"},
+			{"sip", "credentials", "delete", "C1", "--yes", "--force"},
+			{"sip", "ip-acl", "delete", "A1", "--yes", "--force"},
+		} {
+			t.Run(tc.name+"/"+args[1], func(t *testing.T) {
+				setFakeCreds(t)
+				resetWriteFlags(t)
+				recordWaits(t)
+				reqs := deleteServer(t, 10, -1, trunksUsingU1, func(r *http.Request) int {
+					if r.Method == "GET" {
+						return tc.status
+					}
+					return 0
+				})
+
+				err, _, _ := execCmd(t, args...)
+				var ce *clierr.Error
+				if !errors.As(err, &ce) || ce.Code != tc.code || ce.ExitCode() != tc.exit || ce.Retryable != tc.retryable {
+					t.Fatalf("want %s (exit %d, retryable %v), got %#v", tc.code, tc.exit, tc.retryable, ce)
+				}
+				if !strings.HasPrefix(ce.Message, "refusing to delete ") ||
+					!strings.Contains(ce.Message, ": could not check what depends on it: ") {
+					t.Errorf("message does not say what was refused and why: %q", ce.Message)
+				}
+				if !strings.HasSuffix(ce.Hint, "Nothing was deleted.") || ce.RequestID != "req-placeholder" {
+					t.Errorf("hint %q / request id %q not kept from the read", ce.Hint, ce.RequestID)
+				}
+				if countRequests(reqs(), "DELETE ") != 0 {
+					t.Fatal("deleted without a finished check")
+				}
+			})
+		}
+	}
+
+	t.Run("no answer at all", func(t *testing.T) {
+		setFakeCreds(t)
+		resetWriteFlags(t)
+		srv := httptest.NewServer(http.NotFoundHandler())
+		srv.Close()
+		clientForTest = &api.Client{BaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
+		t.Cleanup(func() { clientForTest = nil })
+
+		err, _, _ := execCmd(t, "sip", "uris", "delete", "U1", "--yes", "--force")
+		var ce *clierr.Error
+		if !errors.As(err, &ce) || ce.Code != clierr.CodeNetworkError || ce.ExitCode() != 3 || !ce.Retryable {
+			t.Fatalf("want NETWORK_ERROR (exit 3, retryable), got %#v", ce)
+		}
+		if !strings.HasPrefix(ce.Message, "refusing to delete URI U1: could not check what depends on it: ") {
+			t.Errorf("message = %q", ce.Message)
+		}
+	})
+}
+
+// --dry-run reads the dependents for real (a GET is not a write) and shows
+// them, so the preview refuses exactly what the real run would.
+func TestSIPDeletes_dryRunShowsDependents(t *testing.T) {
+	t.Run("in use", func(t *testing.T) {
+		setFakeCreds(t)
+		resetWriteFlags(t)
+		reqs := deleteServer(t, 0, -1, trunksUsingU1, nil)
+		clientForTest.DryRun = true
+
+		err, _, stderr := execCmd(t, "sip", "uris", "delete", "U1", "--yes", "--dry-run")
+		wantRefused(t, err)
+		if !strings.Contains(stderr, "T1 (in, primary URI)") {
+			t.Errorf("dependents not shown under --dry-run:\n%s", stderr)
+		}
+		if countRequests(reqs(), "GET ") == 0 || countRequests(reqs(), "DELETE ") != 0 {
+			t.Fatalf("want real reads and no delete, got %v", reqs())
+		}
+	})
+
+	t.Run("unused", func(t *testing.T) {
+		setFakeCreds(t)
+		resetWriteFlags(t)
+		reqs := deleteServer(t, 0, -1, `{"meta":{"total_count":0},"objects":[]}`, nil)
+		clientForTest.DryRun = true
+
+		err, _, stderr := execCmd(t, "sip", "uris", "delete", "U9", "--yes", "--dry-run")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(stderr, "[dry-run] DELETE") || countRequests(reqs(), "DELETE ") != 0 {
+			t.Fatalf("want the delete previewed, not sent; stderr:\n%s", stderr)
+		}
+	})
 }
