@@ -41,9 +41,7 @@ var agentRunsGetCmd = &cobra.Command{
 }
 
 func init() {
-	agentRunsListCmd.Flags().IntVar(&agentRunsListLimit, "limit", 20, "results per page (max 20)")
-	agentRunsListCmd.Flags().IntVar(&agentRunsListOffset, "offset", 0, "pagination offset")
-	registerAllFlag(agentRunsListCmd)
+	registerListFlags(agentRunsListCmd, &agentRunsListLimit, &agentRunsListOffset)
 
 	agentRunsCmd.AddCommand(agentRunsListCmd, agentRunsGetCmd)
 	agentCmd.AddCommand(agentRunsCmd)
@@ -60,45 +58,14 @@ func runAgentRunsList(cmd *cobra.Command, args []string) error {
 	q.Set("offset", strconv.Itoa(agentRunsListOffset))
 
 	var resp api.AgentRunList
-	apiErr, err := client.Do("GET", client.AccountURL("AgentFlow", agentID, "Run"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("AgentFlow", agentID, "Run"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
-	}
-	// Mirrors runAgentList's page walk: the reviewer on this PR flagged
-	// --all working on 'agents list' but not here as "close before merge".
-	// Same server, same clamped-to-20 limit, same silent-truncation risk.
-	if allFlag && !dryRunFlag {
-		offset := agentRunsListOffset + len(resp.Objects)
-		for len(resp.Objects) < resp.Meta.TotalCount {
-			pq := url.Values{}
-			for k, v := range q {
-				pq[k] = v
-			}
-			pq.Set("offset", strconv.Itoa(offset))
-			var page api.AgentRunList
-			apiErr, err = client.Do("GET", client.AccountURL("AgentFlow", agentID, "Run"), nil, pq, &page)
-			if err != nil {
-				return err
-			}
-			if apiErr != nil {
-				return apiErr
-			}
-			if len(page.Objects) == 0 {
-				break
-			}
-			resp.Objects = append(resp.Objects, page.Objects...)
-			accumulateRawObjects(&resp, &page)
-			offset += len(page.Objects)
-		}
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"RUN_ID", "STATUS", "STARTED_AT", "ENDED_AT", "PLAYGROUND"}}
 	for _, r := range resp.Objects {

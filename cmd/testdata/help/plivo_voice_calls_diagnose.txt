@@ -8,6 +8,14 @@ Equivalent to:
 …just shorter. Streams the answer as it comes; expect 30–120s for the
 full investigation since the debugger does live log lookups.
 
+With -o json, prints one JSON result when the analysis ends: call_uuid
+(message_uuid for a message), what_happened, likely_cause, timeline[]
+({at, event, source}), next_steps[], hangup_cause_code and hangup_source (from
+the call record; null for a message), confidence (high, medium or low) and
+answer (the prose). -o yaml, -o csv and --query work on that result; -o jsonl
+streams the assistant's raw events instead. An analysis that fails, escalates
+or stops early exits 3.
+
 Usage:
   plivo voice calls diagnose <call_uuid> [flags]
 
@@ -17,7 +25,8 @@ Aliases:
 Examples:
   plivo voice calls diagnose 01fe1ff8-fd57-4901-a150-d55b8dfd669b
   plivo voice call diagnose 01fe1ff8-fd57-4901-a150-d55b8dfd669b   # alias
-  plivo voice calls diagnose <uuid> -o json                        # JSONL
+  plivo voice calls diagnose <uuid> -o json                        # one JSON result
+  plivo voice calls diagnose <uuid> -o jsonl                       # the raw event stream
 
 Flags:
   -h, --help   help for diagnose
@@ -26,8 +35,10 @@ Global Flags:
       --dry-run            print the HTTP request without sending
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
-  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+  -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
       --profile string     named profile from ~/.plivo/config.toml
+      --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
+      --schema             describe the command (arguments, flags, output fields) instead of running it
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts

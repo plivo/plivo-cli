@@ -384,3 +384,40 @@ func TestDo_marshalError_unmarshallableBody(t *testing.T) {
 		t.Errorf("error should mention marshal: %v", err)
 	}
 }
+
+// The --all page walk waits the time a 429 asks for before retrying, so the
+// Retry-After header has to survive onto the error.
+func TestDo_keepsRetryAfterOnTheError(t *testing.T) {
+	cases := []struct {
+		header string
+		want   time.Duration
+	}{
+		{"7", 7 * time.Second},
+		{"", 0},
+		{"soon", 0},
+		{"-3", 0},
+	}
+	for _, tc := range cases {
+		srv, _ := newCapturingServer(t, 429, `{"error":"slow down"}`, map[string]string{"Retry-After": tc.header})
+		c := New("MAabc", "tok", time.Second)
+		c.BaseURL = srv.URL
+
+		apiErr, err := c.Do("GET", srv.URL+"/x", nil, nil, nil)
+		if err != nil || apiErr == nil {
+			t.Fatalf("Retry-After %q: want an APIError, got %v / %v", tc.header, apiErr, err)
+		}
+		if apiErr.RetryAfter != tc.want {
+			t.Errorf("Retry-After %q: RetryAfter = %v, want %v", tc.header, apiErr.RetryAfter, tc.want)
+		}
+	}
+}
+
+func TestRetryAfter_httpDate(t *testing.T) {
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	if got := retryAfter(now.Add(9*time.Second).Format(http.TimeFormat), now); got != 9*time.Second {
+		t.Errorf("future date: got %v, want 9s", got)
+	}
+	if got := retryAfter(now.Add(-time.Minute).Format(http.TimeFormat), now); got != 0 {
+		t.Errorf("past date: got %v, want 0", got)
+	}
+}
