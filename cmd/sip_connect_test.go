@@ -178,8 +178,8 @@ func TestSIPConnectPlan_indiaNumbers(t *testing.T) {
 	}
 }
 
-// Combinations that cannot work stop the plan, exit non-zero, and print no
-// steps. The Vapi refusal needs no compliance read.
+// Combinations that cannot work stop the plan and exit non-zero. Under -o json
+// the output is the error alone. The Vapi refusal needs no compliance read.
 func TestSIPConnectPlan_stopsAtTheFirstFailedCheck(t *testing.T) {
 	for _, tc := range []struct {
 		name, platform, failed string
@@ -207,12 +207,17 @@ func TestSIPConnectPlan_stopsAtTheFirstFailedCheck(t *testing.T) {
 			if !errors.As(err, &ce) || ce.Code != tc.code || ce.ExitCode() == 0 {
 				t.Fatalf("want %s, got %v", tc.code, err)
 			}
-			plan := decodeConnectPlan(t, stdout)
-			if last := plan.Checks[len(plan.Checks)-1]; last.Name != tc.failed || last.Status != "fail" {
-				t.Errorf("last check = %+v, want %s failed", last, tc.failed)
+			// The error envelope alone: nothing on stdout that reads as a
+			// success, and the checks so far in the error's context.
+			if strings.TrimSpace(stdout) != "" {
+				t.Errorf("a failed check printed to stdout:\n%s", stdout)
 			}
-			if plan.Requests == nil || len(plan.Requests) != 0 || plan.NextActions == nil {
-				t.Errorf("a stopped plan has no steps, as [] not null: %+v", plan)
+			checks, _ := ce.Context["checks"].([]connectCheck)
+			if len(checks) == 0 {
+				t.Fatalf("the error's context should carry the checks: %+v", ce.Context)
+			}
+			if last := checks[len(checks)-1]; last.Name != tc.failed || last.Status != "fail" {
+				t.Errorf("last check = %+v, want %s failed", last, tc.failed)
 			}
 			readOnly(t, reqs())
 			if tc.failed == "platform" && hit(reqs(), "GET", "/PhoneNumber/Compliance/") {

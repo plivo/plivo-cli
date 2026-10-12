@@ -10,7 +10,8 @@ the first check that fails and exits non-zero.
 
 Each printed command ends in --dry-run: run it to preview the request, then
 again without --dry-run to create. -o json returns checks[], requests[] and
-next_actions[].
+next_actions[]; when a check fails it prints only the error, with checks[]
+under error.context.
 
 Usage:
   plivo sip connect plan [flags]

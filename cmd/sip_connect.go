@@ -37,7 +37,8 @@ the first check that fails and exits non-zero.
 
 Each printed command ends in --dry-run: run it to preview the request, then
 again without --dry-run to create. -o json returns checks[], requests[] and
-next_actions[].`,
+next_actions[]; when a check fails it prints only the error, with checks[]
+under error.context.`,
 	Example: `  plivo sip connect plan --number +14155551234 --platform livekit
   plivo sip connect plan --number +14155551234 --platform vapi -o json`,
 	Args: cobra.NoArgs,
@@ -103,10 +104,23 @@ func runSIPConnectPlan(cmd *cobra.Command, _ []string) error {
 
 	plan := connectPlan{Number: "+" + digits, Platform: p.name, Requests: []connectRequest{}, NextActions: []string{}}
 	if err := plan.check(client, p, digits); err != nil {
-		if rerr := renderConnectPlan(plan); rerr != nil {
-			return rerr
+		if effectiveFormat() != output.FormatJSON {
+			if rerr := renderConnectPlan(plan); rerr != nil {
+				return rerr
+			}
+			return err
 		}
-		return err
+		// Under -o json a failed check is the error envelope alone, never a plan
+		// that reads as a success; the checks run so far go in its context.
+		var ce *clierr.Error
+		if !errors.As(err, &ce) {
+			ce = clierr.Wrap(err)
+		}
+		if ce.Context == nil {
+			ce.Context = map[string]any{}
+		}
+		ce.Context["checks"] = plan.Checks
+		return ce
 	}
 	plan.build(p, digits)
 	return renderConnectPlan(plan)
