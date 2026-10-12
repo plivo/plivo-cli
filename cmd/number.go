@@ -440,6 +440,7 @@ const indiaKYCDocsURL = "https://www.plivo.com/docs/numbers/rent-india-numbers"
 //
 //   - accepted: no warning, no error
 //   - none attached: a warning for the caller to print; routing goes ahead
+//   - not on this account: a refusal pointing at `plivo numbers list`
 //   - any other status, or any read failing: a refusal whose hint lists the
 //     KYC steps
 //
@@ -455,6 +456,11 @@ func checkIndiaCompliance(client *api.Client, number string) (warning string, er
 		ComplianceID json.RawMessage `json:"compliance_application_id"`
 	}
 	if e := getForCheck(client, client.AccountURL("Number", number), &n); e != nil {
+		if e.Code == clierr.CodeResourceNotFound {
+			e.Message = fmt.Sprintf("refusing to route %s: it is not a number on this account", number)
+			e.Hint = "`plivo numbers list` shows the numbers on this account."
+			return "", e
+		}
 		e.Message = "could not read the number to check its compliance application: " + e.Message
 		return "", kycRefusal(e, number, "")
 	}
@@ -519,8 +525,7 @@ func kycRefusal(e *clierr.Error, number, appID string) *clierr.Error {
 	e.Hint = fmt.Sprintf("India numbers need an accepted compliance application (KYC): 1) %s; "+
 		"2) `plivo numbers compliance create --data @app.json --file documents[0].file=@doc.pdf` submits one "+
 		"(`plivo numbers compliance update <compliance_id>` with the same flags resubmits a rejected one); "+
-		"3) `plivo numbers compliance link --link %s=<compliance_id>` attaches an accepted one. "+
-		"`plivo numbers update --force` skips this check; Plivo still enforces KYC.", see, number)
+		"3) `plivo numbers compliance link --link %s=<compliance_id>` attaches an accepted one.", see, number)
 	e.DocsURL = indiaKYCDocsURL
 	return e
 }
