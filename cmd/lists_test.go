@@ -222,13 +222,13 @@ func TestListTimeFlags_eitherNameReachesTheQuery(t *testing.T) {
 			[]string{"end_time__gte=2026-09-01+00%3A00%3A00", "end_time__lte=2026-09-15+23%3A59%3A59"}},
 		{[]string{"sip", "calls", "list", "--since", "2026-09-01 10:30", "--to-date", "2026-09-15"},
 			[]string{"end_time__gte=2026-09-01+10%3A30%3A00", "end_time__lte=2026-09-15+23%3A59%3A59"}},
-		{[]string{"messaging", "sms", "list", "--since", "2026-09-01", "--until", "2026-09-15"},
-			[]string{"message_type=sms", "message_time__gte=2026-09-01+00%3A00%3A00", "message_time__lte=2026-09-15+23%3A59%3A59"}},
-		{[]string{"messaging", "mms", "list", "--from-date", "2026-09-01T10:30:00+05:30"},
-			[]string{"message_type=mms", "message_time__gte=2026-09-01+05%3A00%3A00"}},
-		// The Message API takes an upper bound alone, unlike the call lists.
-		{[]string{"messaging", "whatsapp", "list", "--to-date", "2026-09-15"},
-			[]string{"message_type=whatsapp", "message_time__lte=2026-09-15+23%3A59%3A59"}},
+		// Message ranges must sit inside the last 90 days, so these are relative.
+		{[]string{"messaging", "sms", "list", "--since", daysAgo(10), "--until", daysAgo(3)},
+			[]string{"message_type=sms", "message_time__gte=" + daysAgo(10) + "+00%3A00%3A00", "message_time__lte=" + daysAgo(3) + "+23%3A59%3A59"}},
+		{[]string{"messaging", "mms", "list", "--from-date", daysAgo(10) + "T10:30:00+05:30"},
+			[]string{"message_type=mms", "message_time__gte=" + daysAgo(10) + "+05%3A00%3A00"}},
+		{[]string{"messaging", "whatsapp", "list", "--from-date", daysAgo(10), "--to-date", daysAgo(3)},
+			[]string{"message_type=whatsapp", "message_time__gte=" + daysAgo(10) + "+00%3A00%3A00", "message_time__lte=" + daysAgo(3) + "+23%3A59%3A59"}},
 	}
 	for _, tc := range cases {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
@@ -248,6 +248,52 @@ func TestListTimeFlags_eitherNameReachesTheQuery(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// An end without a start is refused on every list. The call APIs answer it
+// with a 400; the Message API searches only recent days, so an earlier end
+// matched nothing and read as no messages.
+func TestListTimeFlags_anEndAloneIsRefused(t *testing.T) {
+	for _, list := range [][]string{
+		{"sip", "calls", "list"},
+		{"voice", "calls", "list"},
+		{"messaging", "sms", "list"},
+		{"messaging", "mms", "list"},
+		{"messaging", "whatsapp", "list"},
+	} {
+		for _, end := range []string{"--until", "--to-date"} {
+			args := append(append([]string{}, list...), end, daysAgo(3))
+			t.Run(strings.Join(args, " "), func(t *testing.T) {
+				setFakeCreds(t)
+				_, count := sipServer(t, http.StatusOK, `{"meta":{},"objects":[]}`)
+
+				err, _, _ := execCmd(t, args...)
+				var ce *clierr.Error
+				if !errors.As(err, &ce) || ce.Code != clierr.CodeBadInput || !strings.Contains(ce.Message, "--until needs --since") {
+					t.Fatalf("want BAD_INPUT naming --since, got %v", err)
+				}
+				if n := count(); n != 0 {
+					t.Fatalf("%d request(s) went out", n)
+				}
+			})
+		}
+	}
+}
+
+// The Message API answers a range older than 90 days with a 400 whose body
+// does not parse, so the CLI refuses it first.
+func TestMessageLists_refuseARangeOlderThan90Days(t *testing.T) {
+	setFakeCreds(t)
+	_, count := sipServer(t, http.StatusOK, `{"meta":{},"objects":[]}`)
+
+	err, _, _ := execCmd(t, "messaging", "sms", "list", "--since", daysAgo(95))
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeBadInput || !strings.Contains(ce.Message, "90 days of messages") {
+		t.Fatalf("want BAD_INPUT about 90 days of messages, got %v", err)
+	}
+	if n := count(); n != 0 {
+		t.Fatalf("%d request(s) went out", n)
 	}
 }
 

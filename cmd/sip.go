@@ -200,9 +200,6 @@ func runSIPCallsList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if until != "" && since == "" {
-		return errUntilWithoutSince()
-	}
 
 	client, _, err := getClient()
 	if err != nil {

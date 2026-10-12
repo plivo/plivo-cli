@@ -508,9 +508,6 @@ func runCallList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if until != "" && since == "" {
-		return errUntilWithoutSince()
-	}
 	if err := checkVoiceCallWindow(since, until, time.Now()); err != nil {
 		return err
 	}
@@ -554,12 +551,9 @@ func runCallList(cmd *cobra.Command, args []string) error {
 	return output.Table(os.Stdout, rows)
 }
 
-// The Call API searches at most 31 days of end times per request, a range
-// with no end running to now, and keeps 90 days of calls.
-const (
-	voiceCallSearchSpan = 31 * 24 * time.Hour
-	voiceCallRetention  = 90 * 24 * time.Hour
-)
+// voiceCallSearchSpan is the most the Call API searches per request, a range
+// with no end running to now.
+const voiceCallSearchSpan = 31 * 24 * time.Hour
 
 // checkVoiceCallWindow refuses a range the Call API would answer with a 400,
 // before any request, saying what to run instead. since and until are API
@@ -567,6 +561,9 @@ const (
 func checkVoiceCallWindow(since, until string, now time.Time) error {
 	if since == "" {
 		return nil
+	}
+	if err := checkRetention(since, now, "voice calls"); err != nil {
+		return err
 	}
 	now = now.UTC()
 	from, _ := time.Parse(apiTimeLayout, since)
@@ -577,16 +574,6 @@ func checkVoiceCallWindow(since, until string, now time.Time) error {
 	}
 	to = to.Truncate(time.Minute)
 
-	if earliest := now.Add(-voiceCallRetention); from.Before(earliest) {
-		day := earliest.Truncate(24 * time.Hour)
-		if day.Before(earliest) {
-			day = day.AddDate(0, 0, 1)
-		}
-		e := clierr.BadInput(fmt.Sprintf("the range starts %s, more than 90 days ago: Plivo keeps 90 days of voice calls",
-			from.Format("2006-01-02")))
-		e.Hint = fmt.Sprintf("Start it on or after %s.", day.Format("2006-01-02"))
-		return e
-	}
 	if to.Sub(from) > voiceCallSearchSpan {
 		msg := "voice calls are searched at most 31 days at a time, and this range is longer"
 		if until == "" {

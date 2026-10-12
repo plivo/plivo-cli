@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/output"
@@ -282,6 +283,9 @@ func runMessageListForChannel(cmd *cobra.Command, channel string,
 	}
 	since, until, err := r.bounds(cmd)
 	if err != nil {
+		return err
+	}
+	if err := checkRetention(since, time.Now(), "messages"); err != nil {
 		return err
 	}
 	client, _, err := getClient()

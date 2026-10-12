@@ -24,10 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and can't be combined with `--offset`. `numbers search` doesn't take it.
 - `--since` and `--until` on `voice calls list` and
   `messaging sms|mms|whatsapp list`, and `--from-date`/`--to-date` as the same
-  flags there and on `sip calls list`. Times are UTC, and a bare `--until` date
-  includes that day. Voice calls without `--since` are the last 7 days; a voice
-  range over 31 days, or starting more than 90 days back, is refused before any
-  request with what to run instead.
+  flags there and on `sip calls list`. Times are UTC, a bare `--until` date
+  includes that day, and `--until` needs `--since`. Voice calls without
+  `--since` are the last 7 days. A voice or message range starting more than 90
+  days back, or a voice range over 31 days, is refused before any request with
+  what to run instead.
 - `plivo sip test --uri` checks from your machine that a SIP URI answers before
   a call goes to it: DNS, then a TCP or TLS connect (certificate verified,
   expiry shown) or one SIP OPTIONS over UDP. It never sends an INVITE and needs

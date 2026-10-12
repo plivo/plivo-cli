@@ -99,7 +99,8 @@ func registerTimeRangeFlags(cmd *cobra.Command, r *listTimeRange, what string) {
 
 // bounds returns the range as the API's UTC timestamps, "" for an end that is
 // not set. Both names for one end together are refused: only the last would
-// count.
+// count. So is an end without a start: the call APIs answer it with a 400, and
+// the Message API searches only recent days, so an earlier end matches nothing.
 func (r *listTimeRange) bounds(cmd *cobra.Command) (since, until string, err error) {
 	for _, pair := range [][2]string{{"since", "from-date"}, {"until", "to-date"}} {
 		if cmd.Flags().Changed(pair[0]) && cmd.Flags().Changed(pair[1]) {
@@ -109,15 +110,40 @@ func (r *listTimeRange) bounds(cmd *cobra.Command) (since, until string, err err
 	if since, err = normalizeListTime(r.since, false); err != nil {
 		return "", "", err
 	}
-	until, err = normalizeListTime(r.until, true)
-	return since, until, err
+	if until, err = normalizeListTime(r.until, true); err != nil {
+		return "", "", err
+	}
+	if until != "" && since == "" {
+		e := clierr.BadInput("--until needs --since (--to-date needs --from-date)")
+		e.Hint = "Add --since (or --from-date) for the start of the range."
+		return "", "", e
+	}
+	return since, until, nil
 }
 
-// errUntilWithoutSince is for the call lists: their APIs refuse an end-time
-// upper bound without a lower one. Said here, with the flag names, rather than
-// left to a 400 naming end_time__lte.
-func errUntilWithoutSince() error {
-	return clierr.BadInput("--until needs --since (--to-date needs --from-date): the API rejects an end-time upper bound without a lower one")
+// listRetention is how far back the Call and Message APIs read; a range that
+// starts earlier is a 400.
+const listRetention = 90 * 24 * time.Hour
+
+// checkRetention refuses a range that starts more than 90 days back, before
+// any request. since is an API timestamp, "" when unset; what names the rows.
+func checkRetention(since string, now time.Time, what string) error {
+	if since == "" {
+		return nil
+	}
+	from, _ := time.Parse(apiTimeLayout, since)
+	earliest := now.UTC().Add(-listRetention)
+	if !from.Truncate(time.Minute).Before(earliest) {
+		return nil
+	}
+	day := earliest.Truncate(24 * time.Hour)
+	if day.Before(earliest) {
+		day = day.AddDate(0, 0, 1)
+	}
+	e := clierr.BadInput(fmt.Sprintf("the range starts %s, more than 90 days ago: Plivo keeps 90 days of %s",
+		from.Format("2006-01-02"), what))
+	e.Hint = fmt.Sprintf("Start it on or after %s.", day.Format("2006-01-02"))
+	return e
 }
 
 // listTimeLayouts are what --since/--until accept besides a bare date. The
