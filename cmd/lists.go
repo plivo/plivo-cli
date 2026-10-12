@@ -87,25 +87,39 @@ func validatePage(limit, offset int, hasAll bool) error {
 // same two fields: they are the names people also reach for.
 type listTimeRange struct {
 	since, until string
-	// retainDays is how far back the list's API reads, checked before any
-	// request; 0 leaves it to the API.
-	retainDays int
+	names        [2][]string // every flag for each end, for the both-given check
+	rangeLimits
 }
 
-// listRetainDays is how far back the Call and Message APIs read.
-const listRetainDays = 90
+// rangeLimits are the limits a list's API puts on a range, checked before any
+// request; 0 leaves that one to the API.
+type rangeLimits struct {
+	retainDays int // how far back the API reads
+	spanDays   int // the most it searches per request; a range with no end runs to now
+}
+
+// listRetainDays is how far back the Call and Message APIs read, and
+// listSpanDays the most the Call and Recording APIs search per request.
+const (
+	listRetainDays = 90
+	listSpanDays   = 31
+)
 
 // listTimeNow is the clock the range checks read, so tests can move it.
 var listTimeNow = time.Now
 
 // registerTimeRangeFlags adds --since/--until and --from-date/--to-date to a
-// list. what names the rows and the time they are filtered on; retainDays is
-// how far back the list's API reads, 0 to leave that to the API.
-func registerTimeRangeFlags(cmd *cobra.Command, r *listTimeRange, what string, retainDays int) {
-	r.retainDays = retainDays
+// list. what names the rows and the time they are filtered on; limits are the
+// list's API's, named in the --since help.
+func registerTimeRangeFlags(cmd *cobra.Command, r *listTimeRange, what string, limits rangeLimits) {
+	r.rangeLimits = limits
+	r.names = [2][]string{{"since", "from-date"}, {"until", "to-date"}}
 	sinceUsage := what + " at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]])"
-	if retainDays > 0 {
-		sinceUsage += fmt.Sprintf(", within the last %d days", retainDays)
+	if limits.retainDays > 0 {
+		sinceUsage += fmt.Sprintf(", within the last %d days", limits.retainDays)
+	}
+	if limits.spanDays > 0 {
+		sinceUsage += fmt.Sprintf(", at most %d days per request", limits.spanDays)
 	}
 	f := cmd.Flags()
 	f.StringVar(&r.since, "since", "", sinceUsage)
@@ -114,15 +128,33 @@ func registerTimeRangeFlags(cmd *cobra.Command, r *listTimeRange, what string, r
 	f.StringVar(&r.until, "to-date", "", "same as --until")
 }
 
+// deprecatedNames adds older names for the two ends, kept so scripts that
+// pass them still work. cobra hides them from help and says what to use.
+func (r *listTimeRange) deprecatedNames(cmd *cobra.Command, since, until string) {
+	f := cmd.Flags()
+	f.StringVar(&r.since, since, "", "same as --since")
+	f.StringVar(&r.until, until, "", "same as --until")
+	_ = f.MarkDeprecated(since, "use --since")
+	_ = f.MarkDeprecated(until, "use --until")
+	r.names[0] = append(r.names[0], since)
+	r.names[1] = append(r.names[1], until)
+}
+
 // bounds returns the range in UTC, a zero time for an end that is not set.
-// Refused before any request: both names for one end (only the last would
-// count); an end without a start (the call APIs answer it with a 400, and the
-// Message API searches only recent days, so an earlier end matches nothing);
-// and a start further back than the list's API reads.
+// Refused before any request: two names for one end (only the last would
+// count); an end without a start (the call and recording APIs answer it with
+// a 400, and the Message API searches only recent days, so an earlier end
+// matches nothing); and a range past the list's API limits.
 func (r *listTimeRange) bounds(cmd *cobra.Command) (since, until time.Time, err error) {
-	for _, pair := range [][2]string{{"since", "from-date"}, {"until", "to-date"}} {
-		if cmd.Flags().Changed(pair[0]) && cmd.Flags().Changed(pair[1]) {
-			return time.Time{}, time.Time{}, clierr.BadInput(fmt.Sprintf("--%s and --%s are the same filter; pass one of them", pair[0], pair[1]))
+	for _, names := range r.names {
+		var given []string
+		for _, n := range names {
+			if cmd.Flags().Changed(n) {
+				given = append(given, "--"+n)
+			}
+		}
+		if len(given) > 1 {
+			return time.Time{}, time.Time{}, clierr.BadInput(strings.Join(given, " and ") + " are the same filter; pass one of them")
 		}
 	}
 	if since, err = parseListTime(r.since, false); err != nil {
@@ -136,8 +168,14 @@ func (r *listTimeRange) bounds(cmd *cobra.Command) (since, until time.Time, err 
 		e.Hint = "Add --since (or --from-date) for the start of the range."
 		return time.Time{}, time.Time{}, e
 	}
+	now := listTimeNow()
 	if r.retainDays > 0 {
-		if err = checkRetention(since, listTimeNow(), r.retainDays); err != nil {
+		if err = checkRetention(since, now, r.retainDays); err != nil {
+			return time.Time{}, time.Time{}, err
+		}
+	}
+	if r.spanDays > 0 {
+		if err = checkSpan(since, until, now, r.spanDays); err != nil {
 			return time.Time{}, time.Time{}, err
 		}
 	}
@@ -158,6 +196,66 @@ func checkRetention(since, now time.Time, days int) error {
 		since.Format(time.DateOnly), days, days))
 	e.Hint = fmt.Sprintf("Start it on or after %s.", day.Format(time.DateOnly))
 	return e
+}
+
+// checkSpan refuses a range longer than days, the most the list's API
+// searches per request, with the ranges to run instead.
+func checkSpan(since, until, now time.Time, days int) error {
+	if since.IsZero() {
+		return nil
+	}
+	now = now.UTC()
+	to, why := until, "this range is longer"
+	if to.IsZero() {
+		to, why = now, "a range with no end runs to now"
+	}
+	if to.Sub(since) <= time.Duration(days)*24*time.Hour {
+		return nil
+	}
+	e := clierr.BadInput(fmt.Sprintf("Plivo searches at most %d days per request, and %s", days, why))
+	// Nothing has happened after today, so the ranges stop there: an --until
+	// far ahead would otherwise list one for every month up to it.
+	if endOfToday := now.Truncate(24 * time.Hour).Add(24*time.Hour - time.Second); until.IsZero() || to.After(endOfToday) {
+		to = endOfToday
+	}
+	var ranges []string
+	for _, r := range spanRanges(since, to, days) {
+		ranges = append(ranges, fmt.Sprintf("--since %s --until %s", rangeFlag(r[0], false), rangeFlag(r[1], true)))
+	}
+	if len(ranges) > 0 {
+		e.Hint = "Run one range at a time: " + strings.Join(ranges, "; ") + "."
+		e.Context = map[string]any{"ranges": ranges}
+	}
+	return e
+}
+
+// spanRanges splits from..to into ranges of at most days calendar days: the
+// first starts at from and the last ends at to.
+func spanRanges(from, to time.Time, days int) [][2]time.Time {
+	var out [][2]time.Time
+	for start := from; !start.After(to); {
+		end := start.Truncate(24*time.Hour).AddDate(0, 0, days).Add(-time.Second)
+		if end.After(to) {
+			end = to
+		}
+		out = append(out, [2]time.Time{start, end})
+		start = end.Add(time.Second)
+	}
+	return out
+}
+
+// rangeFlag writes one end of a hinted range: a bare date when it falls on the
+// day's edge (the start of the day, or with end its last second), otherwise
+// the full UTC time, quoted for the shell.
+func rangeFlag(t time.Time, end bool) string {
+	edge := t.Truncate(24 * time.Hour)
+	if end {
+		edge = edge.Add(24*time.Hour - time.Second)
+	}
+	if t.Equal(edge) {
+		return t.Format(time.DateOnly)
+	}
+	return strconv.Quote(t.Format(time.DateTime))
 }
 
 // setTimeRange puts a range on a list query as field__gte and field__lte,

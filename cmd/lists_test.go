@@ -265,6 +265,8 @@ func TestListTimeFlags_eitherNameReachesTheQuery(t *testing.T) {
 			[]string{"message_type=mms", "message_time__gte=" + daysAgo(10) + "+05%3A00%3A00"}},
 		{[]string{"messaging", "whatsapp", "list", "--from-date", daysAgo(10), "--to-date", daysAgo(3)},
 			[]string{"message_type=whatsapp", "message_time__gte=" + daysAgo(10) + "+00%3A00%3A00", "message_time__lte=" + daysAgo(3) + "+23%3A59%3A59"}},
+		{[]string{"voice", "recordings", "list", "--since", daysAgo(10), "--until", daysAgo(3)},
+			[]string{"add_time__gte=" + daysAgo(10) + "+00%3A00%3A00", "add_time__lte=" + daysAgo(3) + "+23%3A59%3A59"}},
 	}
 	for _, tc := range cases {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
@@ -305,14 +307,19 @@ func requireRefusedBeforeAnyRequest(t *testing.T, args []string, want string) {
 }
 
 // Every list with a time range refuses, before any request: both names for
-// one end (only the last would count), an end without a start, and, where its
-// --since help names the 90 days, a start further back. The lists are found by
-// walking the tree, so a new one is covered without being named here.
+// one end (only the last would count), an end without a start, and a range
+// past the limits its API sets, which its --since help names. The lists are
+// found by walking the tree, so a new one is covered without being named here.
 func TestListTimeFlags_refusedBeforeAnyRequest(t *testing.T) {
 	type refusal struct {
 		flags []string
 		want  string
 	}
+	// The lists that check each limit locally. SIP Trunking's own 400 covers
+	// its limit, which is 3 months.
+	retains := map[string]bool{"voice calls list": true,
+		"messaging sms list": true, "messaging mms list": true, "messaging whatsapp list": true}
+	spans := map[string]bool{"voice calls list": true, "voice recordings list": true}
 	d := daysAgo(3)
 	lists := 0
 	walkOwnCommands(func(c *cobra.Command, path []string) {
@@ -321,10 +328,12 @@ func TestListTimeFlags_refusedBeforeAnyRequest(t *testing.T) {
 			return
 		}
 		lists++
-		retains := strings.Contains(since.Usage, "within the last 90 days")
-		// SIP Trunking's own 400 covers its limit, which is 3 months.
-		if want := path[0] != "sip"; retains != want {
-			t.Errorf("%v: 90-day check = %v, want %v", path, retains, want)
+		name := strings.Join(path, " ")
+		if got := strings.Contains(since.Usage, "within the last 90 days"); got != retains[name] {
+			t.Errorf("%s: --since help names the 90 days = %v, want %v", name, got, retains[name])
+		}
+		if got := strings.Contains(since.Usage, "at most 31 days per request"); got != spans[name] {
+			t.Errorf("%s: --since help names the 31 days = %v, want %v", name, got, spans[name])
 		}
 		cases := []refusal{
 			{[]string{"--since", d, "--from-date", d}, "same filter"},
@@ -332,8 +341,11 @@ func TestListTimeFlags_refusedBeforeAnyRequest(t *testing.T) {
 			{[]string{"--until", d}, "--until needs --since"},
 			{[]string{"--to-date", d}, "--until needs --since"},
 		}
-		if retains {
+		if retains[name] {
 			cases = append(cases, refusal{[]string{"--since", daysAgo(95)}, "more than 90 days ago"})
+		}
+		if spans[name] {
+			cases = append(cases, refusal{[]string{"--since", daysAgo(40), "--until", d}, "at most 31 days"})
 		}
 		for _, tc := range cases {
 			args := append(append([]string{}, path...), tc.flags...)
@@ -342,8 +354,127 @@ func TestListTimeFlags_refusedBeforeAnyRequest(t *testing.T) {
 			})
 		}
 	})
-	if lists != 5 {
-		t.Errorf("found %d lists with --since, want 5", lists)
+	if lists != 6 {
+		t.Errorf("found %d lists with --since, want 6", lists)
+	}
+}
+
+// --from-time and --to-time were sent as from_time and to_time, which the
+// Recording API ignores. They now set the same range as --since and --until,
+// with cobra's notice to use those.
+func TestRecordingsList_oldTimeFlagsSetTheRange(t *testing.T) {
+	setFakeCreds(t)
+	urls, _ := sipServer(t, http.StatusOK, `{"meta":{},"objects":[]}`)
+
+	err, stdout, stderr := execCmd(t, "voice", "recordings", "list", "--from-time", daysAgo(10), "--to-time", daysAgo(3))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := urls()
+	if len(got) != 1 {
+		t.Fatalf("expected 1 request, got %v", got)
+	}
+	for _, want := range []string{"add_time__gte=" + daysAgo(10), "add_time__lte=" + daysAgo(3)} {
+		if !strings.Contains(got[0], want) {
+			t.Errorf("query missing %s\n  got: %s", want, got[0])
+		}
+	}
+	if strings.Contains(got[0], "from_time") || strings.Contains(got[0], "to_time") {
+		t.Errorf("sent the names the API ignores: %s", got[0])
+	}
+	// cobra prints the notice through the command's output writer: stderr in
+	// a real run, but execCmd points that writer at its stdout pipe.
+	if !strings.Contains(stdout+stderr, "use --since") {
+		t.Errorf("no deprecation notice: stdout %q, stderr %q", stdout, stderr)
+	}
+
+	requireRefusedBeforeAnyRequest(t,
+		[]string{"voice", "recordings", "list", "--since", daysAgo(3), "--from-time", daysAgo(3)}, "same filter")
+}
+
+// daysAgo is the UTC date n days back, so a range stays inside the APIs' 90
+// days whenever the test runs.
+func daysAgo(n int) string {
+	return time.Now().UTC().AddDate(0, 0, -n).Format(time.DateOnly)
+}
+
+// at reads a test timestamp; "" is the zero time, an end that is not set.
+func at(t *testing.T, s string) time.Time {
+	t.Helper()
+	if s == "" {
+		return time.Time{}
+	}
+	v, err := time.Parse(time.DateTime, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
+
+func TestCheckSpan(t *testing.T) {
+	now := time.Date(2026, 10, 12, 15, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name, since, until string
+		wantErr            string // "" when the range is allowed
+		wantRanges         []string
+	}{
+		{"no range", "", "", "", nil},
+		{"31 days to the second", "2026-09-01 00:00:00", "2026-10-02 00:00:00", "", nil},
+		{"31 days and a second", "2026-09-01 00:00:00", "2026-10-02 00:00:01", "this range is longer",
+			[]string{"--since 2026-09-01 --until 2026-10-01", `--since 2026-10-02 --until "2026-10-02 00:00:01"`}},
+		{"bare dates 31 days apart, both counted", "2026-09-01 00:00:00", "2026-10-01 23:59:59", "", nil},
+		{"no end, inside 31 days", "2026-09-20 00:00:00", "", "", nil},
+		{"no end runs to now", "2026-08-01 00:00:00", "", "a range with no end runs to now",
+			[]string{"--since 2026-08-01 --until 2026-08-31", "--since 2026-09-01 --until 2026-10-01", "--since 2026-10-02 --until 2026-10-12"}},
+		{"89 days", "2026-07-15 00:00:00", "2026-10-12 23:59:59", "this range is longer",
+			[]string{"--since 2026-07-15 --until 2026-08-14", "--since 2026-08-15 --until 2026-09-14", "--since 2026-09-15 --until 2026-10-12"}},
+		{"a start with a time keeps it in the first range", "2026-07-14 16:00:00", "2026-10-12 23:59:59", "this range is longer",
+			[]string{`--since "2026-07-14 16:00:00" --until 2026-08-13`, "--since 2026-08-14 --until 2026-09-13", "--since 2026-09-14 --until 2026-10-12"}},
+		{"an end far ahead stops the ranges at today", "2026-10-01 00:00:00", "9999-12-31 23:59:59", "this range is longer",
+			[]string{"--since 2026-10-01 --until 2026-10-12"}},
+		{"a range wholly ahead has no ranges to offer", "2099-01-01 00:00:00", "2099-12-31 23:59:59", "this range is longer", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkSpan(at(t, tc.since), at(t, tc.until), now, 31)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("want the range allowed, got %v", err)
+				}
+				return
+			}
+			var ce *clierr.Error
+			if !errors.As(err, &ce) || ce.Code != clierr.CodeBadInput || !strings.Contains(ce.Message, tc.wantErr) {
+				t.Fatalf("want BAD_INPUT with %q, got %v", tc.wantErr, err)
+			}
+			got, _ := ce.Context["ranges"].([]string)
+			if strings.Join(got, "; ") != strings.Join(tc.wantRanges, "; ") {
+				t.Errorf("ranges = %v\n want %v", got, tc.wantRanges)
+			}
+			if len(tc.wantRanges) > 0 {
+				if want := "Run one range at a time: " + strings.Join(tc.wantRanges, "; ") + "."; ce.Hint != want {
+					t.Errorf("hint = %q\n want %q", ce.Hint, want)
+				}
+			}
+		})
+	}
+}
+
+// Each range the hint offers must itself be allowed, the first included when
+// it starts within the hour after the 90-day edge.
+func TestSpanRanges_eachRangeIsAllowed(t *testing.T) {
+	now := time.Date(2026, 10, 12, 15, 0, 0, 0, time.UTC)
+	ranges := spanRanges(time.Date(2026, 7, 14, 16, 0, 0, 0, time.UTC), time.Date(2026, 10, 12, 23, 59, 59, 0, time.UTC), 31)
+	if len(ranges) != 3 {
+		t.Fatalf("ranges = %v, want 3", ranges)
+	}
+	for _, r := range ranges {
+		if err := checkRetention(r[0], now, listRetainDays); err != nil {
+			t.Errorf("%v: %v", r, err)
+		}
+		if err := checkSpan(r[0], r[1], now, listSpanDays); err != nil {
+			t.Errorf("%v: %v", r, err)
+		}
 	}
 }
 

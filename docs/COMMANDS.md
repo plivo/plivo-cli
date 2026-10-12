@@ -3807,7 +3807,7 @@ Flags:
       --from-date string   same as --since
       --limit int          results per page (1-20) (default 20)
       --offset int         pagination offset
-      --since string       calls ending at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]]), within the last 90 days
+      --since string       calls ending at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]]), within the last 90 days, at most 31 days per request
       --to string          filter by to_number
       --to-date string     same as --until
       --until string       calls ending at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
@@ -4540,8 +4540,21 @@ plivo voice recordings get <recording_id>
 
 List recordings
 
+List recordings. Without --since, Plivo returns the last 7 days.
+
+--since and --until (or --from-date and --to-date) filter on when a recording
+was added, in UTC, and a bare --until date includes that day. --until needs
+--since. Plivo searches at most 31 days per request; a longer range is refused
+before any request, with the ranges to run instead.
+
 ```
 plivo voice recordings list [flags]
+```
+
+Examples:
+
+```
+  plivo voice recordings list --since 2026-10-01 -o json
 ```
 
 Flags:
@@ -4550,10 +4563,12 @@ Flags:
       --all                      fetch every page (stops after 100 pages)
       --call-uuid string         filter by call uuid
       --conference-name string   filter by conference name
-      --from-time string         filter recordings after this ISO time
+      --from-date string         same as --since
       --limit int                results per page (1-20) (default 20)
       --offset int               pagination offset
-      --to-time string           filter recordings before this ISO time
+      --since string             recordings added at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]]), at most 31 days per request
+      --to-date string           same as --until
+      --until string             recordings added at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
 ```
 
 ---

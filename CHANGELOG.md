@@ -133,6 +133,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `voice recordings list --from-time/--to-time` filtered nothing: they were
+  sent as parameters the Recording API ignores, so the list always showed the
+  last 7 days. The list now takes `--since`/`--until` (and
+  `--from-date`/`--to-date`) on when a recording was added, at most 31 days per
+  request. The old names still work, deprecated, under the same rules: a time
+  the CLI can read, at most 31 days, and an end needs a start, so a call that
+  used to list unfiltered rows can now be refused.
 - `-o json` error messages are readable: SIP Trunking answers
   `{"Error": "..."}`, which the CLI missed, so `message` held the whole body as
   escaped JSON. Other shapes (`error.message`, `detail`, per-field `errors`) are

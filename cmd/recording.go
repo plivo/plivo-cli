@@ -25,15 +25,21 @@ var (
 	recListOffset   int
 	recListCallUUID string
 	recListConf     string
-	recListFromTime string
-	recListToTime   string
+	recListRange    listTimeRange
 )
 
 var recordingListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List recordings",
-	Args:  cobra.NoArgs,
-	RunE:  runRecordingList,
+	Long: `List recordings. Without --since, Plivo returns the last 7 days.
+
+--since and --until (or --from-date and --to-date) filter on when a recording
+was added, in UTC, and a bare --until date includes that day. --until needs
+--since. Plivo searches at most 31 days per request; a longer range is refused
+before any request, with the ranges to run instead.`,
+	Example: `  plivo voice recordings list --since 2026-10-01 -o json`,
+	Args:    cobra.NoArgs,
+	RunE:    runRecordingList,
 }
 
 var recordingGetCmd = &cobra.Command{
@@ -54,14 +60,20 @@ func init() {
 	registerListFlags(recordingListCmd, &recListLimit, &recListOffset)
 	recordingListCmd.Flags().StringVar(&recListCallUUID, "call-uuid", "", "filter by call uuid")
 	recordingListCmd.Flags().StringVar(&recListConf, "conference-name", "", "filter by conference name")
-	recordingListCmd.Flags().StringVar(&recListFromTime, "from-time", "", "filter recordings after this ISO time")
-	recordingListCmd.Flags().StringVar(&recListToTime, "to-time", "", "filter recordings before this ISO time")
+	registerTimeRangeFlags(recordingListCmd, &recListRange, "recordings added", rangeLimits{spanDays: listSpanDays})
+	// --from-time and --to-time were sent as from_time and to_time, which the
+	// API ignores, so they filtered nothing. They now set the same range.
+	recListRange.deprecatedNames(recordingListCmd, "from-time", "to-time")
 
 	recordingCmd.AddCommand(recordingListCmd, recordingGetCmd, recordingDeleteCmd)
 	voiceCmd.AddCommand(recordingCmd)
 }
 
 func runRecordingList(cmd *cobra.Command, args []string) error {
+	since, until, err := recListRange.bounds(cmd)
+	if err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -75,12 +87,7 @@ func runRecordingList(cmd *cobra.Command, args []string) error {
 	if recListConf != "" {
 		q.Set("conference_name", recListConf)
 	}
-	if recListFromTime != "" {
-		q.Set("from_time", recListFromTime)
-	}
-	if recListToTime != "" {
-		q.Set("to_time", recListToTime)
-	}
+	setTimeRange(q, "add_time", since, until)
 
 	var resp api.RecordingList
 	if err := fetchList(client, client.AccountURL("Recording"), q, "objects", &resp); err != nil {
