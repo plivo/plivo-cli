@@ -36,11 +36,25 @@ type sipPlatform struct {
 	outbound string
 	ips      []string
 	ipsNote  string
-	secure   bool   // the guide uses secure trunking for outbound calls
-	india    string // what Plivo's guides say about Indian numbers
-	note     string // printed when an inbound trunk is created
+	secure   bool // the guide uses secure trunking for outbound calls
+	// india is what Plivo's guides say about Indian numbers; noIndia marks a
+	// platform they do not support, and indiaHost is the --uri an Indian
+	// number needs.
+	india     string
+	noIndia   bool
+	indiaHost string
+	note      string   // printed when an inbound trunk is created
+	steps     []string // what the guide has you set up on the platform's side
+	// region is a second region from the platform's own docs: its host and
+	// the addresses its calls come from there.
+	region   *sipPlatformRegion
 	guide    string
 	verified string // YYYY-MM-DD the values were last checked
+}
+
+type sipPlatformRegion struct {
+	name, host string
+	ips        []string
 }
 
 var sipPlatforms = []sipPlatform{
@@ -51,6 +65,12 @@ var sipPlatforms = []sipPlatform{
 		outbound:   "credential", secure: true,
 		india: "need region pinning on the LiveKit project (<project>.india.sip.livekit.cloud), " +
 			"or calls fail to connect.",
+		indiaHost: "<project>.india.sip.livekit.cloud",
+		steps: []string{
+			"In LiveKit, set up an inbound trunk and a dispatch rule that accept calls to your Plivo number.",
+			"In LiveKit, create an outbound trunk with the Plivo outbound trunk's trunk_domain (its Termination SIP Domain) and the credential's username and password.",
+			"If you turn on secure trunking in Plivo (--secure), turn it on in LiveKit too.",
+		},
 		guide: "livekit", verified: "2026-10-08",
 	},
 	{
@@ -61,7 +81,12 @@ var sipPlatforms = []sipPlatform{
 			{"sip.rtc.in.residency.elevenlabs.io", 5060, "tcp"},
 		},
 		outbound: "credential", secure: true,
-		india: "need an ElevenLabs India deployment and --uri sip.rtc.in.residency.elevenlabs.io.",
+		india:     "need an ElevenLabs India deployment and --uri sip.rtc.in.residency.elevenlabs.io.",
+		indiaHost: "sip.rtc.in.residency.elevenlabs.io",
+		steps: []string{
+			"In ElevenLabs, import your Plivo number to accept incoming calls.",
+			"In ElevenLabs, set up outbound calling with the Plivo outbound trunk's trunk_domain (its Termination SIP Domain) and the credential's username and password.",
+		},
 		guide: "elevenlabs", verified: "2026-10-08",
 	},
 	{
@@ -75,6 +100,11 @@ var sipPlatforms = []sipPlatform{
 		india:    "need Retell to confirm that your deployment terminates SIP in India.",
 		note: "Retell will not import a number without an outbound trunk's domain and credential, " +
 			"even for inbound-only use: create an outbound trunk too.",
+		steps: []string{
+			"In Retell, import the number in E.164 with Termination URI set to the Plivo outbound trunk's trunk_domain, " +
+				"the credential's username and password, and Outbound Transport TCP (TLS if the trunk is secure).",
+			"In Retell, bind an inbound agent and an outbound agent to the number.",
+		},
 		guide: "retell", verified: "2026-10-08",
 	},
 	{
@@ -87,7 +117,13 @@ var sipPlatforms = []sipPlatform{
 		ips:      []string{"44.229.228.186/32", "44.238.177.138/32"},
 		ipsNote: "These are Vapi's US addresses. Vapi's EU region sends from 63.182.83.170/32 " +
 			"(Vapi's docs): pass --ip 63.182.83.170/32 instead.",
-		india: "are not supported (Plivo's India calling guide).",
+		india:   "are not supported (Plivo's India calling guide).",
+		noIndia: true,
+		region:  &sipPlatformRegion{name: "EU", host: "sip.eu.vapi.ai", ips: []string{"63.182.83.170/32"}},
+		steps: []string{
+			"In Vapi, set up outbound calling with the Plivo outbound trunk's trunk_domain (its Termination SIP Domain).",
+			"In Vapi, register your Plivo number to accept incoming calls.",
+		},
 		guide: "vapi", verified: "2026-10-08",
 	},
 }
@@ -346,7 +382,8 @@ func (p *sipPlatform) inboundTrunkHint() string {
 	if p.hostSuffix != "" {
 		cmd += " --uri " + p.hostExample()
 	}
-	return "Create the URI first: `" + cmd + "`, then pass its uri_uuid as --uri."
+	return "Create the URI first: `" + cmd + "`, then pass its uri_uuid as --uri. " +
+		"`plivo sip connect plan --number <number> --platform " + p.name + "` prints every step."
 }
 
 // outboundTrunkHint names the command that makes the auth an outbound trunk needs.
