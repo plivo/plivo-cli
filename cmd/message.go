@@ -84,6 +84,7 @@ var (
 	whatsappListState, whatsappListDirection, whatsappListFrom, whatsappListTo string
 	mmsListLimit, mmsListOffset                                                int
 	mmsListState, mmsListDirection, mmsListFrom, mmsListTo                     string
+	smsListRange, whatsappListRange, mmsListRange                              listTimeRange
 )
 
 // ─── Send commands (thin wrappers over runMessageSendForChannel) ────────────
@@ -123,7 +124,7 @@ var messagingSmsListCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runMessageListForChannel(cmd, "sms",
-			smsListLimit, smsListOffset, smsListState, smsListDirection, smsListFrom, smsListTo)
+			smsListLimit, smsListOffset, smsListState, smsListDirection, smsListFrom, smsListTo, &smsListRange)
 	},
 }
 
@@ -133,7 +134,7 @@ var messagingWhatsappListCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runMessageListForChannel(cmd, "whatsapp",
-			whatsappListLimit, whatsappListOffset, whatsappListState, whatsappListDirection, whatsappListFrom, whatsappListTo)
+			whatsappListLimit, whatsappListOffset, whatsappListState, whatsappListDirection, whatsappListFrom, whatsappListTo, &whatsappListRange)
 	},
 }
 
@@ -143,7 +144,7 @@ var messagingMmsListCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runMessageListForChannel(cmd, "mms",
-			mmsListLimit, mmsListOffset, mmsListState, mmsListDirection, mmsListFrom, mmsListTo)
+			mmsListLimit, mmsListOffset, mmsListState, mmsListDirection, mmsListFrom, mmsListTo, &mmsListRange)
 	},
 }
 
@@ -167,9 +168,9 @@ func init() {
 	registerExplainFlag(messagingMmsSendCmd)
 
 	// SMS list flags
-	registerMessageListFlags(messagingSmsListCmd, &smsListLimit, &smsListOffset, &smsListState, &smsListDirection, &smsListFrom, &smsListTo)
-	registerMessageListFlags(messagingWhatsappListCmd, &whatsappListLimit, &whatsappListOffset, &whatsappListState, &whatsappListDirection, &whatsappListFrom, &whatsappListTo)
-	registerMessageListFlags(messagingMmsListCmd, &mmsListLimit, &mmsListOffset, &mmsListState, &mmsListDirection, &mmsListFrom, &mmsListTo)
+	registerMessageListFlags(messagingSmsListCmd, &smsListLimit, &smsListOffset, &smsListState, &smsListDirection, &smsListFrom, &smsListTo, &smsListRange)
+	registerMessageListFlags(messagingWhatsappListCmd, &whatsappListLimit, &whatsappListOffset, &whatsappListState, &whatsappListDirection, &whatsappListFrom, &whatsappListTo, &whatsappListRange)
+	registerMessageListFlags(messagingMmsListCmd, &mmsListLimit, &mmsListOffset, &mmsListState, &mmsListDirection, &mmsListFrom, &mmsListTo, &mmsListRange)
 
 	// Wire per-channel verbs onto each subgroup
 	messagingSmsCmd.AddCommand(messagingSmsSendCmd, messagingSmsListCmd, sms10dlcCmd)
@@ -199,12 +200,13 @@ func registerSendFlags(cmd *cobra.Command, src, dst, text, urlFlag, method *stri
 
 // registerMessageListFlags adds the shared list-flag set (channel filter is set
 // internally per command, not exposed as a flag).
-func registerMessageListFlags(cmd *cobra.Command, limit, offset *int, state, direction, fromN, toN *string) {
+func registerMessageListFlags(cmd *cobra.Command, limit, offset *int, state, direction, fromN, toN *string, r *listTimeRange) {
 	registerListFlags(cmd, limit, offset)
 	cmd.Flags().StringVar(state, "state", "", oneOf(messageStateValues))
 	cmd.Flags().StringVar(direction, "direction", "", oneOf(directionValues))
 	cmd.Flags().StringVar(fromN, "from", "", "filter by from_number")
 	cmd.Flags().StringVar(toN, "to", "", "filter by to_number")
+	registerTimeRangeFlags(cmd, r, "messages sent or received")
 }
 
 // runMessageSendForChannel is the shared body of all three per-channel
@@ -270,12 +272,16 @@ func runMessageSendForChannel(cmd *cobra.Command, channel, src, dst, text, urlFl
 // list commands. Always sets message_type=<channel> so the backend
 // filters server-side.
 func runMessageListForChannel(cmd *cobra.Command, channel string,
-	limit, offset int, state, direction, fromN, toN string,
+	limit, offset int, state, direction, fromN, toN string, r *listTimeRange,
 ) error {
 	if err := validateEnum("state", &state, messageStateValues...); err != nil {
 		return err
 	}
 	if err := validateEnum("direction", &direction, directionValues...); err != nil {
+		return err
+	}
+	since, until, err := r.bounds(cmd)
+	if err != nil {
 		return err
 	}
 	client, _, err := getClient()
@@ -297,6 +303,12 @@ func runMessageListForChannel(cmd *cobra.Command, channel string,
 	}
 	if toN != "" {
 		q.Set("to", toN)
+	}
+	if since != "" {
+		q.Set("message_time__gte", since)
+	}
+	if until != "" {
+		q.Set("message_time__lte", until)
 	}
 
 	var resp api.MessageList

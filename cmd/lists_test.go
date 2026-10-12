@@ -222,6 +222,13 @@ func TestListTimeFlags_eitherNameReachesTheQuery(t *testing.T) {
 			[]string{"end_time__gte=2026-09-01+00%3A00%3A00", "end_time__lte=2026-09-15+23%3A59%3A59"}},
 		{[]string{"sip", "calls", "list", "--since", "2026-09-01 10:30", "--to-date", "2026-09-15"},
 			[]string{"end_time__gte=2026-09-01+10%3A30%3A00", "end_time__lte=2026-09-15+23%3A59%3A59"}},
+		{[]string{"messaging", "sms", "list", "--since", "2026-09-01", "--until", "2026-09-15"},
+			[]string{"message_type=sms", "message_time__gte=2026-09-01+00%3A00%3A00", "message_time__lte=2026-09-15+23%3A59%3A59"}},
+		{[]string{"messaging", "mms", "list", "--from-date", "2026-09-01T10:30:00+05:30"},
+			[]string{"message_type=mms", "message_time__gte=2026-09-01+05%3A00%3A00"}},
+		// The Message API takes an upper bound alone, unlike the call lists.
+		{[]string{"messaging", "whatsapp", "list", "--to-date", "2026-09-15"},
+			[]string{"message_type=whatsapp", "message_time__lte=2026-09-15+23%3A59%3A59"}},
 	}
 	for _, tc := range cases {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
@@ -250,6 +257,9 @@ func TestListTimeFlags_bothNamesForOneEndAreRefused(t *testing.T) {
 	lists := [][]string{
 		{"sip", "calls", "list"},
 		{"voice", "calls", "list"},
+		{"messaging", "sms", "list"},
+		{"messaging", "mms", "list"},
+		{"messaging", "whatsapp", "list"},
 	}
 	pairs := [][]string{
 		{"--since", "2026-09-01", "--from-date", "2026-09-02"},
