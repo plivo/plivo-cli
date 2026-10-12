@@ -3768,8 +3768,22 @@ plivo voice calls hangup <call_uuid>
 
 List calls
 
+List voice calls, newest first. Without --since, Plivo returns the last 7 days.
+
+--since and --until (or --from-date and --to-date) filter on when a call ended,
+in UTC, and a bare --until date includes that day. --until needs --since. Plivo
+keeps 90 days of calls and searches at most 31 days per request; a range past
+either is refused before any request, and the error says what to run instead.
+
 ```
 plivo voice calls list [flags]
+```
+
+Examples:
+
+```
+  plivo voice calls list --since 2026-10-01
+  plivo voice calls list --from-date 2026-09-15 --to-date 2026-10-14 -o json
 ```
 
 Flags:
@@ -3778,9 +3792,13 @@ Flags:
       --all                fetch every page (stops after 100 pages)
       --direction string   inbound|outbound
       --from string        filter by from_number
+      --from-date string   same as --since
       --limit int          results per page (1-20) (default 20)
       --offset int         pagination offset
+      --since string       calls ending at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
       --to string          filter by to_number
+      --to-date string     same as --until
+      --until string       calls ending at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
 ```
 
 ---

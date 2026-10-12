@@ -249,6 +249,7 @@ func TestListTimeFlags_eitherNameReachesTheQuery(t *testing.T) {
 func TestListTimeFlags_bothNamesForOneEndAreRefused(t *testing.T) {
 	lists := [][]string{
 		{"sip", "calls", "list"},
+		{"voice", "calls", "list"},
 	}
 	pairs := [][]string{
 		{"--since", "2026-09-01", "--from-date", "2026-09-02"},
