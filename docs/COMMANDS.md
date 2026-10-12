@@ -1358,7 +1358,7 @@ Flags:
       --from-date string   same as --since
       --limit int          results per page (1-20) (default 20)
       --offset int         pagination offset
-      --since string       messages sent or received at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
+      --since string       messages sent or received at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]]), within the last 90 days
       --state string       queued|sent|delivered|undelivered|failed|received
       --to string          filter by to_number
       --to-date string     same as --until
@@ -1741,7 +1741,7 @@ Flags:
       --from-date string   same as --since
       --limit int          results per page (1-20) (default 20)
       --offset int         pagination offset
-      --since string       messages sent or received at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
+      --since string       messages sent or received at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]]), within the last 90 days
       --state string       queued|sent|delivered|undelivered|failed|received
       --to string          filter by to_number
       --to-date string     same as --until
@@ -2067,7 +2067,7 @@ Flags:
       --from-date string   same as --since
       --limit int          results per page (1-20) (default 20)
       --offset int         pagination offset
-      --since string       messages sent or received at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
+      --since string       messages sent or received at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]]), within the last 90 days
       --state string       queued|sent|delivered|undelivered|failed|received
       --to string          filter by to_number
       --to-date string     same as --until
@@ -3807,7 +3807,7 @@ Flags:
       --from-date string   same as --since
       --limit int          results per page (1-20) (default 20)
       --offset int         pagination offset
-      --since string       calls ending at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
+      --since string       calls ending at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]]), within the last 90 days
       --to string          filter by to_number
       --to-date string     same as --until
       --until string       calls ending at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]])

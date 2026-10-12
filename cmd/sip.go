@@ -163,7 +163,8 @@ func init() {
 	f.StringVar(&sipCallsFrom, "from-number", "", "filter by caller ID")
 	f.StringVar(&sipCallsTo, "to-number", "", "filter by destination")
 	f.StringVar(&sipCallsDirection, "direction", "", oneOf(directionValues))
-	registerTimeRangeFlags(sipCallsListCmd, &sipCallsRange, "calls ending")
+	// No local 90-day check: this API's limit is 3 months, and its 400 says so.
+	registerTimeRangeFlags(sipCallsListCmd, &sipCallsRange, "calls ending", 0)
 	f.IntVar(&sipCallsCauseCode, "hangup-cause-code", 0, "filter by numeric hangup cause code")
 	f.StringVar(&sipCallsSource, "hangup-source", "", "who ended the call: "+oneOf(sipHangupSources))
 	f.StringVar(&sipCallsSTIR, "stir-verification", "", oneOf(stirValues))
@@ -212,8 +213,6 @@ func runSIPCallsList(cmd *cobra.Command, args []string) error {
 		"from_number":       trimPlus(sipCallsFrom),
 		"to_number":         trimPlus(sipCallsTo),
 		"call_direction":    sipCallsDirection,
-		"end_time__gte":     since,
-		"end_time__lte":     until,
 		"hangup_source":     sipCallsSource,
 		"stir_verification": sipCallsSTIR,
 	} {
@@ -221,6 +220,7 @@ func runSIPCallsList(cmd *cobra.Command, args []string) error {
 			q.Set(key, val)
 		}
 	}
+	setTimeRange(q, "end_time", since, until)
 	if sipCallsCauseCode != 0 {
 		q.Set("hangup_cause_code", strconv.Itoa(sipCallsCauseCode))
 	}

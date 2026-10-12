@@ -75,7 +75,7 @@ func init() {
 	callListCmd.Flags().StringVar(&callListFrom, "from", "", "filter by from_number")
 	callListCmd.Flags().StringVar(&callListTo, "to", "", "filter by to_number")
 	callListCmd.Flags().StringVar(&callListDirection, "direction", "", oneOf(directionValues))
-	registerTimeRangeFlags(callListCmd, &callListRange, "calls ending")
+	registerTimeRangeFlags(callListCmd, &callListRange, "calls ending", listRetainDays)
 
 	callMakeCmd.Flags().StringVar(&callMakeFrom, "from", "", "source number (E.164) — must be on your account (required)")
 	_ = callMakeCmd.MarkFlagRequired("from")
@@ -508,7 +508,7 @@ func runCallList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := checkVoiceCallWindow(since, until, time.Now()); err != nil {
+	if err := checkVoiceCallWindow(since, until, listTimeNow()); err != nil {
 		return err
 	}
 	client, _, err := getClient()
@@ -527,12 +527,7 @@ func runCallList(cmd *cobra.Command, args []string) error {
 	if callListDirection != "" {
 		q.Set("call_direction", callListDirection)
 	}
-	if since != "" {
-		q.Set("end_time__gte", since)
-	}
-	if until != "" {
-		q.Set("end_time__lte", until)
-	}
+	setTimeRange(q, "end_time", since, until)
 
 	var resp api.CallList
 	if err := fetchList(client, client.AccountURL("Call"), q, "objects", &resp); err != nil {
@@ -551,55 +546,53 @@ func runCallList(cmd *cobra.Command, args []string) error {
 	return output.Table(os.Stdout, rows)
 }
 
-// voiceCallSearchSpan is the most the Call API searches per request, a range
+// voiceCallSearchDays is the most the Call API searches per request, a range
 // with no end running to now.
-const voiceCallSearchSpan = 31 * 24 * time.Hour
+const voiceCallSearchDays = 31
 
-// checkVoiceCallWindow refuses a range the Call API would answer with a 400,
-// before any request, saying what to run instead. since and until are API
-// timestamps, "" when unset. The API compares whole minutes, so this does too.
-func checkVoiceCallWindow(since, until string, now time.Time) error {
-	if since == "" {
+// checkVoiceCallWindow refuses a range longer than the Call API searches in
+// one request, before any request, with the ranges to run instead. The API
+// compares whole minutes, so this does too.
+func checkVoiceCallWindow(since, until, now time.Time) error {
+	if since.IsZero() {
 		return nil
 	}
-	if err := checkRetention(since, now, "voice calls"); err != nil {
-		return err
-	}
 	now = now.UTC()
-	from, _ := time.Parse(apiTimeLayout, since)
-	from = from.Truncate(time.Minute)
-	to := now
-	if until != "" {
-		to, _ = time.Parse(apiTimeLayout, until)
+	to, why := until, "this range is longer"
+	if to.IsZero() {
+		to, why = now, "a range with no end runs to now"
 	}
-	to = to.Truncate(time.Minute)
-
-	if to.Sub(from) > voiceCallSearchSpan {
-		msg := "voice calls are searched at most 31 days at a time, and this range is longer"
-		if until == "" {
-			msg = "voice calls are searched at most 31 days at a time, and a range with no end runs to now"
-		}
-		ranges := voiceCallRanges(from, to)
-		e := clierr.BadInput(msg)
+	if to.Truncate(time.Minute).Sub(since.Truncate(time.Minute)) <= voiceCallSearchDays*24*time.Hour {
+		return nil
+	}
+	e := clierr.BadInput(fmt.Sprintf("voice calls are searched at most %d days at a time, and %s", voiceCallSearchDays, why))
+	// Nothing has ended after now, so the ranges stop there: an --until far
+	// ahead would otherwise list one for every month up to it.
+	if to.After(now) {
+		to = now
+	}
+	var ranges []string
+	for _, r := range voiceCallRanges(since, to) {
+		ranges = append(ranges, fmt.Sprintf("--since %s --until %s", r[0].Format(time.DateOnly), r[1].Format(time.DateOnly)))
+	}
+	if len(ranges) > 0 {
 		e.Hint = "Run one range at a time: " + strings.Join(ranges, "; ") + "."
 		e.Context = map[string]any{"ranges": ranges}
-		return e
 	}
-	return nil
+	return e
 }
 
-// voiceCallRanges splits from..to into date ranges of at most 31 days, both
-// ends counted, for the hint of a refused range.
-func voiceCallRanges(from, to time.Time) []string {
-	const day = "2006-01-02"
-	var out []string
+// voiceCallRanges splits from..to into days: ranges of at most
+// voiceCallSearchDays, both ends counted.
+func voiceCallRanges(from, to time.Time) [][2]time.Time {
+	var out [][2]time.Time
 	last := to.Truncate(24 * time.Hour)
 	for d := from.Truncate(24 * time.Hour); !d.After(last); {
-		end := d.AddDate(0, 0, 30)
+		end := d.AddDate(0, 0, voiceCallSearchDays-1)
 		if end.After(last) {
 			end = last
 		}
-		out = append(out, fmt.Sprintf("--since %s --until %s", d.Format(day), end.Format(day)))
+		out = append(out, [2]time.Time{d, end})
 		d = end.AddDate(0, 0, 1)
 	}
 	return out

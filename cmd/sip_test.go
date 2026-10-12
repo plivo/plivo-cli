@@ -49,7 +49,7 @@ func resetSIPFlags(t *testing.T) {
 	t.Cleanup(func() {
 		sipCallsLimit, sipCallsOffset = maxListLimit, 0
 		sipCallsFrom, sipCallsTo, sipCallsDirection = "", "", ""
-		sipCallsRange = listTimeRange{}
+		sipCallsRange.since, sipCallsRange.until = "", ""
 		sipCallsCauseCode, sipCallsSource, sipCallsSTIR = 0, "", ""
 		sipTrunksLimit, sipTrunksOffset, sipTrunksDirection = 20, 0, ""
 		sipACLLimit, sipACLOffset = 20, 0
@@ -351,25 +351,6 @@ func TestSIPCallsList_acceptsANumberWithoutAPlus(t *testing.T) {
 	}
 	if !strings.Contains(urls()[0], "from_number=919902443540") {
 		t.Errorf("unexpected query: %s", urls()[0])
-	}
-}
-
-// The API rejects an end-time upper bound with no lower bound. Catch it here so
-// the user gets the flag names they typed rather than a 400 naming end_time__lte.
-func TestSIPCallsList_untilWithoutSinceIsRefusedLocally(t *testing.T) {
-	setFakeCreds(t)
-	resetSIPFlags(t)
-	_, count := sipServer(t, http.StatusOK, `{"meta":{},"objects":[]}`)
-
-	err, _, _ := execCmd(t, "sip", "calls", "list", "--until", "2026-08-31")
-	if err == nil {
-		t.Fatal("expected --until without --since to be refused")
-	}
-	if !strings.Contains(err.Error(), "--since") {
-		t.Errorf("the error should name the flag to add, got: %v", err)
-	}
-	if n := count(); n != 0 {
-		t.Errorf("should not have spent a request, but made %d", n)
 	}
 }
 

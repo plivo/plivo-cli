@@ -6,7 +6,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/output"
@@ -207,7 +206,7 @@ func registerMessageListFlags(cmd *cobra.Command, limit, offset *int, state, dir
 	cmd.Flags().StringVar(direction, "direction", "", oneOf(directionValues))
 	cmd.Flags().StringVar(fromN, "from", "", "filter by from_number")
 	cmd.Flags().StringVar(toN, "to", "", "filter by to_number")
-	registerTimeRangeFlags(cmd, r, "messages sent or received")
+	registerTimeRangeFlags(cmd, r, "messages sent or received", listRetainDays)
 }
 
 // runMessageSendForChannel is the shared body of all three per-channel
@@ -285,9 +284,6 @@ func runMessageListForChannel(cmd *cobra.Command, channel string,
 	if err != nil {
 		return err
 	}
-	if err := checkRetention(since, time.Now(), "messages"); err != nil {
-		return err
-	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -308,12 +304,7 @@ func runMessageListForChannel(cmd *cobra.Command, channel string,
 	if toN != "" {
 		q.Set("to", toN)
 	}
-	if since != "" {
-		q.Set("message_time__gte", since)
-	}
-	if until != "" {
-		q.Set("message_time__lte", until)
-	}
+	setTimeRange(q, "message_time", since, until)
 
 	var resp api.MessageList
 	if err := fetchList(client, client.AccountURL("Message"), q, "objects", &resp); err != nil {
