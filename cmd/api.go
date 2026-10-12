@@ -69,6 +69,9 @@ Paths come in two flavours:
 Mutating verbs (POST, PUT, PATCH, DELETE) require --yes (matches the rest of
 the CLI). Use --dry-run to preview without sending. GET and HEAD pass through.
 
+Here --query adds URL query parameters (key=value). It is not the JMESPath
+--query filter other commands take; -o jsonl, yaml and csv still apply.
+
 Examples:
 
   plivo api GET /v1/Account/MA…/            # absolute: the account itself
@@ -84,7 +87,7 @@ Examples:
 func init() {
 	apiCmd.Flags().StringVar(&apiMethodFlag, "method", "", "HTTP method (alternative to the positional arg; useful when piping)")
 	apiCmd.Flags().StringVar(&apiBodyFlag, "body", "", "request body: literal JSON, @path/to/file, or @- for stdin")
-	apiCmd.Flags().StringArrayVar(&apiQueryFlags, "query", nil, "query param as key=value (repeatable)")
+	apiCmd.Flags().StringArrayVar(&apiQueryFlags, "query", nil, "URL query param as key=value (repeatable; not a JMESPath filter here)")
 	apiCmd.Flags().StringArrayVar(&apiHeaderFlags, "header", nil, "extra header as 'Key: Value' (repeatable; overrides defaults)")
 	registerExplainFlag(apiCmd)
 	rootCmd.AddCommand(apiCmd)
@@ -266,7 +269,9 @@ func parseAPIQueryFlags(flags []string) (url.Values, error) {
 	for _, kv := range flags {
 		eq := strings.Index(kv, "=")
 		if eq <= 0 {
-			return nil, clierr.BadFlag("query", "expected key=value, got "+kv)
+			err := clierr.BadFlag("query", "expected key=value, got "+kv)
+			err.Hint = "On plivo api, --query sets URL query parameters (key=value); it is not the JMESPath filter other commands take."
+			return nil, err
 		}
 		q.Add(kv[:eq], kv[eq+1:])
 	}

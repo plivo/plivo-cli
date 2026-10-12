@@ -17,7 +17,7 @@ VERSION := $(shell git describe --tags --always 2>/dev/null || echo dev)
 # -s removes the symbol table, -w drops DWARF debug info — typical for release.
 LDFLAGS := -s -w -X $(PKG)/internal/version.Value=$(VERSION)
 
-.PHONY: default build tiny build-all install run clean fmt vet test docs help
+.PHONY: default build tiny build-all install run clean fmt vet test docs skill-hashes help
 
 default: ## Debug build with symbols (best for local dev)
 	go build -o $(BINARY) .
@@ -80,6 +80,9 @@ sign-release: ## Sign dist/SHA256SUMS with cosign keyless (opens a browser)
 
 docs: ## Regenerate the command reference (docs/COMMANDS.md)
 	go run ./tools/gendocs -o docs/COMMANDS.md
+
+skill-hashes: ## Regenerate cmd/skill_hashes.go after a SKILL.md change (git fetch origin first)
+	go run ./tools/skillhashes -o cmd/skill_hashes.go
 
 clean: ## Remove build artefacts
 	rm -f $(BINARY)

@@ -1,20 +1,25 @@
 Delete a trunk.
 
-Reports how many numbers are routed to it first: deleting a trunk detaches every
-one of them, and inbound calls to those numbers stop.
+Reads every number on the account first: deleting a trunk detaches every number
+routed to it, and inbound calls to those numbers stop. If one is routed there,
+the delete is refused unless --force is added to --yes. If the check cannot
+read every page, the delete is refused.
 
 Usage:
   plivo sip trunks delete <trunk_id> [flags]
 
 Flags:
-  -h, --help   help for delete
+      --force   delete even though something depends on it (with --yes)
+  -h, --help    help for delete
 
 Global Flags:
       --dry-run            print the HTTP request without sending
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
-  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+  -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
       --profile string     named profile from ~/.plivo/config.toml
+      --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
+      --schema             describe the command (arguments, flags, output fields) instead of running it
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts

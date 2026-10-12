@@ -187,12 +187,35 @@ func TestNumbersUpdate_indiaComplianceRule(t *testing.T) {
 			if !strings.Contains(ce.Message, tc.msg) {
 				t.Errorf("refusal should say why (%q), got: %s", tc.msg, ce.Message)
 			}
-			for _, want := range []string{"plivo numbers compliance link", "--force"} {
-				if !strings.Contains(ce.Hint, want) {
-					t.Errorf("hint should carry the KYC steps (%q), got: %s", want, ce.Hint)
-				}
+			if !strings.Contains(ce.Hint, "plivo numbers compliance link") {
+				t.Errorf("hint should carry the KYC steps, got: %s", ce.Hint)
+			}
+			// --force skips the check, so the refusal must not offer it as the way round.
+			if strings.Contains(ce.Hint, "--force") {
+				t.Errorf("hint should not mention --force, got: %s", ce.Hint)
 			}
 		})
+	}
+}
+
+// A number that is not on the account is a typo or the wrong profile, not a
+// KYC problem, so the refusal points at the account's numbers instead.
+func TestNumbersUpdate_complianceCheckNumberNotOnAccount(t *testing.T) {
+	setFakeCreds(t)
+	reqs := complianceServer(t, complianceFixture{numberStatus: 404, number: `{"api_id":"x","error":"not found"}`})
+	err, _, _ := execCmd(t, "numbers", "update", indiaNumber, "--app-id", "A1")
+	var ce *clierr.Error
+	if !errors.As(err, &ce) {
+		t.Fatalf("want a refusal, got: %v", err)
+	}
+	if !strings.Contains(ce.Message, "not a number on this account") {
+		t.Errorf("refusal should say the number is not on the account, got: %s", ce.Message)
+	}
+	if !strings.Contains(ce.Hint, "plivo numbers list") || strings.Contains(ce.Hint, "KYC") {
+		t.Errorf("hint should point at plivo numbers list, not the KYC steps, got: %s", ce.Hint)
+	}
+	if hit(reqs(), "POST", "/Number/") {
+		t.Error("update sent for a number not on the account")
 	}
 }
 
@@ -270,7 +293,7 @@ func TestNumbersUpdate_complianceCheckRefusesWhenUnreachable(t *testing.T) {
 
 	err, _, _ := execCmd(t, "numbers", "update", indiaNumber, "--app-id", "A1")
 	var ce *clierr.Error
-	if !errors.As(err, &ce) || !strings.Contains(ce.Hint, "--force") {
+	if !errors.As(err, &ce) || !strings.Contains(ce.Hint, "plivo numbers compliance link") {
 		t.Fatalf("want the compliance refusal, got: %v", err)
 	}
 }

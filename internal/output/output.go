@@ -23,9 +23,12 @@ const (
 
 // Resolve picks the effective format. Empty input → table for TTY, json otherwise.
 //
+// jsonl, yaml and csv resolve to JSON too: a command builds one JSON result
+// and JSONSuccess/JSONRaw encode it in the format Configure set.
+//
 // Anything Validate() would reject still resolves to JSON here so the error
 // renderer in cmd/root.go can produce a structured envelope even when the
-// user passed -o yaml or some other unsupported format. The user-visible
+// user passed -o tsv or some other unsupported format. The user-visible
 // rejection happens earlier in the lifecycle (cmd's PersistentPreRunE),
 // before any command body runs.
 func Resolve(format string, f *os.File) Format {
@@ -35,23 +38,20 @@ func Resolve(format string, f *os.File) Format {
 		}
 		return FormatJSON
 	}
-	switch strings.ToLower(format) {
-	case "table":
+	if strings.EqualFold(format, "table") {
 		return FormatTable
-	case "json":
-		return FormatJSON
 	}
-	// Unsupported format — fall through to JSON so an error envelope still
-	// renders (the input was already rejected by Validate before reaching
-	// any RunE).
+	// json, jsonl, yaml, csv, or an unsupported format that falls through to
+	// JSON so an error envelope still renders (the input was already rejected
+	// by Validate before reaching any RunE).
 	return FormatJSON
 }
 
-// SupportedFormats lists the formats accepted by --output. Kept tiny on
-// purpose — the AI / scripts contract is JSON, the human contract is TABLE.
-// Anything else (yaml, tsv, csv, xml, garbage) should be a hard BAD_INPUT
+// SupportedFormats lists the formats accepted by --output. TABLE is the
+// human contract; the rest are encodings of the same JSON result for scripts
+// and AI agents. Anything else (tsv, xml, garbage) is a hard BAD_INPUT
 // instead of silently rendering JSON.
-var SupportedFormats = []string{"json", "table"}
+var SupportedFormats = []string{"json", "jsonl", "yaml", "csv", "table"}
 
 // Validate returns a non-empty reason string when `format` is set to a value
 // that isn't in SupportedFormats. Empty input is always valid (resolves to
@@ -64,9 +64,10 @@ func Validate(format string) string {
 	if format == "" {
 		return ""
 	}
-	switch strings.ToLower(format) {
-	case "json", "table":
-		return ""
+	for _, f := range SupportedFormats {
+		if strings.EqualFold(format, f) {
+			return ""
+		}
 	}
 	return "unsupported output format '" + format + "'; supported: " + strings.Join(SupportedFormats, ", ")
 }
@@ -107,18 +108,24 @@ func MarshalIndent(v any, prefix, indent string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// JSONSuccess writes {"data": data, "meta": meta?} pretty-printed to w.
+// JSONSuccess writes {"data": data, "meta": meta?} pretty-printed to w, or,
+// after Configure, the --query result of that envelope in json, jsonl, yaml
+// or csv.
 func JSONSuccess(w io.Writer, data any, meta any) error {
 	env := map[string]any{"data": data}
 	if meta != nil {
 		env["meta"] = meta
 	}
-	return newEncoder(w).Encode(env)
+	if query == nil && encoding == "json" {
+		return newEncoder(w).Encode(env)
+	}
+	return encode(w, env)
 }
 
 // JSONRaw writes the upstream response verbatim under "data". json.RawMessage
 // marshals itself byte for byte, so nothing is dropped. Falls back to an empty
-// object when there was no body.
+// object when there was no body. Goes through JSONSuccess, so the configured
+// encoding and --query apply.
 func JSONRaw(w io.Writer, raw json.RawMessage) error {
 	if len(raw) == 0 {
 		return JSONSuccess(w, map[string]any{}, nil)

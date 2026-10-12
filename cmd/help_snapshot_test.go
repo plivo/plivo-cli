@@ -98,13 +98,14 @@ func ensureHelpFlagOnTree(c *cobra.Command) {
 }
 
 // TestMain warms up cobra's lazily-added commands (the `help` subcommand and
-// the `completion` subcommand) so they appear consistently in every snapshot
-// regardless of test ordering. Without this, the snapshot for `plivo --help`
-// includes/excludes these commands depending on whether some earlier test in
-// the same package went through rootCmd.Execute().
+// the `completion` subcommand) and root's --version flag so they appear
+// consistently in every snapshot regardless of test ordering. Without this,
+// the snapshot for `plivo --help` includes/excludes them depending on whether
+// some earlier test in the same package executed root (bare `plivo`, --map).
 func TestMain(m *testing.M) {
 	rootCmd.InitDefaultHelpCmd()
 	rootCmd.InitDefaultCompletionCmd()
+	rootCmd.InitDefaultVersionFlag()
 	os.Exit(m.Run())
 }
 

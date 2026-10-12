@@ -57,6 +57,7 @@ By default the CLI validates credentials with GET /Account/ before
 saving. Pass --no-verify to skip (offline / mock use only).`,
 	Example: `  plivo login
   plivo login --name staging`,
+	Args: cobra.NoArgs,
 	RunE: runLogin,
 }
 

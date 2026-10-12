@@ -72,6 +72,7 @@ field on one app, restored on exit.`,
 
   # Don't restore answer_url on exit (advanced):
   plivo voice streams forward --number +14155550142 --app abc --to ws://localhost:7860/ws --keep`,
+	Args: cobra.NoArgs,
 	RunE: runVoiceStreamsForward,
 }
 

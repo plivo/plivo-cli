@@ -39,6 +39,8 @@ var metadataFlags = map[string]bool{
 	"-h":        true,
 	"--version": true,
 	"-v":        true,
+	"--map":     true,
+	"--schema":  true,
 }
 
 // isMetadataInvocation returns true when the argv is purely a help /
@@ -64,7 +66,8 @@ func isMetadataInvocation(firstCmd string, args []string) bool {
 // invocations (--help/--version/bare plivo) / opted-out users / users
 // who haven't yet hit the first-prompt activity floor.
 func maybePromptFeedback(firstCmd string, args []string) {
-	if !isInteractiveFeedbackSession() {
+	// A dry run sends nothing, feedback included, so it never prompts.
+	if dryRunFlag || !isInteractiveFeedbackSession() {
 		return
 	}
 	if skipPromptCommands[firstCmd] {

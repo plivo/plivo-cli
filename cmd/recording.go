@@ -32,6 +32,7 @@ var (
 var recordingListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List recordings",
+	Args:  cobra.NoArgs,
 	RunE:  runRecordingList,
 }
 
@@ -50,8 +51,7 @@ var recordingDeleteCmd = &cobra.Command{
 }
 
 func init() {
-	recordingListCmd.Flags().IntVar(&recListLimit, "limit", 20, "results per page")
-	recordingListCmd.Flags().IntVar(&recListOffset, "offset", 0, "pagination offset")
+	registerListFlags(recordingListCmd, &recListLimit, &recListOffset)
 	recordingListCmd.Flags().StringVar(&recListCallUUID, "call-uuid", "", "filter by call uuid")
 	recordingListCmd.Flags().StringVar(&recListConf, "conference-name", "", "filter by conference name")
 	recordingListCmd.Flags().StringVar(&recListFromTime, "from-time", "", "filter recordings after this ISO time")
@@ -83,18 +83,14 @@ func runRecordingList(cmd *cobra.Command, args []string) error {
 	}
 
 	var resp api.RecordingList
-	apiErr, err := client.Do("GET", client.AccountURL("Recording"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Recording"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"RECORDING_ID", "CALL_UUID", "TYPE", "FORMAT", "DURATION_MS", "ADDED"}}
 	for _, r := range resp.Objects {

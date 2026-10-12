@@ -65,6 +65,7 @@ groups=(
   "messaging" "messaging sms" "messaging sms 10dlc" "messaging sms 10dlc brands"
   "messaging sms powerpacks" "messaging sms tollfree" "messaging whatsapp" "messaging mms"
   "verify sessions"
+  "sip" "sip calls" "sip trunks" "sip uris" "sip credentials" "sip ip-acl"
 )
 for cmd in "${groups[@]}"; do
   read -ra parts <<< "$cmd"
@@ -200,6 +201,17 @@ assert_refused() {
 assert_refused "numbers release"         "$BIN" numbers release +14155551234
 assert_refused "voice calls hangup"      "$BIN" voice calls hangup CALL-FAKE
 assert_refused "voice recordings delete" "$BIN" voice recordings delete REC-FAKE
+
+# SIP deletes read what depends on the object from the API first, under
+# --dry-run too, so the refusal itself needs a network. Check the flag that
+# overrides it is there; the unit tests cover the check.
+for obj in trunks uris credentials ip-acl; do
+  out=$("$BIN" sip "$obj" delete --help)
+  case "$out" in
+    *--force*) echo "✓ sip $obj delete takes --force" ;;
+    *) echo "✗ sip $obj delete --help does not list --force"; exit 1 ;;
+  esac
+done
 
 echo
 echo "✓ smoke passed on $(uname -s)/$(uname -m)"

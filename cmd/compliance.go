@@ -35,6 +35,7 @@ var complianceRequirementsCmd = &cobra.Command{
 	Short:   "List documents/fields required to activate a regulated number",
 	Long:    "Returns the document types and required data fields for a given country / number type\n/ user type — use the returned document_type_id values when building a `create` payload.",
 	Example: "  plivo numbers compliance requirements --country US --number-type local --user-type business",
+	Args:    cobra.NoArgs,
 	RunE:    runComplianceRequirements,
 }
 
@@ -78,6 +79,7 @@ Discover the document_type_id values and required data_fields first with
     --data @app.json \
     --file documents[0].file=@passport.pdf \
     --file documents[1].file=@address-proof.pdf`,
+	Args: cobra.NoArgs,
 	RunE: runComplianceCreate,
 }
 
@@ -106,6 +108,7 @@ var (
 var complianceListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List compliance applications",
+	Args:  cobra.NoArgs,
 	RunE:  runComplianceList,
 }
 
@@ -147,6 +150,7 @@ var complianceLinkCmd = &cobra.Command{
 once per number, or pass the full JSON body via --data (inline or @file.json):
 {"numbers":[{"number":"+14155551234","compliance_application_id":"<id>"}]}.`,
 	Example: "  plivo numbers compliance link --link +14155551234=<compliance_id> --link +14155556789=<compliance_id>",
+	Args:    cobra.NoArgs,
 	RunE:    runComplianceLink,
 }
 
@@ -164,13 +168,12 @@ func init() {
 
 	complianceGetCmd.Flags().StringVar(&compGetExpand, "expand", "", "comma-separated: end_user,documents,linked_numbers")
 
-	complianceListCmd.Flags().StringVar(&compListStatus, "status", "", "filter by status")
+	complianceListCmd.Flags().StringVar(&compListStatus, "status", "", "filter by status: "+oneOf(complianceStatuses))
 	complianceListCmd.Flags().StringVar(&compListCountry, "country", "", "filter by ISO country code")
-	complianceListCmd.Flags().StringVar(&compListNumberType, "number-type", "", "filter by number type")
-	complianceListCmd.Flags().StringVar(&compListUserType, "user-type", "", "filter by user type")
+	complianceListCmd.Flags().StringVar(&compListNumberType, "number-type", "", "filter by number type: "+oneOf(complianceNumTypes))
+	complianceListCmd.Flags().StringVar(&compListUserType, "user-type", "", "filter by user type: "+oneOf(complianceUserTypes))
 	complianceListCmd.Flags().StringVar(&compListAlias, "alias", "", "filter by alias")
-	complianceListCmd.Flags().IntVar(&compListLimit, "limit", 20, "results per page")
-	complianceListCmd.Flags().IntVar(&compListOffset, "offset", 0, "pagination offset")
+	registerListFlags(complianceListCmd, &compListLimit, &compListOffset)
 
 	complianceUpdateCmd.Flags().StringVar(&compUpdateData, "data", "", "updated application JSON; inline or @file.json (required)")
 	complianceUpdateCmd.Flags().StringArrayVar(&compUpdateFiles, "file", nil, "document upload as field=path (repeatable; replaces all documents)")
@@ -287,6 +290,18 @@ func runComplianceCreate(cmd *cobra.Command, args []string) error {
 	})
 }
 
+// unwrapCompliance returns the application from under "compliance", where the
+// documented get response puts it. A flat body is returned untouched.
+func unwrapCompliance(app api.ComplianceApplication) api.ComplianceApplication {
+	var wrapped struct {
+		Compliance *api.ComplianceApplication `json:"compliance"`
+	}
+	if json.Unmarshal(app.Raw(), &wrapped) != nil || wrapped.Compliance == nil {
+		return app
+	}
+	return *wrapped.Compliance
+}
+
 func runComplianceGet(cmd *cobra.Command, args []string) error {
 	id := args[0]
 	client, _, err := getClient()
@@ -311,6 +326,7 @@ func runComplianceGet(cmd *cobra.Command, args []string) error {
 	if effectiveFormat() == output.FormatJSON {
 		return output.JSONRaw(os.Stdout, app.Raw())
 	}
+	app = unwrapCompliance(app)
 	return output.KV(os.Stdout, [][2]string{
 		{"compliance_id", app.ComplianceID},
 		{"alias", app.Alias},
@@ -325,6 +341,15 @@ func runComplianceGet(cmd *cobra.Command, args []string) error {
 }
 
 func runComplianceList(cmd *cobra.Command, args []string) error {
+	if err := validateEnum("status", &compListStatus, complianceStatuses...); err != nil {
+		return err
+	}
+	if err := validateEnum("number-type", &compListNumberType, complianceNumTypes...); err != nil {
+		return err
+	}
+	if err := validateEnum("user-type", &compListUserType, complianceUserTypes...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -341,18 +366,14 @@ func runComplianceList(cmd *cobra.Command, args []string) error {
 		}
 	}
 	var resp api.ComplianceApplicationList
-	apiErr, err := client.Do("GET", client.AccountURL("PhoneNumber", "Compliance"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("PhoneNumber", "Compliance"), q, "compliances", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "compliances")
 	}
 	rows := [][]string{{"COMPLIANCE_ID", "ALIAS", "STATUS", "COUNTRY", "NUMBER_TYPE", "CREATED"}}
 	for _, a := range resp.Objects {

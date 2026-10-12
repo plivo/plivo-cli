@@ -11,10 +11,9 @@
 //   - Anonymous machine id + hashed auth_id              always OK
 //   - Phone numbers, auth tokens, raw auth_ids, emails   NEVER, regex-stripped
 //
-// Sanitisation runs client-side as defence in depth; the collector
-// re-runs the same pipeline server-side. Belt + suspenders because the
-// cost of a PII leak via feedback (which is user-typed free text) is
-// higher than the cost of double-stripping a benign string.
+// Sanitisation runs client-side, before anything is sent. It errs toward
+// over-matching because the cost of a PII leak via feedback (which is
+// user-typed free text) is higher than the cost of stripping a benign string.
 package feedback
 
 import (

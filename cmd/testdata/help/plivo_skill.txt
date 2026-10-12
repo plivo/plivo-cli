@@ -7,6 +7,7 @@ Usage:
 Available Commands:
   install     Install an agent skill so coding agents auto-load the reference
   list        Show bundled skills and whether each is installed
+  update      Update installed skills to the versions bundled in this binary
 
 Flags:
   -h, --help   help for skill
@@ -15,9 +16,11 @@ Global Flags:
       --dry-run            print the HTTP request without sending
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
-  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+  -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
       --profile string     named profile from ~/.plivo/config.toml
+      --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
+      --schema             describe the command (arguments, flags, output fields) instead of running it
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts
 

@@ -49,6 +49,7 @@ const (
 	TriggerMilestone50Cmds    Trigger = "milestone_50_commands"
 	TriggerMilestoneFirstCall Trigger = "milestone_first_call"
 	TriggerMilestoneFirstAsk  Trigger = "milestone_first_ask"
+	TriggerBugReport          Trigger = "bug_report" // `plivo feedback --bug`
 )
 
 // Context captures the CLI-side state at the moment of submission. Only
@@ -129,15 +130,9 @@ func (e *Event) Submit(ctx context.Context, baseURL string, extraHeaders map[str
 	if os.Getenv(TelemetryOptOutEnvVar) == "0" {
 		return ErrTelemetryDisabled
 	}
-	endpoint := os.Getenv(EndpointEnvVar)
-	if endpoint == "" {
-		// Default route: hodor's public /v1/accounts/cli/feedback endpoint.
-		// baseURL is whatever the CLI resolves (env-aware via Profile.Env).
-		// Empty baseURL means caller didn't resolve one → unsafe to guess.
-		if baseURL == "" {
-			return ErrEndpointNotConfigured
-		}
-		endpoint = strings.TrimRight(baseURL, "/") + "/v1/accounts/cli/feedback"
+	endpoint, err := Endpoint(baseURL)
+	if err != nil {
+		return err
 	}
 	body, err := json.Marshal(e)
 	if err != nil {
@@ -171,6 +166,20 @@ func (e *Event) Submit(ctx context.Context, baseURL string, extraHeaders map[str
 		return fmt.Errorf("collector returned HTTP %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// Endpoint returns the URL Submit posts to: PLIVO_FEEDBACK_ENDPOINT when set,
+// else the public /v1/accounts/cli/feedback route on baseURL, which the CLI
+// resolves (env-aware via Profile.Env). An empty baseURL means the caller
+// didn't resolve one, and guessing is unsafe.
+func Endpoint(baseURL string) (string, error) {
+	if endpoint := os.Getenv(EndpointEnvVar); endpoint != "" {
+		return endpoint, nil
+	}
+	if baseURL == "" {
+		return "", ErrEndpointNotConfigured
+	}
+	return strings.TrimRight(baseURL, "/") + "/v1/accounts/cli/feedback", nil
 }
 
 // ErrEndpointNotConfigured signals the caller didn't supply a baseURL
