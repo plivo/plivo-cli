@@ -22,6 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--all` on every paged list reads every page into one result. It stops at 100
   pages (2,000 rows at `--limit 20`) with a warning and `meta.truncated: true`,
   and can't be combined with `--offset`. `numbers search` doesn't take it.
+- `--since` and `--until` on `voice calls list` and
+  `messaging sms|mms|whatsapp list`, and `--from-date`/`--to-date` as the same
+  flags there and on `sip calls list`. Times are UTC, a bare `--until` date
+  includes that day, and `--until` needs `--since`. Voice calls without
+  `--since` are the last 7 days. A voice or message range starting more than 90
+  days back, or a voice range over 31 days, is refused before any request with
+  what to run instead.
 - `plivo sip test --uri` checks from your machine that a SIP URI answers before
   a call goes to it: DNS, then a TCP or TLS connect (certificate verified,
   expiry shown) or one SIP OPTIONS over UDP. It never sends an INVITE and needs

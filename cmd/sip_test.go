@@ -49,48 +49,11 @@ func resetSIPFlags(t *testing.T) {
 	t.Cleanup(func() {
 		sipCallsLimit, sipCallsOffset = maxListLimit, 0
 		sipCallsFrom, sipCallsTo, sipCallsDirection = "", "", ""
-		sipCallsSince, sipCallsUntil = "", ""
+		sipCallsRange.since, sipCallsRange.until = "", ""
 		sipCallsCauseCode, sipCallsSource, sipCallsSTIR = 0, "", ""
 		sipTrunksLimit, sipTrunksOffset, sipTrunksDirection = 20, 0, ""
 		sipACLLimit, sipACLOffset = 20, 0
 	})
-}
-
-func TestNormalizeSIPTime(t *testing.T) {
-	cases := []struct {
-		name     string
-		in       string
-		endOfDay bool
-		want     string
-		wantErr  bool
-	}{
-		{"empty stays empty", "", false, "", false},
-		{"bare date opens the day", "2026-09-01", false, "2026-09-01 00:00:00", false},
-		{"bare date closes the day", "2026-09-01", true, "2026-09-01 23:59:59", false},
-		{"minute precision", "2026-09-01 14:30", false, "2026-09-01 14:30:00", false},
-		{"second precision", "2026-09-01 14:30:09", false, "2026-09-01 14:30:09", false},
-		{"rfc3339 converts to utc", "2026-09-01T10:30:00+05:30", false, "2026-09-01 05:00:00", false},
-		{"surrounding space tolerated", "  2026-09-01  ", false, "2026-09-01 00:00:00", false},
-		{"prose rejected", "yesterday", false, "", true},
-		{"slashes rejected", "01/09/2026", false, "", true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := normalizeSIPTime(tc.in, tc.endOfDay)
-			if tc.wantErr {
-				if err == nil {
-					t.Fatalf("expected an error for %q, got %q", tc.in, got)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error for %q: %v", tc.in, err)
-			}
-			if got != tc.want {
-				t.Fatalf("normalizeSIPTime(%q, %v) = %q, want %q", tc.in, tc.endOfDay, got, tc.want)
-			}
-		})
-	}
 }
 
 // --until must include the day the user named. A naive widening to 00:00:00
@@ -388,25 +351,6 @@ func TestSIPCallsList_acceptsANumberWithoutAPlus(t *testing.T) {
 	}
 	if !strings.Contains(urls()[0], "from_number=919902443540") {
 		t.Errorf("unexpected query: %s", urls()[0])
-	}
-}
-
-// The API rejects an end-time upper bound with no lower bound. Catch it here so
-// the user gets the flag names they typed rather than a 400 naming end_time__lte.
-func TestSIPCallsList_untilWithoutSinceIsRefusedLocally(t *testing.T) {
-	setFakeCreds(t)
-	resetSIPFlags(t)
-	_, count := sipServer(t, http.StatusOK, `{"meta":{},"objects":[]}`)
-
-	err, _, _ := execCmd(t, "sip", "calls", "list", "--until", "2026-08-31")
-	if err == nil {
-		t.Fatal("expected --until without --since to be refused")
-	}
-	if !strings.Contains(err.Error(), "--since") {
-		t.Errorf("the error should name the flag to add, got: %v", err)
-	}
-	if n := count(); n != 0 {
-		t.Errorf("should not have spent a request, but made %d", n)
 	}
 }
 

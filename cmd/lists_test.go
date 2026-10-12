@@ -175,6 +175,178 @@ func TestListFilters_documentedValuesReachTheQuery(t *testing.T) {
 	})
 }
 
+func TestParseListTime(t *testing.T) {
+	cases := []struct {
+		name     string
+		in       string
+		endOfDay bool
+		want     string
+		wantErr  bool
+	}{
+		{"empty stays unset", "", false, "", false},
+		{"bare date opens the day", "2026-09-01", false, "2026-09-01 00:00:00", false},
+		{"bare date closes the day", "2026-09-01", true, "2026-09-01 23:59:59", false},
+		{"minute precision", "2026-09-01 14:30", false, "2026-09-01 14:30:00", false},
+		{"second precision", "2026-09-01 14:30:09", false, "2026-09-01 14:30:09", false},
+		{"rfc3339 converts to utc", "2026-09-01T10:30:00+05:30", false, "2026-09-01 05:00:00", false},
+		{"surrounding space tolerated", "  2026-09-01  ", false, "2026-09-01 00:00:00", false},
+		{"prose rejected", "yesterday", false, "", true},
+		{"slashes rejected", "01/09/2026", false, "", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parseListTime(tc.in, tc.endOfDay)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected an error for %q, got %v", tc.in, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error for %q: %v", tc.in, err)
+			}
+			gotS := ""
+			if !got.IsZero() {
+				gotS = got.Format(time.DateTime)
+			}
+			if gotS != tc.want {
+				t.Fatalf("parseListTime(%q, %v) = %q, want %q", tc.in, tc.endOfDay, gotS, tc.want)
+			}
+		})
+	}
+}
+
+func TestCheckRetention(t *testing.T) {
+	now := time.Date(2026, 10, 12, 15, 0, 0, 0, time.UTC)
+	cases := []struct{ name, since, wantHint string }{
+		{"no start", "", ""},
+		{"exactly 90 days back", "2026-07-14 15:00:00", ""},
+		{"a second more than 90 days back", "2026-07-14 14:59:59", "Start it on or after 2026-07-15."},
+		{"more than 90 days back", "2026-07-14 00:00:00", "Start it on or after 2026-07-15."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkRetention(at(t, tc.since), now, 90)
+			if tc.wantHint == "" {
+				if err != nil {
+					t.Fatalf("want the start allowed, got %v", err)
+				}
+				return
+			}
+			var ce *clierr.Error
+			if !errors.As(err, &ce) || ce.Code != clierr.CodeBadInput || !strings.Contains(ce.Message, "more than 90 days ago") {
+				t.Fatalf("want BAD_INPUT about 90 days, got %v", err)
+			}
+			if ce.Hint != tc.wantHint {
+				t.Errorf("hint = %q, want %q", ce.Hint, tc.wantHint)
+			}
+		})
+	}
+}
+
+// --from-date and --to-date are the same filters as --since and --until.
+// Voice and message ranges must sit inside the last 90 days, so theirs are
+// relative to today.
+func TestListTimeFlags_eitherNameReachesTheQuery(t *testing.T) {
+	voice := []string{"end_time__gte=" + daysAgo(10) + "+00%3A00%3A00", "end_time__lte=" + daysAgo(3) + "+23%3A59%3A59"}
+	cases := []struct {
+		args []string
+		want []string
+	}{
+		{[]string{"sip", "calls", "list", "--from-date", "2026-09-01", "--to-date", "2026-09-15"},
+			[]string{"end_time__gte=2026-09-01+00%3A00%3A00", "end_time__lte=2026-09-15+23%3A59%3A59"}},
+		{[]string{"sip", "calls", "list", "--since", "2026-09-01 10:30", "--to-date", "2026-09-15"},
+			[]string{"end_time__gte=2026-09-01+10%3A30%3A00", "end_time__lte=2026-09-15+23%3A59%3A59"}},
+		{[]string{"voice", "calls", "list", "--since", daysAgo(10), "--until", daysAgo(3)}, voice},
+		{[]string{"voice", "calls", "list", "--from-date", daysAgo(10), "--to-date", daysAgo(3)}, voice},
+		{[]string{"messaging", "sms", "list", "--since", daysAgo(10), "--until", daysAgo(3)},
+			[]string{"message_type=sms", "message_time__gte=" + daysAgo(10) + "+00%3A00%3A00", "message_time__lte=" + daysAgo(3) + "+23%3A59%3A59"}},
+		{[]string{"messaging", "mms", "list", "--from-date", daysAgo(10) + "T10:30:00+05:30"},
+			[]string{"message_type=mms", "message_time__gte=" + daysAgo(10) + "+05%3A00%3A00"}},
+		{[]string{"messaging", "whatsapp", "list", "--from-date", daysAgo(10), "--to-date", daysAgo(3)},
+			[]string{"message_type=whatsapp", "message_time__gte=" + daysAgo(10) + "+00%3A00%3A00", "message_time__lte=" + daysAgo(3) + "+23%3A59%3A59"}},
+	}
+	for _, tc := range cases {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			setFakeCreds(t)
+			urls, _ := sipServer(t, http.StatusOK, `{"meta":{},"objects":[]}`)
+
+			if err, _, _ := execCmd(t, tc.args...); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			got := urls()
+			if len(got) != 1 {
+				t.Fatalf("expected 1 request, got %v", got)
+			}
+			for _, w := range tc.want {
+				if !strings.Contains(got[0], w) {
+					t.Errorf("query missing %s\n  got: %s", w, got[0])
+				}
+			}
+		})
+	}
+}
+
+// requireRefusedBeforeAnyRequest runs args against a fake API and wants a
+// BAD_INPUT whose message holds want, with no request sent.
+func requireRefusedBeforeAnyRequest(t *testing.T, args []string, want string) {
+	t.Helper()
+	setFakeCreds(t)
+	_, count := sipServer(t, http.StatusOK, `{"meta":{},"objects":[]}`)
+
+	err, _, _ := execCmd(t, args...)
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeBadInput || !strings.Contains(ce.Message, want) {
+		t.Fatalf("want BAD_INPUT with %q, got %v", want, err)
+	}
+	if n := count(); n != 0 {
+		t.Fatalf("%d request(s) went out", n)
+	}
+}
+
+// Every list with a time range refuses, before any request: both names for
+// one end (only the last would count), an end without a start, and, where its
+// --since help names the 90 days, a start further back. The lists are found by
+// walking the tree, so a new one is covered without being named here.
+func TestListTimeFlags_refusedBeforeAnyRequest(t *testing.T) {
+	type refusal struct {
+		flags []string
+		want  string
+	}
+	d := daysAgo(3)
+	lists := 0
+	walkOwnCommands(func(c *cobra.Command, path []string) {
+		since := c.Flags().Lookup("since")
+		if since == nil {
+			return
+		}
+		lists++
+		retains := strings.Contains(since.Usage, "within the last 90 days")
+		// SIP Trunking's own 400 covers its limit, which is 3 months.
+		if want := path[0] != "sip"; retains != want {
+			t.Errorf("%v: 90-day check = %v, want %v", path, retains, want)
+		}
+		cases := []refusal{
+			{[]string{"--since", d, "--from-date", d}, "same filter"},
+			{[]string{"--since", d, "--until", d, "--to-date", d}, "same filter"},
+			{[]string{"--until", d}, "--until needs --since"},
+			{[]string{"--to-date", d}, "--until needs --since"},
+		}
+		if retains {
+			cases = append(cases, refusal{[]string{"--since", daysAgo(95)}, "more than 90 days ago"})
+		}
+		for _, tc := range cases {
+			args := append(append([]string{}, path...), tc.flags...)
+			t.Run(strings.Join(args, " "), func(t *testing.T) {
+				requireRefusedBeforeAnyRequest(t, args, tc.want)
+			})
+		}
+	})
+	if lists != 5 {
+		t.Errorf("found %d lists with --since, want 5", lists)
+	}
+}
+
 // The compliance list sends its rows under "compliances", not "objects"; read
 // from the wrong key, the table is empty however many applications exist.
 func TestComplianceList_tableReadsTheCompliancesKey(t *testing.T) {

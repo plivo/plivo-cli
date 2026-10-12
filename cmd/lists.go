@@ -83,6 +83,122 @@ func validatePage(limit, offset int, hasAll bool) error {
 	return nil
 }
 
+// listTimeRange is a list's --since/--until. --from-date and --to-date set the
+// same two fields: they are the names people also reach for.
+type listTimeRange struct {
+	since, until string
+	// retainDays is how far back the list's API reads, checked before any
+	// request; 0 leaves it to the API.
+	retainDays int
+}
+
+// listRetainDays is how far back the Call and Message APIs read.
+const listRetainDays = 90
+
+// listTimeNow is the clock the range checks read, so tests can move it.
+var listTimeNow = time.Now
+
+// registerTimeRangeFlags adds --since/--until and --from-date/--to-date to a
+// list. what names the rows and the time they are filtered on; retainDays is
+// how far back the list's API reads, 0 to leave that to the API.
+func registerTimeRangeFlags(cmd *cobra.Command, r *listTimeRange, what string, retainDays int) {
+	r.retainDays = retainDays
+	sinceUsage := what + " at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]])"
+	if retainDays > 0 {
+		sinceUsage += fmt.Sprintf(", within the last %d days", retainDays)
+	}
+	f := cmd.Flags()
+	f.StringVar(&r.since, "since", "", sinceUsage)
+	f.StringVar(&r.until, "until", "", what+" at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]])")
+	f.StringVar(&r.since, "from-date", "", "same as --since")
+	f.StringVar(&r.until, "to-date", "", "same as --until")
+}
+
+// bounds returns the range in UTC, a zero time for an end that is not set.
+// Refused before any request: both names for one end (only the last would
+// count); an end without a start (the call APIs answer it with a 400, and the
+// Message API searches only recent days, so an earlier end matches nothing);
+// and a start further back than the list's API reads.
+func (r *listTimeRange) bounds(cmd *cobra.Command) (since, until time.Time, err error) {
+	for _, pair := range [][2]string{{"since", "from-date"}, {"until", "to-date"}} {
+		if cmd.Flags().Changed(pair[0]) && cmd.Flags().Changed(pair[1]) {
+			return time.Time{}, time.Time{}, clierr.BadInput(fmt.Sprintf("--%s and --%s are the same filter; pass one of them", pair[0], pair[1]))
+		}
+	}
+	if since, err = parseListTime(r.since, false); err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	if until, err = parseListTime(r.until, true); err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	if !until.IsZero() && since.IsZero() {
+		e := clierr.BadInput("--until needs --since (--to-date needs --from-date)")
+		e.Hint = "Add --since (or --from-date) for the start of the range."
+		return time.Time{}, time.Time{}, e
+	}
+	if r.retainDays > 0 {
+		if err = checkRetention(since, listTimeNow(), r.retainDays); err != nil {
+			return time.Time{}, time.Time{}, err
+		}
+	}
+	return since, until, nil
+}
+
+// checkRetention refuses a start more than days back.
+func checkRetention(since, now time.Time, days int) error {
+	earliest := now.UTC().AddDate(0, 0, -days)
+	if since.IsZero() || !since.Before(earliest) {
+		return nil
+	}
+	day := earliest.Truncate(24 * time.Hour)
+	if day.Before(earliest) {
+		day = day.AddDate(0, 0, 1)
+	}
+	e := clierr.BadInput(fmt.Sprintf("the range starts %s, more than %d days ago: Plivo searches only the last %d days",
+		since.Format(time.DateOnly), days, days))
+	e.Hint = fmt.Sprintf("Start it on or after %s.", day.Format(time.DateOnly))
+	return e
+}
+
+// setTimeRange puts a range on a list query as field__gte and field__lte,
+// leaving out an end that is not set.
+func setTimeRange(q url.Values, field string, since, until time.Time) {
+	if !since.IsZero() {
+		q.Set(field+"__gte", since.Format(time.DateTime))
+	}
+	if !until.IsZero() {
+		q.Set(field+"__lte", until.Format(time.DateTime))
+	}
+}
+
+// listTimeLayouts are what --since/--until accept besides a bare date. The
+// APIs take only "YYYY-MM-DD HH:MM[:SS]", so a bare date is widened here
+// rather than sent through to fail upstream.
+var listTimeLayouts = []string{time.DateTime, "2006-01-02 15:04", time.RFC3339}
+
+// parseListTime reads a --since/--until value as UTC, a zero time when it is
+// empty. A bare date is the start of that day or, with endOfDay, its last
+// second, so --until includes the day the user named.
+func parseListTime(v string, endOfDay bool) (time.Time, error) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return time.Time{}, nil
+	}
+	if t, err := time.Parse(time.DateOnly, v); err == nil {
+		if endOfDay {
+			t = t.Add(24*time.Hour - time.Second)
+		}
+		return t, nil
+	}
+	for _, layout := range listTimeLayouts {
+		if t, err := time.Parse(layout, v); err == nil {
+			return t.UTC(), nil
+		}
+	}
+	return time.Time{}, clierr.BadInput(fmt.Sprintf(
+		"could not read %q as a time — use YYYY-MM-DD, YYYY-MM-DD HH:MM, or YYYY-MM-DD HH:MM:SS (UTC)", v))
+}
+
 // listJSON writes a list response for -o json with its rows array never null.
 // A few endpoints send null, or nothing, for an empty list where the rest send
 // [], and a script reading the rows should not need a case for that. key names
