@@ -34,6 +34,11 @@ func TestSIPPlatforms_tableIsWellFormed(t *testing.T) {
 		if p.outbound != "credential" && p.outbound != "ip-acl" {
 			t.Errorf("%s: outbound %q", p.name, p.outbound)
 		}
+		if r := p.region; r != nil {
+			if !p.knowsHost(r.host) || checkACLEntries(r.ips) != nil {
+				t.Errorf("%s: region %+v is not in the table's hosts or has a bad address", p.name, r)
+			}
+		}
 	}
 }
 
@@ -116,6 +121,8 @@ func TestSIPCreates_platformRefusalsSpendNoRequest(t *testing.T) {
 		{"conflicting transports", string(clierr.CodeBadFlag), "conflicts with transport=tcp",
 			[]string{"sip", "uris", "create", "--name", "n", "--uri", "sip.example.com;transport=tcp", "--transport", "tls"}},
 		{"inbound trunk without a URI", string(clierr.CodeBadInput), "sip uris create --name livekit --platform livekit --uri <project>.sip.livekit.cloud",
+			[]string{"sip", "trunks", "create", "--name", "n", "--direction", "inbound", "--platform", "livekit"}},
+		{"inbound trunk hint names the plan", string(clierr.CodeBadInput), "`plivo sip connect plan --number <number> --platform livekit` prints every step",
 			[]string{"sip", "trunks", "create", "--name", "n", "--direction", "inbound", "--platform", "livekit"}},
 		{"outbound vapi trunk without auth", string(clierr.CodeBadInput), "sip ip-acl create --name vapi --platform vapi",
 			[]string{"sip", "trunks", "create", "--name", "n", "--direction", "outbound", "--platform", "vapi"}},
