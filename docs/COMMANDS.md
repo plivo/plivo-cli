@@ -3807,7 +3807,7 @@ Flags:
       --from-date string   same as --since
       --limit int          results per page (1-20) (default 20)
       --offset int         pagination offset
-      --since string       calls ending at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]]), within the last 90 days
+      --since string       calls ending at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]]), within the last 90 days, at most 31 days per request
       --to string          filter by to_number
       --to-date string     same as --until
       --until string       calls ending at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]])

@@ -206,7 +206,7 @@ func registerMessageListFlags(cmd *cobra.Command, limit, offset *int, state, dir
 	cmd.Flags().StringVar(direction, "direction", "", oneOf(directionValues))
 	cmd.Flags().StringVar(fromN, "from", "", "filter by from_number")
 	cmd.Flags().StringVar(toN, "to", "", "filter by to_number")
-	registerTimeRangeFlags(cmd, r, "messages sent or received", listRetainDays)
+	registerTimeRangeFlags(cmd, r, "messages sent or received", rangeLimits{retainDays: listRetainDays})
 }
 
 // runMessageSendForChannel is the shared body of all three per-channel

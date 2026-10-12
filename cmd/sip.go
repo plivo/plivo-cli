@@ -164,7 +164,7 @@ func init() {
 	f.StringVar(&sipCallsTo, "to-number", "", "filter by destination")
 	f.StringVar(&sipCallsDirection, "direction", "", oneOf(directionValues))
 	// No local 90-day check: this API's limit is 3 months, and its 400 says so.
-	registerTimeRangeFlags(sipCallsListCmd, &sipCallsRange, "calls ending", 0)
+	registerTimeRangeFlags(sipCallsListCmd, &sipCallsRange, "calls ending", rangeLimits{})
 	f.IntVar(&sipCallsCauseCode, "hangup-cause-code", 0, "filter by numeric hangup cause code")
 	f.StringVar(&sipCallsSource, "hangup-source", "", "who ended the call: "+oneOf(sipHangupSources))
 	f.StringVar(&sipCallsSTIR, "stir-verification", "", oneOf(stirValues))
