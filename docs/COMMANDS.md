@@ -2725,6 +2725,7 @@ Flags:
 ```
       --all                        fetch every page (stops after 100 pages)
       --direction string           inbound|outbound
+      --from-date string           same as --since
       --from-number string         filter by caller ID
       --hangup-cause-code int      filter by numeric hangup cause code
       --hangup-source string       who ended the call: customer|carrier|zentrunk
@@ -2732,6 +2733,7 @@ Flags:
       --offset int                 pagination offset
       --since string               calls ending at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
       --stir-verification string   "Verified"|"Not Verified"|"Not Applicable"
+      --to-date string             same as --until
       --to-number string           filter by destination
       --until string               calls ending at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
 ```

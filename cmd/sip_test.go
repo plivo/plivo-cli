@@ -49,48 +49,11 @@ func resetSIPFlags(t *testing.T) {
 	t.Cleanup(func() {
 		sipCallsLimit, sipCallsOffset = maxListLimit, 0
 		sipCallsFrom, sipCallsTo, sipCallsDirection = "", "", ""
-		sipCallsSince, sipCallsUntil = "", ""
+		sipCallsRange = listTimeRange{}
 		sipCallsCauseCode, sipCallsSource, sipCallsSTIR = 0, "", ""
 		sipTrunksLimit, sipTrunksOffset, sipTrunksDirection = 20, 0, ""
 		sipACLLimit, sipACLOffset = 20, 0
 	})
-}
-
-func TestNormalizeSIPTime(t *testing.T) {
-	cases := []struct {
-		name     string
-		in       string
-		endOfDay bool
-		want     string
-		wantErr  bool
-	}{
-		{"empty stays empty", "", false, "", false},
-		{"bare date opens the day", "2026-09-01", false, "2026-09-01 00:00:00", false},
-		{"bare date closes the day", "2026-09-01", true, "2026-09-01 23:59:59", false},
-		{"minute precision", "2026-09-01 14:30", false, "2026-09-01 14:30:00", false},
-		{"second precision", "2026-09-01 14:30:09", false, "2026-09-01 14:30:09", false},
-		{"rfc3339 converts to utc", "2026-09-01T10:30:00+05:30", false, "2026-09-01 05:00:00", false},
-		{"surrounding space tolerated", "  2026-09-01  ", false, "2026-09-01 00:00:00", false},
-		{"prose rejected", "yesterday", false, "", true},
-		{"slashes rejected", "01/09/2026", false, "", true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := normalizeSIPTime(tc.in, tc.endOfDay)
-			if tc.wantErr {
-				if err == nil {
-					t.Fatalf("expected an error for %q, got %q", tc.in, got)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error for %q: %v", tc.in, err)
-			}
-			if got != tc.want {
-				t.Fatalf("normalizeSIPTime(%q, %v) = %q, want %q", tc.in, tc.endOfDay, got, tc.want)
-			}
-		})
-	}
 }
 
 // --until must include the day the user named. A naive widening to 00:00:00

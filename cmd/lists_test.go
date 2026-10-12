@@ -175,6 +175,105 @@ func TestListFilters_documentedValuesReachTheQuery(t *testing.T) {
 	})
 }
 
+func TestNormalizeListTime(t *testing.T) {
+	cases := []struct {
+		name     string
+		in       string
+		endOfDay bool
+		want     string
+		wantErr  bool
+	}{
+		{"empty stays empty", "", false, "", false},
+		{"bare date opens the day", "2026-09-01", false, "2026-09-01 00:00:00", false},
+		{"bare date closes the day", "2026-09-01", true, "2026-09-01 23:59:59", false},
+		{"minute precision", "2026-09-01 14:30", false, "2026-09-01 14:30:00", false},
+		{"second precision", "2026-09-01 14:30:09", false, "2026-09-01 14:30:09", false},
+		{"rfc3339 converts to utc", "2026-09-01T10:30:00+05:30", false, "2026-09-01 05:00:00", false},
+		{"surrounding space tolerated", "  2026-09-01  ", false, "2026-09-01 00:00:00", false},
+		{"prose rejected", "yesterday", false, "", true},
+		{"slashes rejected", "01/09/2026", false, "", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := normalizeListTime(tc.in, tc.endOfDay)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected an error for %q, got %q", tc.in, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error for %q: %v", tc.in, err)
+			}
+			if got != tc.want {
+				t.Fatalf("normalizeListTime(%q, %v) = %q, want %q", tc.in, tc.endOfDay, got, tc.want)
+			}
+		})
+	}
+}
+
+// --from-date and --to-date are the same filters as --since and --until.
+func TestListTimeFlags_eitherNameReachesTheQuery(t *testing.T) {
+	cases := []struct {
+		args []string
+		want []string
+	}{
+		{[]string{"sip", "calls", "list", "--from-date", "2026-09-01", "--to-date", "2026-09-15"},
+			[]string{"end_time__gte=2026-09-01+00%3A00%3A00", "end_time__lte=2026-09-15+23%3A59%3A59"}},
+		{[]string{"sip", "calls", "list", "--since", "2026-09-01 10:30", "--to-date", "2026-09-15"},
+			[]string{"end_time__gte=2026-09-01+10%3A30%3A00", "end_time__lte=2026-09-15+23%3A59%3A59"}},
+	}
+	for _, tc := range cases {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			setFakeCreds(t)
+			urls, _ := sipServer(t, http.StatusOK, `{"meta":{},"objects":[]}`)
+
+			if err, _, _ := execCmd(t, tc.args...); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			got := urls()
+			if len(got) != 1 {
+				t.Fatalf("expected 1 request, got %v", got)
+			}
+			for _, w := range tc.want {
+				if !strings.Contains(got[0], w) {
+					t.Errorf("query missing %s\n  got: %s", w, got[0])
+				}
+			}
+		})
+	}
+}
+
+// Both names for one end of the range would leave only the last one parsed in
+// force, so the pair is refused before any request.
+func TestListTimeFlags_bothNamesForOneEndAreRefused(t *testing.T) {
+	lists := [][]string{
+		{"sip", "calls", "list"},
+	}
+	pairs := [][]string{
+		{"--since", "2026-09-01", "--from-date", "2026-09-02"},
+		{"--since", "2026-09-01", "--until", "2026-09-03", "--to-date", "2026-09-04"},
+	}
+	for _, list := range lists {
+		for _, pair := range pairs {
+			args := append(append([]string{}, list...), pair...)
+			t.Run(strings.Join(args, " "), func(t *testing.T) {
+				setFakeCreds(t)
+				_, count := sipServer(t, http.StatusOK, `{"meta":{},"objects":[]}`)
+
+				err, _, _ := execCmd(t, args...)
+				var ce *clierr.Error
+				if !errors.As(err, &ce) || ce.Code != clierr.CodeBadInput || !strings.Contains(ce.Message, "same filter") {
+					t.Fatalf("want BAD_INPUT naming the pair, got %v", err)
+				}
+				if n := count(); n != 0 {
+					t.Fatalf("%d request(s) went out", n)
+				}
+			})
+		}
+	}
+}
+
 // The compliance list sends its rows under "compliances", not "objects"; read
 // from the wrong key, the table is empty however many applications exist.
 func TestComplianceList_tableReadsTheCompliancesKey(t *testing.T) {

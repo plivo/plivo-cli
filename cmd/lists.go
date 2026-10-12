@@ -83,6 +83,72 @@ func validatePage(limit, offset int, hasAll bool) error {
 	return nil
 }
 
+// listTimeRange is a list's --since/--until. --from-date and --to-date set the
+// same two fields: they are the names people also reach for.
+type listTimeRange struct{ since, until string }
+
+// registerTimeRangeFlags adds --since/--until and --from-date/--to-date to a
+// list. what names the rows and the time they are filtered on.
+func registerTimeRangeFlags(cmd *cobra.Command, r *listTimeRange, what string) {
+	f := cmd.Flags()
+	f.StringVar(&r.since, "since", "", what+" at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]])")
+	f.StringVar(&r.until, "until", "", what+" at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]])")
+	f.StringVar(&r.since, "from-date", "", "same as --since")
+	f.StringVar(&r.until, "to-date", "", "same as --until")
+}
+
+// bounds returns the range as the API's UTC timestamps, "" for an end that is
+// not set. Both names for one end together are refused: only the last would
+// count.
+func (r *listTimeRange) bounds(cmd *cobra.Command) (since, until string, err error) {
+	for _, pair := range [][2]string{{"since", "from-date"}, {"until", "to-date"}} {
+		if cmd.Flags().Changed(pair[0]) && cmd.Flags().Changed(pair[1]) {
+			return "", "", clierr.BadInput(fmt.Sprintf("--%s and --%s are the same filter; pass one of them", pair[0], pair[1]))
+		}
+	}
+	if since, err = normalizeListTime(r.since, false); err != nil {
+		return "", "", err
+	}
+	until, err = normalizeListTime(r.until, true)
+	return since, until, err
+}
+
+// errUntilWithoutSince is for the call lists: their APIs refuse an end-time
+// upper bound without a lower one. Said here, with the flag names, rather than
+// left to a 400 naming end_time__lte.
+func errUntilWithoutSince() error {
+	return clierr.BadInput("--until needs --since (--to-date needs --from-date): the API rejects an end-time upper bound without a lower one")
+}
+
+// listTimeLayouts are what --since/--until accept besides a bare date. The
+// APIs only take "YYYY-MM-DD HH:MM[:SS]", so a bare date is widened here
+// rather than sent through to fail upstream.
+var listTimeLayouts = []string{"2006-01-02 15:04:05", "2006-01-02 15:04", time.RFC3339}
+
+const apiTimeLayout = "2006-01-02 15:04:05"
+
+// normalizeListTime widens a bare date to a full timestamp. endOfDay picks the
+// last second of that day so --until includes the day the user named.
+func normalizeListTime(v string, endOfDay bool) (string, error) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "", nil
+	}
+	if t, err := time.Parse("2006-01-02", v); err == nil {
+		if endOfDay {
+			t = t.Add(24*time.Hour - time.Second)
+		}
+		return t.Format(apiTimeLayout), nil
+	}
+	for _, layout := range listTimeLayouts {
+		if t, err := time.Parse(layout, v); err == nil {
+			return t.UTC().Format(apiTimeLayout), nil
+		}
+	}
+	return "", clierr.BadInput(fmt.Sprintf(
+		"could not read %q as a time — use YYYY-MM-DD, YYYY-MM-DD HH:MM, or YYYY-MM-DD HH:MM:SS (UTC)", v))
+}
+
 // listJSON writes a list response for -o json with its rows array never null.
 // A few endpoints send null, or nothing, for an empty list where the rest send
 // [], and a script reading the rows should not need a case for that. key names

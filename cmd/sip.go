@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
@@ -65,8 +64,7 @@ var (
 	sipCallsFrom       string
 	sipCallsTo         string
 	sipCallsDirection  string
-	sipCallsSince      string
-	sipCallsUntil      string
+	sipCallsRange      listTimeRange
 	sipCallsCauseCode  int
 	sipCallsSource     string
 	sipCallsSTIR       string
@@ -165,8 +163,7 @@ func init() {
 	f.StringVar(&sipCallsFrom, "from-number", "", "filter by caller ID")
 	f.StringVar(&sipCallsTo, "to-number", "", "filter by destination")
 	f.StringVar(&sipCallsDirection, "direction", "", oneOf(directionValues))
-	f.StringVar(&sipCallsSince, "since", "", "calls ending at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]])")
-	f.StringVar(&sipCallsUntil, "until", "", "calls ending at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]])")
+	registerTimeRangeFlags(sipCallsListCmd, &sipCallsRange, "calls ending")
 	f.IntVar(&sipCallsCauseCode, "hangup-cause-code", 0, "filter by numeric hangup cause code")
 	f.StringVar(&sipCallsSource, "hangup-source", "", "who ended the call: "+oneOf(sipHangupSources))
 	f.StringVar(&sipCallsSTIR, "stir-verification", "", oneOf(stirValues))
@@ -180,35 +177,6 @@ func init() {
 	sipACLCmd.AddCommand(sipACLListCmd, sipACLGetCmd)
 	sipCmd.AddCommand(sipCallsCmd, sipTrunksCmd, sipACLCmd)
 	rootCmd.AddCommand(sipCmd)
-}
-
-// sipTimeLayouts are what --since/--until accept. The API itself only takes
-// "YYYY-MM-DD HH:MM[:SS]", so a bare date is widened here rather than sent
-// through to fail upstream.
-var sipTimeLayouts = []string{"2006-01-02 15:04:05", "2006-01-02 15:04", time.RFC3339}
-
-const sipAPITimeLayout = "2006-01-02 15:04:05"
-
-// normalizeSIPTime widens a bare date to a full timestamp. endOfDay picks the
-// last second of that day so --until includes the day the user named.
-func normalizeSIPTime(v string, endOfDay bool) (string, error) {
-	v = strings.TrimSpace(v)
-	if v == "" {
-		return "", nil
-	}
-	if t, err := time.Parse("2006-01-02", v); err == nil {
-		if endOfDay {
-			t = t.Add(24*time.Hour - time.Second)
-		}
-		return t.Format(sipAPITimeLayout), nil
-	}
-	for _, layout := range sipTimeLayouts {
-		if t, err := time.Parse(layout, v); err == nil {
-			return t.UTC().Format(sipAPITimeLayout), nil
-		}
-	}
-	return "", clierr.BadInput(fmt.Sprintf(
-		"could not read %q as a time — use YYYY-MM-DD, YYYY-MM-DD HH:MM, or YYYY-MM-DD HH:MM:SS (UTC)", v))
 }
 
 // trimPlus drops a leading "+" from a number filter. The CDR carries the number
@@ -228,18 +196,12 @@ func runSIPCallsList(cmd *cobra.Command, args []string) error {
 	if err := validateEnum("stir-verification", &sipCallsSTIR, stirValues...); err != nil {
 		return err
 	}
-	// The API refuses an upper time bound without a lower one. Say so here
-	// rather than let it come back as a 400 naming raw filter names.
-	if sipCallsUntil != "" && sipCallsSince == "" {
-		return clierr.BadInput("--until needs --since: the API rejects an end-time upper bound without a lower one")
-	}
-	since, err := normalizeSIPTime(sipCallsSince, false)
+	since, until, err := sipCallsRange.bounds(cmd)
 	if err != nil {
 		return err
 	}
-	until, err := normalizeSIPTime(sipCallsUntil, true)
-	if err != nil {
-		return err
+	if until != "" && since == "" {
+		return errUntilWithoutSince()
 	}
 
 	client, _, err := getClient()
