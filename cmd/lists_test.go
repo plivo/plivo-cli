@@ -265,6 +265,8 @@ func TestListTimeFlags_eitherNameReachesTheQuery(t *testing.T) {
 			[]string{"message_type=mms", "message_time__gte=" + daysAgo(10) + "+05%3A00%3A00"}},
 		{[]string{"messaging", "whatsapp", "list", "--from-date", daysAgo(10), "--to-date", daysAgo(3)},
 			[]string{"message_type=whatsapp", "message_time__gte=" + daysAgo(10) + "+00%3A00%3A00", "message_time__lte=" + daysAgo(3) + "+23%3A59%3A59"}},
+		{[]string{"voice", "recordings", "list", "--since", daysAgo(10), "--until", daysAgo(3)},
+			[]string{"add_time__gte=" + daysAgo(10) + "+00%3A00%3A00", "add_time__lte=" + daysAgo(3) + "+23%3A59%3A59"}},
 	}
 	for _, tc := range cases {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
@@ -317,7 +319,7 @@ func TestListTimeFlags_refusedBeforeAnyRequest(t *testing.T) {
 	// its limit, which is 3 months.
 	retains := map[string]bool{"voice calls list": true,
 		"messaging sms list": true, "messaging mms list": true, "messaging whatsapp list": true}
-	spans := map[string]bool{"voice calls list": true}
+	spans := map[string]bool{"voice calls list": true, "voice recordings list": true}
 	d := daysAgo(3)
 	lists := 0
 	walkOwnCommands(func(c *cobra.Command, path []string) {
@@ -352,9 +354,42 @@ func TestListTimeFlags_refusedBeforeAnyRequest(t *testing.T) {
 			})
 		}
 	})
-	if lists != 5 {
-		t.Errorf("found %d lists with --since, want 5", lists)
+	if lists != 6 {
+		t.Errorf("found %d lists with --since, want 6", lists)
 	}
+}
+
+// --from-time and --to-time were sent as from_time and to_time, which the
+// Recording API ignores. They now set the same range as --since and --until,
+// with cobra's notice to use those.
+func TestRecordingsList_oldTimeFlagsSetTheRange(t *testing.T) {
+	setFakeCreds(t)
+	urls, _ := sipServer(t, http.StatusOK, `{"meta":{},"objects":[]}`)
+
+	err, stdout, stderr := execCmd(t, "voice", "recordings", "list", "--from-time", daysAgo(10), "--to-time", daysAgo(3))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := urls()
+	if len(got) != 1 {
+		t.Fatalf("expected 1 request, got %v", got)
+	}
+	for _, want := range []string{"add_time__gte=" + daysAgo(10), "add_time__lte=" + daysAgo(3)} {
+		if !strings.Contains(got[0], want) {
+			t.Errorf("query missing %s\n  got: %s", want, got[0])
+		}
+	}
+	if strings.Contains(got[0], "from_time") || strings.Contains(got[0], "to_time") {
+		t.Errorf("sent the names the API ignores: %s", got[0])
+	}
+	// cobra prints the notice through the command's output writer: stderr in
+	// a real run, but execCmd points that writer at its stdout pipe.
+	if !strings.Contains(stdout+stderr, "use --since") {
+		t.Errorf("no deprecation notice: stdout %q, stderr %q", stdout, stderr)
+	}
+
+	requireRefusedBeforeAnyRequest(t,
+		[]string{"voice", "recordings", "list", "--since", daysAgo(3), "--from-time", daysAgo(3)}, "same filter")
 }
 
 // daysAgo is the UTC date n days back, so a range stays inside the APIs' 90

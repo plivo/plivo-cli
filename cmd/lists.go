@@ -128,6 +128,18 @@ func registerTimeRangeFlags(cmd *cobra.Command, r *listTimeRange, what string, l
 	f.StringVar(&r.until, "to-date", "", "same as --until")
 }
 
+// deprecatedNames adds older names for the two ends, kept so scripts that
+// pass them still work. cobra hides them from help and says what to use.
+func (r *listTimeRange) deprecatedNames(cmd *cobra.Command, since, until string) {
+	f := cmd.Flags()
+	f.StringVar(&r.since, since, "", "same as --since")
+	f.StringVar(&r.until, until, "", "same as --until")
+	_ = f.MarkDeprecated(since, "use --since")
+	_ = f.MarkDeprecated(until, "use --until")
+	r.names[0] = append(r.names[0], since)
+	r.names[1] = append(r.names[1], until)
+}
+
 // bounds returns the range in UTC, a zero time for an end that is not set.
 // Refused before any request: two names for one end (only the last would
 // count); an end without a start (the call and recording APIs answer it with
