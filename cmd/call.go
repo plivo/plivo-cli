@@ -38,7 +38,7 @@ var callListCmd = &cobra.Command{
 
 --since and --until (or --from-date and --to-date) filter on when a call ended,
 in UTC, and a bare --until date includes that day. --until needs --since. Plivo
-keeps 90 days of calls and searches at most 31 days per request; a range past
+searches only the last 90 days, at most 31 days per request; a range past
 either is refused before any request, and the error says what to run instead.`,
 	Example: `  plivo voice calls list --since 2026-10-01
   plivo voice calls list --from-date 2026-09-15 --to-date 2026-10-14 -o json`,
@@ -551,8 +551,7 @@ func runCallList(cmd *cobra.Command, args []string) error {
 const voiceCallSearchDays = 31
 
 // checkVoiceCallWindow refuses a range longer than the Call API searches in
-// one request, before any request, with the ranges to run instead. The API
-// compares whole minutes, so this does too.
+// one request, before any request, with the ranges to run instead.
 func checkVoiceCallWindow(since, until, now time.Time) error {
 	if since.IsZero() {
 		return nil
@@ -562,18 +561,18 @@ func checkVoiceCallWindow(since, until, now time.Time) error {
 	if to.IsZero() {
 		to, why = now, "a range with no end runs to now"
 	}
-	if to.Truncate(time.Minute).Sub(since.Truncate(time.Minute)) <= voiceCallSearchDays*24*time.Hour {
+	if to.Sub(since) <= voiceCallSearchDays*24*time.Hour {
 		return nil
 	}
 	e := clierr.BadInput(fmt.Sprintf("voice calls are searched at most %d days at a time, and %s", voiceCallSearchDays, why))
-	// Nothing has ended after now, so the ranges stop there: an --until far
+	// Nothing has ended after today, so the ranges stop there: an --until far
 	// ahead would otherwise list one for every month up to it.
-	if to.After(now) {
-		to = now
+	if endOfToday := now.Truncate(24 * time.Hour).Add(24*time.Hour - time.Second); until.IsZero() || to.After(endOfToday) {
+		to = endOfToday
 	}
 	var ranges []string
 	for _, r := range voiceCallRanges(since, to) {
-		ranges = append(ranges, fmt.Sprintf("--since %s --until %s", r[0].Format(time.DateOnly), r[1].Format(time.DateOnly)))
+		ranges = append(ranges, fmt.Sprintf("--since %s --until %s", rangeFlag(r[0], false), rangeFlag(r[1], true)))
 	}
 	if len(ranges) > 0 {
 		e.Hint = "Run one range at a time: " + strings.Join(ranges, "; ") + "."
@@ -582,20 +581,34 @@ func checkVoiceCallWindow(since, until, now time.Time) error {
 	return e
 }
 
-// voiceCallRanges splits from..to into days: ranges of at most
-// voiceCallSearchDays, both ends counted.
+// voiceCallRanges splits from..to into ranges the Call API accepts: the first
+// starts at from and the last ends at to, and each covers at most
+// voiceCallSearchDays calendar days.
 func voiceCallRanges(from, to time.Time) [][2]time.Time {
 	var out [][2]time.Time
-	last := to.Truncate(24 * time.Hour)
-	for d := from.Truncate(24 * time.Hour); !d.After(last); {
-		end := d.AddDate(0, 0, voiceCallSearchDays-1)
-		if end.After(last) {
-			end = last
+	for start := from; !start.After(to); {
+		end := start.Truncate(24*time.Hour).AddDate(0, 0, voiceCallSearchDays).Add(-time.Second)
+		if end.After(to) {
+			end = to
 		}
-		out = append(out, [2]time.Time{d, end})
-		d = end.AddDate(0, 0, 1)
+		out = append(out, [2]time.Time{start, end})
+		start = end.Add(time.Second)
 	}
 	return out
+}
+
+// rangeFlag writes one end of a hinted range: a bare date when it falls on the
+// day's edge (the start of the day, or with end its last second), otherwise
+// the full UTC time, quoted for the shell.
+func rangeFlag(t time.Time, end bool) string {
+	edge := t.Truncate(24 * time.Hour)
+	if end {
+		edge = edge.Add(24*time.Hour - time.Second)
+	}
+	if t.Equal(edge) {
+		return t.Format(time.DateOnly)
+	}
+	return strconv.Quote(t.Format(time.DateTime))
 }
 
 func runCallGet(cmd *cobra.Command, args []string) error {

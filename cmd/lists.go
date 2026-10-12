@@ -144,18 +144,17 @@ func (r *listTimeRange) bounds(cmd *cobra.Command) (since, until time.Time, err 
 	return since, until, nil
 }
 
-// checkRetention refuses a start more than days back. The APIs compare whole
-// minutes, so this does too.
+// checkRetention refuses a start more than days back.
 func checkRetention(since, now time.Time, days int) error {
 	earliest := now.UTC().AddDate(0, 0, -days)
-	if since.IsZero() || !since.Truncate(time.Minute).Before(earliest) {
+	if since.IsZero() || !since.Before(earliest) {
 		return nil
 	}
 	day := earliest.Truncate(24 * time.Hour)
 	if day.Before(earliest) {
 		day = day.AddDate(0, 0, 1)
 	}
-	e := clierr.BadInput(fmt.Sprintf("the range starts %s, more than %d days ago, and Plivo keeps %d days",
+	e := clierr.BadInput(fmt.Sprintf("the range starts %s, more than %d days ago: Plivo searches only the last %d days",
 		since.Format(time.DateOnly), days, days))
 	e.Hint = fmt.Sprintf("Start it on or after %s.", day.Format(time.DateOnly))
 	return e

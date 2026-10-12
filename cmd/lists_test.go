@@ -221,6 +221,7 @@ func TestCheckRetention(t *testing.T) {
 	cases := []struct{ name, since, wantHint string }{
 		{"no start", "", ""},
 		{"exactly 90 days back", "2026-07-14 15:00:00", ""},
+		{"a second more than 90 days back", "2026-07-14 14:59:59", "Start it on or after 2026-07-15."},
 		{"more than 90 days back", "2026-07-14 00:00:00", "Start it on or after 2026-07-15."},
 	}
 	for _, tc := range cases {

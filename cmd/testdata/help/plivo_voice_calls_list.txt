@@ -2,7 +2,7 @@ List voice calls, newest first. Without --since, Plivo returns the last 7 days.
 
 --since and --until (or --from-date and --to-date) filter on when a call ended,
 in UTC, and a bare --until date includes that day. --until needs --since. Plivo
-keeps 90 days of calls and searches at most 31 days per request; a range past
+searches only the last 90 days, at most 31 days per request; a range past
 either is refused before any request, and the error says what to run instead.
 
 Usage:

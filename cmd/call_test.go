@@ -36,16 +36,18 @@ func TestCheckVoiceCallWindow(t *testing.T) {
 		wantRanges         []string
 	}{
 		{"no range", "", "", "", nil},
-		{"31 days to the minute", "2026-09-01 00:00:00", "2026-10-02 00:00:00", "", nil},
-		{"31 days and a minute", "2026-09-01 00:00:00", "2026-10-02 00:01:00", "this range is longer",
-			[]string{"--since 2026-09-01 --until 2026-10-01", "--since 2026-10-02 --until 2026-10-02"}},
+		{"31 days to the second", "2026-09-01 00:00:00", "2026-10-02 00:00:00", "", nil},
+		{"31 days and a second", "2026-09-01 00:00:00", "2026-10-02 00:00:01", "this range is longer",
+			[]string{"--since 2026-09-01 --until 2026-10-01", `--since 2026-10-02 --until "2026-10-02 00:00:01"`}},
 		{"bare dates 31 days apart, both counted", "2026-09-01 00:00:00", "2026-10-01 23:59:59", "", nil},
 		{"no end, inside 31 days", "2026-09-20 00:00:00", "", "", nil},
 		{"no end runs to now", "2026-08-01 00:00:00", "", "a range with no end runs to now",
 			[]string{"--since 2026-08-01 --until 2026-08-31", "--since 2026-09-01 --until 2026-10-01", "--since 2026-10-02 --until 2026-10-12"}},
 		{"89 days", "2026-07-15 00:00:00", "2026-10-12 23:59:59", "this range is longer",
 			[]string{"--since 2026-07-15 --until 2026-08-14", "--since 2026-08-15 --until 2026-09-14", "--since 2026-09-15 --until 2026-10-12"}},
-		{"an end far ahead stops the ranges at now", "2026-10-01 00:00:00", "9999-12-31 23:59:59", "this range is longer",
+		{"a start with a time keeps it in the first range", "2026-07-14 16:00:00", "2026-10-12 23:59:59", "this range is longer",
+			[]string{`--since "2026-07-14 16:00:00" --until 2026-08-13`, "--since 2026-08-14 --until 2026-09-13", "--since 2026-09-14 --until 2026-10-12"}},
+		{"an end far ahead stops the ranges at today", "2026-10-01 00:00:00", "9999-12-31 23:59:59", "this range is longer",
 			[]string{"--since 2026-10-01 --until 2026-10-12"}},
 		{"a range wholly ahead has no ranges to offer", "2099-01-01 00:00:00", "2099-12-31 23:59:59", "this range is longer", nil},
 	}
@@ -75,16 +77,19 @@ func TestCheckVoiceCallWindow(t *testing.T) {
 	}
 }
 
-// Each range the hint offers must itself be one the check allows.
+// Each range the hint offers must itself be allowed, the first included when
+// it starts within the hour after the 90-day edge.
 func TestVoiceCallRanges_eachRangeIsAllowed(t *testing.T) {
 	now := time.Date(2026, 10, 12, 15, 0, 0, 0, time.UTC)
-	ranges := voiceCallRanges(time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC), now)
+	ranges := voiceCallRanges(time.Date(2026, 7, 14, 16, 0, 0, 0, time.UTC), time.Date(2026, 10, 12, 23, 59, 59, 0, time.UTC))
 	if len(ranges) != 3 {
 		t.Fatalf("ranges = %v, want 3", ranges)
 	}
 	for _, r := range ranges {
-		until := r[1].Add(24*time.Hour - time.Second) // a bare --until date
-		if err := checkVoiceCallWindow(r[0], until, now); err != nil {
+		if err := checkRetention(r[0], now, listRetainDays); err != nil {
+			t.Errorf("%v: %v", r, err)
+		}
+		if err := checkVoiceCallWindow(r[0], r[1], now); err != nil {
 			t.Errorf("%v: %v", r, err)
 		}
 	}
