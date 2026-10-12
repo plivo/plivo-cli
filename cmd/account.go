@@ -20,6 +20,7 @@ var accountCmd = &cobra.Command{
 var accountGetCmd = &cobra.Command{
 	Use:   "get",
 	Short: "Get account details (name, billing mode, credits, address)",
+	Args:  cobra.NoArgs,
 	RunE:  runAccountGet,
 }
 
@@ -33,6 +34,7 @@ var (
 var accountUpdateCmd = &cobra.Command{
 	Use:   "update",
 	Short: "Update account profile fields",
+	Args:  cobra.NoArgs,
 	RunE:  runAccountUpdate,
 }
 

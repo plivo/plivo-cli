@@ -31,6 +31,7 @@ var (
 var callListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List calls",
+	Args:  cobra.NoArgs,
 	RunE:  runCallList,
 }
 
@@ -54,15 +55,15 @@ var (
 var callMakeCmd = &cobra.Command{
 	Use:   "make",
 	Short: "Make an outbound call (requires --yes; spends money — use --dry-run to preview)",
+	Args:  cobra.NoArgs,
 	RunE:  runCallMake,
 }
 
 func init() {
-	callListCmd.Flags().IntVar(&callListLimit, "limit", 20, "results per page")
-	callListCmd.Flags().IntVar(&callListOffset, "offset", 0, "pagination offset")
+	registerListFlags(callListCmd, &callListLimit, &callListOffset)
 	callListCmd.Flags().StringVar(&callListFrom, "from", "", "filter by from_number")
 	callListCmd.Flags().StringVar(&callListTo, "to", "", "filter by to_number")
-	callListCmd.Flags().StringVar(&callListDirection, "direction", "", "inbound|outbound")
+	callListCmd.Flags().StringVar(&callListDirection, "direction", "", oneOf(directionValues))
 
 	callMakeCmd.Flags().StringVar(&callMakeFrom, "from", "", "source number (E.164) — must be on your account (required)")
 	_ = callMakeCmd.MarkFlagRequired("from")
@@ -488,6 +489,9 @@ func runCallMake(cmd *cobra.Command, args []string) error {
 }
 
 func runCallList(cmd *cobra.Command, args []string) error {
+	if err := validateEnum("direction", &callListDirection, directionValues...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -506,18 +510,14 @@ func runCallList(cmd *cobra.Command, args []string) error {
 	}
 
 	var resp api.CallList
-	apiErr, err := client.Do("GET", client.AccountURL("Call"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Call"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"UUID", "FROM", "TO", "DIR", "DUR", "TIME", "AMOUNT"}}
 	for _, c := range resp.Objects {

@@ -28,6 +28,7 @@ var (
 var subListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List subaccounts",
+	Args:  cobra.NoArgs,
 	RunE:  runSubList,
 }
 
@@ -46,6 +47,7 @@ var (
 var subCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a subaccount",
+	Args:  cobra.NoArgs,
 	RunE:  runSubCreate,
 }
 
@@ -69,8 +71,7 @@ var subDeleteCmd = &cobra.Command{
 }
 
 func init() {
-	subListCmd.Flags().IntVar(&subListLimit, "limit", 20, "results per page")
-	subListCmd.Flags().IntVar(&subListOffset, "offset", 0, "pagination offset")
+	registerListFlags(subListCmd, &subListLimit, &subListOffset)
 
 	subCreateCmd.Flags().StringVar(&subCreateName, "name", "", "subaccount name (required)")
 	_ = subCreateCmd.MarkFlagRequired("name")
@@ -92,18 +93,14 @@ func runSubList(cmd *cobra.Command, args []string) error {
 	q.Set("limit", strconv.Itoa(subListLimit))
 	q.Set("offset", strconv.Itoa(subListOffset))
 	var resp api.SubaccountList
-	apiErr, err := client.Do("GET", client.AccountURL("Subaccount"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Subaccount"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"AUTH_ID", "NAME", "ENABLED", "CREATED"}}
 	for _, s := range resp.Objects {

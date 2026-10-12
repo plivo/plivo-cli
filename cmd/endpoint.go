@@ -28,6 +28,7 @@ var (
 var epListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List SIP endpoints",
+	Args:  cobra.NoArgs,
 	RunE:  runEndpointList,
 }
 
@@ -48,6 +49,7 @@ var (
 var epCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a SIP endpoint",
+	Args:  cobra.NoArgs,
 	RunE:  runEndpointCreate,
 }
 
@@ -72,8 +74,7 @@ var epDeleteCmd = &cobra.Command{
 }
 
 func init() {
-	epListCmd.Flags().IntVar(&epListLimit, "limit", 20, "results per page")
-	epListCmd.Flags().IntVar(&epListOffset, "offset", 0, "pagination offset")
+	registerListFlags(epListCmd, &epListLimit, &epListOffset)
 
 	epCreateCmd.Flags().StringVar(&epCreateUsername, "username", "", "SIP username (required)")
 	_ = epCreateCmd.MarkFlagRequired("username")
@@ -99,18 +100,14 @@ func runEndpointList(cmd *cobra.Command, args []string) error {
 	q.Set("limit", strconv.Itoa(epListLimit))
 	q.Set("offset", strconv.Itoa(epListOffset))
 	var resp api.EndpointList
-	apiErr, err := client.Do("GET", client.AccountURL("Endpoint"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("Endpoint"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"ENDPOINT_ID", "USERNAME", "ALIAS", "SIP_URI", "APP_ID"}}
 	for _, e := range resp.Objects {

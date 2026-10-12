@@ -1,0 +1,39 @@
+Check, from this machine, that a SIP URI can be reached before any call is
+sent to it. No login is needed, and no INVITE is ever sent, so no call is placed.
+
+TCP and TLS: resolve the host (A/AAAA), open a TCP connection and, for TLS,
+complete the handshake: SNI is the host, the certificate is verified and its
+expiry shown. UDP: resolve the host and send one SIP OPTIONS request.
+
+sips: and transport=tls are tested as TLS, on port 5061 unless the URI gives
+one; tcp and udp use 5060. With no transport, UDP is tested: SIP's default.
+Quote a URI that has ;transport, or the shell cuts the command at the ;.
+
+A pass means the host answers, not that the platform will accept calls. Exit 0
+when reachable. Exit 3 when unreachable, and when a UDP OPTIONS gets no reply:
+hosted platforms often ignore SIP from addresses they do not know, so that
+result is "unknown". Each step waits up to 5 seconds, or --timeout when given.
+
+Usage:
+  plivo sip test [flags]
+
+Examples:
+  plivo sip test --uri "sip:agent.example.com;transport=tls"
+  plivo sip test --uri "sip.example.com:5060;transport=tcp" -o json
+  plivo sip test --uri sips:sip.example.com --dry-run
+
+Flags:
+  -h, --help         help for test
+      --uri string   SIP URI to test, e.g. "sip.example.com;transport=tcp" (required)
+
+Global Flags:
+      --dry-run            print the HTTP request without sending
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+      --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
+  -q, --quiet              suppress non-data output
+      --schema             describe the command (arguments, flags, output fields) instead of running it
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts

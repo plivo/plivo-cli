@@ -1,26 +1,35 @@
 Create an IP access control list.
 
---ip is repeatable. A range that allows the whole internet is reported but not
-blocked: it is occasionally deliberate, and refusing it outright would push
-people to the console instead.
+--ip is repeatable and takes one IPv4 or IPv6 address or CIDR range each. A
+comma-separated list is refused rather than split. A range that allows the
+whole internet is reported but not blocked: it is occasionally deliberate, and
+refusing it outright would push people to the console instead.
+
+--platform vapi fills --ip with the addresses Plivo's Vapi guide allows. The
+other platforms authenticate with a credential, so they have none to fill.
+--ip you pass always wins.
 
 Usage:
   plivo sip ip-acl create [flags]
 
 Examples:
   plivo sip ip-acl create --name platform --ip 203.0.113.4 --ip 198.51.100.0/24
+  plivo sip ip-acl create --name vapi --platform vapi
 
 Flags:
-  -h, --help             help for create
-      --ip stringArray   IP or CIDR (repeatable)
-      --name string      list name
+  -h, --help              help for create
+      --ip stringArray    IP or CIDR (repeatable)
+      --name string       list name
+      --platform string   fill --ip with a platform's published addresses: vapi
 
 Global Flags:
       --dry-run            print the HTTP request without sending
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
-  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+  -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
       --profile string     named profile from ~/.plivo/config.toml
+      --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
+      --schema             describe the command (arguments, flags, output fields) instead of running it
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts

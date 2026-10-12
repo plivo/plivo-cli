@@ -29,6 +29,7 @@ var (
 var mpcListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List multi-party calls",
+	Args:  cobra.NoArgs,
 	RunE:  runMPCList,
 }
 
@@ -49,6 +50,7 @@ var mpcCreateCmd = &cobra.Command{
 	Use:    "create",
 	Short:  "Retired: `plivo voice multiparty participant add` starts an MPC",
 	Hidden: true,
+	Args:   cobra.NoArgs,
 	RunE:   runMPCCreate,
 }
 
@@ -129,16 +131,14 @@ var mpcPartUnholdCmd = &cobra.Command{
 }
 
 func init() {
-	mpcListCmd.Flags().IntVar(&mpcListLimit, "limit", 20, "results per page")
-	mpcListCmd.Flags().IntVar(&mpcListOffset, "offset", 0, "pagination offset")
-	mpcListCmd.Flags().StringVar(&mpcListStatus, "status", "", "filter by status: active|initialized|ended")
+	registerListFlags(mpcListCmd, &mpcListLimit, &mpcListOffset)
+	mpcListCmd.Flags().StringVar(&mpcListStatus, "status", "", "filter by status: "+oneOf(mpcStatusValues))
 
 	mpcCreateCmd.Flags().String("name", "", "ignored")
 	mpcCreateCmd.Flags().Int("max-participants", 0, "ignored")
 	mpcCreateCmd.Flags().Bool("record", false, "ignored")
 
-	mpcPartListCmd.Flags().IntVar(&mpcPartListLimit, "limit", 20, "results per page")
-	mpcPartListCmd.Flags().IntVar(&mpcPartListOffset, "offset", 0, "pagination offset")
+	registerListFlags(mpcPartListCmd, &mpcPartListLimit, &mpcPartListOffset)
 
 	mpcPartAddCmd.Flags().StringVar(&mpcPartAddFrom, "from", "", "source number for the dial-out (required)")
 	_ = mpcPartAddCmd.MarkFlagRequired("from")
@@ -153,6 +153,9 @@ func init() {
 }
 
 func runMPCList(cmd *cobra.Command, args []string) error {
+	if err := validateEnum("status", &mpcListStatus, mpcStatusValues...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -164,18 +167,14 @@ func runMPCList(cmd *cobra.Command, args []string) error {
 		q.Set("status", mpcListStatus)
 	}
 	var resp api.MPCList
-	apiErr, err := client.Do("GET", client.AccountURL("MultiPartyCall"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("MultiPartyCall"), q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"MPC_UUID", "NAME", "STATUS", "BILLING", "CREATED"}}
 	for _, m := range resp.Objects {
@@ -255,18 +254,14 @@ func runMPCPartList(cmd *cobra.Command, args []string) error {
 	q.Set("limit", strconv.Itoa(mpcPartListLimit))
 	q.Set("offset", strconv.Itoa(mpcPartListOffset))
 	var resp api.MPCParticipantList
-	apiErr, err := client.Do("GET", mpcResourceURL(client, id)+"Participant/", nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, mpcResourceURL(client, id)+"Participant/", q, "objects", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
 	rows := [][]string{{"PARTICIPANT_ID", "FROM", "TO", "CALL_UUID", "MUTED", "HOLD", "ROLE"}}
 	for _, p := range resp.Objects {

@@ -1,8 +1,9 @@
 # `plivo feedback`
 
 Share feedback about the Plivo CLI — a 1-5 rating and an optional comment.
-Useful for bug reports, feature asks, or just letting us know something
-feels off.
+Useful for feature asks, or just letting us know something feels off. For a
+bug, `--bug` attaches the last command that failed (see
+[Bug reports](#bug-reports---bug)).
 
 ## Usage
 
@@ -12,6 +13,9 @@ plivo feedback --rating 4                   # one-shot rating only
 plivo feedback --message "..."              # one-shot comment only
 plivo feedback --rating 2 --message "..."   # one-shot both
 plivo feedback --rating 5 --yes             # skip pre-submit confirmation
+plivo feedback --rating 4 --dry-run         # print the request, send nothing
+plivo feedback --bug --dry-run              # show a bug report, send nothing
+plivo feedback --bug --message "..." --yes  # report the last failure
 ```
 
 ## Flags
@@ -21,7 +25,9 @@ plivo feedback --rating 5 --yes             # skip pre-submit confirmation
 | `--rating <1-5>` | One-shot rating. Skips the interactive rating prompt. |
 | `--message <text>` | One-shot comment (max 500 chars). Skips the interactive comment prompt. |
 | `--no-context` | Don't auto-attach CLI version / OS / arch metadata. CLI version still attached (needed for any aggregate). |
-| `--yes` | Skip the pre-submit confirmation step. |
+| `-y`, `--yes` | Skip the pre-submit confirmation step. A bug report sent without a terminal needs it. |
+| `--bug` | Send a bug report: your comment plus the last failed command, printed in full before sending. |
+| `--dry-run` | Print the exact request (endpoint, headers, JSON body) and send nothing. Works on every path, `--bug` included. |
 
 ## What gets sent
 
@@ -48,8 +54,32 @@ We do NOT collect:
 - Free-text from `plivo ask` / `plivo support` message bodies
 - Argument values you passed to the CLI
 
-The client-side redaction is defence-in-depth — the collector re-runs
-the same scrub server-side.
+The redaction runs on your machine, before anything is sent.
+
+## Bug reports (`--bug`)
+
+Every command that fails records the failure in `~/.plivo/last-error.json`
+(mode 0600, replaced on each failure): the command path (for example
+`plivo voice calls get`), exit code, error code, request ID, CLI version,
+OS/arch and time. Never your arguments or flag values, and never the error
+message, since either can echo what you typed. A failed `plivo feedback`
+does not replace it.
+
+`plivo feedback --bug` builds a report from that record and your comment
+(`--message`, or a prompt in a terminal). The collector keeps only the
+comment field of an event, so the recorded failure is added to the comment,
+after your text has been scrubbed. Before anything is sent, the command
+prints the exact request: the endpoint, the `X-Plivo-CLI-*` and `Client-*`
+headers (including the identity headers while telemetry is on, see below),
+and the JSON body.
+
+- In a terminal it then asks `Send this report? [Y/n]`.
+- Without a terminal it refuses (exit 5) unless you pass `--yes`.
+- `--dry-run` prints the report and sends nothing.
+- If sending fails, it prints a prefilled GitHub issue link for
+  `plivo/plivo-cli` with your scrubbed comment and the recorded failure. The
+  link carries no account details and is capped in length; nothing is filed
+  until you submit the form.
 
 ## Privacy & opt-out
 
@@ -63,21 +93,11 @@ way, unless you've set `PLIVO_FEEDBACK_TELEMETRY=0`.
 
 ## How it's sent
 
-A single HTTPS POST to the collector configured via
-`PLIVO_FEEDBACK_ENDPOINT`. 5-second timeout. If the collector is
-unreachable, you'll see a clear "couldn't reach the feedback endpoint"
-message; nothing is silently dropped.
-
-While the backend collector is still being wired up (early access /
-beta period), the command will instead print:
-
-```
-⚠ Feedback collector endpoint not configured yet (PLIVO_FEEDBACK_ENDPOINT unset).
-  Your feedback was prepared but not sent. The CLI team is wiring this up;
-  for now, please open an issue at https://github.com/plivo/plivo-cli/issues.
-```
-
-— and exit cleanly with status 0.
+A single HTTPS POST to the Plivo CLI feedback collector;
+`PLIVO_FEEDBACK_ENDPOINT` points it at another one. 5-second timeout. If
+the collector can't be reached or rejects the event, the command exits 3
+with a network error; nothing is silently dropped. A bug report also prints
+a prefilled GitHub issue link so you can file it there instead.
 
 ## Examples
 
@@ -128,7 +148,8 @@ $ plivo feedback --rating 2 --message "tried with MAABCDEFGHIJKLMNOPQR and got H
 
 | Code | Meaning |
 |---|---|
-| 0 | Submitted, or "nothing to submit", or "collector not configured yet" |
+| 0 | Submitted, nothing to submit, answered N at the confirmation, or `--dry-run` |
 | 1 | Invalid flag value (e.g. `--rating 9`, comment over 500 chars) |
 | 3 | Network error reaching the collector |
-| 130 | User cancelled (Ctrl-C, or answered N to the pre-submit confirm) |
+| 5 | `--bug` without a terminal and without `--yes` |
+| 130 | Ctrl-C |

@@ -30,6 +30,7 @@ var (
 var campListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List campaigns",
+	Args:  cobra.NoArgs,
 	RunE:  runCampaignList,
 }
 
@@ -66,6 +67,7 @@ var (
 var campCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Register a new campaign (spends money — TCR fee, requires --yes)",
+	Args:  cobra.NoArgs,
 	RunE:  runCampaignCreate,
 }
 
@@ -84,8 +86,7 @@ var campUpdateCmd = &cobra.Command{
 }
 
 func init() {
-	campListCmd.Flags().IntVar(&campListLimit, "limit", 20, "results per page")
-	campListCmd.Flags().IntVar(&campListOffset, "offset", 0, "pagination offset")
+	registerListFlags(campListCmd, &campListLimit, &campListOffset)
 	campListCmd.Flags().StringVar(&campListBrand, "brand-id", "", "filter by brand_id")
 
 	campCreateCmd.Flags().StringVar(&campCreateAlias, "alias", "", "human-friendly alias (required)")
@@ -136,18 +137,14 @@ func runCampaignList(cmd *cobra.Command, args []string) error {
 		q.Set("brand_id", campListBrand)
 	}
 	var resp api.Campaign10DLCList
-	apiErr, err := client.Do("GET", client.AccountURL("10dlc", "Campaign"), nil, q, &resp)
-	if err != nil {
+	if err := fetchList(client, client.AccountURL("10dlc", "Campaign"), q, "campaigns", &resp); err != nil {
 		return err
-	}
-	if apiErr != nil {
-		return apiErr
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, resp.Raw())
+		return listJSON(os.Stdout, resp.Raw(), "campaigns")
 	}
 	rows := [][]string{{"CAMPAIGN_ID", "ALIAS", "BRAND_ID", "USECASE", "STATUS"}}
 	for _, c := range resp.Campaigns {

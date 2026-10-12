@@ -7,12 +7,19 @@ before the request, because the API's own error does not say which is missing.
 trunk_domain is only returned on a read, so this reads the trunk back and prints
 it: that domain is what you paste into your platform.
 
+--platform livekit|elevenlabs|retell|vapi checks the trunk against Plivo's guide
+for that platform: it warns when the authentication is not the guide's, names
+the command that makes a missing URI, credential or IP list, and prints
+"recommended: --secure" where the guide uses secure trunking. It never turns
+secure trunking on: that is billed per minute.
+
 Usage:
   plivo sip trunks create [flags]
 
 Examples:
   plivo sip trunks create --name my-trunk --direction inbound --uri <uri_uuid>
   plivo sip trunks create --name out --direction outbound --credential <uuid>
+  plivo sip trunks create --name agent-out --direction outbound --platform livekit --credential <uuid> --secure
 
 Flags:
       --credential string     credential uuid (outbound)
@@ -21,6 +28,7 @@ Flags:
   -h, --help                  help for create
       --ip-acl string         IP access control list uuid (outbound)
       --name string           trunk name
+      --platform string       check against a platform's guide: livekit|elevenlabs|retell|vapi
       --secure                enable TLS/SRTP
       --uri string            primary origination URI uuid (inbound)
 
@@ -28,8 +36,10 @@ Global Flags:
       --dry-run            print the HTTP request without sending
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
-  -o, --output string      output format: table|json (default: table for TTY, json otherwise)
+  -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
       --profile string     named profile from ~/.plivo/config.toml
+      --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
+      --schema             describe the command (arguments, flags, output fields) instead of running it
       --timeout int        request timeout in seconds (default 30)
   -y, --yes                skip confirmation prompts

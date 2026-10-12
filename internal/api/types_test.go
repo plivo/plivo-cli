@@ -569,3 +569,36 @@ func TestRoundTrip_Message(t *testing.T) {
 		t.Errorf("round-trip lost data:\norig:  %+v\nround: %+v", orig, round)
 	}
 }
+
+// The Insights docs type most metrics as strings and post_dial_delay as a
+// float; either may arrive as the other, or as null. None may fail the decode,
+// and each must read back exactly as sent.
+func TestSIPCallInsights_toleratesEveryScalarShape(t *testing.T) {
+	body := `{"call_uuid":"00000000-0000-0000-0000-000000000000",
+		"from":{"carrier":"Example Carrier","number":"+14155551234","region":"US"},
+		"to":null,
+		"rtt":24,"jitter":"3","packet_loss":null,
+		"post_dial_delay":1000.0,"plivo_quality_score":"4.2",
+		"hangup_cause":"normal_hangup","hangup_source":"customer"}`
+	var in SIPCallInsights
+	if err := json.Unmarshal([]byte(body), &in); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	for _, c := range []struct {
+		name string
+		got  FlexString
+		want string
+	}{
+		{"number where a string is documented", in.RTT, "24"},
+		{"string", in.Jitter, "3"},
+		{"null", in.PacketLoss, ""},
+		{"float literal kept as sent", in.PostDialDelay, "1000.0"},
+		{"score", in.PlivoQualityScore, "4.2"},
+		{"nested leg", in.From.Carrier, "Example Carrier"},
+		{"null leg", in.To.Number, ""},
+	} {
+		if string(c.got) != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, c.got, c.want)
+		}
+	}
+}

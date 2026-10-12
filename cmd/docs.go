@@ -110,6 +110,9 @@ func runDocsList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if pages == nil {
+		pages = []docs.Page{} // -o json: [] rather than null
+	}
 	if effectiveFormat() == output.FormatJSON {
 		return output.JSONSuccess(os.Stdout, pages, map[string]any{"count": len(pages)})
 	}

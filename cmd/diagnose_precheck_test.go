@@ -25,7 +25,7 @@ func diagnoseServer(t *testing.T, lookupStatus int) (*httptest.Server, func() []
 		switch {
 		case strings.Contains(r.URL.Path, "/chat"):
 			w.Header().Set("Content-Type", "text/event-stream")
-			_, _ = w.Write([]byte("event: final\ndata: {\"answer\":\"ok\",\"latency_ms\":1}\n\n"))
+			_, _ = w.Write([]byte(okDiagnoseTurn))
 		case strings.Contains(r.URL.Path, "/Call/") || strings.Contains(r.URL.Path, "/Message/"):
 			w.WriteHeader(lookupStatus)
 			if lookupStatus == http.StatusNotFound {
@@ -107,18 +107,30 @@ func TestDiagnoseVoice_lookupServerError_doesNotBlock(t *testing.T) {
 	}
 }
 
-// --dry-run sends nothing, so it must not spend a lookup either.
-func TestDiagnoseVoice_dryRun_skipsPrecheck(t *testing.T) {
-	setFakeCreds(t)
-	_, paths := diagnoseServer(t, http.StatusNotFound)
+// --dry-run sends no writes, but the record check is a read: it still runs, so
+// the preview never shows a turn the real run would refuse. The turn itself is
+// not sent, and no result is printed.
+func TestDiagnoseVoice_dryRun_stillChecksTheRecord(t *testing.T) {
+	for _, status := range []int{http.StatusNotFound, http.StatusOK} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			setFakeCreds(t)
+			_, paths := diagnoseServer(t, status)
+			clientForTest.DryRun = true // as getClient sets it under --dry-run
 
-	if err, _, _ := execCmd(t, "voice", "calls", "diagnose", "whatever", "--dry-run"); err != nil {
-		t.Fatalf("dry-run should not fail: %v", err)
-	}
-	for _, p := range paths() {
-		if strings.Contains(p, "/Call/whatever") {
-			t.Error("dry-run should not perform the existence pre-check")
-		}
+			err, stdout, _ := execCmd(t, "voice", "calls", "diagnose", "whatever", "-o", "json", "--dry-run")
+			if gotErr := err != nil; gotErr != (status == http.StatusNotFound) {
+				t.Errorf("err = %v for a %d lookup", err, status)
+			}
+			if !strings.Contains(strings.Join(paths(), " "), "/Call/whatever") {
+				t.Error("dry-run should still read the call record")
+			}
+			if hitChat(paths()) {
+				t.Error("dry-run must not send the turn to the assistant")
+			}
+			if stdout != "" {
+				t.Errorf("dry-run printed a result:\n%s", stdout)
+			}
+		})
 	}
 }
 
