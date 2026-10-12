@@ -5,7 +5,7 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.0] - 2026-10-09
+## [1.2.0] - 2026-10-12
 
 ### Added
 
@@ -39,6 +39,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on `--secure`, which is billed per minute: the CLI prints
   `recommended: --secure` where the guide uses it. `sip uris create` also takes
   `--transport`.
+- `plivo sip connect plan --number <n> --platform <p>` prints every step to
+  connect a number to a voice-agent platform: the URI, the credential or IP
+  list, both trunks and the `numbers update` that routes the number, each
+  ending in `--dry-run`, then the platform-side setup. It checks the number
+  first (on this account, voice enabled and, for +91, the compliance check and
+  the platform's India support: Vapi is refused) and changes nothing. A failed
+  check exits non-zero; with `-o json` it prints only the error, with the
+  checks so far in `error.context.checks`.
 - `numbers buy --compliance-application-id` attaches a specific compliance
   application: needed for accounts that keep one per customer, and for India
   numbers when Plivo has none to attach by itself. A malformed id is refused
@@ -62,6 +70,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `numbers update --app-id|--trunk-id` on a +91 number checks its compliance
+  application first. The update is refused when the attached application isn't
+  `accepted` or can't be read, and goes ahead with a warning when none is
+  attached. A number that isn't on the account is refused with a
+  `plivo numbers list` hint. `--dry-run` runs the same check.
 - `sip trunks|uris|credentials|ip-acl delete` check every dependent. The old
   check stopped at 200 trunks or 400 numbers and let the delete through when a
   read failed, which could delete live routing. Now every page is read (under
