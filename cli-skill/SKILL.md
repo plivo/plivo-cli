@@ -43,7 +43,7 @@ lookup      carrier lookup for an E.164 number
 messaging   get | sms | mms | whatsapp   (aliases: message, msg, sms)
 numbers     buy | cnam | compliance | get | list | masking | release | search | update
 open        console | calls | call <uuid> | sip-call <uuid> | numbers | docs [path]   (v1.2.0+)
-sip         calls | credentials | ip-acl | test | trunks | uris   (test: v1.2.0+)
+sip         calls | connect | credentials | ip-acl | test | trunks | uris   (connect, test: v1.2.0+)
 skill       install [--project] | list | update   (update, --project: v1.2.0+)
 support     past support escalations
 upgrade     self-update
