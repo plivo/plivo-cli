@@ -291,55 +291,39 @@ func TestVoiceStreamsTest_reportsEndpointClose(t *testing.T) {
 // instead of blaming the network.
 func TestVoiceStreamsTest_signsLikePlivo(t *testing.T) {
 	const profileToken = "ci-only-not-a-real-token" // setFakeCreds
-	cases := []struct {
-		name, endpointToken, wantHint string
-		loggedIn                      bool
-	}{
-		{"signed", profileToken, "", true},
-		{"another account's token", authTestToken, "--profile", true},
-		{"logged out", profileToken, "plivo login", false},
-	}
-	for _, tc := range cases {
+	for _, tc := range []struct{ name, endpointToken, wantHint string }{
+		{"signed", profileToken, ""},
+		{"another account's token", authTestToken, "--profile"},
+		{"logged out", profileToken, "plivo login"},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.loggedIn {
-				setFakeCreds(t)
-			} else {
+			if tc.name == "logged out" {
 				setEmptyHome(t)
+			} else {
+				setFakeCreds(t)
 			}
+			plain := newStreamServer(t, nil)
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if !plivosig.Validate(tc.endpointToken, "http://"+r.Host+r.URL.Path, r.Method,
 					r.Header.Get(plivosig.HeaderNonce), r.Header.Get(plivosig.HeaderSignature), nil) {
 					http.Error(w, "invalid signature", http.StatusForbidden)
 					return
 				}
-				c, err := websocket.Accept(w, r, nil)
-				if err != nil {
-					return
-				}
-				defer c.CloseNow()
-				for {
-					if _, _, err := c.Read(r.Context()); err != nil {
-						return
-					}
-				}
+				plain.Config.Handler.ServeHTTP(w, r)
 			}))
 			t.Cleanup(srv.Close)
 			to := "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws?agent=1"
 
 			if tc.wantHint == "" {
-				res, _, err := streamsTestJSON(t, "--to", to)
-				if err != nil || !res.Connected || !res.Signed {
+				if res, _, err := streamsTestJSON(t, "--to", to); err != nil || !res.Connected || !res.Signed {
 					t.Fatalf("err = %v, connected = %v, signed = %v; want a signed connection", err, res.Connected, res.Signed)
 				}
 				return
 			}
 			err, _, _ := execCmd(t, "voice", "streams", "test", "--to", to, "--duration", "1", "-o", "json")
 			var ce *clierr.Error
-			if !errors.As(err, &ce) {
-				t.Fatalf("err = %v, want the refused upgrade", err)
-			}
-			if ce.Code != clierr.CodeAuthForbidden || ce.StatusCode != http.StatusForbidden || !strings.Contains(ce.Hint, tc.wantHint) {
-				t.Errorf("got %s %d, hint %q; want AUTH_FORBIDDEN 403 and a hint naming %s", ce.Code, ce.StatusCode, ce.Hint, tc.wantHint)
+			if !errors.As(err, &ce) || ce.Code != clierr.CodeAuthForbidden || ce.StatusCode != http.StatusForbidden || !strings.Contains(ce.Hint, tc.wantHint) {
+				t.Fatalf("err = %v; want AUTH_FORBIDDEN 403 with a hint naming %s", err, tc.wantHint)
 			}
 		})
 	}
