@@ -2966,7 +2966,7 @@ plivo sip ip-acl create [flags]
 Examples:
 
 ```
-  plivo sip ip-acl create --name platform --ip 203.0.113.4 --ip 198.51.100.0/24
+  plivo sip ip-acl create --name platform --ip <platform_ip> --ip <platform_cidr>
   plivo sip ip-acl create --name vapi --platform vapi
 ```
 

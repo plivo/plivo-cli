@@ -307,9 +307,10 @@ func requireRefusedBeforeAnyRequest(t *testing.T, args []string, want string) {
 }
 
 // Every list with a time range refuses, before any request: both names for
-// one end (only the last would count), an end without a start, and a range
-// past the limits its API sets, which its --since help names. The lists are
-// found by walking the tree, so a new one is covered without being named here.
+// one end (only the last would count), an end without a start or before it,
+// and a range past the limits its API sets, which its --since help names. The
+// lists are found by walking the tree, so a new one is covered without being
+// named here.
 func TestListTimeFlags_refusedBeforeAnyRequest(t *testing.T) {
 	type refusal struct {
 		flags []string
@@ -340,6 +341,7 @@ func TestListTimeFlags_refusedBeforeAnyRequest(t *testing.T) {
 			{[]string{"--since", d, "--until", d, "--to-date", d}, "same filter"},
 			{[]string{"--until", d}, "--until needs --since"},
 			{[]string{"--to-date", d}, "--until needs --since"},
+			{[]string{"--since", d, "--until", daysAgo(5)}, "must be after --since"},
 		}
 		if retains[name] {
 			cases = append(cases, refusal{[]string{"--since", daysAgo(95)}, "more than 90 days ago"})
@@ -645,9 +647,10 @@ func TestEmptyLists_renderAnEmptyArray(t *testing.T) {
 }
 
 // pagedServer serves rows rows under key, honouring limit and offset like the
-// real endpoints, with meta.total_count set to total (left out when total < 0).
-// fail, when set, may answer request n (1-based) instead: status and
-// Retry-After.
+// real endpoints, with meta.total_count set to total (left out when total < 0)
+// and meta.next the next page or, on the last, the string "null" that the SIP
+// Trunking list sends. fail, when set, may answer request n (1-based) instead:
+// status and Retry-After.
 func pagedServer(t *testing.T, key string, rows, total int, fail func(n int) (int, string)) func() []string {
 	t.Helper()
 	var mu sync.Mutex
@@ -672,9 +675,13 @@ func pagedServer(t *testing.T, key string, rows, total int, fail func(n int) (in
 		for i := offset; i < offset+limit && i < rows; i++ {
 			page = append(page, fmt.Sprintf(`{"id":"row-%d","name":"<%d> & co"}`, i, i))
 		}
-		meta := fmt.Sprintf(`{"limit":%d,"offset":%d,"total_count":%d}`, limit, offset, total)
+		next := `"null"`
+		if offset+limit < rows {
+			next = fmt.Sprintf(`"?limit=%d&offset=%d"`, limit, offset+limit)
+		}
+		meta := fmt.Sprintf(`{"limit":%d,"next":%s,"offset":%d,"total_count":%d}`, limit, next, offset, total)
 		if total < 0 {
-			meta = fmt.Sprintf(`{"limit":%d,"offset":%d}`, limit, offset)
+			meta = fmt.Sprintf(`{"limit":%d,"next":%s,"offset":%d}`, limit, next, offset)
 		}
 		_, _ = fmt.Fprintf(w, `{"api_id":"x","meta":%s,%q:[%s]}`, meta, key, strings.Join(page, ","))
 	}))
@@ -728,8 +735,8 @@ func TestListAll_walksEveryPageIntoOneEnvelope(t *testing.T) {
 	if len(rows) != 45 || rows[0]["id"] != "row-0" || rows[44]["id"] != "row-44" {
 		t.Fatalf("merged %d rows, want row-0..row-44 in order", len(rows))
 	}
-	if meta["total_count"] != float64(45) || meta["truncated"] != nil {
-		t.Errorf("meta = %v, want the server's total_count and no truncated", meta)
+	if meta["total_count"] != float64(45) || meta["truncated"] != nil || meta["next"] != nil {
+		t.Errorf("meta = %v, want the server's total_count, no truncated and a null next", meta)
 	}
 	if !strings.Contains(stdout, `"<44> & co"`) {
 		t.Errorf("rows were re-escaped on the way through:\n%s", stdout)
@@ -822,6 +829,10 @@ func TestListAll_stopsAfter100Pages(t *testing.T) {
 	if len(rows) != 2000 || meta["truncated"] != true || meta["total_count"] != float64(5000) {
 		t.Fatalf("rows=%d meta=%v, want 2000 rows, truncated, total_count 5000", len(rows), meta)
 	}
+	// next resumes at the first row not read, as sent: not HTML-escaped.
+	if !strings.Contains(stdout, `"next": "?limit=20&offset=2000"`) {
+		t.Errorf("meta.next = %v, want ?limit=20&offset=2000 as sent", meta["next"])
+	}
 	if !strings.Contains(stderr, "stopped after 100 pages") {
 		t.Errorf("no warning on stderr: %q", stderr)
 	}
@@ -853,21 +864,49 @@ func TestListAll_retriesARateLimitedPage(t *testing.T) {
 	}
 }
 
-func TestListAll_givesUpAfterThreeRetries(t *testing.T) {
+// Without a Retry-After the waits add up to 61s, past a 60s rate window. A
+// first page that never gets through has no rows to print.
+func TestListAll_givesUpAfterSixRetries(t *testing.T) {
 	setFakeCreds(t)
 	waits := recordWaits(t)
 	hits := pagedServer(t, "objects", 25, 25, func(int) (int, string) { return http.StatusTooManyRequests, "" })
 
-	err, _, _ := execCmd(t, "voice", "calls", "list", "--all")
+	err, stdout, _ := execCmd(t, "voice", "calls", "list", "--all")
 	var ce *clierr.Error
-	if !errors.As(err, &ce) || ce.Code != clierr.CodeRateLimited {
-		t.Fatalf("want RATE_LIMITED, got %v", err)
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeRateLimited || stdout != "" {
+		t.Fatalf("want RATE_LIMITED and nothing printed, got %v, stdout %q", err, stdout)
 	}
-	if n := len(hits()); n != 4 {
-		t.Fatalf("made %d requests, want 1 + 3 retries", n)
+	if n := len(hits()); n != 7 {
+		t.Fatalf("made %d requests, want 1 + 6 retries", n)
 	}
-	if fmt.Sprint(*waits) != "[1s 2s 4s]" {
-		t.Errorf("waits = %v, want 1s 2s 4s without a Retry-After", *waits)
+	if fmt.Sprint(*waits) != "[1s 2s 4s 8s 16s 30s]" {
+		t.Errorf("waits = %v, want 1s doubling to the 30s cap without a Retry-After", *waits)
+	}
+}
+
+// A page still refused after its retries stops the walk, not the rows already
+// read: they print, truncated, with where the rest start, and the run exits 4.
+func TestListAll_printsTheRowsReadBeforeAPageFails(t *testing.T) {
+	setFakeCreds(t)
+	recordWaits(t)
+	pagedServer(t, "objects", 45, 45, func(n int) (int, string) {
+		if n > 1 {
+			return http.StatusTooManyRequests, ""
+		}
+		return 0, ""
+	})
+
+	err, stdout, stderr := execCmd(t, "voice", "calls", "list", "--all", "-o", "json")
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || exitCodeForAPI(ce) != ExitRateLimit {
+		t.Fatalf("want the rate limit (exit 4) after the rows, got %v", err)
+	}
+	rows, meta := dataRows(t, stdout, "objects")
+	if len(rows) != 20 || meta["truncated"] != true || meta["next"] != "?limit=20&offset=20" {
+		t.Fatalf("rows=%d meta=%v, want page 1's 20 rows, truncated, next at offset 20", len(rows), meta)
+	}
+	if !strings.Contains(stderr, "stopped after 20 rows") || !strings.Contains(stderr, "start at offset 20") {
+		t.Errorf("no warning naming where the rest start on stderr: %q", stderr)
 	}
 }
 

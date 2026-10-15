@@ -185,13 +185,15 @@ func startCapturingHTTPServer(t *testing.T, respStatus int, respBody string) (sr
 
 // ─── Destructive verbs refuse without --yes ──────────────────────────────────
 
-// Every command listed here must return a *clierr.Error with code
-// DESTRUCTIVE_REFUSED when invoked without --yes. This is the safety
-// contract the CLI exposes to humans + AI agents alike.
-func TestDestructiveVerbs_refuseWithoutYes(t *testing.T) {
-	setFakeCreds(t)
-
-	cases := []struct {
+// destructiveVerbCases are the deletes, hangups and kicks. Every one must
+// return a *clierr.Error with code DESTRUCTIVE_REFUSED when invoked without
+// --yes or --dry-run. This is the safety contract the CLI exposes to humans +
+// AI agents alike.
+func destructiveVerbCases() []struct {
+	name string
+	args []string
+} {
+	return []struct {
 		name string
 		args []string
 	}{
@@ -219,8 +221,11 @@ func TestDestructiveVerbs_refuseWithoutYes(t *testing.T) {
 		{"api PATCH", []string{"api", "PATCH", "/Application/APP-1/"}},
 		{"api DELETE", []string{"api", "DELETE", "/Number/+14155551234/"}},
 	}
+}
 
-	for _, tc := range cases {
+func TestDestructiveVerbs_refuseWithoutYes(t *testing.T) {
+	setFakeCreds(t)
+	for _, tc := range destructiveVerbCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			err, _, _ := execCmd(t, tc.args...)
 			if err == nil {
@@ -353,8 +358,8 @@ func TestSpendVerbs_refuseWithoutYes(t *testing.T) {
 }
 
 // TestSpendVerbs_dryRunAlonePreviews confirms --dry-run alone (no --yes) is
-// the documented preview path: the command proceeds without error and
-// without hitting the network.
+// the documented preview path for every spend and destructive verb: the
+// command proceeds without error and without hitting the network.
 func TestSpendVerbs_dryRunAlonePreviews(t *testing.T) {
 	setFakeCreds(t)
 
@@ -366,7 +371,7 @@ func TestSpendVerbs_dryRunAlonePreviews(t *testing.T) {
 		Proxy: func(*http.Request) (*url.URL, error) { return url.Parse(srv.URL) },
 	}
 
-	for _, tc := range spendVerbCases() {
+	for _, tc := range append(spendVerbCases(), destructiveVerbCases()...) {
 		t.Run(tc.name, func(t *testing.T) {
 			args := append([]string(nil), tc.args...)
 			args = append(args, "--dry-run")

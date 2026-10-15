@@ -410,8 +410,8 @@ func runAgentUpdate(cmd *cobra.Command, args []string) error {
 
 func runAgentDelete(cmd *cobra.Command, args []string) error {
 	agentID := args[0]
-	if !yesFlag {
-		return clierr.DestructiveRefused("delete agent " + agentID)
+	if err := confirmDestructive("delete agent " + agentID); err != nil {
+		return err
 	}
 	client, _, err := getClient()
 	if err != nil {
