@@ -307,9 +307,10 @@ func requireRefusedBeforeAnyRequest(t *testing.T, args []string, want string) {
 }
 
 // Every list with a time range refuses, before any request: both names for
-// one end (only the last would count), an end without a start, and a range
-// past the limits its API sets, which its --since help names. The lists are
-// found by walking the tree, so a new one is covered without being named here.
+// one end (only the last would count), an end without a start or before it,
+// and a range past the limits its API sets, which its --since help names. The
+// lists are found by walking the tree, so a new one is covered without being
+// named here.
 func TestListTimeFlags_refusedBeforeAnyRequest(t *testing.T) {
 	type refusal struct {
 		flags []string
@@ -340,6 +341,7 @@ func TestListTimeFlags_refusedBeforeAnyRequest(t *testing.T) {
 			{[]string{"--since", d, "--until", d, "--to-date", d}, "same filter"},
 			{[]string{"--until", d}, "--until needs --since"},
 			{[]string{"--to-date", d}, "--until needs --since"},
+			{[]string{"--since", d, "--until", daysAgo(5)}, "must be after --since"},
 		}
 		if retains[name] {
 			cases = append(cases, refusal{[]string{"--since", daysAgo(95)}, "more than 90 days ago"})

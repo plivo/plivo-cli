@@ -151,7 +151,8 @@ func (r *listTimeRange) deprecatedNames(cmd *cobra.Command, since, until string)
 // Refused before any request: two names for one end (only the last would
 // count); an end without a start (the call and recording APIs answer it with
 // a 400, and the Message API searches only recent days, so an earlier end
-// matches nothing); and a range past the list's API limits.
+// matches nothing); an end not after the start (SIP Trunking blames that on
+// its 3-month limit); and a range past the list's API limits.
 func (r *listTimeRange) bounds(cmd *cobra.Command) (since, until time.Time, err error) {
 	for _, names := range r.names {
 		var given []string
@@ -173,6 +174,12 @@ func (r *listTimeRange) bounds(cmd *cobra.Command) (since, until time.Time, err 
 	if !until.IsZero() && since.IsZero() {
 		e := clierr.BadInput("--until needs --since (--to-date needs --from-date)")
 		e.Hint = "Add --since (or --from-date) for the start of the range."
+		return time.Time{}, time.Time{}, e
+	}
+	if !until.IsZero() && !until.After(since) {
+		e := clierr.BadInput(fmt.Sprintf("--until (%s) must be after --since (%s)",
+			until.Format(time.DateTime), since.Format(time.DateTime)))
+		e.Hint = "Pass the earlier time as --since and the later as --until."
 		return time.Time{}, time.Time{}, e
 	}
 	now := listTimeNow()
