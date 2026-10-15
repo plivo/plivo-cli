@@ -10,6 +10,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"os/signal"
@@ -71,7 +72,7 @@ func init() {
 	voiceStreamsCmd.AddCommand(voiceStreamsSimulateCmd)
 }
 
-// simulateFlags control the simulated call.
+// simulateFlags are the flags simulate and readiness share.
 type simulateFlags struct {
 	xmlOnly, expectAudio, insecure bool
 	duration                       int
@@ -89,6 +90,7 @@ type simulateOpts struct {
 	simulateFlags
 	answerURL, method string
 	params            map[string]string // the fields sent to the answer URL
+	strict            bool              // readiness: hosts Plivo cannot reach fail, tunnels warn
 }
 
 func (f simulateFlags) validate() error {
@@ -161,11 +163,12 @@ func callParams(from, to, direction string) map[string]string {
 	return p
 }
 
-// streamsCheck is one finding of a simulated call.
+// streamsCheck is one finding of simulate or readiness.
 type streamsCheck struct {
 	Name   string `json:"name"`
 	Status string `json:"status"` // pass, warn, fail, unknown or info
 	Detail string `json:"detail"`
+	Source string `json:"source,omitempty"` // readiness: the request the check read
 }
 
 // simulation is what one simulated call found.
@@ -212,11 +215,14 @@ const maxAnswerXML = 100 << 10
 // <Stream>, stopping at the first check that rules out the next step.
 func simulateCall(ctx context.Context, o simulateOpts, signer streamSigner) *simulation {
 	s := &simulation{AnswerURL: o.answerURL, Method: o.method, Params: o.params, Signed: signer.token != "", Checks: []streamsCheck{}}
-	if body := s.fetch(ctx, o, signer); body != nil {
-		if doc, ok := s.checkXML(body); ok {
-			st, codec, rate := s.checkStream(doc)
-			if s.err == nil && !o.xmlOnly {
-				s.stream(ctx, st, codec, rate, o, signer)
+	u, _ := url.Parse(o.answerURL) // checked with the flags
+	if !o.strict || s.hostCheck("answer_url", u) {
+		if body := s.fetch(ctx, o, signer); body != nil {
+			if doc, ok := s.checkXML(body); ok {
+				st, codec, rate := s.checkStream(doc, o.strict)
+				if s.err == nil && !o.xmlOnly {
+					s.stream(ctx, st, codec, rate, o, signer)
+				}
 			}
 		}
 	}
@@ -431,7 +437,7 @@ var streamContentTypes = map[string]struct {
 
 // checkStream checks the first <Stream> as a call would use it, and returns
 // it with the codec and rate to stream in. A check that fails sets s.err.
-func (s *simulation) checkStream(doc answerXML) (st streamVerb, codec string, rate int) {
+func (s *simulation) checkStream(doc answerXML, strict bool) (st streamVerb, codec string, rate int) {
 	if len(doc.streams) == 0 {
 		s.fail("stream", streamCheckFailed("the answer XML has no <Stream>, so no audio stream starts",
 			"Only this document is read: no <Redirect> or action URL is followed. Point at the URL that returns the <Stream>."))
@@ -447,8 +453,11 @@ func (s *simulation) checkStream(doc answerXML) (st streamVerb, codec string, ra
 		s.fail("stream", streamCheckFailed(fmt.Sprintf("the <Stream> URL %q is not a ws:// or wss:// URL", st.url), ""))
 	case len(st.url) > 2048:
 		s.fail("stream", streamCheckFailed("the <Stream> URL is longer than 2048 characters, Plivo's limit", ""))
-	default:
+	case !strict || s.hostCheck("stream", u):
 		s.add("stream", "pass", st.url)
+		if strict && u.Scheme == "ws" {
+			s.add("stream", "warn", "ws:// sends the call's audio unencrypted; Plivo's guide asks for wss://")
+		}
 	}
 	if n := len(doc.streams); n > 1 {
 		s.add("stream", "warn", fmt.Sprintf("%d <Stream> elements: one runs per call, and only the first is tested", n))
@@ -482,6 +491,27 @@ func (s *simulation) checkStream(doc answerXML) (st streamVerb, codec string, ra
 		s.add("statusCallbackUrl", "warn", "not set: nothing tells you when a stream drops (DroppedStream)")
 	}
 	return st, f.codec, f.rate
+}
+
+// tunnelDomains are the development tunnels Plivo's docs and this CLI use.
+var tunnelDomains = []string{"ngrok.io", "ngrok.dev", "ngrok-free.app", "ngrok-free.dev", "trycloudflare.com", "lhr.life"}
+
+// hostCheck is readiness's check that a real call can rely on u's host: it
+// fails when Plivo cannot reach it and warns on a development tunnel.
+func (s *simulation) hostCheck(name string, u *url.URL) bool {
+	h := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+	if ip, err := netip.ParseAddr(h); h == "localhost" || strings.HasSuffix(h, ".localhost") ||
+		err == nil && (ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() || ip.IsLinkLocalUnicast()) {
+		s.fail(name, streamCheckFailed(h+" is a local or private host, which Plivo cannot reach",
+			"Serve it from a public host, or through a tunnel while you test."))
+		return false
+	}
+	for _, d := range tunnelDomains {
+		if strings.HasSuffix(h, "."+d) {
+			s.add(name, "warn", h+" is a development tunnel: calls fail once it stops, or restarts with a new URL")
+		}
+	}
+	return true
 }
 
 // stream plays the call to the <Stream> as Plivo would: signed, with the

@@ -11,6 +11,8 @@ itself — they don't act on an existing call-bound stream.
             handler. Restores the original answer_url on Ctrl+C.
   simulate  Act as Plivo on one call: request an answer URL, check its
             XML, then stream to the WebSocket in its <Stream>.
+  readiness Check a number (inbound), or a caller ID and answer URL
+            (outbound), is ready for a streamed call, then simulate it.
 
 Usage:
   plivo voice streams [flags]
@@ -18,6 +20,7 @@ Usage:
 
 Available Commands:
   forward     Redirect an app's answer_url to a local tunnel so calls stream into your local handler
+  readiness   Check a number, or a caller ID and answer URL, is ready for a streamed call
   simulate    Act as Plivo on one call: request an answer URL, check its XML, stream to its <Stream>
   test        Pre-flight a WebSocket endpoint with synthetic Plivo audio frames
 
