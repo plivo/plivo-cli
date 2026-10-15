@@ -963,7 +963,7 @@ refusing it outright would push people to the console instead.
 --platform vapi fills --ip with the addresses Plivo's Vapi guide allows. The
 other platforms authenticate with a credential, so they have none to fill.
 --ip you pass always wins.`,
-	Example: `  plivo sip ip-acl create --name platform --ip 203.0.113.4 --ip 198.51.100.0/24
+	Example: `  plivo sip ip-acl create --name platform --ip <platform_ip> --ip <platform_cidr>
   plivo sip ip-acl create --name vapi --platform vapi`,
 	Args: cobra.NoArgs,
 	RunE: runSIPACLCreate,
