@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	"github.com/plivo/plivo-cli/internal/api"
-	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -263,8 +262,8 @@ func runAppUpdate(cmd *cobra.Command, args []string) error {
 
 func runAppDelete(cmd *cobra.Command, args []string) error {
 	appID := args[0]
-	if !yesFlag {
-		return clierr.DestructiveRefused("delete application " + appID)
+	if err := confirmDestructive("delete application " + appID); err != nil {
+		return err
 	}
 	client, _, err := getClient()
 	if err != nil {

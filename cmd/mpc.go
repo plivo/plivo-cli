@@ -223,8 +223,8 @@ func runMPCCreate(cmd *cobra.Command, args []string) error {
 
 func runMPCEnd(cmd *cobra.Command, args []string) error {
 	id := args[0]
-	if !yesFlag {
-		return clierr.DestructiveRefused("end MPC " + id)
+	if err := confirmDestructive("end MPC " + id); err != nil {
+		return err
 	}
 	client, _, err := getClient()
 	if err != nil {
@@ -305,8 +305,8 @@ func runMPCPartAdd(cmd *cobra.Command, args []string) error {
 
 func runMPCPartKick(cmd *cobra.Command, args []string) error {
 	id, part := args[0], args[1]
-	if !yesFlag {
-		return clierr.DestructiveRefused("kick participant " + part + " from MPC " + id)
+	if err := confirmDestructive("kick participant " + part + " from MPC " + id); err != nil {
+		return err
 	}
 	return mpcParticipantDelete(id, part, "")
 }

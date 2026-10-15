@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/plivo/plivo-cli/internal/api"
-	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -184,8 +183,8 @@ func runStreamStart(cmd *cobra.Command, args []string) error {
 
 func runStreamStop(cmd *cobra.Command, args []string) error {
 	callUUID := args[0]
-	if !yesFlag {
-		return clierr.DestructiveRefused("stop stream(s) on call " + callUUID)
+	if err := confirmDestructive("stop stream(s) on call " + callUUID); err != nil {
+		return err
 	}
 	client, _, err := getClient()
 	if err != nil {

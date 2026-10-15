@@ -190,7 +190,7 @@ func checkACLEntries(entries []string) error {
 	for _, e := range entries {
 		if err := checkACLEntry(e); err != nil {
 			bad := clierr.BadFlag("ip", err.Error())
-			bad.Hint = "Pass one address or CIDR range per --ip, e.g. --ip 203.0.113.4 --ip 198.51.100.0/24."
+			bad.Hint = "Pass one address or CIDR range per --ip, e.g. --ip <platform_ip> --ip <platform_cidr>."
 			return bad
 		}
 	}
@@ -203,7 +203,7 @@ func checkACLEntry(e string) error {
 	}
 	if strings.Contains(e, "/") {
 		if _, err := netip.ParsePrefix(e); err != nil {
-			return fmt.Errorf("%q is not a CIDR range such as 198.51.100.0/24", e)
+			return fmt.Errorf("%q is not a CIDR range such as <platform_ip>/24", e)
 		}
 		return nil
 	}

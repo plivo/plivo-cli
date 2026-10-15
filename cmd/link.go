@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	"github.com/plivo/plivo-cli/internal/api"
-	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -134,8 +133,8 @@ func runLinkCreate(cmd *cobra.Command, args []string) error {
 
 func runLinkDelete(cmd *cobra.Command, args []string) error {
 	id := args[0]
-	if !yesFlag {
-		return clierr.DestructiveRefused("unlink " + id)
+	if err := confirmDestructive("unlink " + id); err != nil {
+		return err
 	}
 	client, _, err := getClient()
 	if err != nil {

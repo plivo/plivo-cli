@@ -148,8 +148,8 @@ var callTransferCmd = &cobra.Command{
 
 func runCallHangup(cmd *cobra.Command, args []string) error {
 	uuidStr := args[0]
-	if !yesFlag {
-		return clierr.DestructiveRefused("hangup call " + uuidStr)
+	if err := confirmDestructive("hangup call " + uuidStr); err != nil {
+		return err
 	}
 	client, _, err := getClient()
 	if err != nil {

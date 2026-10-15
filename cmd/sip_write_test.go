@@ -1020,7 +1020,8 @@ func TestSIPDeletes_stopWhenTheCheckFails(t *testing.T) {
 }
 
 // --dry-run reads the dependents for real (a GET is not a write) and shows
-// them, so the preview refuses exactly what the real run would.
+// them, so the preview refuses exactly what the real run would. It stands in
+// for --yes, never for --force.
 func TestSIPDeletes_dryRunShowsDependents(t *testing.T) {
 	t.Run("in use", func(t *testing.T) {
 		setFakeCreds(t)
@@ -1038,13 +1039,28 @@ func TestSIPDeletes_dryRunShowsDependents(t *testing.T) {
 		}
 	})
 
+	t.Run("in use, with --force", func(t *testing.T) {
+		setFakeCreds(t)
+		resetWriteFlags(t)
+		reqs := deleteServer(t, 0, -1, trunksUsingU1, nil)
+		clientForTest.DryRun = true
+
+		err, _, stderr := execCmd(t, "sip", "uris", "delete", "U1", "--force", "--dry-run")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(stderr, "[dry-run] DELETE") || countRequests(reqs(), "DELETE ") != 0 {
+			t.Fatalf("want the delete previewed, not sent; stderr:\n%s", stderr)
+		}
+	})
+
 	t.Run("unused", func(t *testing.T) {
 		setFakeCreds(t)
 		resetWriteFlags(t)
 		reqs := deleteServer(t, 0, -1, `{"meta":{"total_count":0},"objects":[]}`, nil)
 		clientForTest.DryRun = true
 
-		err, _, stderr := execCmd(t, "sip", "uris", "delete", "U9", "--yes", "--dry-run")
+		err, _, stderr := execCmd(t, "sip", "uris", "delete", "U9", "--dry-run")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

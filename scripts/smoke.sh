@@ -176,15 +176,18 @@ assert_url "support (past escalations)" \
   "$BIN" support --dry-run
 
 # ─── destructive verbs refuse without --yes ──────────────────────────────────
-# Destructive verbs must exit 5 with DESTRUCTIVE_REFUSED without --yes.
+# Destructive verbs must exit 5 with DESTRUCTIVE_REFUSED without --yes, and
+# preview with --dry-run alone. Both run behind a proxy that answers nothing,
+# so a broken gate fails here instead of reaching Plivo.
 echo "--> destructive refusal"
+dead_proxy=http://127.0.0.1:9
 
 assert_refused() {
   local label="$1"
   shift
   local out code
   # Capture, don't pipe: the expected exit 5 would trip `pipefail`.
-  out=$("$@" --dry-run 2>&1) && code=0 || code=$?
+  out=$(HTTPS_PROXY=$dead_proxy "$@" 2>&1) && code=0 || code=$?
   if [ "$code" -ne 5 ]; then
     echo "✗ $label — expected exit 5 (ExitRefused), got $code:"
     echo "$out"
@@ -195,7 +198,12 @@ assert_refused() {
     echo "$out"
     exit 1
   fi
-  echo "✓ $label refused without --yes (exit 5)"
+  out=$(HTTPS_PROXY=$dead_proxy "$@" --dry-run 2>&1) && code=0 || code=$?
+  case "$code $out" in
+    "0 "*"[dry-run] DELETE"*) ;;
+    *) echo "✗ $label --dry-run did not preview the DELETE (exit $code):"; echo "$out"; exit 1 ;;
+  esac
+  echo "✓ $label refused without --yes (exit 5), previewed with --dry-run"
 }
 
 assert_refused "numbers release"         "$BIN" numbers release +14155551234

@@ -135,8 +135,8 @@ func init() {
 
 func runNumberRelease(cmd *cobra.Command, args []string) error {
 	number := args[0]
-	if !yesFlag {
-		return clierr.DestructiveRefused("release number " + number)
+	if err := confirmDestructive("release number " + number); err != nil {
+		return err
 	}
 	client, _, err := getClient()
 	if err != nil {

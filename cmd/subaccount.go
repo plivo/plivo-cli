@@ -213,8 +213,8 @@ func runSubUpdate(cmd *cobra.Command, args []string) error {
 
 func runSubDelete(cmd *cobra.Command, args []string) error {
 	id := args[0]
-	if !yesFlag {
-		return clierr.DestructiveRefused("delete subaccount " + id)
+	if err := confirmDestructive("delete subaccount " + id); err != nil {
+		return err
 	}
 	client, _, err := getClient()
 	if err != nil {

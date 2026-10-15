@@ -24,15 +24,22 @@ const maxListLimit = 20
 const maxListPages = 100
 
 // A page that answers 429 is retried up to pageRetries times, waiting what its
-// Retry-After asks (1s, 2s, 4s without one), never longer than maxRetryWait or
-// --timeout.
+// Retry-After asks, never longer than maxRetryWait or --timeout. Without one the
+// waits double from 1s: 61s in all, past the 60s window the Message API counts
+// its 20 requests in (it sends no Retry-After).
 const (
-	pageRetries  = 3
+	pageRetries  = 6
 	maxRetryWait = 30 * time.Second
 )
 
 // waitBeforeRetry is time.Sleep; tests swap it to keep the clock out of them.
 var waitBeforeRetry = time.Sleep
+
+// partialErr is the error that stopped an --all walk after it had read rows.
+// fetchList keeps those rows for the command to print rather than returning
+// it, and execute returns it once the command is done, so the exit code still
+// says the list is incomplete.
+var partialErr error
 
 // registerListFlags adds --limit, --offset and --all to a list backed by a
 // paged API, and checks them before the command runs. Past 20 rows a page the
@@ -144,7 +151,8 @@ func (r *listTimeRange) deprecatedNames(cmd *cobra.Command, since, until string)
 // Refused before any request: two names for one end (only the last would
 // count); an end without a start (the call and recording APIs answer it with
 // a 400, and the Message API searches only recent days, so an earlier end
-// matches nothing); and a range past the list's API limits.
+// matches nothing); an end not after the start (SIP Trunking blames that on
+// its 3-month limit); and a range past the list's API limits.
 func (r *listTimeRange) bounds(cmd *cobra.Command) (since, until time.Time, err error) {
 	for _, names := range r.names {
 		var given []string
@@ -166,6 +174,12 @@ func (r *listTimeRange) bounds(cmd *cobra.Command) (since, until time.Time, err 
 	if !until.IsZero() && since.IsZero() {
 		e := clierr.BadInput("--until needs --since (--to-date needs --from-date)")
 		e.Hint = "Add --since (or --from-date) for the start of the range."
+		return time.Time{}, time.Time{}, e
+	}
+	if !until.IsZero() && !until.After(since) {
+		e := clierr.BadInput(fmt.Sprintf("--until (%s) must be after --since (%s)",
+			until.Format(time.DateTime), since.Format(time.DateTime)))
+		e.Hint = "Pass the earlier time as --since and the later as --until."
 		return time.Time{}, time.Time{}, e
 	}
 	now := listTimeNow()
@@ -316,7 +330,10 @@ func listJSON(w io.Writer, raw json.RawMessage, key string) error {
 
 // fetchList reads one page of a list into out or, with --all, every page: their
 // rows merged under key into the first page's envelope, which keeps the
-// server's meta.total_count. out then renders exactly as one page would.
+// server's meta.total_count, with meta.next null or, when the walk stopped
+// early, where the rows it left unread start. out then renders exactly as one
+// page would. A walk that fails after its first page still renders the rows it
+// read, and leaves the error in partialErr.
 func fetchList(client *api.Client, endpoint string, q url.Values, key string, out api.RawCapturer) error {
 	if !allFlag || client.DryRun {
 		apiErr, err := client.Do("GET", endpoint, nil, q, out)
@@ -332,12 +349,12 @@ func fetchList(client *api.Client, endpoint string, q url.Values, key string, ou
 		return nil
 	}
 	var rows []json.RawMessage
-	env, capped, err := walkPages(client, endpoint, q, key, maxListPages, func(page []json.RawMessage) bool {
+	env, next, capped, werr := walkPages(client, endpoint, q, key, maxListPages, func(page []json.RawMessage) bool {
 		rows = append(rows, page...)
 		return true
 	})
-	if err != nil {
-		return err
+	if env == nil {
+		return werr // the first page failed: nothing was read
 	}
 	if rows == nil {
 		rows = []json.RawMessage{}
@@ -347,8 +364,13 @@ func fetchList(client *api.Client, endpoint string, q url.Values, key string, ou
 		return err
 	}
 	env[key] = merged
-	if capped {
-		env["meta"] = markTruncated(env["meta"])
+	env["meta"] = walkMeta(env["meta"], next, capped || werr != nil)
+	switch {
+	case werr != nil:
+		partialErr = werr
+		fmt.Fprintf(os.Stderr, "Warning: --all stopped after %d rows on the error below. "+
+			"Those rows are printed; the rest start at offset %d.\n", len(rows), len(rows))
+	case capped:
 		fmt.Fprintf(os.Stderr, "Warning: --all stopped after %d pages (%d rows) and the list has more. "+
 			"Narrow the filters to read the rest.\n", maxListPages, len(rows))
 	}
@@ -368,10 +390,11 @@ func fetchList(client *api.Client, endpoint string, q url.Values, key string, ou
 // walk; only when it does not is a short page taken for the last one. An empty
 // page always ends it, as does visit returning false or maxPages pages (0: no
 // limit); capped reports that last case, when rows were left unread. Returns
-// the first page's envelope.
+// the first page's envelope, and next: the last page's meta.next, where the
+// rows left unread start, or nil when the walk reached the end.
 func walkPages(client *api.Client, endpoint string, q url.Values, key string, maxPages int,
 	visit func(rows []json.RawMessage) bool,
-) (first map[string]json.RawMessage, capped bool, err error) {
+) (first map[string]json.RawMessage, next json.RawMessage, capped bool, err error) {
 	limit, _ := strconv.Atoi(q.Get("limit"))
 	if limit < 1 || limit > maxListLimit {
 		limit = maxListLimit
@@ -379,7 +402,7 @@ func walkPages(client *api.Client, endpoint string, q url.Values, key string, ma
 	offset := 0
 	for page := 0; ; page++ {
 		if maxPages > 0 && page == maxPages {
-			return first, true, nil
+			return first, next, true, nil
 		}
 		pq := url.Values{}
 		for k, v := range q {
@@ -387,9 +410,9 @@ func walkPages(client *api.Client, endpoint string, q url.Values, key string, ma
 		}
 		pq.Set("limit", strconv.Itoa(limit))
 		pq.Set("offset", strconv.Itoa(offset))
-		env, rows, total, perr := getPage(client, endpoint, pq, key)
+		env, rows, meta, perr := getPage(client, endpoint, pq, key)
 		if perr != nil {
-			return first, false, perr
+			return first, next, false, perr
 		}
 		if first == nil {
 			first = env
@@ -398,19 +421,28 @@ func walkPages(client *api.Client, endpoint string, q url.Values, key string, ma
 		// The total, when sent, says where the list ends; otherwise a short page
 		// does. An empty page ends it either way.
 		last := len(rows) < limit
-		if total != nil {
-			last = len(rows) == 0 || offset >= *total
+		if meta.TotalCount != nil {
+			last = len(rows) == 0 || offset >= *meta.TotalCount
+		}
+		if next = meta.Next; last {
+			next = nil
 		}
 		if !visit(rows) || last {
-			return first, false, nil
+			return first, next, false, nil
 		}
 	}
 }
 
+// pageMeta is what a walk reads from a page's meta. TotalCount is nil when the
+// page did not send one.
+type pageMeta struct {
+	TotalCount *int            `json:"total_count"`
+	Next       json.RawMessage `json:"next"`
+}
+
 // getPage reads one page of a walk, retrying a 429 up to pageRetries times.
-// total is meta.total_count, nil when the page did not send one.
 func getPage(client *api.Client, endpoint string, q url.Values, key string,
-) (env map[string]json.RawMessage, rows []json.RawMessage, total *int, err error) {
+) (env map[string]json.RawMessage, rows []json.RawMessage, meta pageMeta, err error) {
 	var timeout time.Duration
 	if client.HTTP != nil {
 		timeout = client.HTTP.Timeout
@@ -419,13 +451,13 @@ func getPage(client *api.Client, endpoint string, q url.Values, key string,
 	for attempt := 0; ; attempt++ {
 		apiErr, derr := client.Do("GET", endpoint, nil, q, &raw)
 		if derr != nil {
-			return nil, nil, nil, derr
+			return nil, nil, pageMeta{}, derr
 		}
 		if apiErr == nil {
 			break
 		}
 		if apiErr.Code != clierr.CodeRateLimited || attempt == pageRetries {
-			return nil, nil, nil, apiErr
+			return nil, nil, pageMeta{}, apiErr
 		}
 		wait := retryWait(attempt, apiErr.RetryAfter, timeout)
 		if !quietFlag {
@@ -434,23 +466,20 @@ func getPage(client *api.Client, endpoint string, q url.Values, key string,
 		waitBeforeRetry(wait)
 	}
 	if json.Unmarshal(raw, &env) != nil || env == nil {
-		return nil, nil, nil, clierr.Upstream("a page of the list was not a JSON object")
+		return nil, nil, pageMeta{}, clierr.Upstream("a page of the list was not a JSON object")
 	}
 	if v := env[key]; len(v) > 0 {
 		if json.Unmarshal(v, &rows) != nil {
-			return nil, nil, nil, clierr.Upstream(fmt.Sprintf("a page of the list had no %q array", key))
+			return nil, nil, pageMeta{}, clierr.Upstream(fmt.Sprintf("a page of the list had no %q array", key))
 		}
 	}
-	var meta struct {
-		TotalCount *int `json:"total_count"`
-	}
 	_ = json.Unmarshal(env["meta"], &meta) // absent or odd: the short page ends the walk
-	return env, rows, meta.TotalCount, nil
+	return env, rows, meta, nil
 }
 
 // retryWait is the wait before retry attempt+1 of a page: the server's
-// Retry-After when it sent one, else 1s, 2s, 4s; capped at maxRetryWait and
-// at the request timeout.
+// Retry-After when it sent one, else 1s doubling each time; capped at
+// maxRetryWait and at the request timeout.
 func retryWait(attempt int, retryAfter, timeout time.Duration) time.Duration {
 	wait := retryAfter
 	if wait <= 0 {
@@ -463,14 +492,18 @@ func retryWait(attempt int, retryAfter, timeout time.Duration) time.Duration {
 	return wait
 }
 
-// markTruncated sets truncated: true on a list's meta, so a script can tell a
-// walk stopped before the end.
-func markTruncated(meta json.RawMessage) json.RawMessage {
+// walkMeta is a merged list's meta: the first page's, with next where a script
+// reads on from (null once every row is read) and, when the walk stopped
+// early, truncated: true so a script can tell.
+func walkMeta(meta, next json.RawMessage, truncated bool) json.RawMessage {
 	m := map[string]json.RawMessage{}
 	if json.Unmarshal(meta, &m) != nil || m == nil {
 		m = map[string]json.RawMessage{}
 	}
-	m["truncated"] = json.RawMessage("true")
+	m["next"] = next // a nil next encodes as null
+	if truncated {
+		m["truncated"] = json.RawMessage("true")
+	}
 	b, err := output.Marshal(m)
 	if err != nil {
 		return meta

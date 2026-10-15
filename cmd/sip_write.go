@@ -50,7 +50,7 @@ func trunksUsing(client *api.Client, segment, uuid string) ([]string, error) {
 			q.Set("limit", strconv.Itoa(maxListLimit))
 			q.Set(filter, uuid)
 			var decodeErr error
-			_, _, err := walkPages(client, client.AccountURL("Zentrunk", "Trunk"), q, "objects", 0,
+			_, _, _, err := walkPages(client, client.AccountURL("Zentrunk", "Trunk"), q, "objects", 0,
 				func(rows []json.RawMessage) bool {
 					for _, row := range rows {
 						var t api.SIPTrunk
@@ -110,7 +110,7 @@ func firstNumberOnTrunk(client *api.Client, trunkID string) (string, error) {
 	var decodeErr error
 	read, pages := 0, 0
 	err := readThrough(client, func() error {
-		_, _, err := walkPages(client, client.AccountURL("Number"), q, "objects", 0,
+		_, _, _, err := walkPages(client, client.AccountURL("Number"), q, "objects", 0,
 			func(rows []json.RawMessage) bool {
 				for _, row := range rows {
 					var n struct {
@@ -142,17 +142,15 @@ func firstNumberOnTrunk(client *api.Client, trunkID string) (string, error) {
 	return found, err
 }
 
-// confirmDelete lets a delete through only with --yes, and one that would break
-// something only with --force on top: deleting an in-use URI also deletes its
-// trunks, and deleting a trunk stops calls to every number routed to it.
+// confirmDelete lets a delete through only with --yes or --dry-run, and one
+// that would break something only with --force on top: deleting an in-use URI
+// also deletes its trunks, and deleting a trunk stops calls to every number
+// routed to it.
 func confirmDelete(action string, dependents []string) error {
 	if len(dependents) == 0 {
-		if !yesFlag {
-			return clierr.DestructiveRefused(action)
-		}
-		return nil
+		return confirmDestructive(action)
 	}
-	if yesFlag && sipDeleteForce {
+	if (yesFlag || dryRunFlag) && sipDeleteForce {
 		return nil
 	}
 	e := clierr.DestructiveRefused(action)
@@ -965,7 +963,7 @@ refusing it outright would push people to the console instead.
 --platform vapi fills --ip with the addresses Plivo's Vapi guide allows. The
 other platforms authenticate with a credential, so they have none to fill.
 --ip you pass always wins.`,
-	Example: `  plivo sip ip-acl create --name platform --ip 203.0.113.4 --ip 198.51.100.0/24
+	Example: `  plivo sip ip-acl create --name platform --ip <platform_ip> --ip <platform_cidr>
   plivo sip ip-acl create --name vapi --platform vapi`,
 	Args: cobra.NoArgs,
 	RunE: runSIPACLCreate,
