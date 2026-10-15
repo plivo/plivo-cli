@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"sync"
@@ -14,7 +15,9 @@ import (
 	"time"
 
 	"github.com/plivo/plivo-cli/internal/clierr"
+	"github.com/plivo/plivo-cli/internal/config"
 	"github.com/plivo/plivo-cli/internal/output"
+	"github.com/plivo/plivo-cli/internal/plivosig"
 	"github.com/plivo/plivo-cli/internal/wsproxy"
 
 	"github.com/coder/websocket"
@@ -82,6 +85,7 @@ type streamsTestResult struct {
 	Errors         int    `json:"errors"` // kept for scripts: a failed send now ends the run, so always 0 here
 
 	LatencyMs       int64    `json:"latency_ms"`        // WebSocket connect time
+	Signed          bool     `json:"signed"`            // the upgrade carried Plivo's signature
 	PlayAudioFrames int      `json:"play_audio_frames"` // playAudio frames carrying audio
 	FirstResponseMs *int64   `json:"first_response_ms"` // first media frame sent to first playAudio back; null when none
 	Warnings        []string `json:"warnings"`
@@ -98,6 +102,10 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 		return clierr.BadFlag("codec", err.Error())
 	}
 	readBack := streamsTestBidirectional || streamsTestExpectAudio
+	header, profile, err := streamsTestSignature(streamsTestTo)
+	if err != nil {
+		return err
+	}
 
 	mediaFormat := wsproxy.MediaFormat{
 		Encoding:   wsproxy.Encoding(streamsTestCodec),
@@ -119,7 +127,7 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 
 	out := cmd.OutOrStdout()
 	jsonOut := effectiveFormat() == output.FormatJSON
-	result := streamsTestResult{Codec: streamsTestCodec, Rate: streamsTestRate, Bidirectional: readBack, Warnings: []string{}}
+	result := streamsTestResult{Codec: streamsTestCodec, Rate: streamsTestRate, Bidirectional: readBack, Signed: profile != "", Warnings: []string{}}
 	warn := func(msg string) {
 		result.Warnings = append(result.Warnings, msg)
 		if !jsonOut {
@@ -130,17 +138,24 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	// --- Phase 1: connect ---
 	dialCtx, dialCancel := context.WithTimeout(ctx, 10*time.Second)
 	dialStart := time.Now()
-	conn, _, err := websocket.Dial(dialCtx, streamsTestTo, &websocket.DialOptions{HTTPClient: httpClient})
+	conn, resp, err := websocket.Dial(dialCtx, streamsTestTo, &websocket.DialOptions{HTTPClient: httpClient, HTTPHeader: header})
 	latency := time.Since(dialStart)
 	dialCancel()
 	if err != nil {
+		if resp != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
+			return streamsTestRefused(resp.StatusCode, profile)
+		}
 		return clierr.NetworkError(streamsTestTo, err)
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "test complete")
 	result.Connected = true
 	result.LatencyMs = latency.Milliseconds()
 	if !jsonOut {
-		fmt.Fprintf(out, "✓ Connection established (%dms)\n", result.LatencyMs)
+		signedAs := ""
+		if profile != "" {
+			signedAs = fmt.Sprintf(", signed with profile %q", profile)
+		}
+		fmt.Fprintf(out, "✓ Connection established (%dms%s)\n", result.LatencyMs, signedAs)
 	}
 
 	// --- Phase 2: handshake (start frame) ---
@@ -270,6 +285,46 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	}
 	fmt.Fprintf(out, "\nEndpoint is ready to receive Plivo audio streams.\n")
 	return nil
+}
+
+// streamsTestSignature signs the upgrade as Plivo signs a stream, over the
+// http:// form of the URL without its query, so an endpoint that checks the
+// signature lets the test in. Logged out, the test stays unsigned.
+func streamsTestSignature(wsURL string) (http.Header, string, error) {
+	u, err := url.Parse(wsURL)
+	if err != nil {
+		return nil, "", clierr.BadFlag("to", err.Error())
+	}
+	p, profile, err := config.Resolve(profileFlag)
+	var ce *clierr.Error
+	if errors.As(err, &ce) && ce.Code == clierr.CodeAuthMissing {
+		return nil, "", nil
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	nonce := randomHex(10)
+	sig, err := plivosig.Compute(p.AuthToken, "http://"+u.Host+u.EscapedPath(), http.MethodGet, nonce, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	return http.Header{plivosig.HeaderSignature: {sig}, plivosig.HeaderNonce: {nonce}}, profile, nil
+}
+
+// streamsTestRefused reports a 401 or 403 on the upgrade: the endpoint
+// refused it, most likely over the signature, so a network hint misleads.
+func streamsTestRefused(status int, profile string) *clierr.Error {
+	hint := "No profile is logged in, so the upgrade was unsigned and an endpoint that checks Plivo's signature refuses it. Run `plivo login`, then test again."
+	if profile != "" {
+		hint = fmt.Sprintf("The upgrade was signed like Plivo's, with profile %q's auth token. If the endpoint checks another account's token, test again with --profile set to that account's profile.", profile)
+	}
+	return &clierr.Error{
+		Code:       clierr.CodeAuthForbidden,
+		Message:    streamsTestTo + " refused the WebSocket upgrade",
+		Hint:       hint,
+		StatusCode: status,
+		Context:    map[string]any{"target": streamsTestTo, "signed": profile != ""},
+	}
 }
 
 // readBackLimit replaces coder/websocket's 32 KiB cap on one message: a
