@@ -12,6 +12,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/plivo/plivo-cli/internal/clierr"
+	"github.com/plivo/plivo-cli/internal/plivosig"
 )
 
 // streamServer is a WebSocket endpoint for `streams test`. It records the
@@ -282,5 +283,48 @@ func TestVoiceStreamsTest_reportsEndpointClose(t *testing.T) {
 	}
 	if !strings.Contains(ce.Message, "1008") || !strings.Contains(ce.Message, "signature required") {
 		t.Errorf("message = %q, want the endpoint's close code and reason", ce.Message)
+	}
+}
+
+// #136: an endpoint that checks Plivo's signature, over http://host/path as
+// Plivo signs a stream, lets a logged-in test in. A refused upgrade says why
+// instead of blaming the network.
+func TestVoiceStreamsTest_signsLikePlivo(t *testing.T) {
+	const profileToken = "ci-only-not-a-real-token" // setFakeCreds
+	for _, tc := range []struct{ name, endpointToken, wantHint string }{
+		{"signed", profileToken, ""},
+		{"another account's token", authTestToken, "--profile"},
+		{"logged out", profileToken, "plivo login"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.name == "logged out" {
+				setEmptyHome(t)
+			} else {
+				setFakeCreds(t)
+			}
+			plain := newStreamServer(t, nil)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if !plivosig.Validate(tc.endpointToken, "http://"+r.Host+r.URL.Path, r.Method,
+					r.Header.Get(plivosig.HeaderNonce), r.Header.Get(plivosig.HeaderSignature), nil) {
+					http.Error(w, "invalid signature", http.StatusForbidden)
+					return
+				}
+				plain.Config.Handler.ServeHTTP(w, r)
+			}))
+			t.Cleanup(srv.Close)
+			to := "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws?agent=1"
+
+			if tc.wantHint == "" {
+				if res, _, err := streamsTestJSON(t, "--to", to); err != nil || !res.Connected || !res.Signed {
+					t.Fatalf("err = %v, connected = %v, signed = %v; want a signed connection", err, res.Connected, res.Signed)
+				}
+				return
+			}
+			err, _, _ := execCmd(t, "voice", "streams", "test", "--to", to, "--duration", "1", "-o", "json")
+			var ce *clierr.Error
+			if !errors.As(err, &ce) || ce.Code != clierr.CodeAuthForbidden || ce.StatusCode != http.StatusForbidden || !strings.Contains(ce.Hint, tc.wantHint) {
+				t.Fatalf("err = %v; want AUTH_FORBIDDEN 403 with a hint naming %s", err, tc.wantHint)
+			}
+		})
 	}
 }
