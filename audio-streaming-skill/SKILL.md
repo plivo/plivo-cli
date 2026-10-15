@@ -187,6 +187,8 @@ The first connection loads Pipecat, so it can be slow. If `frames_read_back` is 
   ```
 
   Check: HTTP 200, `Content-Type` `application/xml` or `text/xml`, a body that passes "Check the XML before you serve it" with a `<Stream>` that points at the voice agent, and a reply well inside Plivo's 15-second limit. The URL must work without Basic or bearer credentials. If it validates Plivo signatures, this unsigned probe gets a 401 that proves nothing: read the body Plivo fetched in the console debug logs after the test call instead.
+
+  From v1.2.1, `plivo voice streams simulate --answer-url <answer URL> --answer-method <method> -o json` makes this request as Plivo does, signed with the profile's Auth Token so a server that checks Plivo's signature lets it in, checks the reply, the `<Response>` root and the `<Stream>` rules (not the other elements: keep the `curl` for those), then streams to the `<Stream>` URL as `streams test` does. Check: exit 0 and `result` `pass`; a failed check exits 1 with `checks[]` in `error.context`. `--xml-only` stops before the WebSocket.
 - No answer URL yet: ask "Plivo needs a URL that tells it to connect calls to your voice agent. Where should that live?" (header Answer URL) · On my server (recommended): "I'll give you the code to add." · Run a small one here for the test. On my server: compose document A from "The XML" with the agent's `wss://` URL and codec, the user adds a route that returns it, and you probe it as above. A small one here: run the echo test script with `STREAM_URL=<wss URL> uv run --script echo_bot.py`; its `/answer` then points calls at the user's voice agent. It always asks for `audio/x-mulaw;rate=8000`, so offer it only for a voice agent that takes μ-law at 8 kHz.
 - On a public `https` host, skip step 6. On this machine, step 6 tunnels the port that serves the answer URL; a WebSocket on another port needs its own tunnel.
 
@@ -220,7 +222,7 @@ curl -s -X <method> https://<tunnel><answer path>    # echo test: curl -s -X POS
 plivo voice streams test --to <wss URL in that XML> --bidirectional --duration 3 -o json
 ```
 
-The XML's `<Stream>` must point at a `wss://` URL that Plivo can reach (`wss://<tunnel>/ws` for the echo test and Pipecat; with `STREAM_URL` set, the user's voice agent), and `frames_read_back` must be above 0. The Pipecat example's `/ws` checks no Plivo signature, so anyone who finds the URL can drive the voice agent on the user's keys: keep the tunnel up only while testing.
+The XML's `<Stream>` must point at a `wss://` URL that Plivo can reach (`wss://<tunnel>/ws` for the echo test and Pipecat; with `STREAM_URL` set, the user's voice agent), and `frames_read_back` must be above 0. From v1.2.1, `plivo voice streams simulate --answer-url https://<tunnel><answer path> --answer-method <method> -o json` makes both checks in one run. The Pipecat example's `/ws` checks no Plivo signature, so anyone who finds the URL can drive the voice agent on the user's keys: keep the tunnel up only while testing.
 
 ### Step 7: create the application
 
@@ -251,7 +253,7 @@ Run it again without `--dry-run`. Check: `application` in `plivo numbers get <nu
 
 ### Step 9: make a test call
 
-Check the credit first. Then place the call the way the user chose in step 3. They talk for 10 seconds or more: the echo test repeats them, the OpenAI voice agent answers them.
+Check the credit first. From v1.2.1, also run `plivo voice streams readiness <number> -o json` when the user calls in, or `plivo voice streams readiness --from <number> --to <phone> --answer-url <answer URL> --answer-method <method> -o json` before Plivo calls them. It places no call: it checks the number, its app, India compliance and the credit, then simulates the call. Fix every `fail` first. `unknown` means not checked (geo permissions and the concurrent call limit have no API), not passed; a tunnel host is a warning while testing. Then place the call the way the user chose in step 3. They talk for 10 seconds or more: the echo test repeats them, the OpenAI voice agent answers them.
 
 - **The user calls in:** ask them to call the number, in full. For an Indian number, from an Indian phone: Indian calls stay within India.
 - **Plivo calls the user:**
@@ -291,7 +293,7 @@ Then report, short, in these words where they fit:
 ## Go live
 
 - Your own domain with a valid certificate, near the callers (Mumbai for India, US East or West for the US; the docs target under 1 s end to end). A stopped or rotated tunnel turns every call into a 7011.
-- Run the step 5 checks against the production host. Then `plivo account applications update <app_id> --answer-url https://PROD/plivo/answer --hangup-url https://PROD/plivo/hangup --dry-run`, show the current values being replaced, and apply after approval. `applications update` has no fallback flag: `plivo api POST /Application/<app_id>/ --body '{"fallback_answer_url":"https://PROD/plivo/fallback"}' --dry-run`, then `--yes`.
+- Run the step 5 checks against the production host. Then `plivo account applications update <app_id> --answer-url https://PROD/plivo/answer --hangup-url https://PROD/plivo/hangup --dry-run`, show the current values being replaced, and apply after approval. `applications update` has no fallback flag: `plivo api POST /Application/<app_id>/ --body '{"fallback_answer_url":"https://PROD/plivo/fallback"}' --dry-run`, then `--yes`. Then, from v1.2.1, `plivo voice streams readiness <number> -o json`: no `fail`, and no tunnel warning.
 - The Pipecat example: its `Dockerfile` builds only `bot.py`, for Pipecat Cloud (`pcc-deploy.toml`). Host `server.py`, which serves the answer XML, separately with `ENV=production`, `AGENT_NAME` and `ORGANIZATION_NAME` set, as its README says, or run `server.py` with `ENV=local` on one HTTPS host. Its `/ws` checks no Plivo signature: add validation first ("Callbacks, signature validation, timeouts").
 - Set `statusCallbackUrl` on `<Stream>`: it is the only push signal for `DroppedStream` and `DegradedStream`.
 - Make every callback handler idempotent, because Plivo retries: key stream callbacks on `StreamID` plus the event, call callbacks on `CallUUID`.
