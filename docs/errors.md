@@ -42,7 +42,7 @@ Stable strings — switch on these, not on the message text.
 |---|---|---|
 | `AUTH_MISSING` | No Plivo creds configured | Run `plivo login` |
 | `AUTH_INVALID` | Upstream returned 401 | Re-check creds, run `plivo auth whoami` |
-| `AUTH_FORBIDDEN` | Upstream returned 403 (role/scope) | Account lacks permission |
+| `AUTH_FORBIDDEN` | Upstream returned 403 (role/scope), or a `voice streams test` endpoint refused the upgrade (401/403) | Account lacks permission; for `streams test`, `plivo login` or `--profile` |
 | `AUTH_EXPIRED` | Cached session token TTL elapsed | Re-login |
 | `AUTH_2FA_REQUIRED` | Account has 2FA enabled | Disable for CLI account or use non-2FA path |
 | `AUTH_RECAPTCHA_REQUIRED` | Endpoint requires browser reCAPTCHA | Use `plivo login` (the browser-based flow) |
