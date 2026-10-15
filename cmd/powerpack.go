@@ -282,8 +282,8 @@ func runPowerpackUpdate(cmd *cobra.Command, args []string) error {
 
 func runPowerpackDelete(cmd *cobra.Command, args []string) error {
 	id := args[0]
-	if !yesFlag {
-		return clierr.DestructiveRefused("delete powerpack " + id)
+	if err := confirmDestructive("delete powerpack " + id); err != nil {
+		return err
 	}
 	client, _, err := getClient()
 	if err != nil {
@@ -352,8 +352,8 @@ func runPowerpackNumberAdd(cmd *cobra.Command, args []string) error {
 
 func runPowerpackNumberRemove(cmd *cobra.Command, args []string) error {
 	id, number := args[0], args[1]
-	if !yesFlag {
-		return clierr.DestructiveRefused(fmt.Sprintf("remove %s from powerpack %s", number, id))
+	if err := confirmDestructive(fmt.Sprintf("remove %s from powerpack %s", number, id)); err != nil {
+		return err
 	}
 	client, _, err := getClient()
 	if err != nil {

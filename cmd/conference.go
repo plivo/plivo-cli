@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/plivo/plivo-cli/internal/api"
-	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -238,16 +237,16 @@ func runConferenceGet(cmd *cobra.Command, args []string) error {
 
 func runConferenceHangup(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	if !yesFlag {
-		return clierr.DestructiveRefused("end conference " + name)
+	if err := confirmDestructive("end conference " + name); err != nil {
+		return err
 	}
 	return doConferenceDelete(name, "")
 }
 
 func runConferenceMemberKick(cmd *cobra.Command, args []string) error {
 	name, member := args[0], args[1]
-	if !yesFlag {
-		return clierr.DestructiveRefused("kick member " + member + " from " + name)
+	if err := confirmDestructive("kick member " + member + " from " + name); err != nil {
+		return err
 	}
 	return doConferenceMemberDelete(name, member, "")
 }

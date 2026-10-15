@@ -225,8 +225,8 @@ func runEndpointUpdate(cmd *cobra.Command, args []string) error {
 
 func runEndpointDelete(cmd *cobra.Command, args []string) error {
 	id := args[0]
-	if !yesFlag {
-		return clierr.DestructiveRefused("delete endpoint " + id)
+	if err := confirmDestructive("delete endpoint " + id); err != nil {
+		return err
 	}
 	client, _, err := getClient()
 	if err != nil {

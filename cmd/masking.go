@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	"github.com/plivo/plivo-cli/internal/api"
-	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -202,8 +201,8 @@ func runMaskingList(cmd *cobra.Command, args []string) error {
 
 func runMaskingDelete(cmd *cobra.Command, args []string) error {
 	id := args[0]
-	if !yesFlag {
-		return clierr.DestructiveRefused("end masking session " + id)
+	if err := confirmDestructive("end masking session " + id); err != nil {
+		return err
 	}
 	client, _, err := getClient()
 	if err != nil {

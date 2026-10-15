@@ -41,6 +41,17 @@ func guardSpend(action string) (proceed, dryRun bool, err *clierr.Error) {
 	}
 }
 
+// confirmDestructive is guardSpend's contract for a delete, hangup or kick:
+// --dry-run stands in for --yes (getClient sets client.DryRun, so nothing is
+// sent), never for --force. It returns an error, not a *clierr.Error, so a
+// pass is a plain nil rather than a typed one.
+func confirmDestructive(action string) error {
+	if _, _, err := guardSpend(action); err != nil {
+		return err
+	}
+	return nil
+}
+
 // applyDryRun sets client.DryRun when the caller is in the preview path.
 // Tiny helper purely to make spend-verb call sites read as a single line.
 func applyDryRun(c *api.Client, dryRun bool) {

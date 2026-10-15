@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	"github.com/plivo/plivo-cli/internal/api"
-	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -140,8 +139,8 @@ func runRecordingGet(cmd *cobra.Command, args []string) error {
 
 func runRecordingDelete(cmd *cobra.Command, args []string) error {
 	id := args[0]
-	if !yesFlag {
-		return clierr.DestructiveRefused("delete recording " + id)
+	if err := confirmDestructive("delete recording " + id); err != nil {
+		return err
 	}
 	client, _, err := getClient()
 	if err != nil {
