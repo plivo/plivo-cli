@@ -50,7 +50,7 @@ func trunksUsing(client *api.Client, segment, uuid string) ([]string, error) {
 			q.Set("limit", strconv.Itoa(maxListLimit))
 			q.Set(filter, uuid)
 			var decodeErr error
-			_, _, err := walkPages(client, client.AccountURL("Zentrunk", "Trunk"), q, "objects", 0,
+			_, _, _, err := walkPages(client, client.AccountURL("Zentrunk", "Trunk"), q, "objects", 0,
 				func(rows []json.RawMessage) bool {
 					for _, row := range rows {
 						var t api.SIPTrunk
@@ -110,7 +110,7 @@ func firstNumberOnTrunk(client *api.Client, trunkID string) (string, error) {
 	var decodeErr error
 	read, pages := 0, 0
 	err := readThrough(client, func() error {
-		_, _, err := walkPages(client, client.AccountURL("Number"), q, "objects", 0,
+		_, _, _, err := walkPages(client, client.AccountURL("Number"), q, "objects", 0,
 			func(rows []json.RawMessage) bool {
 				for _, row := range rows {
 					var n struct {

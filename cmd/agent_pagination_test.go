@@ -118,11 +118,11 @@ func TestAgentsList_withAll_walksEveryPage(t *testing.T) {
 	if !ids["agent-1"] || !ids["agent-2"] {
 		t.Errorf("expected both agent-1 and agent-2 in the merged -o json output, got %v", objs)
 	}
-	// The merge re-encodes both pages; page 2's name and page 1's meta.next
-	// URL must come out byte for byte, not HTML-escaped.
-	for _, want := range []string{`"name": "Agent <Two> & Co"`, "?limit=1&offset=1"} {
+	// The merge re-encodes both pages; page 2's name must come out byte for
+	// byte, not HTML-escaped, and with both pages read there is no next page.
+	for _, want := range []string{`"name": "Agent <Two> & Co"`, `"next": null`} {
 		if !strings.Contains(stdout, want) {
-			t.Errorf("merged -o json output should keep %q as sent, got: %s", want, stdout)
+			t.Errorf("merged -o json output should hold %q, got: %s", want, stdout)
 		}
 	}
 }

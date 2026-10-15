@@ -645,9 +645,9 @@ func TestEmptyLists_renderAnEmptyArray(t *testing.T) {
 }
 
 // pagedServer serves rows rows under key, honouring limit and offset like the
-// real endpoints, with meta.total_count set to total (left out when total < 0).
-// fail, when set, may answer request n (1-based) instead: status and
-// Retry-After.
+// real endpoints, with meta.total_count set to total (left out when total < 0)
+// and meta.next the next page, null on the last. fail, when set, may answer
+// request n (1-based) instead: status and Retry-After.
 func pagedServer(t *testing.T, key string, rows, total int, fail func(n int) (int, string)) func() []string {
 	t.Helper()
 	var mu sync.Mutex
@@ -672,9 +672,13 @@ func pagedServer(t *testing.T, key string, rows, total int, fail func(n int) (in
 		for i := offset; i < offset+limit && i < rows; i++ {
 			page = append(page, fmt.Sprintf(`{"id":"row-%d","name":"<%d> & co"}`, i, i))
 		}
-		meta := fmt.Sprintf(`{"limit":%d,"offset":%d,"total_count":%d}`, limit, offset, total)
+		next := "null"
+		if offset+limit < rows {
+			next = fmt.Sprintf(`"?limit=%d&offset=%d"`, limit, offset+limit)
+		}
+		meta := fmt.Sprintf(`{"limit":%d,"next":%s,"offset":%d,"total_count":%d}`, limit, next, offset, total)
 		if total < 0 {
-			meta = fmt.Sprintf(`{"limit":%d,"offset":%d}`, limit, offset)
+			meta = fmt.Sprintf(`{"limit":%d,"next":%s,"offset":%d}`, limit, next, offset)
 		}
 		_, _ = fmt.Fprintf(w, `{"api_id":"x","meta":%s,%q:[%s]}`, meta, key, strings.Join(page, ","))
 	}))
@@ -728,8 +732,8 @@ func TestListAll_walksEveryPageIntoOneEnvelope(t *testing.T) {
 	if len(rows) != 45 || rows[0]["id"] != "row-0" || rows[44]["id"] != "row-44" {
 		t.Fatalf("merged %d rows, want row-0..row-44 in order", len(rows))
 	}
-	if meta["total_count"] != float64(45) || meta["truncated"] != nil {
-		t.Errorf("meta = %v, want the server's total_count and no truncated", meta)
+	if meta["total_count"] != float64(45) || meta["truncated"] != nil || meta["next"] != nil {
+		t.Errorf("meta = %v, want the server's total_count, no truncated and a null next", meta)
 	}
 	if !strings.Contains(stdout, `"<44> & co"`) {
 		t.Errorf("rows were re-escaped on the way through:\n%s", stdout)
@@ -821,6 +825,10 @@ func TestListAll_stopsAfter100Pages(t *testing.T) {
 	rows, meta := dataRows(t, stdout, "objects")
 	if len(rows) != 2000 || meta["truncated"] != true || meta["total_count"] != float64(5000) {
 		t.Fatalf("rows=%d meta=%v, want 2000 rows, truncated, total_count 5000", len(rows), meta)
+	}
+	// next resumes at the first row not read, as sent: not HTML-escaped.
+	if !strings.Contains(stdout, `"next": "?limit=20&offset=2000"`) {
+		t.Errorf("meta.next = %v, want ?limit=20&offset=2000 as sent", meta["next"])
 	}
 	if !strings.Contains(stderr, "stopped after 100 pages") {
 		t.Errorf("no warning on stderr: %q", stderr)
