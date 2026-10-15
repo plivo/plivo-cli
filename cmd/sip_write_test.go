@@ -1039,6 +1039,21 @@ func TestSIPDeletes_dryRunShowsDependents(t *testing.T) {
 		}
 	})
 
+	t.Run("in use, with --force", func(t *testing.T) {
+		setFakeCreds(t)
+		resetWriteFlags(t)
+		reqs := deleteServer(t, 0, -1, trunksUsingU1, nil)
+		clientForTest.DryRun = true
+
+		err, _, stderr := execCmd(t, "sip", "uris", "delete", "U1", "--force", "--dry-run")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(stderr, "[dry-run] DELETE") || countRequests(reqs(), "DELETE ") != 0 {
+			t.Fatalf("want the delete previewed, not sent; stderr:\n%s", stderr)
+		}
+	})
+
 	t.Run("unused", func(t *testing.T) {
 		setFakeCreds(t)
 		resetWriteFlags(t)

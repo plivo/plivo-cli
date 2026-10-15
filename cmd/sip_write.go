@@ -143,14 +143,14 @@ func firstNumberOnTrunk(client *api.Client, trunkID string) (string, error) {
 }
 
 // confirmDelete lets a delete through only with --yes or --dry-run, and one
-// that would break something only with --yes --force: deleting an in-use URI
+// that would break something only with --force on top: deleting an in-use URI
 // also deletes its trunks, and deleting a trunk stops calls to every number
 // routed to it.
 func confirmDelete(action string, dependents []string) error {
 	if len(dependents) == 0 {
 		return confirmDestructive(action)
 	}
-	if yesFlag && sipDeleteForce {
+	if (yesFlag || dryRunFlag) && sipDeleteForce {
 		return nil
 	}
 	e := clierr.DestructiveRefused(action)
