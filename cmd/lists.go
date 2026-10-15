@@ -369,7 +369,7 @@ func fetchList(client *api.Client, endpoint string, q url.Values, key string, ou
 	case werr != nil:
 		partialErr = werr
 		fmt.Fprintf(os.Stderr, "Warning: --all stopped after %d rows on the error below. "+
-			"Those rows are printed; meta.next is where the rest start.\n", len(rows))
+			"Those rows are printed; the rest start at offset %d.\n", len(rows), len(rows))
 	case capped:
 		fmt.Fprintf(os.Stderr, "Warning: --all stopped after %d pages (%d rows) and the list has more. "+
 			"Narrow the filters to read the rest.\n", maxListPages, len(rows))

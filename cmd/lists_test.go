@@ -904,8 +904,8 @@ func TestListAll_printsTheRowsReadBeforeAPageFails(t *testing.T) {
 	if len(rows) != 20 || meta["truncated"] != true || meta["next"] != "?limit=20&offset=20" {
 		t.Fatalf("rows=%d meta=%v, want page 1's 20 rows, truncated, next at offset 20", len(rows), meta)
 	}
-	if !strings.Contains(stderr, "stopped after 20 rows") {
-		t.Errorf("no warning on stderr: %q", stderr)
+	if !strings.Contains(stderr, "stopped after 20 rows") || !strings.Contains(stderr, "start at offset 20") {
+		t.Errorf("no warning naming where the rest start on stderr: %q", stderr)
 	}
 }
 
