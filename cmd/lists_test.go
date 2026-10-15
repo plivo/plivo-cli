@@ -648,8 +648,9 @@ func TestEmptyLists_renderAnEmptyArray(t *testing.T) {
 
 // pagedServer serves rows rows under key, honouring limit and offset like the
 // real endpoints, with meta.total_count set to total (left out when total < 0)
-// and meta.next the next page, null on the last. fail, when set, may answer
-// request n (1-based) instead: status and Retry-After.
+// and meta.next the next page or, on the last, the string "null" that the SIP
+// Trunking list sends. fail, when set, may answer request n (1-based) instead:
+// status and Retry-After.
 func pagedServer(t *testing.T, key string, rows, total int, fail func(n int) (int, string)) func() []string {
 	t.Helper()
 	var mu sync.Mutex
@@ -674,7 +675,7 @@ func pagedServer(t *testing.T, key string, rows, total int, fail func(n int) (in
 		for i := offset; i < offset+limit && i < rows; i++ {
 			page = append(page, fmt.Sprintf(`{"id":"row-%d","name":"<%d> & co"}`, i, i))
 		}
-		next := "null"
+		next := `"null"`
 		if offset+limit < rows {
 			next = fmt.Sprintf(`"?limit=%d&offset=%d"`, limit, offset+limit)
 		}
