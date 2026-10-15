@@ -208,7 +208,11 @@ func (p streamsProbe) run(ctx context.Context, out io.Writer, quiet bool) (strea
 		if resp != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
 			return result, streamsTestRefused(p.url, resp.StatusCode, p.profile)
 		}
-		return result, clierr.NetworkError(p.url, err)
+		e := clierr.NetworkError(p.url, err)
+		if errors.Is(err, http.ErrSchemeMismatch) {
+			e.Hint = "The URL is wss://, but the server answered without TLS: use ws:// for a server without TLS on this machine; real calls need wss://, through a tunnel or a TLS host."
+		}
+		return result, e
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "test complete")
 	result.Connected = true
