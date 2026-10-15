@@ -24,15 +24,22 @@ const maxListLimit = 20
 const maxListPages = 100
 
 // A page that answers 429 is retried up to pageRetries times, waiting what its
-// Retry-After asks (1s, 2s, 4s without one), never longer than maxRetryWait or
-// --timeout.
+// Retry-After asks, never longer than maxRetryWait or --timeout. Without one the
+// waits double from 1s: 61s in all, past the 60s window the Message API counts
+// its 20 requests in (it sends no Retry-After).
 const (
-	pageRetries  = 3
+	pageRetries  = 6
 	maxRetryWait = 30 * time.Second
 )
 
 // waitBeforeRetry is time.Sleep; tests swap it to keep the clock out of them.
 var waitBeforeRetry = time.Sleep
+
+// partialErr is the error that stopped an --all walk after it had read rows.
+// fetchList keeps those rows for the command to print rather than returning
+// it, and execute returns it once the command is done, so the exit code still
+// says the list is incomplete.
+var partialErr error
 
 // registerListFlags adds --limit, --offset and --all to a list backed by a
 // paged API, and checks them before the command runs. Past 20 rows a page the
@@ -318,7 +325,8 @@ func listJSON(w io.Writer, raw json.RawMessage, key string) error {
 // rows merged under key into the first page's envelope, which keeps the
 // server's meta.total_count, with meta.next null or, when the walk stopped
 // early, where the rows it left unread start. out then renders exactly as one
-// page would.
+// page would. A walk that fails after its first page still renders the rows it
+// read, and leaves the error in partialErr.
 func fetchList(client *api.Client, endpoint string, q url.Values, key string, out api.RawCapturer) error {
 	if !allFlag || client.DryRun {
 		apiErr, err := client.Do("GET", endpoint, nil, q, out)
@@ -334,12 +342,12 @@ func fetchList(client *api.Client, endpoint string, q url.Values, key string, ou
 		return nil
 	}
 	var rows []json.RawMessage
-	env, next, capped, err := walkPages(client, endpoint, q, key, maxListPages, func(page []json.RawMessage) bool {
+	env, next, capped, werr := walkPages(client, endpoint, q, key, maxListPages, func(page []json.RawMessage) bool {
 		rows = append(rows, page...)
 		return true
 	})
-	if err != nil {
-		return err
+	if env == nil {
+		return werr // the first page failed: nothing was read
 	}
 	if rows == nil {
 		rows = []json.RawMessage{}
@@ -349,8 +357,13 @@ func fetchList(client *api.Client, endpoint string, q url.Values, key string, ou
 		return err
 	}
 	env[key] = merged
-	env["meta"] = walkMeta(env["meta"], next, capped)
-	if capped {
+	env["meta"] = walkMeta(env["meta"], next, capped || werr != nil)
+	switch {
+	case werr != nil:
+		partialErr = werr
+		fmt.Fprintf(os.Stderr, "Warning: --all stopped after %d rows on the error below. "+
+			"Those rows are printed; meta.next is where the rest start.\n", len(rows))
+	case capped:
 		fmt.Fprintf(os.Stderr, "Warning: --all stopped after %d pages (%d rows) and the list has more. "+
 			"Narrow the filters to read the rest.\n", maxListPages, len(rows))
 	}
@@ -458,8 +471,8 @@ func getPage(client *api.Client, endpoint string, q url.Values, key string,
 }
 
 // retryWait is the wait before retry attempt+1 of a page: the server's
-// Retry-After when it sent one, else 1s, 2s, 4s; capped at maxRetryWait and
-// at the request timeout.
+// Retry-After when it sent one, else 1s doubling each time; capped at
+// maxRetryWait and at the request timeout.
 func retryWait(attempt int, retryAfter, timeout time.Duration) time.Duration {
 	wait := retryAfter
 	if wait <= 0 {

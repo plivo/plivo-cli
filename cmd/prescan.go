@@ -17,7 +17,11 @@ func execute(args []string) (*cobra.Command, error) {
 		cmd, _, _ := rootCmd.Find(args)
 		return cmd, err
 	}
+	partialErr = nil
 	cmd, err := rootCmd.ExecuteC()
+	if err == nil {
+		err = partialErr // a list printed the rows it read before this stopped it
+	}
 	if err != nil && strings.HasPrefix(err.Error(), "unknown command ") {
 		// cobra's own error for a word that is no subcommand (a group's
 		// NoArgs, or root's legacy check) gets the --help path's code and

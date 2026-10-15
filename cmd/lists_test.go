@@ -861,21 +861,49 @@ func TestListAll_retriesARateLimitedPage(t *testing.T) {
 	}
 }
 
-func TestListAll_givesUpAfterThreeRetries(t *testing.T) {
+// Without a Retry-After the waits add up to 61s, past a 60s rate window. A
+// first page that never gets through has no rows to print.
+func TestListAll_givesUpAfterSixRetries(t *testing.T) {
 	setFakeCreds(t)
 	waits := recordWaits(t)
 	hits := pagedServer(t, "objects", 25, 25, func(int) (int, string) { return http.StatusTooManyRequests, "" })
 
-	err, _, _ := execCmd(t, "voice", "calls", "list", "--all")
+	err, stdout, _ := execCmd(t, "voice", "calls", "list", "--all")
 	var ce *clierr.Error
-	if !errors.As(err, &ce) || ce.Code != clierr.CodeRateLimited {
-		t.Fatalf("want RATE_LIMITED, got %v", err)
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeRateLimited || stdout != "" {
+		t.Fatalf("want RATE_LIMITED and nothing printed, got %v, stdout %q", err, stdout)
 	}
-	if n := len(hits()); n != 4 {
-		t.Fatalf("made %d requests, want 1 + 3 retries", n)
+	if n := len(hits()); n != 7 {
+		t.Fatalf("made %d requests, want 1 + 6 retries", n)
 	}
-	if fmt.Sprint(*waits) != "[1s 2s 4s]" {
-		t.Errorf("waits = %v, want 1s 2s 4s without a Retry-After", *waits)
+	if fmt.Sprint(*waits) != "[1s 2s 4s 8s 16s 30s]" {
+		t.Errorf("waits = %v, want 1s doubling to the 30s cap without a Retry-After", *waits)
+	}
+}
+
+// A page still refused after its retries stops the walk, not the rows already
+// read: they print, truncated, with where the rest start, and the run exits 4.
+func TestListAll_printsTheRowsReadBeforeAPageFails(t *testing.T) {
+	setFakeCreds(t)
+	recordWaits(t)
+	pagedServer(t, "objects", 45, 45, func(n int) (int, string) {
+		if n > 1 {
+			return http.StatusTooManyRequests, ""
+		}
+		return 0, ""
+	})
+
+	err, stdout, stderr := execCmd(t, "voice", "calls", "list", "--all", "-o", "json")
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || exitCodeForAPI(ce) != ExitRateLimit {
+		t.Fatalf("want the rate limit (exit 4) after the rows, got %v", err)
+	}
+	rows, meta := dataRows(t, stdout, "objects")
+	if len(rows) != 20 || meta["truncated"] != true || meta["next"] != "?limit=20&offset=20" {
+		t.Fatalf("rows=%d meta=%v, want page 1's 20 rows, truncated, next at offset 20", len(rows), meta)
+	}
+	if !strings.Contains(stderr, "stopped after 20 rows") {
+		t.Errorf("no warning on stderr: %q", stderr)
 	}
 }
 
