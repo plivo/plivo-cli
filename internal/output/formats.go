@@ -122,8 +122,9 @@ func compileQuery(expr string) (q *jmespath.JMESPath, err error) {
 // encode is the slow path of JSONSuccess: --query on the envelope, then the
 // configured encoding. Everything is built in memory first, so a failing
 // query leaves stdout empty, unless the run already changed something: then
-// the unfiltered result is written instead, with a warning.
-func encode(w io.Writer, env map[string]any) error {
+// the unfiltered result is written instead, with a warning. rowsKey names the
+// array of a list's rows under data, for jsonl and csv.
+func encode(w io.Writer, env map[string]any, rowsKey string) error {
 	doc, err := Marshal(env)
 	if err != nil {
 		return err
@@ -147,13 +148,13 @@ func encode(w io.Writer, env map[string]any) error {
 	var out []byte
 	switch encoding {
 	case "jsonl":
-		out = jsonLines(records(doc, queried))
+		out = jsonLines(records(doc, queried, rowsKey))
 	case "yaml":
 		if out, err = yamlDoc(doc); err != nil {
 			return err
 		}
 	case "csv":
-		if out, err = csvTable(records(doc, queried)); err != nil {
+		if out, err = csvTable(records(doc, queried, rowsKey)); err != nil {
 			return err
 		}
 	default:
@@ -217,10 +218,10 @@ func queryNumbers(v any) any {
 }
 
 // records picks what jsonl and csv write one line per: the query result's
-// elements (or the result itself), otherwise the envelope's data.objects[]
-// (a list response), the elements of data, or data itself. A null result or
-// a null objects list has no records.
-func records(doc []byte, queried bool) []json.RawMessage {
+// elements (or the result itself), otherwise the envelope's data.<key>[] (a
+// list response's rows: key is "objects" on most lists), the elements of data,
+// or data itself. A null result or a null list of rows has no records.
+func records(doc []byte, queried bool, key string) []json.RawMessage {
 	if !queried {
 		var env map[string]json.RawMessage
 		if json.Unmarshal(doc, &env) == nil {
@@ -228,8 +229,8 @@ func records(doc []byte, queried bool) []json.RawMessage {
 		}
 		var page map[string]json.RawMessage
 		if json.Unmarshal(doc, &page) == nil {
-			if objects, ok := page["objects"]; ok && (isArray(objects) || string(objects) == "null") {
-				doc = objects
+			if rows, ok := page[key]; ok && (isArray(rows) || string(rows) == "null") {
+				doc = rows
 			}
 		}
 	}

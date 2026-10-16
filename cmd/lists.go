@@ -314,7 +314,8 @@ func parseListTime(v string, endOfDay bool) (time.Time, error) {
 // listJSON writes a list response for -o json with its rows array never null.
 // A few endpoints send null, or nothing, for an empty list where the rest send
 // [], and a script reading the rows should not need a case for that. key names
-// the array: "objects" on most lists.
+// the array: "objects" on most lists. -o jsonl and -o csv write one line per
+// row of it.
 func listJSON(w io.Writer, raw json.RawMessage, key string) error {
 	var env map[string]json.RawMessage
 	if json.Unmarshal(raw, &env) == nil && env != nil {
@@ -325,7 +326,7 @@ func listJSON(w io.Writer, raw json.RawMessage, key string) error {
 			}
 		}
 	}
-	return output.JSONRaw(w, raw)
+	return output.JSONList(w, raw, key)
 }
 
 // fetchList reads one page of a list into out or, with --all, every page: their
