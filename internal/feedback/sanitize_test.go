@@ -211,9 +211,10 @@ func TestSanitize_redactsMoreShapes(t *testing.T) {
 		"SAABCDEFGHIJKLMNOPQR":           "[REDACTED-AUTH-ID]",
 		"sip:bob:secret@pbx.example.com": "[REDACTED-SIP-URI]",
 		"2026-10-16 10:58:00":            "2026-10-16 10:58:00",
-		// A UUID goes whole, not half as a card or a phone.
-		"d1e2f3a4-0000-4000-8000-000000000001": "[REDACTED-TOKEN]",
-		"d1e2f3a4-b5c6-4d7e-a8b9-000000000001": "[REDACTED-TOKEN]",
+		// A UUID goes whole, even glued to a word, not half as a card or a phone.
+		"d1e2f3a4-0000-4000-8000-000000000001":      "[REDACTED-TOKEN]",
+		"d1e2f3a4-b5c6-4d7e-a8b9-000000000001":      "[REDACTED-TOKEN]",
+		"call_d1e2f3a4-b5c6-4d7e-a8b9-000000000001": "call_[REDACTED-TOKEN]",
 	} {
 		if got, _ := Sanitize("failed on " + in + " today"); got != "failed on "+want+" today" {
 			t.Errorf("Sanitize(%q) = %q, want %s in its place", in, got, want)

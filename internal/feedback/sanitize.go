@@ -79,11 +79,11 @@ var redactionPatterns = []struct {
 		re:          regexp.MustCompile(`\b(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}\b|\b(?:[0-9A-Fa-f]{1,4}:)+:(?:[0-9A-Fa-f]{1,4}\b(?::[0-9A-Fa-f]{1,4}\b)*)?`),
 		replacement: "[REDACTED-IP]",
 	},
-	// UUIDs whole, before phones and cards: an all-digit tail group must not
-	// be cut out as one, leaving the rest of the UUID behind.
+	// UUIDs whole, before phones and cards, which would cut out an all-digit
+	// group and leave the rest. Unanchored, so call_<uuid> goes too.
 	{
 		name:        "uuid",
-		re:          regexp.MustCompile(`\b[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\b`),
+		re:          regexp.MustCompile(`[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}`),
 		replacement: "[REDACTED-TOKEN]",
 	},
 	// Phones with a + country code: 8-15 digits, spaces, dots, dashes or
