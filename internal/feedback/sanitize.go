@@ -79,6 +79,13 @@ var redactionPatterns = []struct {
 		re:          regexp.MustCompile(`\b(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}\b|\b(?:[0-9A-Fa-f]{1,4}:)+:(?:[0-9A-Fa-f]{1,4}\b(?::[0-9A-Fa-f]{1,4}\b)*)?`),
 		replacement: "[REDACTED-IP]",
 	},
+	// UUIDs whole, before phones and cards: an all-digit tail group must not
+	// be cut out as one, leaving the rest of the UUID behind.
+	{
+		name:        "uuid",
+		re:          regexp.MustCompile(`\b[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\b`),
+		replacement: "[REDACTED-TOKEN]",
+	},
 	// Phones with a + country code: 8-15 digits, spaces, dots, dashes or
 	// brackets between them (+1 415 555 1212, +1 (415) 555-1212).
 	{
