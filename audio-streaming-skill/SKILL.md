@@ -17,7 +17,7 @@ Take a developer, or their coding agent, from a Plivo account to a voice agent t
 - Check the credit before every step: `cash_credits` in `plivo auth whoami -o json`. At 0 or less, tell the user to add credits on the console home page, <https://cx.plivo.com/home>, and go on with the free steps. Only renting a number and calls cost money: they wait until `cash_credits` is above 0.
 - Before you link a number to another application, record its current `application` (`plivo numbers get <number> -o json`). Rollback: `plivo numbers update <number> --app-id <previous_app_id>`.
 - Never read, print or ask for API keys in the chat: the user writes them into `.env` with an editor. Never run `plivo login` yourself (step 1).
-- Writes can print nothing on stdout, even with `-o json`. Check the exit code, then read the result back with a `get` command.
+- Before v1.2.1, writes can print nothing on stdout, even with `-o json`: check the exit code, then read the result back with a `get` command. From v1.2.1 every write prints a result.
 - Report each step as observed, not known or failed. Observed means you saw the evidence in this session. Never say "ready" and never infer account state. A `request_uuid`, an HTTP 2xx, a passing XML check or a WebSocket handshake is not success: a call worked only when the call record, the voice agent's log and a person who heard the audio agree.
 - Verdicts: **will break** when a documented rule or an observed failure says so (name the failure); **risky** when plausible or untested (say what to check, name no hangup code); **style** when nothing changes. A rule here with no label is risky.
 
