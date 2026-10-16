@@ -19,7 +19,7 @@ Examples:
 Flags:
   -h, --help              help for create
       --ip stringArray    IP or CIDR (repeatable)
-      --name string       list name
+      --name string       list name (required)
       --platform string   fill --ip with a platform's published addresses: vapi
 
 Global Flags:

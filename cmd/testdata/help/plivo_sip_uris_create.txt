@@ -23,7 +23,7 @@ Examples:
 Flags:
       --authentication-needed   require authentication
   -h, --help                    help for create
-      --name string             URI name
+      --name string             URI name (required)
       --password-stdin          read the URI password from stdin
       --platform string         fill in a platform's published values: livekit|elevenlabs|retell|vapi
       --transport string        udp|tcp|tls, added to --uri as ;transport=

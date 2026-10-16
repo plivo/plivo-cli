@@ -134,6 +134,27 @@ func TestSIPTrunksCreate_refusesAnUnusableTrunkWithoutARequest(t *testing.T) {
 	}
 }
 
+// The API refuses a URI, trunk or IP access control list with no name, or an
+// empty one, though its docs call the name optional.
+func TestSIPCreates_requireAName(t *testing.T) {
+	for _, args := range [][]string{
+		{"sip", "uris", "create", "--uri", "sip.example.com"},
+		{"sip", "trunks", "create", "--direction", "inbound", "--uri", uriU1, "--dry-run"},
+		{"sip", "ip-acl", "create", "--ip", "203.0.113.4"},
+	} {
+		if !isFlagRequired(findCmd(t, args[:3]...), "name") {
+			t.Errorf("%v: --name is not marked required", args[:3])
+		}
+		for _, name := range [][]string{nil, {"--name", ""}, {"--name", "  "}} {
+			setFakeCreds(t)
+			_, count := sipServer(t, http.StatusOK, `{}`)
+			if err, _, _ := execCmd(t, append(args[:len(args):len(args)], name...)...); err == nil || !strings.Contains(err.Error(), "name") || count() != 0 {
+				t.Errorf("%v %v: err %v, %d request(s)", args[:3], name, err, count())
+			}
+		}
+	}
+}
+
 // trunk_domain is not on the create response, and it is the value the customer
 // pastes into their platform, so create has to read the trunk back.
 func TestSIPTrunksCreate_readsBackForTheDomain(t *testing.T) {
@@ -273,7 +294,7 @@ func TestSIPURIsCreate_acceptsEveryDocumentedURIShape(t *testing.T) {
 				t.Fatalf("%q was rejected: %v", uri, err)
 			}
 			p := post(reqs(), "/Zentrunk/URI/")
-			if p == nil || p.body["uri"] != uri {
+			if p == nil || p.body["uri"] != uri || p.body["name"] != "n" {
 				t.Errorf("uri not sent verbatim: %v", p)
 			}
 		})

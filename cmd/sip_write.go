@@ -261,6 +261,16 @@ func deleteSIP(client *api.Client, parts ...string) error {
 	return nil
 }
 
+// requireName refuses a blank --name on a URI, trunk or IP access control list
+// create. The API answers "name cannot be empty" to those, though its docs call
+// the name optional; cobra only checks that the flag was passed.
+func requireName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return clierr.BadInput("--name is required: the API refuses an empty name")
+	}
+	return nil
+}
+
 // emitWrite renders the result of an update or delete. These used to print
 // prose on stderr and nothing on stdout, so `-o json` produced an empty stream
 // and exit 0 — indistinguishable from success with no data to a jq pipeline.
@@ -341,6 +351,9 @@ read every page, the delete is refused.`,
 }
 
 func runSIPTrunksCreate(cmd *cobra.Command, args []string) error {
+	if err := requireName(trunkCreateName); err != nil {
+		return err
+	}
 	p, err := sipPlatformFlag(trunkCreatePlatform)
 	if err != nil {
 		return err
@@ -593,6 +606,9 @@ the check fails, the delete is refused.`,
 func normalizeSIPURI(v string) string { return strings.TrimSpace(v) }
 
 func runSIPURIsCreate(cmd *cobra.Command, args []string) error {
+	if err := requireName(uriCreateName); err != nil {
+		return err
+	}
 	p, err := sipPlatformFlag(uriCreatePlatform)
 	if err != nil {
 		return err
@@ -1079,6 +1095,9 @@ func warnRiskyIPs(ips []string) {
 }
 
 func runSIPACLCreate(cmd *cobra.Command, args []string) error {
+	if err := requireName(aclCreateName); err != nil {
+		return err
+	}
 	p, err := sipPlatformFlag(aclCreatePlatform)
 	if err != nil {
 		return err
@@ -1152,7 +1171,7 @@ func runSIPACLDelete(cmd *cobra.Command, args []string) error {
 
 func init() {
 	cf := sipTrunksCreateCmd.Flags()
-	cf.StringVar(&trunkCreateName, "name", "", "trunk name")
+	cf.StringVar(&trunkCreateName, "name", "", "trunk name (required)")
 	cf.StringVar(&trunkCreateDirection, "direction", "", "inbound|outbound (required)")
 	cf.StringVar(&trunkCreateURI, "uri", "", "primary origination URI uuid (inbound)")
 	cf.StringVar(&trunkCreateFallbackURI, "fallback-uri", "", "fallback origination URI uuid")
@@ -1172,7 +1191,7 @@ func init() {
 	uf.StringVar(&trunkUpdateDirection, "direction", "", "inbound|outbound (read from the trunk when omitted)")
 
 	ucf := sipURIsCreateCmd.Flags()
-	ucf.StringVar(&uriCreateName, "name", "", "URI name")
+	ucf.StringVar(&uriCreateName, "name", "", "URI name (required)")
 	ucf.StringVar(&uriCreateURI, "uri", "", "host, host:port, host;transport=…, or sip:user@host")
 	ucf.StringVar(&uriCreateUsername, "username", "", "username when authentication is needed")
 	ucf.BoolVar(&uriCreatePasswordStdin, "password-stdin", false, "read the URI password from stdin")
@@ -1198,7 +1217,7 @@ func init() {
 	cuf.BoolVar(&credUpdatePasswordStdin, "password-stdin", false, "read the password from stdin (required: every update rewrites it)")
 
 	acf := sipACLCreateCmd.Flags()
-	acf.StringVar(&aclCreateName, "name", "", "list name")
+	acf.StringVar(&aclCreateName, "name", "", "list name (required)")
 	acf.StringArrayVar(&aclCreateIPs, "ip", nil, "IP or CIDR (repeatable)")
 	acf.StringVar(&aclCreatePlatform, "platform", "", "fill --ip with a platform's published addresses: vapi")
 	auf := sipACLUpdateCmd.Flags()
@@ -1207,6 +1226,9 @@ func init() {
 
 	for _, c := range []*cobra.Command{sipTrunksDeleteCmd, sipURIsDeleteCmd, sipCredsDeleteCmd, sipACLDeleteCmd} {
 		c.Flags().BoolVar(&sipDeleteForce, "force", false, "delete even though something depends on it (with --yes)")
+	}
+	for _, c := range []*cobra.Command{sipTrunksCreateCmd, sipURIsCreateCmd, sipACLCreateCmd} {
+		_ = c.MarkFlagRequired("name")
 	}
 
 	sipTrunksCmd.AddCommand(sipTrunksCreateCmd, sipTrunksUpdateCmd, sipTrunksDeleteCmd)

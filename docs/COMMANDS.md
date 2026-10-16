@@ -2974,7 +2974,7 @@ Flags:
 
 ```
       --ip stringArray    IP or CIDR (repeatable)
-      --name string       list name
+      --name string       list name (required)
       --platform string   fill --ip with a platform's published addresses: vapi
 ```
 
@@ -3144,7 +3144,7 @@ Flags:
       --direction string      inbound|outbound (required)
       --fallback-uri string   fallback origination URI uuid
       --ip-acl string         IP access control list uuid (outbound)
-      --name string           trunk name
+      --name string           trunk name (required)
       --platform string       check against a platform's guide: livekit|elevenlabs|retell|vapi
       --secure                enable TLS/SRTP
       --uri string            primary origination URI uuid (inbound)
@@ -3303,7 +3303,7 @@ Flags:
 
 ```
       --authentication-needed   require authentication
-      --name string             URI name
+      --name string             URI name (required)
       --password-stdin          read the URI password from stdin
       --platform string         fill in a platform's published values: livekit|elevenlabs|retell|vapi
       --transport string        udp|tcp|tls, added to --uri as ;transport=
