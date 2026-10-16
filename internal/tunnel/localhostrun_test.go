@@ -42,8 +42,8 @@ func TestDescribe_autoNamesAProviderEitherWay(t *testing.T) {
 	}
 }
 
-// auto falls back to localhost.run when ngrok can't start, and Done closes
-// once the tunnel process exits.
+// auto falls back to localhost.run as soon as ngrok exits, not after ngrok's
+// 10s wait for a tunnel, and Done closes once the tunnel process exits.
 func TestStart_autoFallsBackAndNoticesTheExit(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the fakes are shell scripts")
@@ -60,13 +60,14 @@ func TestStart_autoFallsBackAndNoticesTheExit(t *testing.T) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("HOME", t.TempDir())
 
+	began := time.Now()
 	tn, err := Start(context.Background(), 1234, ProviderAuto)
 	if err != nil {
 		t.Fatalf("auto did not fall back to localhost.run: %v", err)
 	}
 	defer func() { _ = tn.Close() }()
-	if tn.PublicURL != "https://abc.lhr.life" {
-		t.Errorf("url = %q, want the localhost.run one", tn.PublicURL)
+	if d := time.Since(began); tn.PublicURL != "https://abc.lhr.life" || d > 5*time.Second {
+		t.Errorf("fell back to %q after %v, want the localhost.run URL at once: a dead ngrok is noticed, not waited out", tn.PublicURL, d)
 	}
 	select {
 	case <-tn.Done:
