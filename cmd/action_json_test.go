@@ -37,6 +37,8 @@ func TestActions_printJSONOnStdout(t *testing.T) {
 		"messaging sms 10dlc links delete UUID --yes", "messaging sms 10dlc brands update BFAKE01 --email a@example.com",
 		"messaging sms 10dlc campaigns update CFAKE01 --description qa", "numbers compliance delete UUID --yes",
 		"numbers masking sessions delete UUID --yes",
+		"agents publish UUID", "agents pause UUID", "agents resume UUID",
+		"agents update UUID --name qa", "agents delete UUID --yes",
 	} {
 		args := strings.Fields(strings.ReplaceAll(line, "UUID", "d1e2f3a4-0000-4000-8000-000000000001"))
 		err, stdout, _ := execCmd(t, append(args, "-o", "json")...)
