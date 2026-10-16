@@ -16,6 +16,16 @@ func TestActions_printJSONOnStdout(t *testing.T) {
 		"voice calls play UUID --urls https://example.com/a.mp3", "voice calls stop-play UUID",
 		"voice calls speak UUID --text hi", "voice calls stop-speak UUID", "voice calls dtmf UUID --digits 12",
 		"voice calls stop-record UUID", "voice calls streams stop UUID --yes", "voice calls streams stop UUID UUID --yes",
+		"voice conferences hangup room --yes", "voice conferences stop-record room",
+		"voice conferences member mute room 11", "voice conferences member unmute room 11",
+		"voice conferences member deaf room 11", "voice conferences member undeaf room 11",
+		"voice conferences member kick room 11 --yes", "voice conferences member stop-play room 11",
+		"voice conferences member play room 11 --urls https://example.com/a.mp3",
+		"voice conferences member speak room 11 --text hi", "voice conferences member stop-speak room 11",
+		"voice multiparty end room --yes", "voice multiparty participant kick room 11 --yes",
+		"voice multiparty participant add room --from +14155550100 --to +14155550101 --yes",
+		"voice multiparty participant mute room 11", "voice multiparty participant unmute room 11",
+		"voice multiparty participant hold room 11", "voice multiparty participant unhold room 11",
 	} {
 		args := strings.Fields(strings.ReplaceAll(line, "UUID", "d1e2f3a4-0000-4000-8000-000000000001"))
 		err, stdout, _ := execCmd(t, append(args, "-o", "json")...)

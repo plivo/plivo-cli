@@ -240,8 +240,7 @@ func runMPCEnd(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Ended MPC %s\n", id)
-	return nil
+	return emitWrite(fmt.Sprintf("Ended MPC %s", id), map[string]any{"mpc": id, "ended": true})
 }
 
 func runMPCPartList(cmd *cobra.Command, args []string) error {
@@ -299,8 +298,7 @@ func runMPCPartAdd(cmd *cobra.Command, args []string) error {
 	if dryRun {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Added participant to %s: %s\n", id, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Added participant to %s: %s", id, resp.Message), resp.Raw())
 }
 
 func runMPCPartKick(cmd *cobra.Command, args []string) error {
@@ -373,8 +371,7 @@ func mpcParticipantPost(id, part, sub, label string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "%s: %s/%s — %s\n", label, id, part, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("%s: %s/%s — %s", label, id, part, resp.Message), resp.Raw())
 }
 
 func mpcParticipantDelete(id, part, sub string) error {
@@ -397,9 +394,9 @@ func mpcParticipantDelete(id, part, sub string) error {
 		return nil
 	}
 	if sub == "" {
-		fmt.Fprintf(os.Stderr, "Kicked participant %s from MPC %s\n", part, id)
-	} else {
-		fmt.Fprintf(os.Stderr, "Cleared %s on %s/%s\n", sub, id, part)
+		return emitWrite(fmt.Sprintf("Kicked participant %s from MPC %s", part, id),
+			map[string]any{"mpc": id, "participant_id": part, "kicked": true})
 	}
-	return nil
+	return emitWrite(fmt.Sprintf("Cleared %s on %s/%s", sub, id, part),
+		map[string]any{"mpc": id, "participant_id": part, "resource": sub, "cleared": true})
 }
