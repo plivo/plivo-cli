@@ -197,3 +197,27 @@ func TestSA06_DoesNotRedactProse(t *testing.T) {
 		}
 	}
 }
+
+// Shapes the scrubber let through; a date and time must stay readable.
+func TestSanitize_redactsMoreShapes(t *testing.T) {
+	for in, want := range map[string]string{
+		"4155551212":                     "[REDACTED-PHONE]",
+		"+1 415 555 1212":                "[REDACTED-PHONE]",
+		"(415) 555-1212":                 "[REDACTED-PHONE]",
+		"98765 43210":                    "[REDACTED-PHONE]",
+		"4111 1111 1111 1111":            "[REDACTED-CARD]",
+		"203.0.113.5":                    "[REDACTED-IP]",
+		"2001:db8::1":                    "[REDACTED-IP]",
+		"SAABCDEFGHIJKLMNOPQR":           "[REDACTED-AUTH-ID]",
+		"sip:bob:secret@pbx.example.com": "[REDACTED-SIP-URI]",
+		"2026-10-16 10:58:00":            "2026-10-16 10:58:00",
+		// A UUID goes whole, even glued to a word, not half as a card or a phone.
+		"d1e2f3a4-0000-4000-8000-000000000001":      "[REDACTED-TOKEN]",
+		"d1e2f3a4-b5c6-4d7e-a8b9-000000000001":      "[REDACTED-TOKEN]",
+		"call_d1e2f3a4-b5c6-4d7e-a8b9-000000000001": "call_[REDACTED-TOKEN]",
+	} {
+		if got, _ := Sanitize("failed on " + in + " today"); got != "failed on "+want+" today" {
+			t.Errorf("Sanitize(%q) = %q, want %s in its place", in, got, want)
+		}
+	}
+}

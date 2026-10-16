@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/coder/websocket"
 	"github.com/plivo/plivo-cli/internal/api"
@@ -412,10 +413,10 @@ func TestNumbersAffectedWarning_fetchFailureDegrades(t *testing.T) {
 
 // runForwardTeardown runs `voice streams forward` against a fake app and a
 // fake tunnel with the context already cancelled, so it goes straight from
-// setup to teardown. restoreStatus is the API's answer to the restore (0
-// drops the connection instead). It returns the restore request's body, or
-// nil if none was sent.
-func runForwardTeardown(t *testing.T, restoreStatus int, args ...string) (error, string, map[string]any) {
+// setup to teardown; with tunnelDies the tunnel has exited instead. restoreStatus
+// is the API's answer to the restore (0 drops the connection instead). It
+// returns the restore request's body, or nil if none was sent.
+func runForwardTeardown(t *testing.T, restoreStatus int, tunnelDies bool, args ...string) (error, string, map[string]any) {
 	t.Helper()
 	setFakeCreds(t)
 	const original = "https://old.example.com/answer"
@@ -449,11 +450,17 @@ func runForwardTeardown(t *testing.T, restoreStatus int, args ...string) (error,
 	t.Cleanup(srv.Close)
 
 	streamsFwdClientForTest = &api.Client{BaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", HTTP: &http.Client{}}
-	startTunnel = func(context.Context, int, string) (*tunnel.Tunnel, error) {
-		return &tunnel.Tunnel{PublicURL: "https://fake-tunnel.test"}, nil
+	tn := &tunnel.Tunnel{PublicURL: "https://fake-tunnel.test"}
+	startTunnel = func(context.Context, int, string) (*tunnel.Tunnel, error) { return tn, nil }
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) // a forward that misses the stop fails, not hangs
+	if tunnelDies {
+		dead := make(chan struct{})
+		close(dead)
+		tn.Done = dead
+	} else {
+		cancel()
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+	t.Cleanup(cancel)
 	voiceStreamsForwardCmd.SetContext(ctx)
 	t.Cleanup(func() {
 		streamsFwdClientForTest = nil
@@ -485,7 +492,7 @@ func TestVoiceStreamsForward_failedRestoreIsAnError(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			err, stdout, body := runForwardTeardown(t, c.status, "-o", c.format)
+			err, stdout, body := runForwardTeardown(t, c.status, false, "-o", c.format)
 			var ce *clierr.Error
 			if !errors.As(err, &ce) || ce.ExitCode() == 0 {
 				t.Fatalf("want a non-zero CLI error, got %v", err)
@@ -504,7 +511,7 @@ func TestVoiceStreamsForward_failedRestoreIsAnError(t *testing.T) {
 }
 
 func TestVoiceStreamsForward_restoresURLAndMethod(t *testing.T) {
-	err, stdout, body := runForwardTeardown(t, http.StatusOK, "-o", "table")
+	err, stdout, body := runForwardTeardown(t, http.StatusOK, false, "-o", "table")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -518,7 +525,7 @@ func TestVoiceStreamsForward_restoresURLAndMethod(t *testing.T) {
 
 // --keep leaves the tunnel URL on purpose; its hint must restore the method too.
 func TestVoiceStreamsForward_keepPrintsFullRestoreCommand(t *testing.T) {
-	err, stdout, body := runForwardTeardown(t, http.StatusOK, "-o", "table", "--keep")
+	err, stdout, body := runForwardTeardown(t, http.StatusOK, false, "-o", "table", "--keep")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -527,5 +534,17 @@ func TestVoiceStreamsForward_keepPrintsFullRestoreCommand(t *testing.T) {
 	}
 	if !strings.Contains(stdout, wantRestoreCmd) {
 		t.Errorf("--keep hint lacks %q:\n%s", wantRestoreCmd, stdout)
+	}
+}
+
+// A tunnel that stops mid-run: forward restores the answer URL and fails.
+func TestVoiceStreamsForward_stoppedTunnelRestoresAndFails(t *testing.T) {
+	err, _, body := runForwardTeardown(t, http.StatusOK, true, "-o", "json")
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeNetworkError || !strings.Contains(ce.Message, "tunnel stopped") {
+		t.Fatalf("err = %v, want NETWORK_ERROR naming the stopped tunnel", err)
+	}
+	if body["answer_url"] != "https://old.example.com/answer" {
+		t.Errorf("restore body = %v, want the original answer URL back", body)
 	}
 }

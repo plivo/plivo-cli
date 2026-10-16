@@ -341,13 +341,14 @@ func TestTelemetryEnabled_envVarWinsOverConfig(t *testing.T) {
 	}
 }
 
-// TestTelemetryEnabled_envVarOnlyDisablesOnExactZero matches this repo's
-// existing convention (internal/feedback: `== "0"`) — any other value,
-// including "false", is not the off signal and leaves the config in charge.
-func TestTelemetryEnabled_envVarOnlyDisablesOnExactZero(t *testing.T) {
+// 0, false, off and no, in any case, switch telemetry off (EnvOff); any other
+// value leaves the config in charge.
+func TestTelemetryEnabled_envVarTakesEveryOffSpelling(t *testing.T) {
 	withHomeDir(t)
-	t.Setenv(TelemetryEnvVar, "false")
-	if !TelemetryEnabled() {
-		t.Error(`PLIVO_CLI_TELEMETRY="false" should NOT disable telemetry — only exact "0" does`)
+	for v, off := range map[string]bool{"0": true, "false": true, " Off ": true, "NO": true, "1": false, "on": false} {
+		t.Setenv(TelemetryEnvVar, v)
+		if got := TelemetryEnabled(); got == off {
+			t.Errorf("PLIVO_CLI_TELEMETRY=%q: TelemetryEnabled() = %v, want %v", v, got, !off)
+		}
 	}
 }

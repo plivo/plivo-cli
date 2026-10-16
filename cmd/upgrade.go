@@ -348,20 +348,16 @@ func resolveExePath() (string, error) {
 	return real, nil
 }
 
-// homebrewInstallHint returns a non-empty hint when the binary lives
-// inside a Homebrew prefix — replacing it would conflict with Homebrew's
-// metadata and break `brew upgrade plivo` later. Returns "" otherwise.
+// homebrewInstallHint returns a non-empty hint when Homebrew installed the
+// binary — replacing it would conflict with Homebrew's metadata and break
+// `brew upgrade plivo` later. Returns "" otherwise.
+//
+// exePath is resolved, and a formula's binary resolves into its Cellar
+// (/opt/homebrew/bin/plivo links to ../Cellar/plivo/<version>/bin/plivo). A
+// plain binary install.sh put in a Homebrew bin directory is not brew's.
 func homebrewInstallHint(exePath string) string {
-	prefixes := []string{
-		"/opt/homebrew/",     // Apple Silicon brew
-		"/usr/local/Cellar/", // Intel brew installs
-		"/usr/local/Homebrew/",
-		"/home/linuxbrew/", // Linux brew
-	}
-	for _, p := range prefixes {
-		if strings.HasPrefix(exePath, p) {
-			return "this binary was installed via Homebrew — use `brew upgrade plivo` instead"
-		}
+	if strings.Contains(filepath.ToSlash(exePath), "/Cellar/") {
+		return "this binary was installed via Homebrew — use `brew upgrade plivo` instead"
 	}
 	return ""
 }

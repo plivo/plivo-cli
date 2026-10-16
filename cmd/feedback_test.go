@@ -7,12 +7,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/config"
 	"github.com/plivo/plivo-cli/internal/feedback"
+	"golang.org/x/term"
 )
 
 // resetFeedbackFlags zeros out the package-level feedback flags between
@@ -484,5 +486,40 @@ func TestFeedback_takesTheGlobalYesShorthand(t *testing.T) {
 	}
 	if hits, ev, _ := c.snapshot(); hits != 1 || ev.Rating != 3 {
 		t.Errorf("hits = %d, rating = %d; want the rating sent once", hits, ev.Rating)
+	}
+}
+
+// The daily prompt must not show while stdout is piped (`plivo … | jq` waited
+// for Enter) or while any off switch is on, however it is spelled.
+func TestMaybePromptFeedback_pipesAndOffSwitches(t *testing.T) {
+	for _, c := range []struct {
+		name, env, value, toml string
+		stdoutTTY, want        bool
+	}{
+		{name: "terminal", stdoutTTY: true, want: true},
+		{name: "stdout piped"},
+		{name: "prompt off", env: feedback.PromptOptOutEnvVar, value: "off", stdoutTTY: true},
+		{name: "feedback sending off", env: feedback.TelemetryOptOutEnvVar, value: "no", stdoutTTY: true},
+		{name: "telemetry off", env: config.TelemetryEnvVar, value: "false", stdoutTTY: true},
+		{name: "config telemetry off", toml: "[telemetry]\nenabled = false\n", stdoutTTY: true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if home := setEmptyHome(t); c.toml != "" {
+				writeProfile(t, home, c.toml)
+			}
+			for _, k := range []string{"CI", feedback.PromptOptOutEnvVar, feedback.TelemetryOptOutEnvVar, config.TelemetryEnvVar} {
+				t.Setenv(k, "")
+			}
+			if c.env != "" {
+				t.Setenv(c.env, c.value)
+			}
+			isTerminal = func(fd int) bool { return c.stdoutTTY || fd != int(os.Stdout.Fd()) }
+			t.Cleanup(func() { isTerminal = term.IsTerminal })
+			_ = feedback.SaveState(&feedback.State{SuccessCount: feedback.MinSuccessfulBeforeFirstPrompt})
+			stdinTokenFn(t, "n\n", func() { maybePromptFeedback("voice", []string{"voice", "calls", "list"}) })
+			if s, _ := feedback.LoadState(); (s.PromptCount == 1) != c.want {
+				t.Errorf("prompted = %v, want %v", s.PromptCount == 1, c.want)
+			}
+		})
 	}
 }

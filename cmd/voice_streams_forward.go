@@ -57,11 +57,12 @@ var voiceStreamsForwardCmd = &cobra.Command{
 Saves the app's current answer_url, starts a tunnel + a local
 HTTP/WebSocket server, points the app at the tunnel, and forwards
 incoming call audio to your local WebSocket handler. Restores the
-original answer_url on Ctrl+C.
+original answer_url on Ctrl+C, or when the tunnel stops (then exits 3).
 
 No setup required: defaults to localhost.run over ssh, which needs no
 install and no account. Uses ngrok instead when it is already on PATH
-(or at ~/.plivo/bin/ngrok). Force either with --tunnel.
+(or at ~/.plivo/bin/ngrok), and localhost.run when ngrok can't start.
+Force either with --tunnel.
 
 Nothing is purchased, created, or deleted — the only mutation is one
 field on one app, restored on exit.`,
@@ -235,15 +236,29 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 		close(srvErrCh)
 	}()
 
-	// --- Wait for SIGINT or fatal server error ---
+	// --- Wait for SIGINT, a fatal server error or the tunnel stopping ---
+	var tunnelErr *clierr.Error
 	select {
 	case <-ctx.Done():
-		if !jsonOut {
-			fmt.Fprintf(out, "\n^C — tearing down...\n")
-		}
 	case err := <-srvErrCh:
 		if !jsonOut {
 			fmt.Fprintf(out, "\nlocal server error: %v\n", err)
+		}
+	case <-tn.Done:
+		// Ctrl-C reaches the tunnel process too: give that signal a moment to
+		// land here before calling the tunnel dead.
+		select {
+		case <-ctx.Done():
+		case <-time.After(time.Second):
+			tunnelErr = tunnelStopped(tn.Err())
+		}
+	}
+	if !jsonOut {
+		switch {
+		case tunnelErr != nil:
+			fmt.Fprintf(out, "\n✗ %s. Tearing down...\n", tunnelErr.Message)
+		case ctx.Err() != nil:
+			fmt.Fprintf(out, "\n^C — tearing down...\n")
 		}
 	}
 
@@ -272,6 +287,9 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	if tunnelErr != nil {
+		return tunnelErr
+	}
 	if jsonOut {
 		return output.JSONSuccess(os.Stdout, streamsFwdResult{
 			AppID:          streamsFwdAppID,
@@ -282,6 +300,22 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	}
 	fmt.Fprintf(out, "✓ All cleaned up.\n")
 	return nil
+}
+
+// tunnelStopped is the error for a tunnel process that exited on its own: its
+// URL is gone, so calls to the app could not reach the handler.
+func tunnelStopped(reason error) *clierr.Error {
+	msg := "the tunnel stopped"
+	if reason != nil {
+		msg += " (" + reason.Error() + ")"
+	}
+	return &clierr.Error{
+		Code:      clierr.CodeNetworkError,
+		Message:   msg,
+		Hint:      "Run the command again to open a new tunnel.",
+		Retryable: true,
+		Context:   map[string]any{"restored": !streamsFwdKeep},
+	}
 }
 
 // restoreAnswerURL puts the app's original answer URL and method back. If it

@@ -83,8 +83,9 @@ func setTelemetryEnabled(on bool) error {
 		state = "on"
 	}
 	fmt.Fprintf(os.Stderr, "Telemetry: %s\n", state)
-	if on && os.Getenv(config.TelemetryEnvVar) == "0" {
-		fmt.Fprintf(os.Stderr, "  note: %s=0 is set in this shell and still disables it\n", config.TelemetryEnvVar)
+	if on && config.EnvOff(config.TelemetryEnvVar) {
+		fmt.Fprintf(os.Stderr, "  note: %s=%s is set in this shell and still disables it\n",
+			config.TelemetryEnvVar, os.Getenv(config.TelemetryEnvVar))
 	}
 	return nil
 }
@@ -98,8 +99,8 @@ func printTelemetryStatus() error {
 		return output.JSONSuccess(os.Stdout, map[string]string{"telemetry": state}, nil)
 	}
 	fmt.Fprintf(os.Stdout, "telemetry: %s\n", state)
-	if os.Getenv(config.TelemetryEnvVar) == "0" {
-		fmt.Fprintf(os.Stdout, "  (forced off by %s=0)\n", config.TelemetryEnvVar)
+	if config.EnvOff(config.TelemetryEnvVar) {
+		fmt.Fprintf(os.Stdout, "  (forced off by %s=%s)\n", config.TelemetryEnvVar, os.Getenv(config.TelemetryEnvVar))
 	}
 	return nil
 }
