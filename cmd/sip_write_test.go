@@ -116,6 +116,8 @@ func TestSIPTrunksCreate_refusesAnUnusableTrunkWithoutARequest(t *testing.T) {
 		{"bad direction", "inbound or outbound", []string{"sip", "trunks", "create", "--name", "x", "--direction", "sideways"}},
 		{"inbound without uri", "--uri", []string{"sip", "trunks", "create", "--name", "x", "--direction", "inbound"}},
 		{"outbound without auth", "--credential or --ip-acl", []string{"sip", "trunks", "create", "--name", "x", "--direction", "outbound"}},
+		{"inbound with a credential", "--credential", []string{"sip", "trunks", "create", "--name", "x", "--direction", "inbound", "--uri", uriU1, "--credential", credC1}},
+		{"outbound with a fallback", "--fallback-uri", []string{"sip", "trunks", "create", "--name", "x", "--direction", "outbound", "--credential", credC1, "--fallback-uri", uriU9}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -335,13 +337,13 @@ func TestSIPCredentials_passwordOnlyEverComesFromStdin(t *testing.T) {
 		setFakeCreds(t)
 		resetWriteFlags(t)
 		reqs := sipWriteServer(t, trunksUsingU1)
-		readAllStdin = func() ([]byte, error) { return []byte("s3cret"), nil }
+		readAllStdin = func() ([]byte, error) { return []byte("s3cret!"), nil }
 
 		if err, _, _ := execCmd(t, "sip", "credentials", "create", "--name", "c", "--username", "u", "--password-stdin"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		p := post(reqs(), "/Zentrunk/Credential/")
-		if p == nil || p.body["password"] != "s3cret" {
+		if p == nil || p.body["password"] != "s3cret!" {
 			t.Fatalf("password not sent: %v", p)
 		}
 	})
@@ -352,13 +354,13 @@ func TestSIPCredentials_passwordOnlyEverComesFromStdin(t *testing.T) {
 		setFakeCreds(t)
 		resetWriteFlags(t)
 		reqs := sipWriteServer(t, trunksUsingU1)
-		readAllStdin = func() ([]byte, error) { return []byte("s3cret\n"), nil }
+		readAllStdin = func() ([]byte, error) { return []byte("s3cret!\n"), nil }
 
 		if err, _, _ := execCmd(t, "sip", "credentials", "create", "--name", "c", "--username", "u", "--password-stdin"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		p := post(reqs(), "/Zentrunk/Credential/")
-		if p == nil || p.body["password"] != "s3cret" {
+		if p == nil || p.body["password"] != "s3cret!" {
 			t.Fatalf("newline survived into the password: %q", p.body["password"])
 		}
 	})
@@ -380,7 +382,7 @@ func TestSIPCredentials_passwordOnlyEverComesFromStdin(t *testing.T) {
 		setFakeCreds(t)
 		resetWriteFlags(t)
 		sipWriteServer(t, trunksUsingU1)
-		readAllStdin = func() ([]byte, error) { return []byte("hunter2"), nil }
+		readAllStdin = func() ([]byte, error) { return []byte("hunter2!"), nil }
 
 		err, stdout, stderr := execCmd(t, "sip", "credentials", "create", "--name", "c", "--username", "u", "--password-stdin", "-o", "table")
 		if err != nil {
@@ -390,6 +392,18 @@ func TestSIPCredentials_passwordOnlyEverComesFromStdin(t *testing.T) {
 			t.Errorf("the password was printed back:\nstdout: %s\nstderr: %s", stdout, stderr)
 		}
 	})
+}
+
+// What the API would refuse never reaches it: a credential password outside
+// its rule, created or updated, and a number that is not one.
+func TestSIPInputChecks_refuseBeforeAnyRequest(t *testing.T) {
+	resetWriteFlags(t)
+	for _, pw := range []string{"n0symbol", "sh!", "abcdefghijklmnopqrs!x", "spa ce!x", "dash-it!"} {
+		readAllStdin = func() ([]byte, error) { return []byte(pw), nil }
+		requireRefusedBeforeAnyRequest(t, []string{"sip", "credentials", "create", "--name", "c", "--username", "user1", "--password-stdin"}, "the password on stdin must be")
+	}
+	requireRefusedBeforeAnyRequest(t, []string{"sip", "credentials", "update", credC1, "--password-stdin"}, "the password on stdin must be")
+	requireRefusedBeforeAnyRequest(t, []string{"numbers", "update", "+1 (415) 555-1234", "--alias", "desk"}, "is not a phone number")
 }
 
 func TestRiskyCIDR(t *testing.T) {
@@ -555,14 +569,14 @@ func TestSIPCredentialsUpdate_passwordOnlyRotationCarriesTheUsername(t *testing.
 	t.Cleanup(srv.Close)
 	clientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
 	t.Cleanup(func() { clientForTest = nil })
-	readAllStdin = func() ([]byte, error) { return []byte("newpw"), nil }
+	readAllStdin = func() ([]byte, error) { return []byte("newpw!"), nil }
 
 	if err, _, _ := execCmd(t, "sip", "credentials", "update", credC1, "--password-stdin"); err != nil {
 		t.Fatalf("a password-only rotation must work: %v", err)
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if body["password"] != "newpw" {
+	if body["password"] != "newpw!" {
 		t.Errorf("password not sent: %v", body)
 	}
 	if body["username"] != "stored-user" {

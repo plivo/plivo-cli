@@ -82,7 +82,7 @@ func TestSIPCallsList_mapsEveryFilterToItsQueryParam(t *testing.T) {
 
 	err, _, _ := execCmd(t, "sip", "calls", "list",
 		"--limit", "5", "--offset", "10",
-		"--from-number", "+14155551234", "--to-number", "+13125551234",
+		"--from-number", "+14155551234", "--to-number", "+1312",
 		"--direction", "outbound", "--since", "2026-09-01",
 		"--hangup-cause-code", "3000", "--hangup-source", "carrier",
 		"--stir-verification", "Verified")
@@ -92,7 +92,7 @@ func TestSIPCallsList_mapsEveryFilterToItsQueryParam(t *testing.T) {
 	got := urls()[0]
 	for _, want := range []string{
 		"limit=5", "offset=10",
-		"from_number=14155551234", "to_number=13125551234",
+		"from_number=14155551234", "to_number=1312", // a prefix is a valid filter
 		"call_direction=outbound", "end_time__gte=2026-09-01+00%3A00%3A00",
 		"hangup_cause_code=3000", "hangup_source=carrier",
 		"stir_verification=Verified",
@@ -136,6 +136,8 @@ func TestSIPCallsList_localValidationMakesNoRequest(t *testing.T) {
 		{"limit below one", []string{"sip", "calls", "list", "--limit", "0"}},
 		{"unparseable since", []string{"sip", "calls", "list", "--since", "yesterday"}},
 		{"unparseable until", []string{"sip", "calls", "list", "--until", "01/09/2026"}},
+		{"from-number with a space", []string{"sip", "calls", "list", "--from-number", "+1 415"}},
+		{"to-number with a letter", []string{"sip", "calls", "list", "--to-number", "1415555O"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

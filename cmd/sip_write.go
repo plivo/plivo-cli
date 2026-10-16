@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -401,6 +402,9 @@ func runSIPTrunksCreate(cmd *cobra.Command, args []string) error {
 		}
 	default:
 		return clierr.BadInput("--direction must be inbound or outbound")
+	}
+	if err := checkTrunkFlags(cmd, trunkCreateDirection); err != nil {
+		return err
 	}
 	if p != nil {
 		p.checkTrunk(trunkCreateDirection, trunkCreateCredential, trunkCreateIPACL, cmd.Flags().Changed("secure"))
@@ -913,6 +917,21 @@ var sipCredsDeleteCmd = &cobra.Command{
 	RunE:  sipObjectArg(runSIPCredsDelete),
 }
 
+// credentialPassword is the API's rule for a credential password: 5 to 20
+// letters, digits and the symbols ~!@#$%^&*()_+, with at least one symbol.
+// It answers anything else with a 400, after the round trip.
+var credentialPassword = regexp.MustCompile(`^[A-Za-z0-9~!@#$%^&*()_+]{5,20}$`)
+
+// checkCredentialPassword applies that rule. The error never repeats the
+// password.
+func checkCredentialPassword(pw string) error {
+	if !credentialPassword.MatchString(pw) || !strings.ContainsAny(pw, "~!@#$%^&*()_+") {
+		return clierr.BadInput("the password on stdin must be 5 to 20 letters, digits and ~!@#$%^&*()_+, " +
+			"with at least one of those symbols")
+	}
+	return nil
+}
+
 // readPasswordStdin takes the password from stdin. Trailing newlines are
 // stripped because `printf`/`echo` and a heredoc disagree about them, and a
 // password that silently carries one fails to authenticate with no clue why.
@@ -937,6 +956,9 @@ func runSIPCredsCreate(cmd *cobra.Command, args []string) error {
 	}
 	pw, err := readPasswordStdin()
 	if err != nil {
+		return err
+	}
+	if err := checkCredentialPassword(pw); err != nil {
 		return err
 	}
 	client, _, err := getClient()
@@ -1021,6 +1043,9 @@ func runSIPCredsUpdate(cmd *cobra.Command, args []string) error {
 	if credUpdatePasswordStdin {
 		pw, err := readPasswordStdin()
 		if err != nil {
+			return err
+		}
+		if err := checkCredentialPassword(pw); err != nil {
 			return err
 		}
 		body["password"] = pw

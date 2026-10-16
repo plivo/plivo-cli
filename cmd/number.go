@@ -246,6 +246,9 @@ func runNumberGet(cmd *cobra.Command, args []string) error {
 
 func runNumberUpdate(cmd *cobra.Command, args []string) error {
 	number := args[0]
+	if !isE164Digits(strings.TrimPrefix(number, "+")) {
+		return clierr.BadInput(fmt.Sprintf("%q is not a phone number in E.164, such as +14155551234", number))
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err

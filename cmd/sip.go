@@ -187,6 +187,12 @@ func trimPlus(number string) string {
 	return strings.TrimPrefix(strings.TrimSpace(number), "+")
 }
 
+// isE164Digits reports whether digits, a number without its "+", is 1 to 15
+// digits: an E.164 number or, as a list filter, the start of one.
+func isE164Digits(digits string) bool {
+	return digits != "" && len(digits) <= 15 && strings.Trim(digits, "0123456789") == ""
+}
+
 func runSIPCallsList(cmd *cobra.Command, args []string) error {
 	if err := validateEnum("direction", &sipCallsDirection, directionValues...); err != nil {
 		return err
@@ -196,6 +202,13 @@ func runSIPCallsList(cmd *cobra.Command, args []string) error {
 	}
 	if err := validateEnum("stir-verification", &sipCallsSTIR, stirValues...); err != nil {
 		return err
+	}
+	// The API matches a number filter exactly or as a prefix, so any run of
+	// digits can match; a letter, space or dash never does.
+	for _, f := range [][2]string{{"from-number", sipCallsFrom}, {"to-number", sipCallsTo}} {
+		if v := trimPlus(f[1]); v != "" && !isE164Digits(v) {
+			return clierr.BadFlag(f[0], fmt.Sprintf("%q is not a number in E.164, or the start of one", f[1]))
+		}
 	}
 	since, until, err := sipCallsRange.bounds(cmd)
 	if err != nil {
