@@ -257,6 +257,9 @@ func presetURI(p *sipPlatform, raw, transport string) (string, error) {
 	if transport != "" && u.Transport != "" && transport != u.Transport {
 		return "", clierr.BadFlag("transport", fmt.Sprintf("%s conflicts with transport=%s in --uri", transport, u.Transport))
 	}
+	if u.Scheme == "sips" && transport != "" && transport != "tls" {
+		return "", clierr.BadFlag("transport", fmt.Sprintf("%s conflicts with sips: in --uri, which means TLS", transport))
+	}
 	want := transport
 	if want == "" {
 		want = u.Transport
@@ -275,6 +278,12 @@ func presetURI(p *sipPlatform, raw, transport string) (string, error) {
 			return "", e
 		}
 		s, u.Host = p.uris[0].host, p.uris[0].host
+	}
+	// sips: means TLS: it takes the guide's TLS entry, and its port when the
+	// guide gives one, and needs no ;transport= added.
+	sipsTLS := u.Scheme == "sips" && want == ""
+	if sipsTLS {
+		want = "tls"
 	}
 	var m *sipPlatformURI
 	if p.knowsHost(u.Host) {
@@ -296,7 +305,7 @@ func presetURI(p *sipPlatform, raw, transport string) (string, error) {
 	if u.Port == 0 && m != nil {
 		addPort = m.port
 	}
-	if u.Transport == "" {
+	if u.Transport == "" && !sipsTLS {
 		addTransport = want
 	}
 	out := fillSIPURI(s, addPort, addTransport)

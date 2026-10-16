@@ -27,7 +27,7 @@ Flags:
       --fallback-uri string   fallback origination URI uuid
   -h, --help                  help for create
       --ip-acl string         IP access control list uuid (outbound)
-      --name string           trunk name
+      --name string           trunk name (required)
       --platform string       check against a platform's guide: livekit|elevenlabs|retell|vapi
       --secure                enable TLS/SRTP
       --uri string            primary origination URI uuid (inbound)
