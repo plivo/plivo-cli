@@ -364,11 +364,11 @@ func TestSIPTest_warnsAboutSRVRecords(t *testing.T) {
 	}
 	err, stdout, _ := execCmd(t, "sip", "test", "--uri", "sips:sip.example.com", "-o", "json")
 	w := decodeSIPTest(t, stdout).Warnings
-	if _, ce := sipTestExit(t, err); ce.Context["check"] != "dns" || len(w) != 1 || !strings.Contains(w[0], `edge.example.net:5070;transport=tls`) {
+	if _, ce := sipTestExit(t, err); ce.Context["check"] != "dns" || len(w) != 1 || w[0] != `_sips._tcp.sip.example.com points to edge.example.net:5070; this test probes sip.example.com itself. To test that target: --uri "edge.example.net:5070;transport=tls"` {
 		t.Errorf("warnings %v, error %v", w, err)
 	}
 	for _, uri := range []string{"nosrv.example.com", "sip.example.com:5060", "127.0.0.1;transport=tcp", "sip.example.com --dry-run"} {
-		if _, _, stderr := execCmd(t, append([]string{"sip", "test", "--timeout", "1", "--uri"}, strings.Fields(uri)...)...); strings.Contains(stderr, "SRV") {
+		if _, _, stderr := execCmd(t, append([]string{"sip", "test", "--timeout", "1", "--uri"}, strings.Fields(uri)...)...); strings.Contains(stderr, "points to") {
 			t.Errorf("%s warned: %s", uri, stderr)
 		}
 	}

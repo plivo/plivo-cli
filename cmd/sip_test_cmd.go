@@ -36,7 +36,7 @@ expiry shown. UDP: resolve the host and send one SIP OPTIONS request.
 sips: and transport=tls are tested as TLS, on port 5061 unless the URI gives
 one; tcp and udp use 5060. With no transport, UDP is tested: SIP's default.
 A host given without a port that publishes a SIP SRV record gets a warning
-naming the record's target, which the test does not follow.
+naming the record's target; the test probes the host itself.
 Quote a URI that has ;transport, or the shell cuts the command at the ;.
 
 A pass means the host answers, not that the platform will accept calls. Exit 0
@@ -238,8 +238,8 @@ func sipSRVWarnings(ctx context.Context, u sipURI, transport string, step time.D
 		return nil
 	}
 	target := net.JoinHostPort(strings.TrimSuffix(srvs[0].Target, "."), strconv.Itoa(int(srvs[0].Port)))
-	return []string{fmt.Sprintf("_%s._%s.%s points to %s, which this test does not follow, and Plivo's docs do not say "+
-		"calls follow SRV either. To test that target: --uri \"%s;transport=%s\"", service, proto, u.Host, target, target, transport)}
+	return []string{fmt.Sprintf("_%s._%s.%s points to %s; this test probes %s itself. To test that target: --uri \"%s;transport=%s\"",
+		service, proto, u.Host, target, u.Host, target, transport)}
 }
 
 // sipDialTCP connects to the first address that answers. What is left of the
@@ -478,7 +478,7 @@ func printSIPTestPlan(u sipURI, transport string, port int, step time.Duration) 
 		fmt.Fprintf(os.Stderr, "  dns  resolve %s (A/AAAA) within %s\n", u.Host, step)
 	}
 	if service, proto, ok := sipSRVQuery(u, transport); ok {
-		fmt.Fprintf(os.Stderr, "  srv  look up _%s._%s.%s; a target is reported, never followed\n", service, proto, u.Host)
+		fmt.Fprintf(os.Stderr, "  srv  look up _%s._%s.%s and name its target in a warning\n", service, proto, u.Host)
 	}
 	if transport == "udp" {
 		fmt.Fprintf(os.Stderr, "  udp  send one SIP OPTIONS to port %d and wait up to %s for a reply\n", port, step)
