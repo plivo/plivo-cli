@@ -95,6 +95,11 @@ submission entirely; `PLIVO_FEEDBACK_PROMPT=0` only silences the
 auto-prompt. The explicit `plivo feedback` command still works either
 way, unless you've set `PLIVO_FEEDBACK_TELEMETRY=0`.
 
+Each of these switches also silences the once-a-day auto-prompt, and the
+prompt never shows unless stdin, stdout and stderr are all terminals, so
+`plivo … | jq` never waits on it. The variables take `0`, `false`, `off`
+or `no`.
+
 ## How it's sent
 
 A single HTTPS POST to the Plivo CLI feedback collector;

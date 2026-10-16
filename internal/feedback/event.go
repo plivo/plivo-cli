@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/plivo/plivo-cli/internal/config"
 	"github.com/plivo/plivo-cli/internal/version"
 )
 
@@ -127,7 +128,7 @@ func (e *Event) SetComment(raw string) {
 // can afford a longer budget than the contextual channel's 1s
 // fire-and-forget would allow.
 func (e *Event) Submit(ctx context.Context, baseURL string, extraHeaders map[string]string) error {
-	if os.Getenv(TelemetryOptOutEnvVar) == "0" {
+	if config.EnvOff(TelemetryOptOutEnvVar) {
 		return ErrTelemetryDisabled
 	}
 	endpoint, err := Endpoint(baseURL)
