@@ -614,9 +614,11 @@ func TestSIPTrunksUpdate_alwaysSendsTrunkDirection(t *testing.T) {
 }
 
 // The API clears a fallback URI an update leaves out, so the stored one is sent
-// again; --fallback-uri "" leaves it out, the only way to clear it.
+// again; --fallback-uri "" leaves it out, the only way to clear it. A trunk
+// turned outbound, which takes a credential and an IP list, gets none.
 func TestSIPTrunksUpdate_keepsTheFallbackUnlessCleared(t *testing.T) {
-	for flags, want := range map[string]any{"--name=renamed": uriU9, "--secure --direction=inbound": uriU9, "--fallback-uri=": nil} {
+	for flags, want := range map[string]any{"--name=renamed": uriU9, "--secure --direction=inbound": uriU9, "--fallback-uri=": nil,
+		"--uri=" + uriU1 + " --fallback-uri=" + uriU1: uriU1, "--direction=outbound --credential=" + credC1 + " --ip-acl=" + aclA1: nil} {
 		t.Run(flags, func(t *testing.T) {
 			setFakeCreds(t)
 			resetWriteFlags(t)
@@ -628,6 +630,20 @@ func TestSIPTrunksUpdate_keepsTheFallbackUnlessCleared(t *testing.T) {
 				t.Errorf("update = %v, want fallback_uri_uuid %v", p, want)
 			}
 		})
+	}
+}
+
+// The stored direction, or --direction, decides: URIs are for an inbound
+// trunk, a credential or IP access control list for an outbound one.
+func TestSIPTrunksUpdate_refusesFlagsOfTheOtherDirection(t *testing.T) {
+	for flags, flag := range map[string]string{"--credential=" + credC1: "credential", "--direction=outbound --uri=" + uriU1: "uri"} {
+		setFakeCreds(t)
+		reqs := sipWriteServer(t, trunksUsingU1)
+		err, _, _ := execCmd(t, append([]string{"sip", "trunks", "update", "T1"}, strings.Fields(flags)...)...)
+		var ce *clierr.Error
+		if !errors.As(err, &ce) || ce.Context["flag"] != flag || post(reqs(), "/Zentrunk/Trunk/") != nil {
+			t.Errorf("%s: want BAD_FLAG on --%s and no update, got %v", flags, flag, err)
+		}
 	}
 }
 

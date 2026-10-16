@@ -23,6 +23,27 @@ const (
 	dirOutbound = "outbound"
 )
 
+var trunkStatusValues = []string{"enabled", "disabled"}
+
+// trunkFlagDirections pairs each trunk flag that names an object with the one
+// direction that uses it: an inbound trunk sends calls to its URIs, and an
+// outbound trunk authenticates with a credential, an IP list or both.
+var trunkFlagDirections = [][2]string{
+	{"uri", dirInbound}, {"fallback-uri", dirInbound}, {"credential", dirOutbound}, {"ip-acl", dirOutbound},
+}
+
+// checkTrunkFlags refuses a flag the trunk's direction does not use, before
+// any write. An empty value names nothing: --fallback-uri "" clears the
+// fallback.
+func checkTrunkFlags(cmd *cobra.Command, dir string) error {
+	for _, fd := range trunkFlagDirections {
+		if fd[1] != dir && cmd.Flags().Lookup(fd[0]).Value.String() != "" {
+			return clierr.BadFlag(fd[0], fmt.Sprintf("is for an %s trunk, and this one is %s", fd[1], dir))
+		}
+	}
+	return nil
+}
+
 // ─── helpers shared by the write verbs ───────────────────────────────────────
 
 // sipDeleteForce backs --force on the SIP deletes: delete even though something
@@ -450,6 +471,17 @@ func runSIPTrunksUpdate(cmd *cobra.Command, args []string) error {
 	if err := canonUUIDFlags(cmd); err != nil {
 		return err
 	}
+	if err := validateEnum("status", &trunkUpdateStatus, trunkStatusValues...); err != nil {
+		return err
+	}
+	// validateEnum reads "" as not given, but --status "" was given: an empty
+	// status is not one to send.
+	if cmd.Flags().Changed("status") && trunkUpdateStatus == "" {
+		return badEnumValue("status", "", "empty value", trunkStatusValues)
+	}
+	if err := validateEnum("direction", &trunkUpdateDirection, directionValues...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -488,12 +520,15 @@ func runSIPTrunksUpdate(cmd *cobra.Command, args []string) error {
 		if dir == "" {
 			dir = stored.TrunkDirection
 		}
-		if keepFallback && stored.FallbackURIUUID != "" {
+		if keepFallback && dir == dirInbound && stored.FallbackURIUUID != "" {
 			body["fallback_uri_uuid"] = stored.FallbackURIUUID
 		}
 	}
 	if dir == "" {
 		return clierr.BadInput("could not read the trunk's direction — pass --direction")
+	}
+	if err := checkTrunkFlags(cmd, dir); err != nil {
+		return err
 	}
 	body["trunk_direction"] = dir
 	if _, err := postSIP(client, body, "Zentrunk", "Trunk", args[0]); err != nil {
@@ -1185,7 +1220,7 @@ func init() {
 
 	uf := sipTrunksUpdateCmd.Flags()
 	uf.StringVar(&trunkUpdateName, "name", "", "trunk name")
-	uf.StringVar(&trunkUpdateStatus, "status", "", "enabled|disabled")
+	uf.StringVar(&trunkUpdateStatus, "status", "", oneOf(trunkStatusValues))
 	uf.StringVar(&trunkUpdateURI, "uri", "", "primary origination URI uuid")
 	uf.StringVar(&trunkUpdateFallbackURI, "fallback-uri", "", "fallback origination URI uuid (\"\" removes it)")
 	uf.StringVar(&trunkUpdateCredential, "credential", "", "credential uuid")

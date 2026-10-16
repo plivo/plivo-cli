@@ -129,6 +129,10 @@ func TestSIPWrites_refuseBadValuesWithoutARequest(t *testing.T) {
 		{"ip-acl create bad address", "ip", []string{"sip", "ip-acl", "create", "--name", "a", "--ip", "203.0.113.4", "--ip", "999.0.113.4"}},
 		{"ip-acl update bad range", "ip", []string{"sip", "ip-acl", "update", aclA1, "--ip", "198.51.100.0/33"}},
 		{"trunks create bad uuid", "credential", []string{"sip", "trunks", "create", "--name", "n", "--direction", "outbound", "--credential", "C1"}},
+		{"trunks update unknown status", "status", []string{"sip", "trunks", "update", "T1", "--status", "disabld"}},
+		{"trunks update status case", "status", []string{"sip", "trunks", "update", "T1", "--status", "Disabled"}},
+		{"trunks update empty status", "status", []string{"sip", "trunks", "update", "T1", "--status", ""}},
+		{"trunks update bad direction", "direction", []string{"sip", "trunks", "update", "T1", "--direction", "sideways"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setFakeCreds(t)
