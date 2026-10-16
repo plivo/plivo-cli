@@ -101,6 +101,13 @@ func TestListFilters_unknownValueFailsBeforeAnyRequest(t *testing.T) {
 		{"status", []string{"numbers", "compliance", "list", "--status", "approved"}},
 		{"number-type", []string{"numbers", "compliance", "list", "--number-type", "national"}},
 		{"user-type", []string{"numbers", "compliance", "list", "--user-type", "company"}},
+		// The Message API has no number filter: every message came back.
+		{"from", []string{"messaging", "sms", "list", "--from", "+14155551234"}},
+		{"to", []string{"messaging", "sms", "list", "--to", "+14155551234", "--dry-run"}},
+		{"from", []string{"messaging", "mms", "list", "--from", "+14155551234"}},
+		{"to", []string{"messaging", "mms", "list", "--to", "+14155551234"}},
+		{"from", []string{"messaging", "whatsapp", "list", "--from", "+14155551234"}},
+		{"to", []string{"messaging", "whatsapp", "list", "--to", "+14155551234"}},
 	}
 	for _, tc := range cases {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
@@ -119,6 +126,26 @@ func TestListFilters_unknownValueFailsBeforeAnyRequest(t *testing.T) {
 				t.Fatalf("%d request(s) went out before validation", n)
 			}
 		})
+	}
+}
+
+// The --query in the hint for a refused --from/--to finds the number on a
+// page, written with or without its +.
+func TestMessageList_numberFilterHintFindsTheNumber(t *testing.T) {
+	setFakeCreds(t)
+	sipServer(t, http.StatusOK, `{"meta":{},"objects":[{"from_number":"14155551234","to_number":"1"},`+
+		`{"from_number":"+14155551234","to_number":"2"},{"from_number":"3","to_number":"14155551234"}]}`)
+	for flag, want := range map[string]int{"from": 2, "to": 1} {
+		err, _, _ := execCmd(t, "messaging", "whatsapp", "list", "--"+flag, "+14155551234")
+		var ce *clierr.Error
+		if !errors.As(err, &ce) || strings.Count(ce.Hint, `"`) != 2 {
+			t.Fatalf("--%s: want a hint with one quoted --query, got %v", flag, err)
+		}
+		err, stdout, _ := execCmd(t, "messaging", "whatsapp", "list", "-o", "json", "--query", strings.Split(ce.Hint, `"`)[1])
+		var rows []any
+		if err != nil || json.Unmarshal([]byte(stdout), &rows) != nil || len(rows) != want {
+			t.Errorf("--%s: the hint's query gave %q (%v), want %d rows", flag, stdout, err, want)
+		}
 	}
 }
 

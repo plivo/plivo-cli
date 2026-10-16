@@ -1270,6 +1270,7 @@ func init() {
 	cf.StringVar(&trunkCreateIPACL, "ip-acl", "", "IP access control list uuid (outbound)")
 	cf.BoolVar(&trunkCreateSecure, "secure", false, "enable TLS/SRTP")
 	cf.StringVar(&trunkCreatePlatform, "platform", "", "check against a platform's guide: livekit|elevenlabs|retell|vapi")
+	markRequiredByHand(sipTrunksCreateCmd, "direction")
 
 	uf := sipTrunksUpdateCmd.Flags()
 	uf.StringVar(&trunkUpdateName, "name", "", "trunk name")
@@ -1301,11 +1302,13 @@ func init() {
 	ccf.StringVar(&credCreateName, "name", "", "credential name")
 	ccf.StringVar(&credCreateUsername, "username", "", "SIP username (required)")
 	ccf.BoolVar(&credCreatePasswordStdin, "password-stdin", false, "read the password from stdin (required)")
+	markRequiredByHand(sipCredsCreateCmd, "username", "password-stdin")
 	registerListFlags(sipCredsListCmd, &credListLimit, &credListOffset)
 	cuf := sipCredsUpdateCmd.Flags()
 	cuf.StringVar(&credUpdateName, "name", "", "credential name")
 	cuf.StringVar(&credUpdateUsername, "username", "", "SIP username")
 	cuf.BoolVar(&credUpdatePasswordStdin, "password-stdin", false, "read the password from stdin (required: every update rewrites it)")
+	markRequiredByHand(sipCredsUpdateCmd, "password-stdin")
 
 	acf := sipACLCreateCmd.Flags()
 	acf.StringVar(&aclCreateName, "name", "", "list name (required)")

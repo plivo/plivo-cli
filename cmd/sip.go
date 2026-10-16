@@ -572,9 +572,10 @@ func runSIPCallsDiagnose(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	// Read under --dry-run too (a GET is not a write), and keep the record:
-	// -o json takes the hangup facts from it.
+	// -o json takes the hangup facts from it. Only a 404 is "not found": a read
+	// that got no answer goes on to the assistant, as voice calls diagnose does.
 	record, status := readRecord(client, "Zentrunk", "Call", callUUID)
-	if status == 0 || status == http.StatusNotFound {
+	if status == http.StatusNotFound {
 		if resourceExists(client, "Call", callUUID) {
 			return &clierr.Error{
 				Code:       clierr.CodeBadInput,

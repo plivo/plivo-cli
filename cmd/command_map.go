@@ -120,13 +120,24 @@ func globalFlags() []flagSchema {
 	return flags
 }
 
+// requiredByHand marks a flag its command checks itself (its error says more
+// than cobra's), so --schema and --map list it as required. Cobra's own mark
+// would refuse first, with its plainer message.
+const requiredByHand = "plivo_required_by_hand"
+
+func markRequiredByHand(c *cobra.Command, names ...string) {
+	for _, n := range names {
+		_ = c.Flags().SetAnnotation(n, requiredByHand, []string{"true"})
+	}
+}
+
 func describeFlag(f *pflag.Flag) flagSchema {
 	return flagSchema{
 		Name:      f.Name,
 		Shorthand: f.Shorthand,
 		Type:      f.Value.Type(),
 		Default:   f.DefValue,
-		Required:  len(f.Annotations[cobra.BashCompOneRequiredFlag]) > 0,
+		Required:  len(f.Annotations[cobra.BashCompOneRequiredFlag]) > 0 || len(f.Annotations[requiredByHand]) > 0,
 		Usage:     f.Usage,
 	}
 }

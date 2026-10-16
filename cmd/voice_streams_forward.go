@@ -134,7 +134,7 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	apiErr, err := client.Do("GET", client.AccountURL("Application", streamsFwdAppID), nil, nil, &app)
 	client.DryRun = wasDryRun
 	if err != nil {
-		return clierr.NetworkError(client.AccountURL("Application", streamsFwdAppID), err)
+		return err
 	}
 	if apiErr != nil {
 		return apiErr
@@ -209,7 +209,7 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	}
 	if apiErr, err := client.Do("POST", client.AccountURL("Application", streamsFwdAppID), patchBody, nil, nil); err != nil {
 		listener.Close()
-		return clierr.NetworkError(client.AccountURL("Application", streamsFwdAppID), err)
+		return err
 	} else if apiErr != nil {
 		listener.Close()
 		return apiErr
@@ -326,7 +326,7 @@ func restoreAnswerURL(client *api.Client, appID, answerURL, method string) error
 	body := map[string]interface{}{"answer_url": answerURL, "answer_method": method}
 	apiErr, err := client.Do("POST", target, body, nil, nil)
 	if err != nil {
-		apiErr = clierr.NetworkError(target, err)
+		apiErr = clierr.Wrap(err) // already the client's own error when the POST got no answer
 	}
 	if apiErr == nil {
 		return nil

@@ -331,3 +331,30 @@ func TestOutputFields_followJSONTags(t *testing.T) {
 		t.Errorf("outputFields =\n%+v\nwant\n%+v", got, want)
 	}
 }
+
+// Flags a command checks by hand are required in --schema and --map, and only
+// those. They are only marked: the command's own error still comes first, not
+// cobra's "required flag(s)".
+func TestSchema_handCheckedFlagsAreRequired(t *testing.T) {
+	setEmptyHome(t)
+	for _, tc := range []struct{ args, want []string }{
+		{[]string{"sip", "connect", "plan"}, []string{"number", "platform"}},
+		{[]string{"sip", "credentials", "create"}, []string{"password-stdin", "username"}},
+		{[]string{"sip", "credentials", "update", zeroUUID}, []string{"password-stdin"}},
+		{[]string{"sip", "test"}, []string{"uri"}},
+		// --name is marked for cobra to enforce: the run passes it.
+		{[]string{"sip", "trunks", "create", "--name", "x"}, []string{"direction", "name"}},
+	} {
+		c, _, _ := rootCmd.Find(tc.args)
+		var got []string
+		for _, f := range describe(c).Flags {
+			if f.Required {
+				got = append(got, f.Name)
+			}
+		}
+		err, _, _ := execCmd(t, tc.args...)
+		if !slices.Equal(got, tc.want) || err == nil || strings.Contains(err.Error(), "required flag") {
+			t.Errorf("%v: required %v, want %v; run without them: %v", tc.args, got, tc.want, err)
+		}
+	}
+}

@@ -1356,13 +1356,11 @@ Flags:
 ```
       --all                fetch every page (stops after 100 pages)
       --direction string   inbound|outbound
-      --from string        filter by from_number
       --from-date string   same as --since
       --limit int          results per page (1-20) (default 20)
       --offset int         pagination offset
       --since string       messages sent or received at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]]), within the last 90 days
       --state string       queued|sent|delivered|undelivered|failed|received
-      --to string          filter by to_number
       --to-date string     same as --until
       --until string       messages sent or received at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
 ```
@@ -1739,13 +1737,11 @@ Flags:
 ```
       --all                fetch every page (stops after 100 pages)
       --direction string   inbound|outbound
-      --from string        filter by from_number
       --from-date string   same as --since
       --limit int          results per page (1-20) (default 20)
       --offset int         pagination offset
       --since string       messages sent or received at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]]), within the last 90 days
       --state string       queued|sent|delivered|undelivered|failed|received
-      --to string          filter by to_number
       --to-date string     same as --until
       --until string       messages sent or received at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
 ```
@@ -2065,13 +2061,11 @@ Flags:
 ```
       --all                fetch every page (stops after 100 pages)
       --direction string   inbound|outbound
-      --from string        filter by from_number
       --from-date string   same as --since
       --limit int          results per page (1-20) (default 20)
       --offset int         pagination offset
       --since string       messages sent or received at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]]), within the last 90 days
       --state string       queued|sent|delivered|undelivered|failed|received
-      --to string          filter by to_number
       --to-date string     same as --until
       --until string       messages sent or received at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
 ```
@@ -3770,7 +3764,13 @@ Flags:
 Get a call by UUID
 
 ```
-plivo voice calls get <call_uuid>
+plivo voice calls get <call_uuid> [flags]
+```
+
+Flags:
+
+```
+      --live   get a call in progress, not its record (written once the call ends)
 ```
 
 ---

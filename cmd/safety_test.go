@@ -183,6 +183,19 @@ func startCapturingHTTPServer(t *testing.T, respStatus int, respBody string) (sr
 	return srv, get
 }
 
+// No answer is exit 3, here a timed-out GET, never exit 1 as a usage mistake.
+func TestNoAnswer_isATimeoutNotAUsageError(t *testing.T) {
+	hung := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { <-r.Context().Done() }))
+	t.Cleanup(hung.Close)
+	setFakeCreds(t)
+	clientForTest = &api.Client{BaseURL: hung.URL, AuthID: "CIFAKEPLACEHOLDER001", HTTP: &http.Client{Timeout: 200 * time.Millisecond}}
+	t.Cleanup(func() { clientForTest = nil })
+	err, _, _ := execCmd(t, "voice", "calls", "get", "abc")
+	if e, ok := err.(*clierr.Error); !ok || e.Code != clierr.CodeUpstreamTimeout || !e.Retryable || e.ExitCode() != 3 {
+		t.Errorf("got %#v, want a retryable UPSTREAM_TIMEOUT, exit 3", err)
+	}
+}
+
 // ─── Destructive verbs refuse without --yes ──────────────────────────────────
 
 // destructiveVerbCases are the deletes, hangups and kicks. Every one must

@@ -308,6 +308,24 @@ func TestFromHTTP_bodyOverridesStatus(t *testing.T) {
 	}
 }
 
+// Echoed ids and names must not override the status: a hex id can hold "2fa".
+func TestFromHTTP_echoedTextDoesNotOverrideTheStatus(t *testing.T) {
+	for msg, tc := range map[string]struct {
+		status int
+		want   Code
+	}{
+		"URI with uuid:0e2fa000-0000-4000-8000-000000000000 not found":       {404, CodeResourceNotFound},
+		"primary_uri_uuid 0e2fa000-0000-4000-8000-000000000000 is not valid": {400, CodeValidation},
+		"credential invalid credentials already exists":                      {409, CodeResourceConflict},
+		"geo permission lookup failed":                                       {503, CodeUpstreamUnavailable},
+		"2fa_required":                                                       {401, Code2FARequired},
+	} {
+		if got := FromHTTP(tc.status, "", []byte(`{"error":"`+msg+`"}`)).Code; got != tc.want {
+			t.Errorf("%d %q: Code = %s, want %s", tc.status, msg, got, tc.want)
+		}
+	}
+}
+
 // ─── extractMessage — various Plivo response shapes ─────────────────────────
 
 func TestFromHTTP_extractsErrorKey(t *testing.T) {

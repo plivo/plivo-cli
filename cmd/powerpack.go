@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -184,10 +185,21 @@ func runPowerpackGet(cmd *cobra.Command, args []string) error {
 		{"local_connect", fmt.Sprintf("%v", p.LocalConnect)},
 		{"application_type", p.ApplicationType},
 		{"application_id", p.ApplicationID},
-		{"number_priority", p.NumberPriority},
+		{"number_priority", jsonText(p.NumberPriority)},
 		{"number_pool", p.NumberPoolUUID},
 		{"created_on", p.CreatedOn},
 	})
+}
+
+// jsonText is a raw JSON value as table text: a string as is, null or
+// absent as empty, anything else as compact JSON.
+func jsonText(v json.RawMessage) string {
+	var s string
+	if len(v) == 0 || json.Unmarshal(v, &s) == nil {
+		return s
+	}
+	b, _ := output.Marshal(v)
+	return string(b)
 }
 
 func runPowerpackCreate(cmd *cobra.Command, args []string) error {

@@ -187,8 +187,9 @@ func TestNumbersUpdate_indiaComplianceRule(t *testing.T) {
 			if !strings.Contains(ce.Message, tc.msg) {
 				t.Errorf("refusal should say why (%q), got: %s", tc.msg, ce.Message)
 			}
-			if !strings.Contains(ce.Hint, "plivo numbers compliance link") {
-				t.Errorf("hint should carry the KYC steps, got: %s", ce.Hint)
+			// KYC steps only when the API answered about the record (exit 1).
+			if kyc := strings.Contains(ce.Hint, "plivo numbers compliance link"); kyc != (ce.ExitCode() == ExitUserError) {
+				t.Errorf("KYC steps in the hint = %v for %s: %s", kyc, ce.Code, ce.Hint)
 			}
 			// --force skips the check, so the refusal must not offer it as the way round.
 			if strings.Contains(ce.Hint, "--force") {
@@ -283,17 +284,20 @@ func TestNumbersUpdate_dryRunRunsTheComplianceCheck(t *testing.T) {
 }
 
 // A transport failure is a failed read too. The trunk guard lets one through to
-// the API; the compliance check must not.
-func TestNumbersUpdate_complianceCheckRefusesWhenUnreachable(t *testing.T) {
+// the API; the compliance check must not. Neither it nor sip calls diagnose
+// may report it as missing KYC or a missing call.
+func TestUnreachable_isANetworkErrorNotKYCOrNotFound(t *testing.T) {
 	setFakeCreds(t)
 	srv := httptest.NewServer(http.NotFoundHandler())
 	srv.Close()
-	clientForTest = &api.Client{BaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
+	clientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
 	t.Cleanup(func() { clientForTest = nil })
 
-	err, _, _ := execCmd(t, "numbers", "update", indiaNumber, "--app-id", "A1")
-	var ce *clierr.Error
-	if !errors.As(err, &ce) || !strings.Contains(ce.Hint, "plivo numbers compliance link") {
-		t.Fatalf("want the compliance refusal, got: %v", err)
+	for _, args := range [][]string{{"numbers", "update", indiaNumber, "--app-id", "A1"}, {"sip", "calls", "diagnose", "abc"}} {
+		err, _, _ := execCmd(t, args...)
+		var ce *clierr.Error
+		if !errors.As(err, &ce) || ce.Code != clierr.CodeNetworkError || strings.Contains(ce.Hint, "KYC") {
+			t.Errorf("%v: want a NETWORK_ERROR without the KYC steps, got: %v", args, err)
+		}
 	}
 }
