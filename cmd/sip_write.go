@@ -632,6 +632,9 @@ func runSIPURIsCreate(cmd *cobra.Command, args []string) error {
 	if uriCreateAuthNeeded && uriCreateUsername == "" {
 		return errAuthNeedsUsername
 	}
+	if err := uriAuthConflict(cmd, uriCreateAuthNeeded, uriCreateUsername, uriCreatePasswordStdin); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -718,6 +721,9 @@ func runSIPURIsUpdate(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	}
+	if err := uriAuthConflict(cmd, uriUpdateAuthNeeded, uriUpdateUsername, uriUpdatePasswordStdin); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -749,17 +755,16 @@ func runSIPURIsUpdate(cmd *cobra.Command, args []string) error {
 		// With authentication_needed true the API also demands a username, so a
 		// password-only rotation is impossible on the wire. Carry the stored one.
 		if body["username"] == nil {
-			var cur api.SIPTrunkURI
-			apiErr, gerr := client.Do("GET", client.AccountURL("Zentrunk", "URI", args[0]), nil, nil, &cur)
-			if gerr != nil || apiErr != nil || cur.Username == "" {
-				return clierr.BadInput(
-					"could not read the current username, which the API requires alongside a password — pass --username too")
+			stored, err := storedUsername(client, "URI", args[0])
+			if err != nil {
+				return err
 			}
-			body["username"] = cur.Username
+			body["username"] = stored
 		}
 	}
 	boolFlagPatch(cmd, "authentication-needed", "authentication_needed", uriUpdateAuthNeeded, body)
-	if uriUpdateAuthNeeded && cmd.Flags().Changed("authentication-needed") && uriUpdateUsername == "" {
+	// The username sent, given or carried: a password brings the stored one.
+	if user, _ := body["username"].(string); uriUpdateAuthNeeded && cmd.Flags().Changed("authentication-needed") && user == "" {
 		return errAuthNeedsUsername
 	}
 	if len(body) == 0 {
@@ -988,13 +993,11 @@ func runSIPCredsUpdate(cmd *cobra.Command, args []string) error {
 		// alone is impossible on the wire. Carry the stored username across
 		// rather than making the user restate something that is not changing.
 		if _, ok := body["username"]; !ok {
-			var cur api.SIPTrunkCredential
-			apiErr, gerr := client.Do("GET", client.AccountURL("Zentrunk", "Credential", args[0]), nil, nil, &cur)
-			if gerr != nil || apiErr != nil || cur.Username == "" {
-				return clierr.BadInput(
-					"could not read the current username, which the API requires alongside a password — pass --username too")
+			stored, err := storedUsername(client, "Credential", args[0])
+			if err != nil {
+				return err
 			}
-			body["username"] = cur.Username
+			body["username"] = stored
 		}
 	}
 	if len(body) == 0 {
@@ -1258,6 +1261,33 @@ var readAllStdin = defaultReadAllStdin
 // the round trip, and its message names the field rather than the flag.
 var errAuthNeedsUsername = clierr.BadInput(
 	"--authentication-needed=true also needs --username")
+
+// uriAuthConflict refuses --authentication-needed=false with --username or
+// --password-stdin, which only apply with authentication on: the request
+// would turn it off and set them at once.
+func uriAuthConflict(cmd *cobra.Command, authNeeded bool, username string, passwordStdin bool) error {
+	if cmd.Flags().Changed("authentication-needed") && !authNeeded && (username != "" || passwordStdin) {
+		return clierr.BadInput("--authentication-needed=false turns authentication off, " +
+			"so --username and --password-stdin do not apply: pass one or the other")
+	}
+	return nil
+}
+
+// storedUsername reads a URI's or credential's username, under --dry-run too:
+// the API refuses a password sent without one, and a preview that skipped the
+// read would fail on a username it never asked for.
+func storedUsername(client *api.Client, segment, id string) (string, error) {
+	var cur struct {
+		Username string `json:"username"`
+	}
+	if e := getForCheck(client, client.AccountURL("Zentrunk", segment, id), &cur); e != nil {
+		return "", e
+	}
+	if cur.Username == "" {
+		return "", clierr.BadInput("could not read the current username, which the API requires alongside a password — pass --username too")
+	}
+	return cur.Username, nil
+}
 
 // readTrunk reads a trunk, under --dry-run too. A trunk update needs what it
 // does not change: the direction, which the API demands on every call, and

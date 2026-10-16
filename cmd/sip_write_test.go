@@ -39,6 +39,8 @@ func sipWriteServer(t *testing.T, trunks string) func() []sipReq {
 			_, _ = w.Write([]byte(trunks))
 		case r.Method == "GET" && strings.Contains(r.URL.Path, "/Zentrunk/Trunk/"):
 			_, _ = w.Write([]byte(`{"api_id":"x","object":{"trunk_id":"T1","name":"n","trunk_direction":"inbound","trunk_status":"enabled","trunk_domain":"T1.zt.plivo.com","fallback_uri_uuid":"` + uriU9 + `"}}`))
+		case r.Method == "GET" && (strings.Contains(r.URL.Path, "/Zentrunk/URI/") || strings.Contains(r.URL.Path, "/Zentrunk/Credential/")):
+			_, _ = w.Write([]byte(`{"username":"storeduser1"}`))
 		case r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/Number/"):
 			_, _ = w.Write([]byte(`{"meta":{},"objects":[{"number":"1","application":"/v1/Account/A/Zentrunk/Trunk/T1/"},{"number":"2","application":"/v1/Account/A/Zentrunk/Trunk/T1/"}]}`))
 		case r.Method == "POST":
@@ -786,6 +788,36 @@ func TestSIPURIsUpdate_passwordRotationRestatesWhatTheAPIDemands(t *testing.T) {
 	}
 	if body["username"] != "stored-user" {
 		t.Errorf("stored username not carried across: %v", body)
+	}
+}
+
+// A password brings the stored username: read under --dry-run too, where only
+// the update is previewed, and enough for --authentication-needed. Turning
+// authentication off while setting a username or password is refused.
+func TestSIPAuthUpdates_carryTheStoredUsername(t *testing.T) {
+	for _, args := range [][]string{
+		{"sip", "credentials", "update", credC1, "--password-stdin", "--dry-run"},
+		{"sip", "uris", "update", uriU1, "--password-stdin", "--dry-run"},
+		{"sip", "uris", "update", uriU1, "--password-stdin", "--authentication-needed"},
+	} {
+		setFakeCreds(t)
+		resetWriteFlags(t)
+		readAllStdin = func() ([]byte, error) { return []byte("n3w!pass"), nil }
+		reqs := sipWriteServer(t, trunksUsingU1)
+		dry := args[len(args)-1] == "--dry-run"
+		clientForTest.DryRun = dry // as getClient sets it under --dry-run
+		err, _, _ := execCmd(t, args...)
+		if p := post(reqs(), "/Zentrunk/"); err != nil || (p == nil) != dry || (!dry && (p.body["username"] != "storeduser1" || p.body["authentication_needed"] != true)) {
+			t.Errorf("%v: err %v, requests %v", args[2:], err, reqs())
+		}
+	}
+	for _, args := range [][]string{
+		{"sip", "uris", "update", uriU1, "--authentication-needed=false", "--username", "bob12"},
+		{"sip", "uris", "update", uriU1, "--authentication-needed=false", "--password-stdin"},
+		{"sip", "uris", "create", "--name", "n", "--uri", "sip.example.com", "--authentication-needed=false", "--username", "bob12"},
+		{"sip", "uris", "create", "--name", "n", "--uri", "sip.example.com", "--authentication-needed=false", "--password-stdin"},
+	} {
+		requireRefusedBeforeAnyRequest(t, args, "--authentication-needed=false")
 	}
 }
 
