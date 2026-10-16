@@ -139,6 +139,7 @@ func startLocalhostRun(ctx context.Context, localPort int) (*Tunnel, error) {
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start ssh: %w", err)
 	}
+	t := watch(cmd)
 
 	urlCh := make(chan string, 1)
 	go func() {
@@ -156,12 +157,15 @@ func startLocalhostRun(ctx context.Context, localPort int) (*Tunnel, error) {
 
 	select {
 	case u := <-urlCh:
-		return &Tunnel{PublicURL: u, cmd: cmd}, nil
+		t.PublicURL = u
+		return t, nil
+	case <-t.Done:
+		return nil, fmt.Errorf("ssh exited before localhost.run announced a URL (%v)", t.err)
 	case <-time.After(lhrTimeout):
-		_ = cmd.Process.Kill()
+		_ = t.Close()
 		return nil, fmt.Errorf("localhost.run did not announce a URL within %s", lhrTimeout)
 	case <-ctx.Done():
-		_ = cmd.Process.Kill()
+		_ = t.Close()
 		return nil, ctx.Err()
 	}
 }
@@ -180,12 +184,18 @@ var Providers = []string{ProviderAuto, ProviderNgrok, ProviderLocalhostRun}
 //
 // "auto" prefers ngrok when it is already installed — it is the more robust of
 // the two and anyone who installed it presumably wants it — and otherwise falls
-// back to localhost.run so the command works with no setup at all.
+// back to localhost.run so the command works with no setup at all. It falls
+// back too when ngrok cannot start: another ngrok holding the account's one
+// free session, or no authtoken.
 func Start(ctx context.Context, localPort int, provider string) (*Tunnel, error) {
 	switch strings.TrimSpace(provider) {
 	case "", ProviderAuto:
 		if _, err := findNgrok(); err == nil {
-			return StartNgrok(ctx, localPort)
+			t, err := StartNgrok(ctx, localPort)
+			if err == nil || ctx.Err() != nil {
+				return t, err
+			}
+			fmt.Fprintf(os.Stderr, "  %v; using localhost.run instead.\n", err)
 		}
 		return startLocalhostRun(ctx, localPort)
 	case ProviderNgrok:
