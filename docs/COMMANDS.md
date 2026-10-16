@@ -863,8 +863,9 @@ Send a message to Plivo's AI assistant and stream the response.
 The assistant uses Server-Sent Events: token text streams to stdout as it
 arrives, live status appears on stderr and is overwritten in place, and the
 final summary lands on stdout. Long flows (voice-debug can run 2–5 minutes)
-work fine — there is no overall HTTP timeout. Ctrl-C cancels and exits 130;
-no auto-retry (debugger runs are not idempotent).
+work fine: the stream has no time limit unless you pass --timeout, which ends
+it with exit 3. An answer the stream cuts off before its end also exits 3.
+Ctrl-C cancels and exits 130; no auto-retry (debugger runs are not idempotent).
 
 Use -i for an interactive chat that keeps context across follow-ups: each
 turn replays the recent conversation as history (a one-shot ask sends none,
@@ -873,8 +874,9 @@ fresh conversation, /help lists commands, and /exit or Ctrl-D leaves.
 
 Pass --call-uuid for voice-debug context; --verbose to show the assistant's
 tool calls; -o json or -o jsonl to emit each SSE event as one JSON line
-(handy for scripts and AI agents). A stream has no single result, so -o yaml,
--o csv and --query are refused.
+(handy for scripts and AI agents). Either way the output is JSON Lines, one
+object per line, not one JSON document: read it a line at a time. A stream
+has no single result, so -o yaml, -o csv and --query are refused.
 
 ```
 plivo ask [message] [flags]
@@ -4617,11 +4619,12 @@ One-command local-dev experience for voice streaming.
 Saves the app's current answer_url, starts a tunnel + a local
 HTTP/WebSocket server, points the app at the tunnel, and forwards
 incoming call audio to your local WebSocket handler. Restores the
-original answer_url on Ctrl+C.
+original answer_url on Ctrl+C, or when the tunnel stops (then exits 3).
 
 No setup required: defaults to localhost.run over ssh, which needs no
 install and no account. Uses ngrok instead when it is already on PATH
-(or at ~/.plivo/bin/ngrok). Force either with --tunnel.
+(or at ~/.plivo/bin/ngrok), and localhost.run when ngrok can't start.
+Force either with --tunnel.
 
 Nothing is purchased, created, or deleted — the only mutation is one
 field on one app, restored on exit.
@@ -4666,9 +4669,10 @@ Pre-flight a WebSocket endpoint with synthetic Plivo audio frames
 
 Open a WebSocket to --to, send a Plivo-format start frame, stream synthetic
 audio (a 1 kHz tone) for --duration seconds, then send stop and close.
-Reports the connection time (latency_ms) and any warnings.
+Reports the connection time (latency_ms) and any warnings. An endpoint
+that closes the connection before the stop frame fails the test (exit 3).
 
-With --bidirectional it also reads what the endpoint sends back, while the
+With --bidirectional it also counts what the endpoint sends back, while the
 audio streams and for up to --duration seconds after, and times the first
 playAudio from the first frame sent (first_response_ms). --expect-audio
 does the same and exits 1 when no playAudio comes back.

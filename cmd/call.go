@@ -165,8 +165,7 @@ func runCallHangup(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Hung up %s\n", uuidStr)
-	return nil
+	return emitWrite(fmt.Sprintf("Hung up %s", uuidStr), map[string]any{"call_uuid": uuidStr, "hung_up": true})
 }
 
 func runCallTransfer(cmd *cobra.Command, args []string) error {
@@ -198,8 +197,7 @@ func runCallTransfer(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Transferred %s: %s\n", uuidStr, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Transferred %s: %s", uuidStr, resp.Message), resp.Raw())
 }
 
 var (
@@ -272,8 +270,7 @@ func runCallPlay(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Playing on %s: %s\n", uuidStr, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Playing on %s: %s", uuidStr, resp.Message), resp.Raw())
 }
 
 func runCallStopPlay(cmd *cobra.Command, args []string) error {
@@ -304,8 +301,7 @@ func runCallSpeak(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Speaking on %s: %s\n", uuidStr, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Speaking on %s: %s", uuidStr, resp.Message), resp.Raw())
 }
 
 func runCallStopSpeak(cmd *cobra.Command, args []string) error {
@@ -368,8 +364,7 @@ func runCallDTMF(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Sent DTMF on %s: %s\n", uuidStr, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Sent DTMF on %s: %s", uuidStr, resp.Message), resp.Raw())
 }
 
 func runCallRecord(cmd *cobra.Command, args []string) error {
@@ -436,8 +431,8 @@ func runSubresourceDelete(cmd *cobra.Command, uuidStr, sub, doneLabel string) er
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "%s on %s\n", doneLabel, uuidStr)
-	return nil
+	return emitWrite(fmt.Sprintf("%s on %s", doneLabel, uuidStr),
+		map[string]any{"call_uuid": uuidStr, "resource": sub, "stopped": true})
 }
 
 func runCallMake(cmd *cobra.Command, args []string) error {

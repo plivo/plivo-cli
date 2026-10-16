@@ -512,9 +512,11 @@ func lineCount(b []byte) int {
 
 // retireReplacedSkills renames, in the default skills root, the SKILL.md of
 // each skill that s supersedes to SKILL.md.retired, so an agent never loads
-// both. It is renamed, not deleted, since the copy may hold edits; the folder
-// stays, as an agent finds a skill by its SKILL.md. A failure is only a
-// warning, because the new skill is already installed.
+// both. It is renamed, not deleted, since the copy may hold edits, and for the
+// same reason a copy retired before is kept: os.Rename would replace it, so
+// this one takes SKILL.md.retired.2 or the next free name. The folder stays,
+// as an agent finds a skill by its SKILL.md. A failure is only a warning,
+// because the new skill is already installed.
 func retireReplacedSkills(s bundledSkill) {
 	for _, name := range s.replaces {
 		old, err := resolveSkillDir("", name)
@@ -529,11 +531,18 @@ func retireReplacedSkills(s bundledSkill) {
 			fmt.Fprintf(os.Stderr, "Would retire skill: %s\n", old)
 			continue
 		}
-		if err := os.Rename(path, path+".retired"); err != nil {
+		dst := path + ".retired"
+		for i := 2; ; i++ {
+			if _, err := os.Lstat(dst); err != nil {
+				break
+			}
+			dst = fmt.Sprintf("%s.retired.%d", path, i)
+		}
+		if err := os.Rename(path, dst); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not retire skill %s: %v\n", old, err)
 			continue
 		}
-		fmt.Fprintf(os.Stderr, "Retired skill %s (now part of %s): renamed its SKILL.md to SKILL.md.retired\n", old, s.dirName)
+		fmt.Fprintf(os.Stderr, "Retired skill %s (now part of %s): renamed its SKILL.md to %s\n", old, s.dirName, filepath.Base(dst))
 	}
 }
 

@@ -633,8 +633,8 @@ func analysisIncomplete(answer string) (string, bool) {
 // It judges both output modes alike. askErr is runAsk's result; label and uuid
 // name the record, and getCmd is the command that reads it directly.
 func diagnoseOutcome(askErr error, label, uuid, getCmd string) error {
-	if askErr != nil && !lastAsk.errored {
-		return askErr // the turn never ran: auth, HTTP or network trouble
+	if askErr != nil && !lastAsk.ran {
+		return askErr // the turn never ran its course: auth, HTTP, network trouble or --timeout
 	}
 	if dryRunFlag {
 		return nil // nothing was sent, so there is no analysis to judge

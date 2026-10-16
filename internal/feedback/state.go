@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/plivo/plivo-cli/internal/config"
 )
 
 // PromptInterval is the minimum wall-clock gap between auto-prompts. A
@@ -92,7 +94,7 @@ func SaveState(s *State) error {
 
 // ShouldPrompt decides whether to fire the auto-prompt right now. False
 // when:
-//   - user opted out via PLIVO_FEEDBACK_PROMPT=0
+//   - user opted out via PLIVO_FEEDBACK_PROMPT=0 (or false, off, no)
 //   - last prompted within PromptInterval (don't badger)
 //   - last submitted within PromptInterval (already heard from them)
 //   - first prompt floor not yet reached: under MinSuccessfulBeforeFirstPrompt
@@ -101,7 +103,7 @@ func SaveState(s *State) error {
 //
 // Pure function — env + state + clock in, bool out. Easy to test.
 func ShouldPrompt(s *State, now time.Time) bool {
-	if os.Getenv(PromptOptOutEnvVar) == "0" {
+	if config.EnvOff(PromptOptOutEnvVar) {
 		return false
 	}
 	if !s.LastPromptedAt.IsZero() && now.Sub(s.LastPromptedAt) < PromptInterval {

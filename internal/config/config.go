@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/plivo/plivo-cli/internal/clierr"
@@ -87,11 +88,22 @@ type TelemetryConfig struct {
 // switch that only silences `plivo feedback` submission.
 const TelemetryEnvVar = "PLIVO_CLI_TELEMETRY"
 
+// EnvOff reports whether the environment variable name holds an off value:
+// 0, false, off or no, in any case. Every opt-out switch reads it, so each
+// takes the same spellings.
+func EnvOff(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(name))) {
+	case "0", "false", "off", "no":
+		return true
+	}
+	return false
+}
+
 // TelemetryEnabled reports whether identity headers should go out.
-// PLIVO_CLI_TELEMETRY=0 always wins; otherwise it's the config.toml
-// [telemetry] setting, default on.
+// PLIVO_CLI_TELEMETRY off (EnvOff) always wins; otherwise it's the
+// config.toml [telemetry] setting, default on.
 func TelemetryEnabled() bool {
-	if os.Getenv(TelemetryEnvVar) == "0" {
+	if EnvOff(TelemetryEnvVar) {
 		return false
 	}
 	cfg, err := Load()

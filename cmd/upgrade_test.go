@@ -12,10 +12,12 @@ func TestHomebrewInstallHint(t *testing.T) {
 		name, path string
 		wantHint   bool
 	}{
-		{"apple-silicon-brew", "/opt/homebrew/bin/plivo", true},
 		{"apple-silicon-cellar", "/opt/homebrew/Cellar/plivo/0.1.0/bin/plivo", true},
 		{"intel-brew-cellar", "/usr/local/Cellar/plivo/0.1.0/bin/plivo", true},
-		{"linuxbrew", "/home/linuxbrew/.linuxbrew/bin/plivo", true},
+		{"linuxbrew-cellar", "/home/linuxbrew/.linuxbrew/Cellar/plivo/0.1.0/bin/plivo", true},
+		// install.sh can drop a plain binary in a brew bin directory: not brew's.
+		{"install.sh-in-brew-bin", "/opt/homebrew/bin/plivo", false},
+		{"install.sh-in-linuxbrew-bin", "/home/linuxbrew/.linuxbrew/bin/plivo", false},
 		{"manual-install", "/usr/local/bin/plivo", false},
 		{"user-home", "/Users/alice/go/bin/plivo", false},
 		{"system-path", "/usr/bin/plivo", false},
