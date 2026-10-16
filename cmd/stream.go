@@ -205,9 +205,9 @@ func runStreamStop(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if len(args) == 2 {
-		fmt.Fprintf(os.Stderr, "Stopped stream %s on call %s\n", args[1], callUUID)
-	} else {
-		fmt.Fprintf(os.Stderr, "Stopped all streams on call %s\n", callUUID)
+		return emitWrite(fmt.Sprintf("Stopped stream %s on call %s", args[1], callUUID),
+			map[string]any{"call_uuid": callUUID, "stream_id": args[1], "stopped": true})
 	}
-	return nil
+	return emitWrite(fmt.Sprintf("Stopped all streams on call %s", callUUID),
+		map[string]any{"call_uuid": callUUID, "stopped": true})
 }

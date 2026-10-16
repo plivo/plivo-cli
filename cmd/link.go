@@ -150,6 +150,5 @@ func runLinkDelete(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Unlinked %s\n", id)
-	return nil
+	return emitWrite(fmt.Sprintf("Unlinked %s", id), map[string]any{"link_id": id, "unlinked": true})
 }

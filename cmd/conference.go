@@ -361,11 +361,10 @@ func doConferenceDelete(name, sub string) error {
 		return nil
 	}
 	if sub == "" {
-		fmt.Fprintf(os.Stderr, "Ended conference %s\n", name)
-	} else {
-		fmt.Fprintf(os.Stderr, "Stopped %s on conference %s\n", sub, name)
+		return emitWrite(fmt.Sprintf("Ended conference %s", name), map[string]any{"conference_name": name, "ended": true})
 	}
-	return nil
+	return emitWrite(fmt.Sprintf("Stopped %s on conference %s", sub, name),
+		map[string]any{"conference_name": name, "resource": sub, "stopped": true})
 }
 
 func doConferenceMemberPost(name, member, sub string, body map[string]any, label string) error {
@@ -384,8 +383,7 @@ func doConferenceMemberPost(name, member, sub string, body map[string]any, label
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "%s: %s/%s — %s\n", label, name, member, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("%s: %s/%s — %s", label, name, member, resp.Message), resp.Raw())
 }
 
 func doConferenceMemberDelete(name, member, sub string) error {
@@ -408,9 +406,9 @@ func doConferenceMemberDelete(name, member, sub string) error {
 		return nil
 	}
 	if sub == "" {
-		fmt.Fprintf(os.Stderr, "Kicked member %s from %s\n", member, name)
-	} else {
-		fmt.Fprintf(os.Stderr, "Cleared %s on %s/%s\n", sub, name, member)
+		return emitWrite(fmt.Sprintf("Kicked member %s from %s", member, name),
+			map[string]any{"conference_name": name, "member_id": member, "kicked": true})
 	}
-	return nil
+	return emitWrite(fmt.Sprintf("Cleared %s on %s/%s", sub, name, member),
+		map[string]any{"conference_name": name, "member_id": member, "resource": sub, "cleared": true})
 }

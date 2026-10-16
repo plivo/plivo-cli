@@ -112,6 +112,5 @@ func runAccountUpdate(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Updated account: %s\n", resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Updated account: %s", resp.Message), resp.Raw())
 }

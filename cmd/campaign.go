@@ -287,6 +287,5 @@ func runCampaignUpdate(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Updated campaign %s: %s\n", id, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Updated campaign %s: %s", id, resp.Message), resp.Raw())
 }
