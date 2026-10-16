@@ -208,7 +208,10 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 			// The socket is gone after any failed write: no point retrying.
 			_ = conn.CloseNow()
 			rb.stop()
-			return clierr.NetworkError(streamsTestTo, fmt.Errorf("send frame %d: %w", i+1, writeFailure(rb, err)))
+			if e := endpointClosed(rb, fmt.Sprintf("at frame %d of %d", i+1, totalFrames)); e != nil {
+				return e
+			}
+			return clierr.NetworkError(streamsTestTo, fmt.Errorf("send frame %d: %w", i+1, err))
 		}
 		result.FramesSent++
 		// 20ms-paced; if we're falling behind, send-as-fast-as-possible
@@ -255,7 +258,10 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	_ = conn.Close(websocket.StatusNormalClosure, "test complete")
 	rb.stop()
 	if closedEarly {
-		return clierr.NetworkError(streamsTestTo, fmt.Errorf("%w before the stop frame", writeFailure(rb, rb.err)))
+		if e := endpointClosed(rb, "before the stop frame"); e != nil {
+			return e
+		}
+		return clierr.NetworkError(streamsTestTo, fmt.Errorf("%w before the stop frame", rb.err))
 	}
 
 	if readBack {
@@ -454,17 +460,42 @@ func isPlayAudio(data []byte) bool {
 	return json.Unmarshal(data, &ev) == nil && ev.Event == "playAudio" && ev.Media.Payload != ""
 }
 
-// writeFailure explains a write the endpoint did not take. When the reader
-// saw the endpoint's close frame, its code and reason say why; stop rb
-// first.
-func writeFailure(rb *streamsReadBack, err error) error {
+// closeDetail is the code and reason of the endpoint's close frame, when the
+// reader saw one; stop rb first.
+func closeDetail(rb *streamsReadBack) (string, bool) {
 	var ce websocket.CloseError
 	if !errors.As(rb.err, &ce) {
-		return err
+		return "", false
 	}
-	msg := fmt.Sprintf("the endpoint closed the connection (code %d", int(ce.Code))
+	detail := fmt.Sprintf("code %d", int(ce.Code))
 	if ce.Reason != "" {
-		msg += fmt.Sprintf(", reason %q", ce.Reason)
+		detail += fmt.Sprintf(", reason %q", ce.Reason)
 	}
-	return errors.New(msg + ")")
+	return detail, true
+}
+
+// writeFailure explains a write the endpoint did not take: when it sent a
+// close frame, its code and reason say why.
+func writeFailure(rb *streamsReadBack, err error) error {
+	if detail, ok := closeDetail(rb); ok {
+		return fmt.Errorf("the endpoint closed the connection (%s)", detail)
+	}
+	return err
+}
+
+// endpointClosed is the error for an endpoint that hung up before the stop
+// frame, nil when it sent no close frame. The endpoint was reached, so the
+// error gives its close code and reason, not a connectivity hint.
+func endpointClosed(rb *streamsReadBack, when string) *clierr.Error {
+	detail, ok := closeDetail(rb)
+	if !ok {
+		return nil
+	}
+	return &clierr.Error{
+		Code:      clierr.CodeNetworkError,
+		Message:   fmt.Sprintf("%s closed the stream %s (%s)", streamsTestTo, when, detail),
+		Hint:      "The endpoint accepted the stream, then hung up: on a real call that drops the audio. Its logs should say why.",
+		Retryable: true,
+		Context:   map[string]any{"target": streamsTestTo},
+	}
 }

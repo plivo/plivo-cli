@@ -287,8 +287,8 @@ func TestVoiceStreamsTest_reportsEndpointClose(t *testing.T) {
 				if !errors.As(err, &ce) || ce.Code != clierr.CodeNetworkError {
 					t.Fatalf("err = %v, want NETWORK_ERROR", err)
 				}
-				if !strings.Contains(ce.Message, "1008") || !strings.Contains(ce.Message, "signature required") {
-					t.Errorf("message = %q, want the endpoint's close code and reason", ce.Message)
+				if !strings.Contains(ce.Message, `closed the stream`) || !strings.Contains(ce.Message, `code 1008, reason "signature required"`) || strings.Contains(ce.Hint, "internet") {
+					t.Errorf("message = %q, hint = %q, want the endpoint's close code and reason, not a reach failure", ce.Message, ce.Hint)
 				}
 			})
 		}
