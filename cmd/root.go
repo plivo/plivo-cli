@@ -369,6 +369,11 @@ func reportError(ran *cobra.Command, err error) int {
 			apiErr.Context,
 		)
 	} else {
+		// Context is JSON-only. A diagnose result that could not be built keeps
+		// the assistant's prose there, the only copy of the analysis.
+		if answer, _ := apiErr.Context["answer"].(string); answer != "" {
+			fmt.Fprintf(os.Stderr, "%s\n\n", output.SafeText(strings.TrimSpace(answer)))
+		}
 		output.PlainError(os.Stderr,
 			string(apiErr.Code),
 			apiErr.Message,

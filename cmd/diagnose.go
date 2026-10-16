@@ -296,12 +296,15 @@ type timelineEntry struct {
 	Source string  `json:"source"`
 }
 
-// resultBlockRE finds fenced code blocks; the result is the last one.
-var resultBlockRE = regexp.MustCompile("(?is)```[ \\t]*(?:json)?[ \\t]*\\r?\\n(.*?)```")
+// resultBlockRE finds fenced code blocks with any info string (json, bash or
+// none), so each block's fences pair up even when a command block comes first.
+var resultBlockRE = regexp.MustCompile("(?s)```[^\\n`]*\\n(.*?)```")
 
 // newDiagnoseResult builds the -o json result from the assistant's answer and
-// the call record. A missing or invalid result block is an error: the result
-// never carries fields the analysis left empty.
+// the call record. The result block is the last JSON object with
+// what_happened: a command or an unrelated JSON block after it is not the
+// result. A missing or unreadable block is an error, and so is an empty
+// what_happened; likely_cause, timeline and next_steps may be empty or null.
 func newDiagnoseResult(answer string, t diagnoseTarget) (*diagnoseResult, error) {
 	fail := func(reason string) error {
 		return &clierr.Error{
@@ -315,10 +318,16 @@ func newDiagnoseResult(answer string, t diagnoseTarget) (*diagnoseResult, error)
 		}
 	}
 	blocks := resultBlockRE.FindAllStringSubmatchIndex(answer, -1)
-	if len(blocks) == 0 {
+	var last []int
+	for i := len(blocks) - 1; i >= 0 && last == nil; i-- {
+		var keys map[string]json.RawMessage
+		if json.Unmarshal([]byte(answer[blocks[i][2]:blocks[i][3]]), &keys) == nil && keys["what_happened"] != nil {
+			last = blocks[i]
+		}
+	}
+	if last == nil {
 		return nil, fail("has no JSON result block")
 	}
-	last := blocks[len(blocks)-1]
 	var b struct {
 		WhatHappened string `json:"what_happened"`
 		LikelyCause  string `json:"likely_cause"`
@@ -330,25 +339,19 @@ func newDiagnoseResult(answer string, t diagnoseTarget) (*diagnoseResult, error)
 		Confidence string   `json:"confidence"`
 	}
 	if err := json.Unmarshal([]byte(answer[last[2]:last[3]]), &b); err != nil {
-		return nil, fail("has a result block that is not valid JSON: " + err.Error())
+		return nil, fail("has a result block that cannot be read: " + err.Error())
 	}
 	res := &diagnoseResult{
 		WhatHappened: strings.TrimSpace(b.WhatHappened),
 		LikelyCause:  strings.TrimSpace(b.LikelyCause),
-		Confidence:   strings.ToLower(strings.TrimSpace(b.Confidence)),
+		Confidence:   confidenceLevel(b.Confidence),
 		NextSteps:    []string{},
 		Answer:       strings.TrimSpace(answer[:last[0]] + answer[last[1]:]),
 	}
 	switch {
 	case res.WhatHappened == "":
 		return nil, fail("has a result block without what_happened")
-	case res.LikelyCause == "":
-		return nil, fail("has a result block without likely_cause")
-	case b.Timeline == nil:
-		return nil, fail("has a result block without timeline")
-	case b.NextSteps == nil:
-		return nil, fail("has a result block without next_steps")
-	case res.Confidence != "high" && res.Confidence != "medium" && res.Confidence != "low":
+	case res.Confidence == "":
 		return nil, fail(fmt.Sprintf("has a result block with confidence %q, not high, medium or low", b.Confidence))
 	}
 	for _, step := range b.NextSteps {
@@ -385,6 +388,18 @@ func newDiagnoseResult(answer string, t diagnoseTarget) (*diagnoseResult, error)
 	}
 	res.Timeline = sortTimeline(entries, zone)
 	return res, nil
+}
+
+// confidenceLevel reads the assistant's confidence by how it starts, so
+// "High (90%)" is high. "" when it starts with none of high, medium or low.
+func confidenceLevel(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	for _, level := range []string{"high", "medium", "low"} {
+		if strings.HasPrefix(s, level) {
+			return level
+		}
+	}
+	return ""
 }
 
 // callRecord is what -o json takes from the call's own record. Voice and SIP
