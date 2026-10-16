@@ -342,7 +342,8 @@ func TestSchema_handCheckedFlagsAreRequired(t *testing.T) {
 		{[]string{"sip", "credentials", "create"}, []string{"password-stdin", "username"}},
 		{[]string{"sip", "credentials", "update", zeroUUID}, []string{"password-stdin"}},
 		{[]string{"sip", "test"}, []string{"uri"}},
-		{[]string{"sip", "trunks", "create"}, []string{"direction"}},
+		// --name is marked for cobra to enforce: the run passes it.
+		{[]string{"sip", "trunks", "create", "--name", "x"}, []string{"direction", "name"}},
 	} {
 		c, _, _ := rootCmd.Find(tc.args)
 		var got []string
