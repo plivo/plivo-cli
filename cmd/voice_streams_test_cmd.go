@@ -21,6 +21,7 @@ import (
 	"github.com/plivo/plivo-cli/internal/wsproxy"
 
 	"github.com/coder/websocket"
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
 
@@ -39,9 +40,10 @@ var voiceStreamsTestCmd = &cobra.Command{
 	Short: "Pre-flight a WebSocket endpoint with synthetic Plivo audio frames",
 	Long: `Open a WebSocket to --to, send a Plivo-format start frame, stream synthetic
 audio (a 1 kHz tone) for --duration seconds, then send stop and close.
-Reports the connection time (latency_ms) and any warnings.
+Reports the connection time (latency_ms) and any warnings. An endpoint
+that closes the connection before the stop frame fails the test (exit 3).
 
-With --bidirectional it also reads what the endpoint sends back, while the
+With --bidirectional it also counts what the endpoint sends back, while the
 audio streams and for up to --duration seconds after, and times the first
 playAudio from the first frame sent (first_response_ms). --expect-audio
 does the same and exits 1 when no playAudio comes back.
@@ -115,7 +117,6 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	mediaFormat := wsproxy.MediaFormat{
 		Encoding:   wsproxy.Encoding(streamsTestCodec),
 		SampleRate: streamsTestRate,
-		Channels:   1,
 	}
 
 	// Build a context that cancels on SIGINT so Ctrl+C tears down cleanly
@@ -164,7 +165,8 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	}
 
 	// --- Phase 2: handshake (start frame) ---
-	startFrame, err := wsproxy.EncodeStart("test-stream", "test-call", "test-account", mediaFormat)
+	streamID := uuid.NewString() // Plivo's stream and call ids are UUIDs
+	startFrame, err := wsproxy.EncodeStart(streamID, uuid.NewString(), "test-account", mediaFormat)
 	if err != nil {
 		return clierr.Wrap(fmt.Errorf("encode start frame: %w", err))
 	}
@@ -185,12 +187,10 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	frames := wsproxy.SyntheticAudio(streamsTestCodec, totalFrames, frameMs, streamsTestRate)
 
 	// The reader starts before the first media frame, so an answer is read,
-	// and timed, as it arrives rather than after the whole stream.
+	// and timed, as it arrives rather than after the whole stream. It runs in
+	// every mode: it is also what sees the endpoint close the connection.
 	sendStart := time.Now()
-	var rb *streamsReadBack
-	if readBack {
-		rb = startStreamsReadBack(conn)
-	}
+	rb := startStreamsReadBack(conn)
 	for i, audio := range frames {
 		if ctx.Err() != nil {
 			break
@@ -198,7 +198,7 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 		// A write that runs out of time closes the connection, so the
 		// bound only catches an endpoint that has stopped reading.
 		mediaCtx, mediaCancel := context.WithTimeout(ctx, 2*time.Second)
-		raw, _ := wsproxy.EncodeMedia("inbound", i+1, i*frameMs, audio)
+		raw, _ := wsproxy.EncodeMedia(streamID, i+1, sendStart.UnixMilli()+int64(i*frameMs), audio)
 		err := conn.Write(mediaCtx, websocket.MessageText, raw)
 		mediaCancel()
 		if err != nil {
@@ -207,9 +207,7 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 			}
 			// The socket is gone after any failed write: no point retrying.
 			_ = conn.CloseNow()
-			if rb != nil {
-				rb.stop()
-			}
+			rb.stop()
 			return clierr.NetworkError(streamsTestTo, fmt.Errorf("send frame %d: %w", i+1, writeFailure(rb, err)))
 		}
 		result.FramesSent++
@@ -232,7 +230,7 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	}
 
 	// --- Phase 4: give the endpoint time to answer ---
-	if rb != nil && ctx.Err() == nil {
+	if readBack && ctx.Err() == nil {
 		rb.waitForAnswer(ctx, time.Duration(streamsTestDuration)*time.Second)
 	}
 
@@ -243,10 +241,24 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	stopCtx, stopCancel := context.WithTimeout(context.WithoutCancel(ctx), 1*time.Second)
 	stopErr := conn.Write(stopCtx, websocket.MessageText, stop)
 	stopCancel()
+	if stopErr != nil {
+		// If the endpoint's close failed the write, the reader may still be
+		// taking that close in: give it a moment.
+		select {
+		case <-rb.done:
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	// Reading ended before our close: the endpoint hung up first, which on a
+	// real call drops the stream.
+	closedEarly := ctx.Err() == nil && rb.ended()
 	_ = conn.Close(websocket.StatusNormalClosure, "test complete")
+	rb.stop()
+	if closedEarly {
+		return clierr.NetworkError(streamsTestTo, fmt.Errorf("%w before the stop frame", writeFailure(rb, rb.err)))
+	}
 
-	if rb != nil {
-		rb.stop()
+	if readBack {
 		result.FramesReadBack = rb.frames
 		result.PlayAudioFrames = rb.playAudio
 		if !rb.firstAudio.IsZero() {
@@ -420,6 +432,16 @@ func (rb *streamsReadBack) stop() {
 	<-rb.done
 }
 
+// ended reports whether reading has already stopped on its own.
+func (rb *streamsReadBack) ended() bool {
+	select {
+	case <-rb.done:
+		return true
+	default:
+		return false
+	}
+}
+
 // isPlayAudio reports whether a message is a playAudio event that carries
 // audio: the event a voice agent sends to speak to the caller.
 func isPlayAudio(data []byte) bool {
@@ -437,7 +459,7 @@ func isPlayAudio(data []byte) bool {
 // first.
 func writeFailure(rb *streamsReadBack, err error) error {
 	var ce websocket.CloseError
-	if rb == nil || !errors.As(rb.err, &ce) {
+	if !errors.As(rb.err, &ce) {
 		return err
 	}
 	msg := fmt.Sprintf("the endpoint closed the connection (code %d", int(ce.Code))
