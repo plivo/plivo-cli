@@ -54,7 +54,8 @@ func stubLookup(t *testing.T, err error) *int {
 		}
 		return []net.IPAddr{{IP: net.IPv4(127, 0, 0, 1)}}, nil
 	}
-	t.Cleanup(func() { sipLookup = net.DefaultResolver.LookupIPAddr })
+	sipLookupSRV = func(context.Context, string, string, string) (string, []*net.SRV, error) { return "", nil, nil } // no SRV record
+	t.Cleanup(func() { sipLookup, sipLookupSRV = net.DefaultResolver.LookupIPAddr, net.DefaultResolver.LookupSRV })
 	return &calls
 }
 
@@ -323,7 +324,7 @@ func TestSIPTest_dryRunOnlyPrintsThePlan(t *testing.T) {
 		uri  string
 		want []string
 	}{
-		{"sips:sip.example.com", []string{"[dry-run]", "dns  resolve sip.example.com", "tcp  connect to port 5061", "tls  handshake"}},
+		{"sips:sip.example.com", []string{"[dry-run]", "dns  resolve sip.example.com", "srv  look up _sips._tcp.sip.example.com", "tcp  connect to port 5061", "tls  handshake"}},
 		{"sip.example.com", []string{"dns  resolve sip.example.com", "udp  send one SIP OPTIONS to port 5060"}},
 		{"203.0.113.4:5080;transport=tcp", []string{"dns  skip", "tcp  connect to port 5080"}},
 	} {
@@ -343,6 +344,35 @@ func TestSIPTest_dryRunOnlyPrintsThePlan(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A host with no port and a SIP SRV record gets a warning naming the target,
+// while the failing check still decides the error. No lookup with a port, for
+// an IP or under --dry-run, and a failed lookup warns nothing.
+func TestSIPTest_warnsAboutSRVRecords(t *testing.T) {
+	setEmptyHome(t)
+	stubLookup(t, errors.New("no such host")) // every probe stops at DNS
+	var asked []string
+	sipLookupSRV = func(_ context.Context, service, proto, name string) (string, []*net.SRV, error) {
+		asked = append(asked, service+"."+proto+"."+name)
+		if name != "sip.example.com" {
+			return "", nil, errors.New("no such host")
+		}
+		return "", []*net.SRV{{Target: "edge.example.net.", Port: 5070}}, nil
+	}
+	err, stdout, _ := execCmd(t, "sip", "test", "--uri", "sips:sip.example.com", "-o", "json")
+	w := decodeSIPTest(t, stdout).Warnings
+	if _, ce := sipTestExit(t, err); ce.Context["check"] != "dns" || len(w) != 1 || !strings.Contains(w[0], `edge.example.net:5070;transport=tls`) {
+		t.Errorf("warnings %v, error %v", w, err)
+	}
+	for _, uri := range []string{"nosrv.example.com", "sip.example.com:5060", "127.0.0.1;transport=tcp", "sip.example.com --dry-run"} {
+		if _, _, stderr := execCmd(t, append([]string{"sip", "test", "--timeout", "1", "--uri"}, strings.Fields(uri)...)...); strings.Contains(stderr, "SRV") {
+			t.Errorf("%s warned: %s", uri, stderr)
+		}
+	}
+	if strings.Join(asked, " ") != "sips.tcp.sip.example.com sip.udp.nosrv.example.com" {
+		t.Errorf("SRV lookups: %v", asked)
 	}
 }
 
