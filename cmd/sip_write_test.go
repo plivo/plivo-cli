@@ -62,9 +62,16 @@ func sipWriteServer(t *testing.T, trunks string) func() []sipReq {
 	}
 }
 
+// SIP object IDs as the API returns them: lower-case UUIDs.
+const (
+	uriU1, uriU9   = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "99999999-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+	credC1, credC9 = "11111111-cccc-4ccc-8ccc-cccccccccccc", "99999999-cccc-4ccc-8ccc-cccccccccccc"
+	aclA1, aclA9   = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "99999999-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+)
+
 const trunksUsingU1 = `{"meta":{},"objects":[
- {"trunk_id":"T1","name":"in","trunk_direction":"inbound","primary_uri_uuid":"U1"},
- {"trunk_id":"T2","name":"out","trunk_direction":"outbound","credential_uuid":"C1","ipacl_uuid":"A1"}]}`
+ {"trunk_id":"T1","name":"in","trunk_direction":"inbound","primary_uri_uuid":"` + uriU1 + `"},
+ {"trunk_id":"T2","name":"out","trunk_direction":"outbound","credential_uuid":"` + credC1 + `","ipacl_uuid":"` + aclA1 + `"}]}`
 
 func resetWriteFlags(t *testing.T) {
 	t.Helper()
@@ -137,7 +144,7 @@ func TestSIPTrunksCreate_readsBackForTheDomain(t *testing.T) {
 	resetWriteFlags(t)
 	reqs := sipWriteServer(t, trunksUsingU1)
 
-	err, stdout, _ := execCmd(t, "sip", "trunks", "create", "--name", "x", "--direction", "inbound", "--uri", "U1", "-o", "table")
+	err, stdout, _ := execCmd(t, "sip", "trunks", "create", "--name", "x", "--direction", "inbound", "--uri", uriU1, "-o", "table")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -223,9 +230,9 @@ func TestSIPDeletes_previewWhichTrunksUseTheObject(t *testing.T) {
 		name, uuid, want string
 		args             []string
 	}{
-		{"uri", "U1", "primary URI", []string{"sip", "uris", "delete", "U1"}},
-		{"credential", "C1", "credential", []string{"sip", "credentials", "delete", "C1"}},
-		{"ip-acl", "A1", "IP ACL", []string{"sip", "ip-acl", "delete", "A1"}},
+		{"uri", uriU1, "primary URI", []string{"sip", "uris", "delete", uriU1}},
+		{"credential", credC1, "credential", []string{"sip", "credentials", "delete", credC1}},
+		{"ip-acl", aclA1, "IP ACL", []string{"sip", "ip-acl", "delete", aclA1}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -478,7 +485,7 @@ func TestSIPURIs_authenticationNeedsAUsername(t *testing.T) {
 		args []string
 	}{
 		{"create", []string{"sip", "uris", "create", "--name", "n", "--uri", "example.com", "--authentication-needed=true"}},
-		{"update", []string{"sip", "uris", "update", "U1", "--authentication-needed=true"}},
+		{"update", []string{"sip", "uris", "update", uriU1, "--authentication-needed=true"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setFakeCreds(t)
@@ -520,7 +527,7 @@ func TestSIPCredentialsUpdate_passwordOnlyRotationCarriesTheUsername(t *testing.
 	t.Cleanup(func() { clientForTest = nil })
 	readAllStdin = func() ([]byte, error) { return []byte("newpw"), nil }
 
-	if err, _, _ := execCmd(t, "sip", "credentials", "update", "C1", "--password-stdin"); err != nil {
+	if err, _, _ := execCmd(t, "sip", "credentials", "update", credC1, "--password-stdin"); err != nil {
 		t.Fatalf("a password-only rotation must work: %v", err)
 	}
 	mu.Lock()
@@ -546,7 +553,7 @@ func TestSIPDelete_readsDependentsEvenWithYes(t *testing.T) {
 	t.Cleanup(func() { yesFlag = false })
 	reqs := sipWriteServer(t, trunksUsingU1)
 
-	err, _, stderr := execCmd(t, "sip", "uris", "delete", "U1", "--yes", "--force")
+	err, _, stderr := execCmd(t, "sip", "uris", "delete", uriU1, "--yes", "--force")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -571,7 +578,7 @@ func TestSIPTrunksUpdate_alwaysSendsTrunkDirection(t *testing.T) {
 	resetWriteFlags(t)
 	reqs := sipWriteServer(t, trunksUsingU1)
 
-	if err, _, _ := execCmd(t, "sip", "trunks", "update", "T1", "--uri", "U9"); err != nil {
+	if err, _, _ := execCmd(t, "sip", "trunks", "update", "T1", "--uri", strings.ToUpper(uriU9)); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	p := post(reqs(), "/Zentrunk/Trunk/T1/")
@@ -581,7 +588,7 @@ func TestSIPTrunksUpdate_alwaysSendsTrunkDirection(t *testing.T) {
 	if p.body["trunk_direction"] != "inbound" {
 		t.Errorf("trunk_direction missing or wrong, so the API would 400: %v", p.body)
 	}
-	if p.body["primary_uri_uuid"] != "U9" {
+	if p.body["primary_uri_uuid"] != uriU9 {
 		t.Errorf("the actual change was lost: %v", p.body)
 	}
 }
@@ -594,7 +601,7 @@ func TestSIPWrites_emitJSONOnStdout(t *testing.T) {
 		args       []string
 	}{
 		{"update", `"updated"`, []string{"sip", "trunks", "update", "T1", "--status", "disabled", "-o", "json"}},
-		{"delete", `"deleted"`, []string{"sip", "uris", "delete", "U1", "--yes", "--force", "-o", "json"}},
+		{"delete", `"deleted"`, []string{"sip", "uris", "delete", uriU1, "--yes", "--force", "-o", "json"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setFakeCreds(t)
@@ -618,7 +625,7 @@ func TestSIPTrunksCreate_jsonCarriesTrunkDomain(t *testing.T) {
 	resetWriteFlags(t)
 	sipWriteServer(t, trunksUsingU1)
 
-	err, stdout, _ := execCmd(t, "sip", "trunks", "create", "--name", "x", "--direction", "inbound", "--uri", "U1", "-o", "json")
+	err, stdout, _ := execCmd(t, "sip", "trunks", "create", "--name", "x", "--direction", "inbound", "--uri", uriU1, "-o", "json")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -644,7 +651,7 @@ func TestSIPCredentialsUpdate_requiresThePasswordFlag(t *testing.T) {
 	resetWriteFlags(t)
 	reqs := sipWriteServer(t, trunksUsingU1)
 
-	err, _, _ := execCmd(t, "sip", "credentials", "update", "C1", "--name", "renamed")
+	err, _, _ := execCmd(t, "sip", "credentials", "update", credC1, "--name", "renamed")
 	if err == nil || !strings.Contains(err.Error(), "--password-stdin is required") {
 		t.Fatalf("expected the required-flag refusal, got: %v", err)
 	}
@@ -730,7 +737,7 @@ func TestSIPURIsUpdate_passwordRotationRestatesWhatTheAPIDemands(t *testing.T) {
 	t.Cleanup(func() { clientForTest = nil })
 	readAllStdin = func() ([]byte, error) { return []byte("newpw"), nil }
 
-	if err, _, _ := execCmd(t, "sip", "uris", "update", "U1", "--password-stdin"); err != nil {
+	if err, _, _ := execCmd(t, "sip", "uris", "update", uriU1, "--password-stdin"); err != nil {
 		t.Fatalf("a password-only rotation must work: %v", err)
 	}
 	mu.Lock()
@@ -871,11 +878,13 @@ func TestSIPTrunksDelete_forceDeletesARoutedTrunk(t *testing.T) {
 }
 
 // Deleting an in-use URI also deletes its trunks, so --yes alone is not enough.
+// The API reads an ID in any case; the check used to compare it as typed, so an
+// upper-case ID matched no trunk and --yes deleted the object and its trunks.
 func TestSIPDeletes_refuseAnInUseObjectWithoutForce(t *testing.T) {
 	for _, args := range [][]string{
-		{"sip", "uris", "delete", "U1", "--yes"},
-		{"sip", "credentials", "delete", "C1", "--yes"},
-		{"sip", "ip-acl", "delete", "A1", "--yes"},
+		{"sip", "uris", "delete", strings.ToUpper(uriU1), "--yes"},
+		{"sip", "credentials", "delete", " " + strings.ToUpper(credC1), "--yes"},
+		{"sip", "ip-acl", "delete", aclA1, "--yes"},
 	} {
 		t.Run(args[1], func(t *testing.T) {
 			setFakeCreds(t)
@@ -894,15 +903,26 @@ func TestSIPDeletes_refuseAnInUseObjectWithoutForce(t *testing.T) {
 	}
 }
 
+// An object ID that is not a UUID never reaches the API.
+func TestSIPObjects_refuseAnIDThatIsNotAUUID(t *testing.T) {
+	setFakeCreds(t)
+	resetWriteFlags(t)
+	reqs := sipWriteServer(t, trunksUsingU1)
+	err, _, _ := execCmd(t, "sip", "ip-acl", "get", "A1")
+	if ce, ok := err.(*clierr.Error); !ok || ce.Code != clierr.CodeBadInput || len(reqs()) != 0 {
+		t.Fatalf("want BAD_INPUT before any request, got %v after %d requests", err, len(reqs()))
+	}
+}
+
 // Each delete asks the trunk list for exactly the trunks that use the object.
 func TestSIPDeletes_askTheTrunkListByFilter(t *testing.T) {
 	cases := []struct {
 		args []string
 		want []string
 	}{
-		{[]string{"sip", "uris", "delete", "U9", "--yes"}, []string{"primary_uri_uuid=U9", "fallback_uri_uuid=U9"}},
-		{[]string{"sip", "credentials", "delete", "C9", "--yes"}, []string{"credential_uuid=C9"}},
-		{[]string{"sip", "ip-acl", "delete", "A9", "--yes"}, []string{"ipacl_uuid=A9"}},
+		{[]string{"sip", "uris", "delete", uriU9, "--yes"}, []string{"primary_uri_uuid=" + uriU9, "fallback_uri_uuid=" + uriU9}},
+		{[]string{"sip", "credentials", "delete", credC9, "--yes"}, []string{"credential_uuid=" + credC9}},
+		{[]string{"sip", "ip-acl", "delete", aclA9, "--yes"}, []string{"ipacl_uuid=" + aclA9}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.args[1], func(t *testing.T) {
@@ -938,7 +958,7 @@ func TestSIPDeletes_checkEachMatchClientSide(t *testing.T) {
 	resetWriteFlags(t)
 	reqs := deleteServer(t, 0, -1, trunksUsingU1, nil)
 
-	err, _, stderr := execCmd(t, "sip", "credentials", "delete", "C9", "--yes")
+	err, _, stderr := execCmd(t, "sip", "credentials", "delete", credC9, "--yes")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -966,9 +986,9 @@ func TestSIPDeletes_stopWhenTheCheckFails(t *testing.T) {
 	for _, tc := range cases {
 		for _, args := range [][]string{
 			{"sip", "trunks", "delete", "T1", "--yes", "--force"},
-			{"sip", "uris", "delete", "U1", "--yes", "--force"},
-			{"sip", "credentials", "delete", "C1", "--yes", "--force"},
-			{"sip", "ip-acl", "delete", "A1", "--yes", "--force"},
+			{"sip", "uris", "delete", uriU1, "--yes", "--force"},
+			{"sip", "credentials", "delete", credC1, "--yes", "--force"},
+			{"sip", "ip-acl", "delete", aclA1, "--yes", "--force"},
 		} {
 			t.Run(tc.name+"/"+args[1], func(t *testing.T) {
 				setFakeCreds(t)
@@ -1008,12 +1028,12 @@ func TestSIPDeletes_stopWhenTheCheckFails(t *testing.T) {
 		clientForTest = &api.Client{BaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
 		t.Cleanup(func() { clientForTest = nil })
 
-		err, _, _ := execCmd(t, "sip", "uris", "delete", "U1", "--yes", "--force")
+		err, _, _ := execCmd(t, "sip", "uris", "delete", uriU1, "--yes", "--force")
 		var ce *clierr.Error
 		if !errors.As(err, &ce) || ce.Code != clierr.CodeNetworkError || ce.ExitCode() != 3 || !ce.Retryable {
 			t.Fatalf("want NETWORK_ERROR (exit 3, retryable), got %#v", ce)
 		}
-		if !strings.HasPrefix(ce.Message, "refusing to delete URI U1: could not check what depends on it: ") {
+		if !strings.HasPrefix(ce.Message, "refusing to delete URI "+uriU1+": could not check what depends on it: ") {
 			t.Errorf("message = %q", ce.Message)
 		}
 	})
@@ -1029,7 +1049,7 @@ func TestSIPDeletes_dryRunShowsDependents(t *testing.T) {
 		reqs := deleteServer(t, 0, -1, trunksUsingU1, nil)
 		clientForTest.DryRun = true
 
-		err, _, stderr := execCmd(t, "sip", "uris", "delete", "U1", "--yes", "--dry-run")
+		err, _, stderr := execCmd(t, "sip", "uris", "delete", uriU1, "--yes", "--dry-run")
 		wantRefused(t, err)
 		if !strings.Contains(stderr, "T1 (in, primary URI)") {
 			t.Errorf("dependents not shown under --dry-run:\n%s", stderr)
@@ -1045,7 +1065,7 @@ func TestSIPDeletes_dryRunShowsDependents(t *testing.T) {
 		reqs := deleteServer(t, 0, -1, trunksUsingU1, nil)
 		clientForTest.DryRun = true
 
-		err, _, stderr := execCmd(t, "sip", "uris", "delete", "U1", "--force", "--dry-run")
+		err, _, stderr := execCmd(t, "sip", "uris", "delete", uriU1, "--force", "--dry-run")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1060,7 +1080,7 @@ func TestSIPDeletes_dryRunShowsDependents(t *testing.T) {
 		reqs := deleteServer(t, 0, -1, `{"meta":{"total_count":0},"objects":[]}`, nil)
 		clientForTest.DryRun = true
 
-		err, _, stderr := execCmd(t, "sip", "uris", "delete", "U9", "--dry-run")
+		err, _, stderr := execCmd(t, "sip", "uris", "delete", uriU9, "--dry-run")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

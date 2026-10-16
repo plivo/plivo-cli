@@ -160,9 +160,9 @@ func TestSIPTrunksCreate_platformNeverSetsSecure(t *testing.T) {
 				reqs := sipWriteServer(t, trunksUsingU1)
 				args := []string{"sip", "trunks", "create", "--name", "n", "--direction", dir, "--platform", p.name, "-o", "json"}
 				if dir == dirInbound {
-					args = append(args, "--uri", "U1")
+					args = append(args, "--uri", uriU1)
 				} else {
-					args = append(args, "--credential", "C1", "--ip-acl", "A1")
+					args = append(args, "--credential", credC1, "--ip-acl", aclA1)
 				}
 				err, _, stderr := execCmd(t, args...)
 				if err != nil {
@@ -188,7 +188,7 @@ func TestSIPTrunksCreate_platformNeverSetsSecure(t *testing.T) {
 		resetWriteFlags(t)
 		reqs := sipWriteServer(t, trunksUsingU1)
 		err, _, stderr := execCmd(t, "sip", "trunks", "create", "--name", "n", "--direction", "outbound",
-			"--platform", "livekit", "--credential", "C1", "--secure")
+			"--platform", "livekit", "--credential", credC1, "--secure")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -207,11 +207,11 @@ func TestSIPTrunksCreate_platformChecksTheAuthAndPrintsNotes(t *testing.T) {
 		args       []string
 	}{
 		{"vapi with a credential", "authenticates its outbound calls with an IP access control list",
-			[]string{"--direction", "outbound", "--platform", "vapi", "--credential", "C1"}},
+			[]string{"--direction", "outbound", "--platform", "vapi", "--credential", credC1}},
 		{"livekit with an ip acl", "authenticates its outbound calls with a credential",
-			[]string{"--direction", "outbound", "--platform", "livekit", "--ip-acl", "A1"}},
+			[]string{"--direction", "outbound", "--platform", "livekit", "--ip-acl", aclA1}},
 		{"retell inbound", "even for inbound-only use",
-			[]string{"--direction", "inbound", "--platform", "retell", "--uri", "U1"}},
+			[]string{"--direction", "inbound", "--platform", "retell", "--uri", uriU1}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setFakeCreds(t)

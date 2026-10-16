@@ -77,22 +77,62 @@ func trunksUsing(client *api.Client, segment, uuid string) ([]string, error) {
 }
 
 // trunksReferencing names every trunk pointing at uuid, so the user sees what a
-// delete would detach before it happens rather than after.
+// delete would detach before it happens rather than after. The API reads an ID
+// in any case, so this compares in any case too.
 func trunksReferencing(trunks []api.SIPTrunk, uuid string) []string {
 	var out []string
 	for _, t := range trunks {
-		switch uuid {
-		case t.PrimaryURIUUID:
+		switch {
+		case strings.EqualFold(uuid, t.PrimaryURIUUID):
 			out = append(out, t.TrunkID+" ("+t.Name+", primary URI)")
-		case t.FallbackURIUUID:
+		case strings.EqualFold(uuid, t.FallbackURIUUID):
 			out = append(out, t.TrunkID+" ("+t.Name+", fallback URI)")
-		case t.CredentialUUID:
+		case strings.EqualFold(uuid, t.CredentialUUID):
 			out = append(out, t.TrunkID+" ("+t.Name+", credential)")
-		case t.IPACLUUID:
+		case strings.EqualFold(uuid, t.IPACLUUID):
 			out = append(out, t.TrunkID+" ("+t.Name+", IP ACL)")
 		}
 	}
 	return out
+}
+
+// canonUUID returns a SIP object's ID as the API writes it: trimmed and
+// lower-case. ok is false when it is not a UUID.
+func canonUUID(v string) (id string, ok bool) {
+	id = strings.ToLower(strings.TrimSpace(v))
+	return id, looksLikeUUID(id)
+}
+
+// sipObjectArg runs run with its argument, a URI, credential or IP access
+// control list UUID, as canonUUID returns it, and refuses one that is not a
+// UUID before any request. The in-use check before a delete used to compare
+// the ID as typed with the API's lower-case IDs: an upper-case one matched no
+// trunk, so --yes deleted an object in use and the API deleted its trunks.
+func sipObjectArg(run func(*cobra.Command, []string) error) func(*cobra.Command, []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		id, ok := canonUUID(args[0])
+		if !ok {
+			return clierr.BadInput(fmt.Sprintf("%s needs a UUID, got %q", cmd.CommandPath(), args[0]))
+		}
+		return run(cmd, []string{id})
+	}
+}
+
+// canonUUIDFlags does the same for the trunk flags that name a URI,
+// credential or IP access control list. An empty value is not an ID and is
+// left as given.
+func canonUUIDFlags(cmd *cobra.Command) error {
+	for _, name := range []string{"uri", "fallback-uri", "credential", "ip-acl"} {
+		f := cmd.Flags().Lookup(name)
+		if v := f.Value.String(); v != "" {
+			id, ok := canonUUID(v)
+			if !ok {
+				return clierr.BadFlag(name, fmt.Sprintf("needs a UUID, got %q", v))
+			}
+			_ = f.Value.Set(id)
+		}
+	}
+	return nil
 }
 
 // firstNumberOnTrunk reads the account's numbers page by page, under --dry-run
@@ -303,6 +343,9 @@ func runSIPTrunksCreate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := canonUUIDFlags(cmd); err != nil {
+		return err
+	}
 	switch trunkCreateDirection {
 	case dirInbound:
 		if trunkCreateURI == "" {
@@ -389,6 +432,9 @@ func runSIPTrunksCreate(cmd *cobra.Command, args []string) error {
 }
 
 func runSIPTrunksUpdate(cmd *cobra.Command, args []string) error {
+	if err := canonUUIDFlags(cmd); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -503,7 +549,7 @@ with a warning.`,
 }
 
 var sipURIsListCmd = &cobra.Command{Use: "list", Short: "List origination URIs", Args: cobra.NoArgs, RunE: runSIPURIsList}
-var sipURIsGetCmd = &cobra.Command{Use: "get <uri_uuid>", Short: "Get one origination URI", Args: cobra.ExactArgs(1), RunE: runSIPURIsGet}
+var sipURIsGetCmd = &cobra.Command{Use: "get <uri_uuid>", Short: "Get one origination URI", Args: cobra.ExactArgs(1), RunE: sipObjectArg(runSIPURIsGet)}
 
 var sipURIsUpdateCmd = &cobra.Command{
 	Use:   "update <uri_uuid>",
@@ -512,7 +558,7 @@ var sipURIsUpdateCmd = &cobra.Command{
 
 --uri is checked before sending, as on create.`,
 	Args: cobra.ExactArgs(1),
-	RunE: runSIPURIsUpdate,
+	RunE: sipObjectArg(runSIPURIsUpdate),
 }
 
 var sipURIsDeleteCmd = &cobra.Command{
@@ -522,7 +568,7 @@ var sipURIsDeleteCmd = &cobra.Command{
 also deletes those trunks, so an in-use URI needs --force on top of --yes. If
 the check fails, the delete is refused.`,
 	Args: cobra.ExactArgs(1),
-	RunE: runSIPURIsDelete,
+	RunE: sipObjectArg(runSIPURIsDelete),
 }
 
 // normalizeSIPURI keeps whatever shape the user gave. A bare host is legal, so
@@ -776,14 +822,14 @@ echoed, never printed back, and never generated for you.`,
 }
 
 var sipCredsListCmd = &cobra.Command{Use: "list", Short: "List credentials", Args: cobra.NoArgs, RunE: runSIPCredsList}
-var sipCredsGetCmd = &cobra.Command{Use: "get <credential_uuid>", Short: "Get one credential", Args: cobra.ExactArgs(1), RunE: runSIPCredsGet}
+var sipCredsGetCmd = &cobra.Command{Use: "get <credential_uuid>", Short: "Get one credential", Args: cobra.ExactArgs(1), RunE: sipObjectArg(runSIPCredsGet)}
 
 var sipCredsUpdateCmd = &cobra.Command{
 	Use:   "update <credential_uuid>",
 	Short: "Update a credential",
 	Long:  "As with create, a new password is read from stdin only.",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runSIPCredsUpdate,
+	RunE:  sipObjectArg(runSIPCredsUpdate),
 }
 
 var sipCredsDeleteCmd = &cobra.Command{
@@ -791,7 +837,7 @@ var sipCredsDeleteCmd = &cobra.Command{
 	Short: "Delete a credential (requires --yes)",
 	Long:  "Names any trunk using it first; an in-use one needs --force on top of --yes. If the check fails, the delete is refused.",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runSIPCredsDelete,
+	RunE:  sipObjectArg(runSIPCredsDelete),
 }
 
 // readPasswordStdin takes the password from stdin. Trailing newlines are
@@ -974,7 +1020,7 @@ var sipACLUpdateCmd = &cobra.Command{
 	Short: "Update an IP access control list",
 	Long:  "--ip replaces the whole list rather than appending, so pass every address you want kept.",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runSIPACLUpdate,
+	RunE:  sipObjectArg(runSIPACLUpdate),
 }
 
 var sipACLDeleteCmd = &cobra.Command{
@@ -982,7 +1028,7 @@ var sipACLDeleteCmd = &cobra.Command{
 	Short: "Delete an IP access control list (requires --yes)",
 	Long:  "Names any trunk using it first; an in-use one needs --force on top of --yes. If the check fails, the delete is refused.",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runSIPACLDelete,
+	RunE:  sipObjectArg(runSIPACLDelete),
 }
 
 // riskyCIDR reports a range that allows far more than a platform needs. It
