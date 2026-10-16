@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/coder/websocket"
 	"github.com/plivo/plivo-cli/internal/api"
@@ -451,7 +452,7 @@ func runForwardTeardown(t *testing.T, restoreStatus int, tunnelDies bool, args .
 	streamsFwdClientForTest = &api.Client{BaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", HTTP: &http.Client{}}
 	tn := &tunnel.Tunnel{PublicURL: "https://fake-tunnel.test"}
 	startTunnel = func(context.Context, int, string) (*tunnel.Tunnel, error) { return tn, nil }
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) // a forward that misses the stop fails, not hangs
 	if tunnelDies {
 		dead := make(chan struct{})
 		close(dead)
