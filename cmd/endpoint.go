@@ -219,8 +219,7 @@ func runEndpointUpdate(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Updated endpoint %s: %s\n", id, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Updated endpoint %s: %s", id, resp.Message), resp.Raw())
 }
 
 func runEndpointDelete(cmd *cobra.Command, args []string) error {
@@ -242,6 +241,5 @@ func runEndpointDelete(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Deleted endpoint %s\n", id)
-	return nil
+	return emitWrite(fmt.Sprintf("Deleted endpoint %s", id), map[string]any{"endpoint_id": id, "deleted": true})
 }

@@ -155,8 +155,7 @@ func runNumberRelease(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Released %s\n", number)
-	return nil
+	return emitWrite(fmt.Sprintf("Released %s", number), map[string]any{"number": number, "released": true})
 }
 
 func runNumberList(cmd *cobra.Command, args []string) error {
@@ -294,8 +293,7 @@ func runNumberUpdate(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Updated %s: %s\n", number, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Updated %s: %s", number, resp.Message), resp.Raw())
 }
 
 func runNumberBuy(cmd *cobra.Command, args []string) error {
