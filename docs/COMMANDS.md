@@ -863,8 +863,9 @@ Send a message to Plivo's AI assistant and stream the response.
 The assistant uses Server-Sent Events: token text streams to stdout as it
 arrives, live status appears on stderr and is overwritten in place, and the
 final summary lands on stdout. Long flows (voice-debug can run 2–5 minutes)
-work fine — there is no overall HTTP timeout. Ctrl-C cancels and exits 130;
-no auto-retry (debugger runs are not idempotent).
+work fine: the stream has no time limit unless you pass --timeout, which ends
+it with exit 3. An answer the stream cuts off before its end also exits 3.
+Ctrl-C cancels and exits 130; no auto-retry (debugger runs are not idempotent).
 
 Use -i for an interactive chat that keeps context across follow-ups: each
 turn replays the recent conversation as history (a one-shot ask sends none,

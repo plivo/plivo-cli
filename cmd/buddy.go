@@ -65,8 +65,9 @@ var askCmd = &cobra.Command{
 The assistant uses Server-Sent Events: token text streams to stdout as it
 arrives, live status appears on stderr and is overwritten in place, and the
 final summary lands on stdout. Long flows (voice-debug can run 2–5 minutes)
-work fine — there is no overall HTTP timeout. Ctrl-C cancels and exits 130;
-no auto-retry (debugger runs are not idempotent).
+work fine: the stream has no time limit unless you pass --timeout, which ends
+it with exit 3. An answer the stream cuts off before its end also exits 3.
+Ctrl-C cancels and exits 130; no auto-retry (debugger runs are not idempotent).
 
 Use -i for an interactive chat that keeps context across follow-ups: each
 turn replays the recent conversation as history (a one-shot ask sends none,
@@ -127,6 +128,10 @@ func applyBuddyURL(c *api.Client) {
 
 func runAsk(cmd *cobra.Command, args []string) error {
 	lastAsk = askOutcome{}
+	limit, err := askStreamLimit(cmd)
+	if err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -139,7 +144,7 @@ func runAsk(cmd *cobra.Command, args []string) error {
 		if len(args) == 1 {
 			first = args[0]
 		}
-		return runInteractiveAsk(client, url, first)
+		return runInteractiveAsk(client, url, first, limit)
 	}
 
 	if len(args) != 1 {
@@ -169,7 +174,7 @@ func runAsk(cmd *cobra.Command, args []string) error {
 	}
 
 	// SIGINT/SIGTERM → cancel the SSE context → http body close → exit 130.
-	streamCtx, cancel := context.WithCancel(context.Background())
+	streamCtx, cancel := askStreamContext(limit)
 	defer cancel()
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
@@ -199,15 +204,13 @@ func runAsk(cmd *cobra.Command, args []string) error {
 	// Ctrl-C: print whatever we've accumulated so the user sees a partial
 	// answer, then exit 130.
 	if streamCtx.Err() == context.Canceled {
-		if !r.jsonMode {
-			if r.streamed {
-				fmt.Fprintln(os.Stdout) // close the streamed line
-			} else if r.answerBuf.Len() > 0 {
-				fmt.Fprintln(os.Stdout, strings.TrimRight(r.answerBuf.String(), "\n"))
-			}
-		}
+		r.flushPartial()
 		fmt.Fprintln(os.Stderr, "(cancelled)")
 		os.Exit(130)
+	}
+	if sseErr != nil && streamCtx.Err() == context.DeadlineExceeded {
+		r.flushPartial()
+		return askTimedOut(limit)
 	}
 
 	if sseErr != nil {
@@ -220,6 +223,7 @@ func runAsk(cmd *cobra.Command, args []string) error {
 		return clierr.NetworkError("buddy", sseErr)
 	}
 	lastAsk = askOutcome{
+		ran:       true,
 		escalated: r.escalated,
 		errored:   r.errorSeen,
 		errorMsg:  r.errorMsg,
@@ -230,7 +234,41 @@ func runAsk(cmd *cobra.Command, args []string) error {
 		// A server-emitted error event is a service-side error, not bad user input.
 		return clierr.Upstream(r.errorMsg)
 	}
+	if !r.finished {
+		r.flushPartial()
+		return clierr.Upstream("the answer stopped before it finished: the stream closed without the assistant's final event")
+	}
 	return nil
+}
+
+// askStreamLimit is how long one assistant stream may run: --timeout when it
+// was passed, else no limit (0), since an investigation can take minutes.
+func askStreamLimit(cmd *cobra.Command) (time.Duration, error) {
+	if !cmd.Flags().Changed("timeout") {
+		return 0, nil
+	}
+	if timeoutSec < 1 {
+		return 0, clierr.BadFlag("timeout", "must be at least 1 second")
+	}
+	return time.Duration(timeoutSec) * time.Second, nil
+}
+
+// askStreamContext bounds a stream by limit; 0 leaves it unbounded.
+func askStreamContext(limit time.Duration) (context.Context, context.CancelFunc) {
+	if limit > 0 {
+		return context.WithTimeout(context.Background(), limit)
+	}
+	return context.WithCancel(context.Background())
+}
+
+// askTimedOut is the error for a stream that outlived --timeout.
+func askTimedOut(limit time.Duration) *clierr.Error {
+	return &clierr.Error{
+		Code:      clierr.CodeUpstreamTimeout,
+		Message:   fmt.Sprintf("the assistant had not finished after --timeout %d seconds", int(limit.Seconds())),
+		Hint:      "Raise --timeout, or leave it out: without it the stream has no time limit.",
+		Retryable: true,
+	}
 }
 
 // escalateToolName is the assistant tool that files a support ticket.
@@ -241,6 +279,7 @@ const escalateToolName = "escalate_to_support"
 // that errored, escalated, stopped early or says it could not finish did not
 // diagnose anything.
 type askOutcome struct {
+	ran       bool   // the stream ran to its close, unlike a timeout or a transport failure
 	escalated bool   // ended by filing a support ticket
 	errored   bool   // the server sent an error event
 	errorMsg  string // that event's message
@@ -294,6 +333,7 @@ type buddySession struct {
 	// turn so follow-ups thread together. If the server ever starts sending
 	// a real `session` event, sendTurn adopts it here going forward.
 	sessionID string
+	limit     time.Duration // --timeout per turn; 0 for none
 }
 
 // historyForRequest returns the most recent turns, capped at maxHistoryTurns.
@@ -329,7 +369,7 @@ func (s *buddySession) sendTurn(message string) (answer string, ok bool) {
 		SessionID:   s.sessionID,
 	}
 
-	turnCtx, cancel := context.WithCancel(context.Background())
+	turnCtx, cancel := askStreamContext(s.limit)
 	defer cancel()
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
@@ -358,12 +398,12 @@ func (s *buddySession) sendTurn(message string) (answer string, ok bool) {
 
 	switch {
 	case turnCtx.Err() == context.Canceled:
-		if r.streamed {
-			fmt.Fprintln(os.Stdout) // tokens already streamed; just close the line
-		} else if r.answerBuf.Len() > 0 {
-			fmt.Fprintln(os.Stdout, strings.TrimRight(r.answerBuf.String(), "\n"))
-		}
+		r.flushPartial()
 		fmt.Fprintln(os.Stderr, "(cancelled)")
+		return "", false
+	case sseErr != nil && turnCtx.Err() == context.DeadlineExceeded:
+		r.flushPartial()
+		fmt.Fprintf(os.Stderr, "buddy error: %s\n", askTimedOut(s.limit).Message)
 		return "", false
 	case sseErr != nil:
 		var httpErr *api.SSEHTTPError
@@ -426,8 +466,8 @@ func printREPLHelp(w io.Writer) {
 // runInteractiveAsk runs the `ask -i` read-eval loop: each message is sent with
 // the running conversation history so the assistant keeps context. Ctrl-C
 // cancels the in-flight turn; Ctrl-D or /exit leaves. An optional firstMsg
-// seeds the first turn (`plivo ask -i "..."`).
-func runInteractiveAsk(client *api.Client, url, firstMsg string) error {
+// seeds the first turn (`plivo ask -i "..."`); limit bounds each turn.
+func runInteractiveAsk(client *api.Client, url, firstMsg string, limit time.Duration) error {
 	// Only refuse an EXPLICIT -o json or jsonl — the non-TTY default (e.g.
 	// piped through `tee`) shouldn't block a session that's still human-driven.
 	if f := strings.ToLower(outputFormat); f == "json" || f == "jsonl" {
@@ -442,6 +482,7 @@ func runInteractiveAsk(client *api.Client, url, firstMsg string) error {
 		url:       url,
 		uctx:      buildBuddyUserContext(client),
 		sessionID: newBuddySessionID(), // minted up front: every turn in this REPL shares it
+		limit:     limit,
 	}
 
 	fmt.Fprintln(os.Stderr, "Plivo AI assistant — interactive mode.")
@@ -575,6 +616,19 @@ func (r *buddyRenderer) track(ev api.SSEEvent) {
 	case "error":
 		r.errorSeen = true
 		r.errorMsg = d.Error
+	}
+}
+
+// flushPartial prints what a turn that never finished left behind: it closes
+// a streamed line, or prints the buffered answer.
+func (r *buddyRenderer) flushPartial() {
+	if r.jsonMode {
+		return
+	}
+	if r.streamed {
+		fmt.Fprintln(r.out)
+	} else if r.answerBuf.Len() > 0 {
+		fmt.Fprintln(r.out, strings.TrimRight(r.answerBuf.String(), "\n"))
 	}
 }
 
