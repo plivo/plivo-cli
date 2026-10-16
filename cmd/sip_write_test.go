@@ -332,34 +332,36 @@ func TestSIPCredentials_passwordOnlyEverComesFromStdin(t *testing.T) {
 		}
 	})
 
+	// user1 and s3cr! are 5 characters: both rules' lower bound.
 	t.Run("password is read from stdin and sent", func(t *testing.T) {
 		setFakeCreds(t)
 		resetWriteFlags(t)
 		reqs := sipWriteServer(t, trunksUsingU1)
-		readAllStdin = func() ([]byte, error) { return []byte("s3cret!"), nil }
+		readAllStdin = func() ([]byte, error) { return []byte("s3cr!"), nil }
 
-		if err, _, _ := execCmd(t, "sip", "credentials", "create", "--name", "c", "--username", "u", "--password-stdin"); err != nil {
+		if err, _, _ := execCmd(t, "sip", "credentials", "create", "--name", "c", "--username", "user1", "--password-stdin"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		p := post(reqs(), "/Zentrunk/Credential/")
-		if p == nil || p.body["password"] != "s3cret!" {
+		if p == nil || p.body["password"] != "s3cr!" {
 			t.Fatalf("password not sent: %v", p)
 		}
 	})
 
 	// `echo` adds a newline and `printf` does not. A password carrying one fails
-	// to authenticate later with nothing to explain why.
+	// to authenticate later with nothing to explain why. Without it, the
+	// password is 20 characters, as is the username: both rules' upper bound.
 	t.Run("a trailing newline is stripped", func(t *testing.T) {
 		setFakeCreds(t)
 		resetWriteFlags(t)
 		reqs := sipWriteServer(t, trunksUsingU1)
-		readAllStdin = func() ([]byte, error) { return []byte("s3cret!\n"), nil }
+		readAllStdin = func() ([]byte, error) { return []byte("s3cret!s3cret!s3cret\n"), nil }
 
-		if err, _, _ := execCmd(t, "sip", "credentials", "create", "--name", "c", "--username", "u", "--password-stdin"); err != nil {
+		if err, _, _ := execCmd(t, "sip", "credentials", "create", "--name", "c", "--username", "abcdefghij0123456789", "--password-stdin"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		p := post(reqs(), "/Zentrunk/Credential/")
-		if p == nil || p.body["password"] != "s3cret!" {
+		if p == nil || p.body["password"] != "s3cret!s3cret!s3cret" {
 			t.Fatalf("newline survived into the password: %q", p.body["password"])
 		}
 	})
@@ -370,7 +372,7 @@ func TestSIPCredentials_passwordOnlyEverComesFromStdin(t *testing.T) {
 		sipWriteServer(t, trunksUsingU1)
 		readAllStdin = func() ([]byte, error) { return []byte("\n"), nil }
 
-		err, _, _ := execCmd(t, "sip", "credentials", "create", "--name", "c", "--username", "u", "--password-stdin")
+		err, _, _ := execCmd(t, "sip", "credentials", "create", "--name", "c", "--username", "user1", "--password-stdin")
 		if err == nil {
 			t.Fatal("an empty password must not be sent")
 		}
@@ -383,7 +385,7 @@ func TestSIPCredentials_passwordOnlyEverComesFromStdin(t *testing.T) {
 		sipWriteServer(t, trunksUsingU1)
 		readAllStdin = func() ([]byte, error) { return []byte("hunter2!"), nil }
 
-		err, stdout, stderr := execCmd(t, "sip", "credentials", "create", "--name", "c", "--username", "u", "--password-stdin", "-o", "table")
+		err, stdout, stderr := execCmd(t, "sip", "credentials", "create", "--name", "c", "--username", "user1", "--password-stdin", "-o", "table")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

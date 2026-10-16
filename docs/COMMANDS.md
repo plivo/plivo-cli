@@ -2846,7 +2846,7 @@ plivo sip credentials create [flags]
 Examples:
 
 ```
-  printf '%s' "$SIP_PASSWORD" | plivo sip credentials create --name c1 --username u1 --password-stdin
+  printf '%s' "$SIP_PASSWORD" | plivo sip credentials create --name c1 --username sipuser1 --password-stdin
 ```
 
 Flags:

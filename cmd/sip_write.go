@@ -899,7 +899,7 @@ var sipCredsCreateCmd = &cobra.Command{
 The password is read from stdin only. There is no --password flag: a password in
 an argument lands in shell history, process listings and CI logs. It is never
 echoed, never printed back, and never generated for you.`,
-	Example: `  printf '%s' "$SIP_PASSWORD" | plivo sip credentials create --name c1 --username u1 --password-stdin`,
+	Example: `  printf '%s' "$SIP_PASSWORD" | plivo sip credentials create --name c1 --username sipuser1 --password-stdin`,
 	Args:    cobra.NoArgs,
 	RunE:    runSIPCredsCreate,
 }
@@ -938,6 +938,20 @@ func checkCredentialPassword(pw string) error {
 	return nil
 }
 
+// credentialUsername is the API's rule for a credential username: 5 to 20
+// letters and digits. It answers anything else "Username length should be
+// between 5 and 20, should contain only alphanumeric characters".
+var credentialUsername = regexp.MustCompile(`^[A-Za-z0-9]{5,20}$`)
+
+// checkCredentialUsername applies that rule to --username. A username is not
+// a secret, so the error names it.
+func checkCredentialUsername(u string) error {
+	if !credentialUsername.MatchString(u) {
+		return clierr.BadFlag("username", fmt.Sprintf("%q must be 5 to 20 letters and digits", u))
+	}
+	return nil
+}
+
 // readPasswordStdin takes the password from stdin. Trailing newlines are
 // stripped because `printf`/`echo` and a heredoc disagree about them, and a
 // password that silently carries one fails to authenticate with no clue why.
@@ -959,6 +973,9 @@ func runSIPCredsCreate(cmd *cobra.Command, args []string) error {
 	}
 	if credCreateUsername == "" {
 		return clierr.BadInput("--username is required")
+	}
+	if err := checkCredentialUsername(credCreateUsername); err != nil {
+		return err
 	}
 	pw, err := readPasswordStdin()
 	if err != nil {
@@ -1035,6 +1052,11 @@ func runSIPCredsGet(cmd *cobra.Command, args []string) error {
 }
 
 func runSIPCredsUpdate(cmd *cobra.Command, args []string) error {
+	if cmd.Flags().Changed("username") {
+		if err := checkCredentialUsername(credUpdateUsername); err != nil {
+			return err
+		}
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
