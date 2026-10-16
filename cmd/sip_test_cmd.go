@@ -50,6 +50,7 @@ result is "unknown". Each step waits up to 5 seconds, or --timeout when given.`,
 
 func init() {
 	sipTestCmd.Flags().StringVar(&sipTestURI, "uri", "", "SIP URI to test, e.g. \"sip.example.com;transport=tcp\" (required)")
+	markRequiredByHand(sipTestCmd, "uri")
 	sipCmd.AddCommand(sipTestCmd)
 }
 

@@ -49,6 +49,7 @@ func init() {
 	f := sipConnectPlanCmd.Flags()
 	f.StringVar(&sipConnectNumber, "number", "", "number to connect, e.g. +14155551234 (required)")
 	f.StringVar(&sipConnectPlatform, "platform", "", "livekit|elevenlabs|retell|vapi (required)")
+	markRequiredByHand(sipConnectPlanCmd, "number", "platform")
 	sipConnectCmd.AddCommand(sipConnectPlanCmd)
 	sipCmd.AddCommand(sipConnectCmd)
 }
