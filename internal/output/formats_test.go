@@ -153,6 +153,7 @@ func TestQuery_runsOnTheWholeEnvelope(t *testing.T) {
 		{"json", "length(data.objects[?sms_rate < `0.01`])", "1\n"},
 		// A name before "(" in a literal is not a call to an unknown function.
 		{"json", "data.objects[?contains(number, 'x(')].number", "[]\n"},
+		{"json", `data."lenght("`, "null\n"},
 		{"jsonl", "data.objects[].number", "\"+14155551234\"\n\"+14155556789\"\n"},
 		// A list of values is one bare value per line: no header, no quotes.
 		{"csv", "data.objects[].number", "+14155551234\n+14155556789\n"},
