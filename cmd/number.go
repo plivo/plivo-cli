@@ -396,7 +396,9 @@ func runNumberSearch(cmd *cobra.Command, args []string) error {
 
 // requireInboundTrunk refuses an outbound trunk. Numbers receive calls, and an
 // outbound trunk has no origination URI to send them to, so the attach would
-// succeed and the number would simply stop answering.
+// succeed and the number would simply stop answering. A disabled trunk is
+// routed to with a warning: the route is right, but no call comes through
+// until the trunk is enabled.
 func requireInboundTrunk(client *api.Client, trunkID string) error {
 	var t api.SIPTrunk
 	var apiErr *api.APIError
@@ -423,6 +425,10 @@ func requireInboundTrunk(client *api.Client, trunkID string) error {
 	if t = unwrapSIPTrunk(t); t.TrunkDirection == dirOutbound {
 		return clierr.BadInput(fmt.Sprintf(
 			"trunk %s is outbound; a number can only be routed to an inbound trunk", trunkID))
+	}
+	if strings.EqualFold(t.TrunkStatus, "disabled") {
+		fmt.Fprintf(os.Stderr, "Warning: trunk %s is disabled, so no call to this number comes through it until "+
+			"`plivo sip trunks update %s --status enabled`.\n", trunkID, trunkID)
 	}
 	return nil
 }

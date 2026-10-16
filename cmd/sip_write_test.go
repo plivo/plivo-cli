@@ -438,8 +438,8 @@ func TestNumbersUpdate_trunkID(t *testing.T) {
 		setFakeCreds(t)
 		resetWriteFlags(t)
 		reqs := sipWriteServer(t, trunksUsingU1)
-		if err, _, _ := execCmd(t, "numbers", "update", "15551234567", "--trunk-id", "T1"); err != nil {
-			t.Fatalf("unexpected error: %v", err)
+		if err, _, stderr := execCmd(t, "numbers", "update", "15551234567", "--trunk-id", "T1"); err != nil || strings.Contains(stderr, "disabled") {
+			t.Fatalf("unexpected error or warning for an enabled trunk: %v\n%s", err, stderr)
 		}
 		p := post(reqs(), "/Number/15551234567/")
 		if p == nil || p.body["app_id"] != "T1" {
@@ -461,6 +461,16 @@ func TestNumbersUpdate_trunkID(t *testing.T) {
 			}
 		}
 	})
+}
+
+// Routing to a disabled trunk goes through, warned from the same read.
+func TestNumbersUpdate_warnsOnADisabledTrunk(t *testing.T) {
+	setFakeCreds(t)
+	_, count := sipServer(t, http.StatusOK, `{"object":{"trunk_id":"T1","trunk_direction":"inbound","trunk_status":"Disabled"}}`)
+	err, _, stderr := execCmd(t, "numbers", "update", "15551234567", "--trunk-id", "T1")
+	if err != nil || count() != 2 || !strings.Contains(stderr, "`plivo sip trunks update T1 --status enabled`") {
+		t.Errorf("err %v, %d request(s), stderr:\n%s", err, count(), stderr)
+	}
 }
 
 // A number receives calls; an outbound trunk has nowhere to send them. The
