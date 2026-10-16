@@ -63,6 +63,7 @@ func TestParseSIPURI_namesWhatIsWrong(t *testing.T) {
 		{":5060", "no host"},
 		{"sip:user@", "no host"},
 		{"sip:@sip.example.com", "empty user part"},
+		{"sip:alice:s3cret@sip.example.com", "password in its user part"},
 		{"user@sip.example.com", "no scheme"},
 		{"sip_trunk.example.com", `contains '_'`},
 		{"-sip.example.com", "not a valid hostname"},
@@ -82,8 +83,8 @@ func TestParseSIPURI_namesWhatIsWrong(t *testing.T) {
 			if err == nil {
 				t.Fatalf("%q was accepted", tc.in)
 			}
-			if !strings.Contains(err.Error(), tc.want) {
-				t.Errorf("parseSIPURI(%q) error %q should mention %q", tc.in, err, tc.want)
+			if !strings.Contains(err.Error(), tc.want) || strings.Contains(err.Error(), "s3cret") {
+				t.Errorf("parseSIPURI(%q) error %q should mention %q, and no password", tc.in, err, tc.want)
 			}
 		})
 	}
@@ -122,6 +123,7 @@ func TestSIPWrites_refuseBadValuesWithoutARequest(t *testing.T) {
 	}{
 		{"uris create bad port", "uri", []string{"sip", "uris", "create", "--name", "n", "--uri", "sip.example.com:70000"}},
 		{"uris create unknown transport", "uri", []string{"sip", "uris", "create", "--name", "n", "--uri", "sip.example.com;transport=sctp"}},
+		{"uris create password", "uri", []string{"sip", "uris", "create", "--name", "n", "--uri", "sip:alice:s3cret@sip.example.com"}},
 		{"uris update bad host", "uri", []string{"sip", "uris", "update", uriU1, "--uri", "sip_example.com"}},
 		{"uris update empty", "uri", []string{"sip", "uris", "update", uriU1, "--uri", " "}},
 		{"ip-acl create comma list", "ip", []string{"sip", "ip-acl", "create", "--name", "a", "--ip", "203.0.113.4,198.51.100.7"}},
