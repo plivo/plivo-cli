@@ -17,7 +17,7 @@ Install another skill when the task leaves XML: `plivo skill install audio-strea
 - Use the CLI for every Plivo step and `-o json` to read values. `plivo <command> --help` wins on which commands and flags exist; never invent one.
 - Every write is two commands: first with `--dry-run` (prints the request, sends nothing), then, after you show the preview and the user agrees, the same command for real, with `--yes` where it asks for one. `account applications create|update` and `numbers update` act at once without `--dry-run`, so the preview is their only check.
 - Check the credit before a call: `cash_credits` in `plivo auth whoami -o json`. At 0 or less, send the user to <https://cx.plivo.com/home> to add credits and go on with the free steps. Writing and checking XML is free; only calls and renting a number cost money.
-- Before you link a number to another application, record its current `application` (`plivo numbers get <number> -o json`). Rollback: `plivo numbers update <number> --app-id <previous_app_id>`.
+- Before you link a number to another application, record its current `application` (`plivo numbers get <number> -o json`). Rollback: `plivo numbers update <number> --app-id <previous_app_id>`, or `--trunk-id <trunk_id>` when it ended `/Zentrunk/Trunk/<trunk_id>/`. `numbers update` cannot put back an empty `application`: tell the user before you link.
 - For more than one step, track the steps below in your agent's task or todo tool (TaskCreate and TaskUpdate in Claude Code, the plan tool in Codex CLI). Mark a step done only when its check passes.
 - Report each step as observed, not assumed. A parser pass, an HTTP 200 or a `request_uuid` is not a working call: only the call record and someone who heard the audio confirm it.
 
@@ -75,18 +75,19 @@ Run this loop on every document you write or change, including every document an
 
 Fix what failed and run the loop again. Well-formed XML is not a working call.
 
-**On this computer, for a test.** Save the documents as files in one folder (`answer.xml`, `menu.xml`, ...) and serve them with this script, which answers GET and POST with the file's bytes:
+**On this computer, for a test.** Save the documents in a new folder that holds nothing else (`xml/answer.xml`, `xml/menu.xml`, ...) and serve only that folder with this script, which answers GET and POST with the file's bytes. Never serve a project folder: anyone with the tunnel link can read every file in the served folder, `.env` and `.git` included.
 
 ```python
-# serve_xml.py: python3 serve_xml.py 8080
-import http.server, sys
+# serve_xml.py: python3 serve_xml.py 8080 xml   (serves only the folder named last)
+import functools, http.server, sys
 
 class H(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         self.rfile.read(int(self.headers.get("Content-Length", 0)))
         self.do_GET()
 
-http.server.ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
+handler = functools.partial(H, directory=sys.argv[2])
+http.server.ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), handler).serve_forever()
 ```
 
 Then open a tunnel: `cloudflared tunnel --config /dev/null --url http://127.0.0.1:8080` (free, no account; the link is in its output as `https://<name>.trycloudflare.com`), or `ngrok http 8080`. Ask before you install either. Point `action` and `<Redirect>` URLs at the tunnel link plus the file name. Static files cannot branch on `Digits` or `DialStatus`: every key gets the same next document, which is enough to test the flow, not to ship it. Tell the user the link changes each time the tunnel restarts, and that anyone with it can read the files.
@@ -103,7 +104,7 @@ Run it again without `--dry-run`. Check: `plivo account applications get <app_id
 
 ### Step 4: link the number
 
-Show the preview, then ask (header Link) "Send calls on <masked number> to <app name>? They stop going to <old app name> until you switch back. I'll do that at the end if you want." · Yes, switch it · Keep it as it is.
+Show the preview, then ask (header Link) "Send calls on <masked number> to <app name>? They stop going to <old app name> until you switch back. I'll do that at the end if you want." · Yes, switch it · Keep it as it is. For a number on no app, replace the second and third sentences with "It can move to another app later, but it can't go back to having none."
 
 ```bash
 plivo numbers update <number> --app-id <app_id> --dry-run
@@ -122,7 +123,7 @@ Check the credit, then ask (header Test call) "How do you want to test it?" · I
 plivo voice calls make --from <number> --to <phone> --answer-url https://YOUR-HOST/plivo/answer --answer-method POST --dry-run
 ```
 
-`--answer-method` defaults to `GET`. Set `POST` explicitly, or Plivo fetches a route your handler may not serve. For a call in, find its UUID with `plivo voice calls list --to <number> --direction inbound --limit 5 -o json` (completed calls only: retry after a few seconds). Read `plivo voice calls get <call_uuid> -o json` for `call_duration`, `hangup_cause_code`, `hangup_cause_name` and `hangup_source`.
+`--answer-method` defaults to `GET`. Set `POST` explicitly, or Plivo fetches a route your handler may not serve. For a call in, find its UUID with `plivo voice calls list --to <number> --direction inbound --limit 5 -o json` (completed calls only: retry after a few seconds). After the call ends, read `plivo voice calls get <call_uuid> -o json` for `call_duration`, `hangup_cause_code`, `hangup_cause_name` and `hangup_source`. The record is written at hangup, so a call still up reads as not found; from v1.2.1, `--live` reads it in progress.
 
 Then ask (header Result) "Did the call do what you expected?" · Yes, all of it · Partly: "Something was skipped or wrong." · No: "Silence, or it hung up." · The call didn't come.
 
