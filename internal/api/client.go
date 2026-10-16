@@ -4,9 +4,11 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/cliupgrade"
 	"github.com/plivo/plivo-cli/internal/version"
 
@@ -214,7 +217,8 @@ func (c *Client) BuddyURL(path string) string {
 // queryParams (if non-nil and non-empty) are appended to the URL.
 // On success (2xx), response is unmarshalled into out (if non-nil).
 // On API error (>=400), returns an *APIError with no Go error.
-// On transport errors, returns a Go error with nil *APIError.
+// On transport errors (no answer, or a cut-off one), returns a nil *APIError
+// and, as the Go error, a NETWORK_ERROR or UPSTREAM_TIMEOUT *clierr.Error.
 func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, out any) (*APIError, error) {
 	if len(queryParams) > 0 {
 		sep := "?"
@@ -279,7 +283,7 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("http: %w", err)
+		return nil, transportError(method, req.URL.Host, err)
 	}
 	defer resp.Body.Close()
 
@@ -287,7 +291,7 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
+		return nil, transportError(method, req.URL.Host, fmt.Errorf("read response: %w", err))
 	}
 
 	if resp.StatusCode >= 400 {
@@ -381,7 +385,7 @@ func (c *Client) DoMultipart(method, fullURL string, dataJSON []byte, files map[
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("http: %w", err)
+		return nil, transportError(method, req.URL.Host, err)
 	}
 	defer resp.Body.Close()
 
@@ -389,7 +393,7 @@ func (c *Client) DoMultipart(method, fullURL string, dataJSON []byte, files map[
 
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
+		return nil, transportError(method, req.URL.Host, fmt.Errorf("read response: %w", err))
 	}
 	if resp.StatusCode >= 400 {
 		return parseError(resp.StatusCode, resp.Header, respBytes), nil
@@ -410,4 +414,27 @@ func (c *Client) DoMultipart(method, fullURL string, dataJSON []byte, files map[
 		}
 	}
 	return nil, nil
+}
+
+// transportError is a request that got no complete answer: UPSTREAM_TIMEOUT
+// when the time ran out, NETWORK_ERROR otherwise, both exit 3. Returned as a
+// plain error it read as a usage mistake, exit 1. Only a GET is retryable: any
+// other request may have reached Plivo and been carried out before the
+// connection failed.
+func transportError(method, host string, err error) *clierr.Error {
+	var ne net.Error
+	timedOut := errors.As(err, &ne) && ne.Timeout()
+	if ue, ok := err.(*url.Error); ok {
+		err = ue.Err // its method and URL repeat what the command already says
+	}
+	e := clierr.NetworkError(host, err)
+	if timedOut {
+		e.Code = clierr.CodeUpstreamTimeout
+		e.Message = fmt.Sprintf("No answer from %s in time: %v", host, err)
+		e.Hint = "On a slow network, pass a longer --timeout (in seconds; the default is 30)."
+	}
+	if e.Retryable = method == http.MethodGet; !e.Retryable {
+		e.Message += ". The request may have gone through: check before sending it again"
+	}
+	return e
 }
