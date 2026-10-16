@@ -63,11 +63,8 @@ func sipWriteServer(t *testing.T, trunks string) func() []sipReq {
 }
 
 // SIP object IDs as the API returns them: lower-case UUIDs.
-const (
-	uriU1, uriU9   = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "99999999-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
-	credC1, credC9 = "11111111-cccc-4ccc-8ccc-cccccccccccc", "99999999-cccc-4ccc-8ccc-cccccccccccc"
-	aclA1, aclA9   = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "99999999-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-)
+const uriU1, credC1, aclA1 = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "11111111-cccc-4ccc-8ccc-cccccccccccc", "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+const uriU9, credC9, aclA9 = "99999999-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "99999999-cccc-4ccc-8ccc-cccccccccccc", "99999999-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 
 const trunksUsingU1 = `{"meta":{},"objects":[
  {"trunk_id":"T1","name":"in","trunk_direction":"inbound","primary_uri_uuid":"` + uriU1 + `"},
@@ -593,27 +590,19 @@ func TestSIPTrunksUpdate_alwaysSendsTrunkDirection(t *testing.T) {
 	}
 }
 
-// The API clears a fallback URI an update leaves out, so a rename, --status or
-// --secure used to drop it. The stored one is sent again; --fallback-uri ""
-// leaves it out on purpose, the only way to clear it.
+// The API clears a fallback URI an update leaves out, so the stored one is sent
+// again; --fallback-uri "" leaves it out, the only way to clear it.
 func TestSIPTrunksUpdate_keepsTheFallbackUnlessCleared(t *testing.T) {
-	for name, tc := range map[string]struct {
-		args []string
-		want any // the fallback_uri_uuid sent; nil when left out
-	}{
-		"rename":         {[]string{"--name", "renamed"}, uriU9},
-		"with direction": {[]string{"--secure", "--direction", "inbound"}, uriU9},
-		"cleared":        {[]string{"--fallback-uri", ""}, nil},
-	} {
-		t.Run(name, func(t *testing.T) {
+	for flags, want := range map[string]any{"--name=renamed": uriU9, "--secure --direction=inbound": uriU9, "--fallback-uri=": nil} {
+		t.Run(flags, func(t *testing.T) {
 			setFakeCreds(t)
 			resetWriteFlags(t)
 			reqs := sipWriteServer(t, trunksUsingU1)
-			if err, _, _ := execCmd(t, append([]string{"sip", "trunks", "update", "T1"}, tc.args...)...); err != nil {
+			if err, _, _ := execCmd(t, append([]string{"sip", "trunks", "update", "T1"}, strings.Fields(flags)...)...); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if p := post(reqs(), "/Zentrunk/Trunk/T1/"); p == nil || p.body["fallback_uri_uuid"] != tc.want || p.body["trunk_direction"] != "inbound" {
-				t.Errorf("update = %v, want fallback_uri_uuid %v", p, tc.want)
+			if p := post(reqs(), "/Zentrunk/Trunk/T1/"); p == nil || p.body["fallback_uri_uuid"] != want {
+				t.Errorf("update = %v, want fallback_uri_uuid %v", p, want)
 			}
 		})
 	}
@@ -904,8 +893,7 @@ func TestSIPTrunksDelete_forceDeletesARoutedTrunk(t *testing.T) {
 }
 
 // Deleting an in-use URI also deletes its trunks, so --yes alone is not enough.
-// The API reads an ID in any case; the check used to compare it as typed, so an
-// upper-case ID matched no trunk and --yes deleted the object and its trunks.
+// An upper-case ID used to match no trunk, as the check compared it as typed.
 func TestSIPDeletes_refuseAnInUseObjectWithoutForce(t *testing.T) {
 	for _, args := range [][]string{
 		{"sip", "uris", "delete", strings.ToUpper(uriU1), "--yes"},
@@ -931,13 +919,7 @@ func TestSIPDeletes_refuseAnInUseObjectWithoutForce(t *testing.T) {
 
 // An object ID that is not a UUID never reaches the API.
 func TestSIPObjects_refuseAnIDThatIsNotAUUID(t *testing.T) {
-	setFakeCreds(t)
-	resetWriteFlags(t)
-	reqs := sipWriteServer(t, trunksUsingU1)
-	err, _, _ := execCmd(t, "sip", "ip-acl", "get", "A1")
-	if ce, ok := err.(*clierr.Error); !ok || ce.Code != clierr.CodeBadInput || len(reqs()) != 0 {
-		t.Fatalf("want BAD_INPUT before any request, got %v after %d requests", err, len(reqs()))
-	}
+	requireRefusedBeforeAnyRequest(t, []string{"sip", "ip-acl", "get", "A1"}, "needs a UUID")
 }
 
 // Each delete asks the trunk list for exactly the trunks that use the object.

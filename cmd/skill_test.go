@@ -229,10 +229,10 @@ func TestSkillInstall_allBundledSkillsInstallByteIdentical(t *testing.T) {
 
 // v1.1.3 installed plivo-first-agent, whose flow now lives in
 // plivo-audio-streaming. Two skills claiming the same request make an agent
-// pick between them, so installing the replacement retires the old copy in
-// the default skills root, and nowhere else. Its SKILL.md is renamed, not
-// deleted: the copy may hold edits.
-func TestSkillInstall_retiresTheFirstAgentSkill(t *testing.T) {
+// pick between them, so installing the replacement removes the old copy from
+// the default skills root, and from nowhere else.
+// Its SKILL.md is renamed SKILL.md.retired, not deleted: it may hold edits.
+func TestSkillInstall_removesRetiredFirstAgentSkill(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -245,7 +245,7 @@ func TestSkillInstall_retiresTheFirstAgentSkill(t *testing.T) {
 		t.Fatalf("dry-run install: %v", err)
 	}
 	if _, err := os.Stat(old); err != nil {
-		t.Fatalf("--dry-run retired the skill: %v", err)
+		t.Fatalf("--dry-run removed the retired skill: %v", err)
 	}
 	dryRunFlag = false
 
@@ -259,7 +259,7 @@ func TestSkillInstall_retiresTheFirstAgentSkill(t *testing.T) {
 	}
 	for _, p := range []string{sibling, old} {
 		if _, err := os.Stat(p); err != nil {
-			t.Errorf("--dir install retired %s: %v", p, err)
+			t.Errorf("--dir install removed %s: %v", p, err)
 		}
 	}
 	skillDir = ""
@@ -267,11 +267,8 @@ func TestSkillInstall_retiresTheFirstAgentSkill(t *testing.T) {
 	if err := runSkillInstall(nil, []string{"audio-streaming"}); err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	if _, err := os.Stat(old); !os.IsNotExist(err) {
-		t.Errorf("plivo-first-agent still installed after installing its replacement (stat err: %v)", err)
-	}
-	if !fileIs(t, old+".retired", "---\nname: plivo-first-agent\n---\n") {
-		t.Error("the retired SKILL.md was deleted, not renamed SKILL.md.retired")
+	if _, err := os.Stat(old); !os.IsNotExist(err) || !fileIs(t, old+".retired", "---\nname: plivo-first-agent\n---\n") {
+		t.Errorf("plivo-first-agent not renamed SKILL.md.retired after installing its replacement (stat err: %v)", err)
 	}
 	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "plivo-audio-streaming", skillFileName)); err != nil {
 		t.Errorf("replacement not installed: %v", err)
@@ -279,8 +276,7 @@ func TestSkillInstall_retiresTheFirstAgentSkill(t *testing.T) {
 }
 
 // The retired folder may hold the user's own files. Only the SKILL.md that
-// v1.1.3 wrote is renamed, and that is enough to stop agents loading the old
-// skill.
+// v1.1.3 wrote goes, and that is enough to stop agents loading the old skill.
 func TestSkillInstall_keepsUserFilesInRetiredSkillFolder(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -614,9 +610,8 @@ func TestSkillInstall_projectReadsCRLFAsLF(t *testing.T) {
 	}
 }
 
-// A home copy can hold edits too, and install used to overwrite it without a
-// look. One that matches no released version is kept, as `skill update` keeps
-// it, and --force replaces it.
+// A home copy can hold edits too: one that matches no released version is
+// kept, as `skill update` keeps it, unless --force.
 func TestSkillInstall_homeKeepsAnEditedCopyUnlessForced(t *testing.T) {
 	_, home := fakeRepo(t, false)
 	p := writeSkillFile(t, home, "plivo-cli", "my own notes\n")
@@ -630,13 +625,23 @@ func TestSkillInstall_homeKeepsAnEditedCopyUnlessForced(t *testing.T) {
 	}
 }
 
-// A copy that a release shipped holds no edits, so a home install replaces it.
-func TestSkillInstall_homeReplacesAReleasedVersion(t *testing.T) {
+// A home copy that a release shipped holds no edits, so it is still
+// overwritten, as every earlier release did.
+func TestSkillInstall_homeInstallStillOverwrites(t *testing.T) {
 	_, home := fakeRepo(t, false)
-	shipVersion(t, "plivo-cli", olderCLISkill)
-	p := writeSkillFile(t, home, "plivo-cli", olderCLISkill)
-	if err, _, _ := execCmd(t, "skill", "install"); err != nil || !fileIs(t, p, cliskill.SkillMD) {
-		t.Errorf("a released version was not replaced: %v", err)
+	shipVersion(t, "plivo-cli", "older\n")
+	p := filepath.Join(home, ".claude", "skills", "plivo-cli", skillFileName)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte("older\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err, _, _ := execCmd(t, "skill", "install"); err != nil {
+		t.Fatalf("home install: %v", err)
+	}
+	if got, _ := os.ReadFile(p); string(got) != cliskill.SkillMD {
+		t.Error("a home install no longer overwrites")
 	}
 }
 

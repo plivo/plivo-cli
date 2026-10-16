@@ -350,13 +350,9 @@ func TestOutputFormats_queryFailingAfterAWritePrintsTheResult(t *testing.T) {
 	setFakeCreds(t)
 	resetWriteFlags(t)
 	sipWriteServer(t, trunksUsingU1)
-
 	err, stdout, stderr := execCmd(t, "sip", "uris", "create", "--name", "n", "--uri", "sip.example.com", "--query", "abs(data)")
-	if err != nil {
-		t.Fatalf("want exit 0 after the write, got %v", err)
-	}
-	if !strings.Contains(stdout, `"uri_uuid": "U1"`) || !strings.Contains(stderr, "do not run it again") {
-		t.Errorf("want the unfiltered result and a warning:\nstdout: %s\nstderr: %s", stdout, stderr)
+	if err != nil || !strings.Contains(stdout, `"uri_uuid": "U1"`) || !strings.Contains(stderr, "do not run it again") {
+		t.Errorf("want exit 0, the unfiltered result and a warning, got %v:\nstdout: %s\nstderr: %s", err, stdout, stderr)
 	}
 }
 

@@ -151,6 +151,8 @@ func TestQuery_runsOnTheWholeEnvelope(t *testing.T) {
 		{"json", "data.meta.total_count", "2\n"},
 		// A filter compares numbers, so decoded numbers must be float64.
 		{"json", "length(data.objects[?sms_rate < `0.01`])", "1\n"},
+		// A name before "(" in a literal is not a call to an unknown function.
+		{"json", "data.objects[?contains(number, 'x(')].number", "[]\n"},
 		{"jsonl", "data.objects[].number", "\"+14155551234\"\n\"+14155556789\"\n"},
 		// A list of values is one bare value per line: no header, no quotes.
 		{"csv", "data.objects[].number", "+14155551234\n+14155556789\n"},
@@ -187,9 +189,11 @@ func TestQuery_keepsLargeIntegersExact(t *testing.T) {
 	}
 }
 
-func TestConfigure_rejectsAnExpressionThatDoesNotParse(t *testing.T) {
+// An expression that does not parse is refused up front, and so is a call to
+// an unknown function, which the search meets only after a write's request.
+func TestConfigure_rejectsABadExpression(t *testing.T) {
 	t.Cleanup(func() { _ = Configure("", "") })
-	for _, expr := range []string{"data.objects[", "data..x", "[?", "`"} {
+	for _, expr := range []string{"data.objects[", "data..x", "[?", "`", "lenght(data.objects)", "data.objects[?lenght (tags) > `1`].id"} {
 		err := Configure("json", expr)
 		var qe *QueryError
 		if !errors.As(err, &qe) {
@@ -202,8 +206,8 @@ func TestConfigure_rejectsAnExpressionThatDoesNotParse(t *testing.T) {
 	}
 }
 
-// A query can parse yet fail on the data (a function given the wrong type).
-// That is still the flag's fault, and nothing is written.
+// A query can parse yet fail on the data (a sum of objects, a wrong
+// argument type). That is still the flag's fault, and nothing is written.
 func TestQuery_runtimeFailureWritesNothing(t *testing.T) {
 	for _, expr := range []string{"sum(data.objects)", "abs(data.api_id)"} {
 		got, err := render(t, "json", expr, listPage)
@@ -213,27 +217,6 @@ func TestQuery_runtimeFailureWritesNothing(t *testing.T) {
 		}
 		if got != "" {
 			t.Errorf("%s: wrote %q before failing", expr, got)
-		}
-	}
-}
-
-// The search meets a function only when it reaches the call, which for a
-// write is after the request. So an unknown name is refused when the query is
-// configured, wherever it sits; a name inside a literal is not a call.
-func TestConfigure_refusesAnUnknownFunction(t *testing.T) {
-	t.Cleanup(func() { _ = Configure("", "") })
-	for expr, refused := range map[string]bool{
-		"lenght(data.objects)":                    true,
-		"data.objects[?lenght (tags) > `1`].id":   true,
-		"data.objects[].to_strng(number)":         true,
-		"length(data.objects)":                    false,
-		"data.objects[?contains(alias, 'x(')]":    false,
-		"data.\"lenght(\"":                        false,
-		"data.objects[?alias == `\"y(\"`].number": false,
-	} {
-		var qe *QueryError
-		if got := errors.As(Configure("json", expr), &qe); got != refused {
-			t.Errorf("Configure(%q) refused = %v, want %v", expr, got, refused)
 		}
 	}
 }

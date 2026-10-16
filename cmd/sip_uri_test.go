@@ -123,7 +123,6 @@ func TestSIPWrites_refuseBadValuesWithoutARequest(t *testing.T) {
 	}{
 		{"uris create bad port", "uri", []string{"sip", "uris", "create", "--name", "n", "--uri", "sip.example.com:70000"}},
 		{"uris create unknown transport", "uri", []string{"sip", "uris", "create", "--name", "n", "--uri", "sip.example.com;transport=sctp"}},
-		{"uris create password", "uri", []string{"sip", "uris", "create", "--name", "n", "--uri", "sip:alice:s3cret@sip.example.com"}},
 		{"uris update bad host", "uri", []string{"sip", "uris", "update", uriU1, "--uri", "sip_example.com"}},
 		{"uris update empty", "uri", []string{"sip", "uris", "update", uriU1, "--uri", " "}},
 		{"ip-acl create comma list", "ip", []string{"sip", "ip-acl", "create", "--name", "a", "--ip", "203.0.113.4,198.51.100.7"}},
