@@ -5,6 +5,7 @@ Usage:
 
 Flags:
   -h, --help   help for get
+      --live   get a call in progress, not its record (written once the call ends)
 
 Global Flags:
       --dry-run            print the HTTP request without sending

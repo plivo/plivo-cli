@@ -153,6 +153,18 @@ type Call struct {
 	ResourceURI  string `json:"resource_uri,omitempty"`
 }
 
+// LiveCall is a call in progress (GET Call/{uuid}/?status=live).
+type LiveCall struct {
+	RawBody
+	CallUUID     string `json:"call_uuid"`
+	CallStatus   string `json:"call_status,omitempty"`
+	Direction    string `json:"direction,omitempty"`
+	From         string `json:"from,omitempty"`
+	To           string `json:"to,omitempty"`
+	CallerName   string `json:"caller_name,omitempty"`
+	SessionStart string `json:"session_start,omitempty"`
+}
+
 type CallList struct {
 	RawBody
 	APIID   string   `json:"api_id"`

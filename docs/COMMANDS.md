@@ -3762,7 +3762,13 @@ Flags:
 Get a call by UUID
 
 ```
-plivo voice calls get <call_uuid>
+plivo voice calls get <call_uuid> [flags]
+```
+
+Flags:
+
+```
+      --live   get a call in progress, not its record (written once the call ends)
 ```
 
 ---
