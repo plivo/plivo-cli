@@ -1,8 +1,9 @@
 Open a WebSocket to --to, send a Plivo-format start frame, stream synthetic
 audio (a 1 kHz tone) for --duration seconds, then send stop and close.
-Reports the connection time (latency_ms) and any warnings.
+Reports the connection time (latency_ms) and any warnings. An endpoint
+that closes the connection before the stop frame fails the test (exit 3).
 
-With --bidirectional it also reads what the endpoint sends back, while the
+With --bidirectional it also counts what the endpoint sends back, while the
 audio streams and for up to --duration seconds after, and times the first
 playAudio from the first frame sent (first_response_ms). --expect-audio
 does the same and exits 1 when no playAudio comes back.

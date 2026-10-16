@@ -317,12 +317,14 @@ func TestDiagnose_completeAnalysisExitsZero(t *testing.T) {
 	}
 }
 
-// The early-stop rule is for diagnose only: `ask` prints what came and exits 0.
-func TestAsk_streamCutBeforeFinalIsNotAnError(t *testing.T) {
+// A one-shot ask cut off before its final event prints what came, then exits 3.
+func TestAsk_streamCutBeforeFinalIsAnError(t *testing.T) {
 	setFakeCreds(t)
 	diagnoseStream(t, sseTurn("token", `{"text":"partial"}`))
-	if err, _, _ := execCmd(t, "ask", "hello", "-o", "json"); err != nil {
-		t.Errorf("ask should not judge how the stream ended, got: %v", err)
+	err, stdout, _ := execCmd(t, "ask", "hello", "-o", "json")
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeUpstreamError || !strings.Contains(stdout, "partial") {
+		t.Errorf("err = %v, stdout = %q; want the event printed, then UPSTREAM_ERROR", err, stdout)
 	}
 }
 

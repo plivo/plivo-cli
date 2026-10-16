@@ -205,7 +205,7 @@ func TestRunInteractiveAsk_sessionID_mintedAndSharedAcrossTurns(t *testing.T) {
 	client := &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, HTTP: &http.Client{}}
 
 	stdinTokenFn(t, "first turn\nsecond turn\n", func() {
-		_ = runInteractiveAsk(client, srv.URL+"/chat", "")
+		_ = runInteractiveAsk(client, srv.URL+"/chat", "", 0)
 	})
 
 	ids := sessionIDs()
@@ -229,7 +229,7 @@ func TestRunInteractiveAsk_reset_rotatesSessionID(t *testing.T) {
 	client := &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, HTTP: &http.Client{}}
 
 	stdinTokenFn(t, "first turn\n/reset\nsecond turn\n", func() {
-		_ = runInteractiveAsk(client, srv.URL+"/chat", "")
+		_ = runInteractiveAsk(client, srv.URL+"/chat", "", 0)
 	})
 
 	ids := sessionIDs()
@@ -307,7 +307,7 @@ func TestRunInteractiveAsk_nonTTYDefault_notRejected(t *testing.T) {
 
 	var err error
 	stdinTokenFn(t, "", func() { // immediate EOF, like Ctrl-D
-		err = runInteractiveAsk(client, srv.URL+"/chat", "")
+		err = runInteractiveAsk(client, srv.URL+"/chat", "", 0)
 	})
 	if err != nil {
 		t.Errorf("expected nil (clean EOF exit), got: %v", err)
@@ -321,7 +321,7 @@ func TestRunInteractiveAsk_explicitJSON_stillRejected(t *testing.T) {
 	// jsonl is the same event stream as json for ask, so it is refused too.
 	for _, f := range []string{"json", "jsonl"} {
 		outputFormat = f
-		err := runInteractiveAsk(&api.Client{}, "http://example.invalid/chat", "")
+		err := runInteractiveAsk(&api.Client{}, "http://example.invalid/chat", "", 0)
 		if err == nil || !strings.Contains(err.Error(), "can't be combined with -o "+f) {
 			t.Errorf("expected the -o %s rejection, got: %v", f, err)
 		}

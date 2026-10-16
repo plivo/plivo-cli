@@ -18,12 +18,30 @@ import (
 	"time"
 )
 
-// Tunnel is a live ngrok session: a public URL pointing at a local port,
+// Tunnel is a live tunnel session: a public URL pointing at a local port,
 // plus a Close that tears the subprocess down.
 type Tunnel struct {
 	PublicURL string // e.g. https://abc123.ngrok-free.dev
-	cmd       *exec.Cmd
+	// Done is closed when the tunnel process exits, which takes PublicURL
+	// down with it. A nil Done never closes.
+	Done <-chan struct{}
+	cmd  *exec.Cmd
+	err  error // why the process exited; set before Done closes
 }
+
+// watch reaps cmd in the background, so Done closes as soon as it exits.
+func watch(cmd *exec.Cmd) *Tunnel {
+	done := make(chan struct{})
+	t := &Tunnel{Done: done, cmd: cmd}
+	go func() {
+		t.err = cmd.Wait()
+		close(done)
+	}()
+	return t
+}
+
+// Err is why the tunnel process exited. Read it only after Done is closed.
+func (t *Tunnel) Err() error { return t.err }
 
 // StartNgrok launches `ngrok http <localPort>` and returns when the
 // public URL is reachable via ngrok's local API (typically 1-2 seconds).
@@ -48,13 +66,14 @@ func StartNgrok(ctx context.Context, localPort int) (*Tunnel, error) {
 	// Poll ngrok's local API for the public URL. ngrok serves a JSON listing
 	// at http://127.0.0.1:4040/api/tunnels once it's bound. Default timeout
 	// is 10s; that's plenty for cold-start.
-	publicURL, err := waitForNgrokTunnel(ctx, 10*time.Second, localPort, cmd)
+	t := watch(cmd)
+	publicURL, err := waitForNgrokTunnel(ctx, 10*time.Second, localPort, t)
 	if err != nil {
-		_ = cmd.Process.Kill()
+		_ = t.Close()
 		return nil, fmt.Errorf("ngrok did not report a tunnel URL: %w (is ngrok already running on :4040?)", err)
 	}
-
-	return &Tunnel{PublicURL: publicURL, cmd: cmd}, nil
+	t.PublicURL = publicURL
+	return t, nil
 }
 
 // Close kills the ngrok subprocess. Idempotent; safe to call from a defer.
@@ -65,7 +84,7 @@ func (t *Tunnel) Close() error {
 	if err := t.cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		return err
 	}
-	_ = t.cmd.Wait()
+	<-t.Done
 	return nil
 }
 
@@ -104,19 +123,18 @@ func findNgrok() (string, error) {
 // trusting the shared 4040 API at all and reading the URL from our own
 // child's stdout instead. That is the right fix and is not attempted here
 // because ngrok is not available to verify the log format against.
-func waitForNgrokTunnel(ctx context.Context, timeout time.Duration, wantPort int, cmd *exec.Cmd) (string, error) {
+func waitForNgrokTunnel(ctx context.Context, timeout time.Duration, wantPort int, t *Tunnel) (string, error) {
 	deadline := time.Now().Add(timeout)
 	httpClient := &http.Client{Timeout: 500 * time.Millisecond}
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
+		case <-t.Done:
+			// If our ngrok died, no amount of polling will help, and whatever
+			// is on 4040 now is definitely not ours.
+			return "", fmt.Errorf("it exited (%v)", t.err)
 		default:
-		}
-		// If our ngrok died, no amount of polling will help, and whatever is
-		// on 4040 now is definitely not ours.
-		if cmd != nil && cmd.ProcessState != nil && cmd.ProcessState.Exited() {
-			return "", fmt.Errorf("ngrok exited before reporting a tunnel")
 		}
 		resp, err := httpClient.Get("http://127.0.0.1:4040/api/tunnels")
 		if err == nil {

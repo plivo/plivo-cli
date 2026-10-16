@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -37,6 +39,40 @@ func TestDescribe_autoNamesAProviderEitherWay(t *testing.T) {
 		}
 	} else if !strings.Contains(got, "localhost.run") {
 		t.Errorf("ngrok absent, so auto should fall back to localhost.run; got %q", got)
+	}
+}
+
+// auto falls back to localhost.run as soon as ngrok exits, not after ngrok's
+// 10s wait for a tunnel, and Done closes once the tunnel process exits.
+func TestStart_autoFallsBackAndNoticesTheExit(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fakes are shell scripts")
+	}
+	dir := t.TempDir()
+	for name, script := range map[string]string{
+		"ngrok": "exit 1", // e.g. another agent already holds the session
+		"ssh":   "echo 'abc.lhr.life tunneled with tls termination, https://abc.lhr.life'; exec sleep 1",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"+script+"\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("HOME", t.TempDir())
+
+	began := time.Now()
+	tn, err := Start(context.Background(), 1234, ProviderAuto)
+	if err != nil {
+		t.Fatalf("auto did not fall back to localhost.run: %v", err)
+	}
+	defer func() { _ = tn.Close() }()
+	if d := time.Since(began); tn.PublicURL != "https://abc.lhr.life" || d > 5*time.Second {
+		t.Errorf("fell back to %q after %v, want the localhost.run URL at once: a dead ngrok is noticed, not waited out", tn.PublicURL, d)
+	}
+	select {
+	case <-tn.Done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Done never closed after the tunnel process exited")
 	}
 }
 
