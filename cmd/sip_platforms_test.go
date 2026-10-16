@@ -59,6 +59,9 @@ func TestSIPURIsCreate_platformFillsThePublishedValues(t *testing.T) {
 		{"vapi eu", "sip.eu.vapi.ai;transport=udp", []string{"--platform", "vapi", "--uri", "sip.eu.vapi.ai"}},
 		{"typed values win", "sip:+14155551234@sip.rtc.elevenlabs.io:5080;transport=tcp", []string{"--platform", "elevenlabs", "--uri", "sip:+14155551234@sip.rtc.elevenlabs.io:5080;transport=tcp"}},
 		{"transport without a platform", "sip.example.com;transport=tls", []string{"--uri", "sip.example.com", "--transport", "tls"}},
+		{"elevenlabs sips", "sips:sip.rtc.elevenlabs.io:5061", []string{"--platform", "elevenlabs", "--uri", "sips:sip.rtc.elevenlabs.io"}},
+		{"livekit sips", "sips:abc123.sip.livekit.cloud", []string{"--platform", "livekit", "--uri", "sips:abc123.sip.livekit.cloud"}},
+		{"retell sips", "sips:sip.retellai.com", []string{"--platform", "retell", "--uri", "sips:sip.retellai.com"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setFakeCreds(t)
@@ -88,6 +91,7 @@ func TestSIPURIsCreate_platformWarnsOnValuesTheGuideDoesNotList(t *testing.T) {
 		{"foreign host", "sip.example.com;transport=udp", "not a Vapi SIP host", []string{"--platform", "vapi", "--uri", "sip.example.com"}},
 		{"unlisted transport", "sip.rtc.elevenlabs.io;transport=udp", "does not list transport=udp", []string{"--platform", "elevenlabs", "--transport", "udp"}},
 		{"bare livekit domain", "sip.livekit.cloud;transport=tcp", "not a LiveKit SIP host", []string{"--platform", "livekit", "--uri", "sip.livekit.cloud"}},
+		{"vapi sips", "sips:sip.vapi.ai", "does not list transport=tls", []string{"--platform", "vapi", "--uri", "sips:sip.vapi.ai"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setFakeCreds(t)
@@ -120,6 +124,8 @@ func TestSIPCreates_platformRefusalsSpendNoRequest(t *testing.T) {
 			[]string{"sip", "uris", "create", "--name", "n", "--uri", "sip.example.com", "--transport", "sctp"}},
 		{"conflicting transports", string(clierr.CodeBadFlag), "conflicts with transport=tcp",
 			[]string{"sip", "uris", "create", "--name", "n", "--uri", "sip.example.com;transport=tcp", "--transport", "tls"}},
+		{"sips: with tcp", string(clierr.CodeBadFlag), "conflicts with sips:",
+			[]string{"sip", "uris", "create", "--name", "n", "--uri", "sips:sip.example.com", "--transport", "tcp"}},
 		{"inbound trunk without a URI", string(clierr.CodeBadInput), "sip uris create --name livekit --platform livekit --uri <project>.sip.livekit.cloud",
 			[]string{"sip", "trunks", "create", "--name", "n", "--direction", "inbound", "--platform", "livekit"}},
 		{"inbound trunk hint names the plan", string(clierr.CodeBadInput), "`plivo sip connect plan --number <number> --platform livekit` prints every step",
