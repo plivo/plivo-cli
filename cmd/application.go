@@ -256,8 +256,7 @@ func runAppUpdate(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Updated %s: %s\n", appID, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Updated %s: %s", appID, resp.Message), resp.Raw())
 }
 
 func runAppDelete(cmd *cobra.Command, args []string) error {
@@ -283,6 +282,5 @@ func runAppDelete(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Deleted application %s\n", appID)
-	return nil
+	return emitWrite(fmt.Sprintf("Deleted application %s", appID), map[string]any{"app_id": appID, "deleted": true})
 }

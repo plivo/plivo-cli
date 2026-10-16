@@ -265,8 +265,14 @@ func deleteSIP(client *api.Client, parts ...string) error {
 // prose on stderr and nothing on stdout, so `-o json` produced an empty stream
 // and exit 0 — indistinguishable from success with no data to a jq pipeline.
 func emitWrite(human string, fields map[string]any) error {
+	return emitResponse(human, mustJSON(fields))
+}
+
+// emitResponse is emitWrite for a write whose API response has a body: -o json
+// prints that body as the API sent it.
+func emitResponse(human string, raw json.RawMessage) error {
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, mustJSON(fields))
+		return output.JSONRaw(os.Stdout, raw)
 	}
 	fmt.Fprintf(os.Stderr, "%s\n", human)
 	return nil

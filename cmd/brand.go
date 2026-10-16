@@ -245,6 +245,5 @@ func runBrandUpdate(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Updated brand %s: %s\n", id, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Updated brand %s: %s", id, resp.Message), resp.Raw())
 }
