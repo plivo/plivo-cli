@@ -2747,7 +2747,7 @@ Flags:
       --stir-verification string   "Verified"|"Not Verified"|"Not Applicable"
       --to-date string             same as --until
       --to-number string           filter by destination
-      --until string               calls ending at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
+      --until string               calls ending at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]]); defaults to now when --since is given
 ```
 
 ---

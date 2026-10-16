@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
@@ -75,9 +76,12 @@ func TestSIPCallsList_untilIncludesTheNamedDay(t *testing.T) {
 	}
 }
 
+// --since alone runs to now, in UTC; a start still to come gets no end.
 func TestSIPCallsList_mapsEveryFilterToItsQueryParam(t *testing.T) {
 	setFakeCreds(t)
 	resetSIPFlags(t)
+	listTimeNow = func() time.Time { return time.Date(2026, 10, 16, 8, 30, 0, 0, time.FixedZone("UTC+5:30", 19800)) }
+	t.Cleanup(func() { listTimeNow = time.Now })
 	urls, _ := sipServer(t, http.StatusOK, `{"meta":{},"objects":[]}`)
 
 	err, _, _ := execCmd(t, "sip", "calls", "list",
@@ -93,13 +97,16 @@ func TestSIPCallsList_mapsEveryFilterToItsQueryParam(t *testing.T) {
 	for _, want := range []string{
 		"limit=5", "offset=10",
 		"from_number=14155551234", "to_number=1312", // a prefix is a valid filter
-		"call_direction=outbound", "end_time__gte=2026-09-01+00%3A00%3A00",
+		"call_direction=outbound", "end_time__gte=2026-09-01+00%3A00%3A00", "end_time__lte=2026-10-16+03%3A00%3A00",
 		"hangup_cause_code=3000", "hangup_source=carrier",
 		"stir_verification=Verified",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("query missing %s\n  got: %s", want, got)
 		}
+	}
+	if err, _, _ := execCmd(t, "sip", "calls", "list", "--from-date", "2026-10-17"); err != nil || strings.Contains(urls()[1], "end_time__lte") {
+		t.Errorf("a start still to come got an end: %v %v", err, urls())
 	}
 }
 

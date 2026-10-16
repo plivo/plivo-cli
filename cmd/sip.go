@@ -165,6 +165,7 @@ func init() {
 	f.StringVar(&sipCallsDirection, "direction", "", oneOf(directionValues))
 	// No local 90-day check: this API's limit is 3 months, and its 400 says so.
 	registerTimeRangeFlags(sipCallsListCmd, &sipCallsRange, "calls ending", rangeLimits{})
+	f.Lookup("until").Usage += "; defaults to now when --since is given"
 	f.IntVar(&sipCallsCauseCode, "hangup-cause-code", 0, "filter by numeric hangup cause code")
 	f.StringVar(&sipCallsSource, "hangup-source", "", "who ended the call: "+oneOf(sipHangupSources))
 	f.StringVar(&sipCallsSTIR, "stir-verification", "", oneOf(stirValues))
@@ -213,6 +214,11 @@ func runSIPCallsList(cmd *cobra.Command, args []string) error {
 	since, until, err := sipCallsRange.bounds(cmd)
 	if err != nil {
 		return err
+	}
+	// Given a start and no end, the API searches only the 30 days after the
+	// start, so --since alone runs to now. A start still to come gets no end.
+	if now := listTimeNow().UTC(); until.IsZero() && !since.IsZero() && since.Before(now) {
+		until = now
 	}
 
 	client, _, err := getClient()
