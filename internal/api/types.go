@@ -653,10 +653,12 @@ type Powerpack struct {
 	LocalConnect    bool   `json:"local_connect,omitempty"`
 	ApplicationType string `json:"application_type,omitempty"`
 	ApplicationID   string `json:"application_id,omitempty"`
-	NumberPriority  string `json:"number_priority,omitempty"`
-	NumberPoolUUID  string `json:"number_pool,omitempty"`
-	CreatedOn       string `json:"created_on,omitempty"`
-	ResourceURI     string `json:"resource_uri,omitempty"`
+	// An array of per-country priorities, as the API reference has it. Raw, so
+	// a string or null decodes too.
+	NumberPriority json.RawMessage `json:"number_priority,omitempty"`
+	NumberPoolUUID string          `json:"number_pool,omitempty"`
+	CreatedOn      string          `json:"created_on,omitempty"`
+	ResourceURI    string          `json:"resource_uri,omitempty"`
 }
 
 type PowerpackList struct {

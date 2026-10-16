@@ -105,3 +105,24 @@ func TestMmsSend_dstHelpText_notMalformed(t *testing.T) {
 		t.Errorf("--dst should render as a string flag, got:\n%s", out)
 	}
 }
+
+// number_priority is an array of objects in the API reference: decoded as a
+// string, it failed every powerpack list and get. get shows it compact.
+func TestPowerpacks_numberPriorityInAnyShape(t *testing.T) {
+	setFakeCreds(t)
+	docs := `[{"country_iso":"US","priority":{"priority1":"shortcode","priority2":"tollfree"},"service_type":"SMS"}]`
+	for raw, want := range map[string]string{docs: docs, `"local,tollfree"`: "local,tollfree", "null": ""} {
+		sipServer(t, http.StatusOK, `{"uuid":"p","number_priority":`+raw+`,"objects":[{"uuid":"p","number_priority":`+raw+`}]}`)
+		errList, _, _ := execCmd(t, "messaging", "sms", "powerpacks", "list")
+		err, stdout, _ := execCmd(t, "messaging", "sms", "powerpacks", "get", "p", "-o", "table")
+		got := "(no line)"
+		for _, line := range strings.Split(stdout, "\n") {
+			if v, ok := strings.CutPrefix(line, "number_priority:"); ok {
+				got = strings.TrimSpace(v)
+			}
+		}
+		if errList != nil || err != nil || got != want {
+			t.Errorf("%s: list: %v, get: %v, number_priority %q, want %q", raw, errList, err, got, want)
+		}
+	}
+}
