@@ -38,7 +38,7 @@ func sipWriteServer(t *testing.T, trunks string) func() []sipReq {
 		case r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/Zentrunk/Trunk/"):
 			_, _ = w.Write([]byte(trunks))
 		case r.Method == "GET" && strings.Contains(r.URL.Path, "/Zentrunk/Trunk/"):
-			_, _ = w.Write([]byte(`{"api_id":"x","object":{"trunk_id":"T1","name":"n","trunk_direction":"inbound","trunk_status":"enabled","trunk_domain":"T1.zt.plivo.com"}}`))
+			_, _ = w.Write([]byte(`{"api_id":"x","object":{"trunk_id":"T1","name":"n","trunk_direction":"inbound","trunk_status":"enabled","trunk_domain":"T1.zt.plivo.com","fallback_uri_uuid":"` + uriU9 + `"}}`))
 		case r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/Number/"):
 			_, _ = w.Write([]byte(`{"meta":{},"objects":[{"number":"1","application":"/v1/Account/A/Zentrunk/Trunk/T1/"},{"number":"2","application":"/v1/Account/A/Zentrunk/Trunk/T1/"}]}`))
 		case r.Method == "POST":
@@ -590,6 +590,32 @@ func TestSIPTrunksUpdate_alwaysSendsTrunkDirection(t *testing.T) {
 	}
 	if p.body["primary_uri_uuid"] != uriU9 {
 		t.Errorf("the actual change was lost: %v", p.body)
+	}
+}
+
+// The API clears a fallback URI an update leaves out, so a rename, --status or
+// --secure used to drop it. The stored one is sent again; --fallback-uri ""
+// leaves it out on purpose, the only way to clear it.
+func TestSIPTrunksUpdate_keepsTheFallbackUnlessCleared(t *testing.T) {
+	for name, tc := range map[string]struct {
+		args []string
+		want any // the fallback_uri_uuid sent; nil when left out
+	}{
+		"rename":         {[]string{"--name", "renamed"}, uriU9},
+		"with direction": {[]string{"--secure", "--direction", "inbound"}, uriU9},
+		"cleared":        {[]string{"--fallback-uri", ""}, nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			setFakeCreds(t)
+			resetWriteFlags(t)
+			reqs := sipWriteServer(t, trunksUsingU1)
+			if err, _, _ := execCmd(t, append([]string{"sip", "trunks", "update", "T1"}, tc.args...)...); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if p := post(reqs(), "/Zentrunk/Trunk/T1/"); p == nil || p.body["fallback_uri_uuid"] != tc.want || p.body["trunk_direction"] != "inbound" {
+				t.Errorf("update = %v, want fallback_uri_uuid %v", p, tc.want)
+			}
+		})
 	}
 }
 

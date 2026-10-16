@@ -318,9 +318,11 @@ var sipTrunksUpdateCmd = &cobra.Command{
 
 Boolean and state flags take an explicit value so they can be reversed:
 --secure=false and --status disabled both turn something off. A flag you do not
-pass is left untouched.`,
+pass is left untouched, the fallback URI included. --fallback-uri "" removes
+the fallback URI.`,
 	Example: `  plivo sip trunks update <id> --status disabled
-  plivo sip trunks update <id> --secure=false`,
+  plivo sip trunks update <id> --secure=false
+  plivo sip trunks update <id> --fallback-uri ""   # remove the fallback URI`,
 	Args: cobra.ExactArgs(1),
 	RunE: runSIPTrunksUpdate,
 }
@@ -457,13 +459,28 @@ func runSIPTrunksUpdate(cmd *cobra.Command, args []string) error {
 		return clierr.BadInput("nothing to update — pass at least one flag")
 	}
 	// The API rejects any update without trunk_direction, including one that
-	// does not touch it. Carry the stored value rather than 400 on every flag.
+	// does not touch it, and clears a fallback URI an update leaves out: a
+	// rename used to drop it. Both come from the stored trunk unless given, and
+	// --fallback-uri "" leaves the fallback out on purpose, which clears it.
+	keepFallback := !cmd.Flags().Changed("fallback-uri")
+	if !keepFallback && trunkUpdateFallbackURI == "" {
+		delete(body, "fallback_uri_uuid")
+	}
 	dir := trunkUpdateDirection
-	if dir == "" {
-		var derr error
-		if dir, derr = trunkDirectionOf(client, args[0]); derr != nil {
-			return derr
+	if dir == "" || keepFallback {
+		stored, err := readTrunk(client, args[0])
+		if err != nil {
+			return err
 		}
+		if dir == "" {
+			dir = stored.TrunkDirection
+		}
+		if keepFallback && stored.FallbackURIUUID != "" {
+			body["fallback_uri_uuid"] = stored.FallbackURIUUID
+		}
+	}
+	if dir == "" {
+		return clierr.BadInput("could not read the trunk's direction — pass --direction")
 	}
 	body["trunk_direction"] = dir
 	if _, err := postSIP(client, body, "Zentrunk", "Trunk", args[0]); err != nil {
@@ -1148,7 +1165,7 @@ func init() {
 	uf.StringVar(&trunkUpdateName, "name", "", "trunk name")
 	uf.StringVar(&trunkUpdateStatus, "status", "", "enabled|disabled")
 	uf.StringVar(&trunkUpdateURI, "uri", "", "primary origination URI uuid")
-	uf.StringVar(&trunkUpdateFallbackURI, "fallback-uri", "", "fallback origination URI uuid")
+	uf.StringVar(&trunkUpdateFallbackURI, "fallback-uri", "", "fallback origination URI uuid (\"\" removes it)")
 	uf.StringVar(&trunkUpdateCredential, "credential", "", "credential uuid")
 	uf.StringVar(&trunkUpdateIPACL, "ip-acl", "", "IP access control list uuid")
 	uf.BoolVar(&trunkUpdateSecure, "secure", false, "enable TLS/SRTP (takes a value: --secure=false)")
@@ -1220,9 +1237,10 @@ var readAllStdin = defaultReadAllStdin
 var errAuthNeedsUsername = clierr.BadInput(
 	"--authentication-needed=true also needs --username")
 
-// trunkDirectionOf reads a trunk's direction. Several write paths need it: the
-// update API demands it on every call, and a number may only attach inbound.
-func trunkDirectionOf(client *api.Client, trunkID string) (string, error) {
+// readTrunk reads a trunk, under --dry-run too. A trunk update needs what it
+// does not change: the direction, which the API demands on every call, and
+// the fallback URI, which the API clears when an update leaves it out.
+func readTrunk(client *api.Client, trunkID string) (api.SIPTrunk, error) {
 	var t api.SIPTrunk
 	var apiErr *api.APIError
 	err := readThrough(client, func() error {
@@ -1231,15 +1249,12 @@ func trunkDirectionOf(client *api.Client, trunkID string) (string, error) {
 		return e
 	})
 	if err != nil {
-		return "", err
+		return t, err
 	}
 	if apiErr != nil {
-		return "", apiErr
+		return t, apiErr
 	}
-	if t = unwrapSIPTrunk(t); t.TrunkDirection == "" {
-		return "", clierr.BadInput("could not read the trunk's direction — pass --direction")
-	}
-	return t.TrunkDirection, nil
+	return unwrapSIPTrunk(t), nil
 }
 
 // readThrough runs a pre-flight GET even under --dry-run.

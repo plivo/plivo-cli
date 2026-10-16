@@ -3218,7 +3218,8 @@ Update a trunk.
 
 Boolean and state flags take an explicit value so they can be reversed:
 --secure=false and --status disabled both turn something off. A flag you do not
-pass is left untouched.
+pass is left untouched, the fallback URI included. --fallback-uri "" removes
+the fallback URI.
 
 ```
 plivo sip trunks update <trunk_id> [flags]
@@ -3229,6 +3230,7 @@ Examples:
 ```
   plivo sip trunks update <id> --status disabled
   plivo sip trunks update <id> --secure=false
+  plivo sip trunks update <id> --fallback-uri ""   # remove the fallback URI
 ```
 
 Flags:
@@ -3236,7 +3238,7 @@ Flags:
 ```
       --credential string     credential uuid
       --direction string      inbound|outbound (read from the trunk when omitted)
-      --fallback-uri string   fallback origination URI uuid
+      --fallback-uri string   fallback origination URI uuid ("" removes it)
       --ip-acl string         IP access control list uuid
       --name string           trunk name
       --secure                enable TLS/SRTP (takes a value: --secure=false)
