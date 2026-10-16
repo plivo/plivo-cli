@@ -34,9 +34,9 @@ plivo feedback --bug --message "..." --yes  # report the last failure
 When you submit feedback, the following is attached automatically:
 
 - **Your rating** (1-5)
-- **Your comment** — after client-side PII scrubbing (phone numbers,
-  auth tokens, emails, and Plivo auth IDs are replaced with
-  `[REDACTED-*]` placeholders)
+- **Your comment** — after client-side PII scrubbing (phone and card
+  numbers, IP addresses, SIP URIs, emails, auth tokens and Plivo account
+  and subaccount auth IDs are replaced with `[REDACTED-*]` placeholders)
 - **CLI version**, OS, architecture
 - **Anonymous machine ID** (one UUID per machine, persisted at
   `~/.plivo/machine-id`)
@@ -48,7 +48,11 @@ When you submit feedback, the following is attached automatically:
 
 We do NOT collect:
 
-- Phone numbers (any format)
+- Phone numbers in these shapes: a `+` and country code with spaces, dots,
+  dashes or brackets between the digits (`+1 (415) 555-1212`), a run of 10
+  to 19 digits, `415-555-1212`, `(415) 555-1212` and `98765 43210`. A number
+  written another way can get through, so leave numbers out of comments.
+- Card numbers (13 to 19 digits), IP addresses and SIP URIs
 - Auth tokens or scoped tokens
 - File paths or attachment paths
 - Free-text from `plivo ask` / `plivo support` message bodies

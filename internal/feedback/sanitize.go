@@ -9,11 +9,13 @@
 //   - Comment text                                       OK after sanitisation
 //   - CLI metadata (version, os, arch, command path)     always OK
 //   - Anonymous machine id + hashed auth_id              always OK
-//   - Phone numbers, auth tokens, raw auth_ids, emails   NEVER, regex-stripped
+//   - Phone and card numbers, IPs, SIP URIs              NEVER, regex-stripped
+//   - Auth tokens, raw auth_ids, emails                  NEVER, regex-stripped
 //
 // Sanitisation runs client-side, before anything is sent. It errs toward
 // over-matching because the cost of a PII leak via feedback (which is
 // user-typed free text) is higher than the cost of stripping a benign string.
+// It strips the shapes in redactionPatterns, not every way to write a number.
 package feedback
 
 import (
@@ -41,10 +43,17 @@ var redactionPatterns = []struct {
 	re          *regexp.Regexp
 	replacement string
 }{
-	// Plivo auth_ids: MA + 18 uppercase alphanumerics.
+	// SIP URIs, first: they hold users, passwords, numbers and hosts.
+	{
+		name:        "sip-uri",
+		re:          regexp.MustCompile(`(?i)\bsips?:[^\s"'<>]+`),
+		replacement: "[REDACTED-SIP-URI]",
+	},
+	// Plivo auth_ids: MA (account) or SA (subaccount) + 18 uppercase
+	// alphanumerics.
 	{
 		name:        "auth-id",
-		re:          regexp.MustCompile(`\bMA[A-Z0-9]{18}\b`),
+		re:          regexp.MustCompile(`\b[MS]A[A-Z0-9]{18}\b`),
 		replacement: "[REDACTED-AUTH-ID]",
 	},
 	// Plivo scoped tokens: stk_ + alphanumerics.
@@ -53,22 +62,42 @@ var redactionPatterns = []struct {
 		re:          regexp.MustCompile(`\bstk_[A-Za-z0-9]+\b`),
 		replacement: "[REDACTED-TOKEN]",
 	},
-	// E.164 phone numbers and common dialled formats.
-	{
-		name:        "phone-e164",
-		re:          regexp.MustCompile(`\+\d{10,15}\b`),
-		replacement: "[REDACTED-PHONE]",
-	},
-	{
-		name:        "phone-dashed",
-		re:          regexp.MustCompile(`\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b`),
-		replacement: "[REDACTED-PHONE]",
-	},
 	// Email addresses.
 	{
 		name:        "email",
 		re:          regexp.MustCompile(`\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b`),
 		replacement: "[REDACTED-EMAIL]",
+	},
+	// IPv4, then IPv6 in full or with "::" (so a time like 10:58:00 stays).
+	{
+		name:        "ipv4",
+		re:          regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b`),
+		replacement: "[REDACTED-IP]",
+	},
+	{
+		name:        "ipv6",
+		re:          regexp.MustCompile(`\b(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}\b|\b(?:[0-9A-Fa-f]{1,4}:)+:(?:[0-9A-Fa-f]{1,4}\b(?::[0-9A-Fa-f]{1,4}\b)*)?`),
+		replacement: "[REDACTED-IP]",
+	},
+	// Phones with a + country code: 8-15 digits, spaces, dots, dashes or
+	// brackets between them (+1 415 555 1212, +1 (415) 555-1212).
+	{
+		name:        "phone-international",
+		re:          regexp.MustCompile(`\+\d(?:[\s.()-]{0,2}\d){7,14}\b`),
+		replacement: "[REDACTED-PHONE]",
+	},
+	// Card numbers: 13-19 digits, maybe in space or dash groups.
+	{
+		name:        "card",
+		re:          regexp.MustCompile(`\b\d(?:[ -]?\d){12,18}\b`),
+		replacement: "[REDACTED-CARD]",
+	},
+	// National phones: 415-555-1212, (415) 555-1212, 98765 43210, and a
+	// bare run of 10 to 12 digits (13 or more are cards, above).
+	{
+		name:        "phone-national",
+		re:          regexp.MustCompile(`(?:\(\d{3}\)\s?|\b\d{3}[-.\s])\d{3}[-.\s]\d{4}\b|\b\d{5}[-.\s]\d{5}\b|\b\d{10,12}\b`),
+		replacement: "[REDACTED-PHONE]",
 	},
 }
 
