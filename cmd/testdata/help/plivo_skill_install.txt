@@ -16,8 +16,11 @@ stdout so any other tool can capture it; both act on a single skill.
 
 --project installs into the git repository you are in instead, at
 <repo>/.claude/skills/<skill>/SKILL.md, so everyone who clones it gets the
-skill. A project copy that differs from the bundled one may hold your team's
-edits, so it is kept unless you pass --force.
+skill.
+
+An installed copy that matches no released version holds someone's edits, so
+it is kept unless you pass --force, as `plivo skill update` does. A retired
+skill that an install replaces keeps its file, renamed SKILL.md.retired.
 
 Usage:
   plivo skill install [cli|audio-streaming|sip-trunking|voice-xml|all] [flags]
@@ -32,7 +35,7 @@ Examples:
 
 Flags:
       --dir string   destination directory (default: ~/.claude/skills/<skill>)
-      --force        with --project, overwrite a skill file that differs from the bundled one
+      --force        also overwrite a copy that matches no released version (its edits are lost)
   -h, --help         help for install
       --print        write the skill content to stdout instead of installing
       --project      install into the current git repository's .claude/skills

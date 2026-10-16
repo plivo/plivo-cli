@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 
@@ -21,8 +22,14 @@ var (
 	queryExpr string
 )
 
-// QueryError is a --query expression that does not compile, or fails while
-// it runs (an unknown function, a function given the wrong type).
+// Committed reports whether the run has already changed something on the
+// account; cmd points it at the API client's record of sent writes. nil
+// means nothing has.
+var Committed func() bool
+
+// QueryError is a --query expression that does not compile, calls a function
+// JMESPath does not have, or fails while it runs (a function given the wrong
+// type).
 type QueryError struct {
 	Expr string
 	Err  error
@@ -48,11 +55,57 @@ func Configure(format, expr string) error {
 		return nil
 	}
 	q, err := compileQuery(expr)
+	if err == nil {
+		err = unknownFunction(expr)
+	}
 	if err != nil {
 		return &QueryError{Expr: expr, Err: err}
 	}
 	query, queryExpr = q, expr
 	return nil
+}
+
+// unknownFunction refuses a call to a function JMESPath does not have. The
+// parser takes any name, and the search finds out only once it reaches the
+// call: after a write, the request has gone by then. Each name is checked by
+// calling it with no arguments, which fails on the name before the arguments.
+func unknownFunction(expr string) error {
+	for _, name := range calledFunctions(expr) {
+		if _, err := jmespath.Search(name+"()", nil); err != nil && strings.HasPrefix(err.Error(), "unknown function") {
+			return err
+		}
+	}
+	return nil
+}
+
+// calledFunctions lists the names expr calls: an unquoted identifier followed
+// by "(", outside string and JSON literals and quoted identifiers. expr has
+// compiled, so its quotes are balanced.
+func calledFunctions(expr string) []string {
+	var names []string
+	for i := 0; i < len(expr); i++ {
+		switch c := expr[i]; {
+		case c == '\'' || c == '`' || c == '"':
+			for i++; i < len(expr) && expr[i] != c; i++ {
+				if expr[i] == '\\' {
+					i++
+				}
+			}
+		case identByte(c):
+			start := i
+			for i+1 < len(expr) && identByte(expr[i+1]) {
+				i++
+			}
+			if strings.HasPrefix(strings.TrimLeft(expr[i+1:], " \t\r\n"), "(") {
+				names = append(names, expr[start:i+1])
+			}
+		}
+	}
+	return names
+}
+
+func identByte(c byte) bool {
+	return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }
 
 // compileQuery turns a parser panic into an error: the expression is user
@@ -68,27 +121,39 @@ func compileQuery(expr string) (q *jmespath.JMESPath, err error) {
 
 // encode is the slow path of JSONSuccess: --query on the envelope, then the
 // configured encoding. Everything is built in memory first, so a failing
-// query leaves stdout empty.
+// query leaves stdout empty, unless the run already changed something: then
+// the unfiltered result is written instead, with a warning.
 func encode(w io.Writer, env map[string]any) error {
 	doc, err := Marshal(env)
 	if err != nil {
 		return err
 	}
-	if query != nil {
-		if doc, err = runQuery(doc); err != nil {
-			return err
+	queried := query != nil
+	if queried {
+		filtered, qerr := runQuery(doc)
+		switch {
+		case qerr == nil:
+			doc = filtered
+		case Committed != nil && Committed():
+			// The request went through: an error here would read as "nothing
+			// happened" and invite a second send, so the result goes out whole.
+			fmt.Fprintf(os.Stderr, "Warning: --query failed (%s), so this is the unfiltered result. "+
+				"The request was sent: do not run it again.\n", SafeText(qerr.Error()))
+			queried = false
+		default:
+			return qerr
 		}
 	}
 	var out []byte
 	switch encoding {
 	case "jsonl":
-		out = jsonLines(records(doc, query != nil))
+		out = jsonLines(records(doc, queried))
 	case "yaml":
 		if out, err = yamlDoc(doc); err != nil {
 			return err
 		}
 	case "csv":
-		if out, err = csvTable(records(doc, query != nil)); err != nil {
+		if out, err = csvTable(records(doc, queried)); err != nil {
 			return err
 		}
 	default:

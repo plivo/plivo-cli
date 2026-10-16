@@ -114,8 +114,11 @@ stdout so any other tool can capture it; both act on a single skill.
 
 --project installs into the git repository you are in instead, at
 <repo>/.claude/skills/<skill>/SKILL.md, so everyone who clones it gets the
-skill. A project copy that differs from the bundled one may hold your team's
-edits, so it is kept unless you pass --force.`,
+skill.
+
+An installed copy that matches no released version holds someone's edits, so
+it is kept unless you pass --force, as ` + "`plivo skill update`" + ` does. A retired
+skill that an install replaces keeps its file, renamed SKILL.md.retired.`,
 	Example: `  plivo skill install                    # CLI skill -> ~/.claude/skills/plivo-cli/
   plivo skill install audio-streaming    # -> ~/.claude/skills/plivo-audio-streaming/
   plivo skill install voice-xml          # -> ~/.claude/skills/plivo-voice-xml/
@@ -150,7 +153,7 @@ It looks in ~/.claude/skills and, inside a git repository, in
 release shipped; anything else is treated as your own edit and kept, and
 --force replaces it too. Skills that are not installed stay that way: add them
 with ` + "`plivo skill install`" + `. A retired skill still installed next to the one
-that replaced it is reported with the command that removes it; update itself
+that replaced it is reported with the command that retires it; update itself
 deletes nothing.`,
 	Example: `  plivo skill update              # update what is installed
   plivo skill update --dry-run    # show what would change, write nothing
@@ -164,7 +167,7 @@ func init() {
 	skillInstallCmd.Flags().StringVar(&skillDir, "dir", "", "destination directory (default: ~/.claude/skills/<skill>)")
 	skillInstallCmd.Flags().BoolVar(&skillPrint, "print", false, "write the skill content to stdout instead of installing")
 	skillInstallCmd.Flags().BoolVar(&skillProject, "project", false, "install into the current git repository's .claude/skills")
-	skillInstallCmd.Flags().BoolVar(&skillForce, "force", false, "with --project, overwrite a skill file that differs from the bundled one")
+	skillInstallCmd.Flags().BoolVar(&skillForce, "force", false, "also overwrite a copy that matches no released version (its edits are lost)")
 	skillCmd.AddCommand(skillInstallCmd, skillListCmd, skillUpdateCmd)
 	rootCmd.AddCommand(skillCmd)
 }
@@ -176,9 +179,6 @@ func runSkillInstall(cmd *cobra.Command, args []string) error {
 	}
 	if skillProject && skillDir != "" {
 		return clierr.BadFlag("project", "can't be combined with --dir; --project installs into the repository's .claude/skills")
-	}
-	if skillForce && !skillProject {
-		return clierr.BadFlag("force", "only applies with --project; a home or --dir install always overwrites")
 	}
 
 	// "all" fans out; --dir and --print each name a single destination, so they
@@ -206,7 +206,7 @@ func runSkillInstall(cmd *cobra.Command, args []string) error {
 }
 
 // installSkills installs each skill, into the repository under --project. A
-// project copy that was kept fails the command once the rest are installed.
+// copy that was kept fails the command once the rest are installed.
 func installSkills(skills []bundledSkill) error {
 	projectRoot := ""
 	if skillProject {
@@ -229,13 +229,13 @@ func installSkills(skills []bundledSkill) error {
 	if len(kept) == 0 {
 		return nil
 	}
-	what := kept[0] + ", which differs from the bundled skill"
+	what := kept[0] + ", which matches no released version"
 	if len(kept) > 1 {
-		what = strings.Join(kept, ", ") + ", which differ from the bundled skills"
+		what = strings.Join(kept, ", ") + ", which match no released version"
 	}
 	e := clierr.DestructiveRefused("overwrite " + what)
-	e.Hint = "A project copy may hold your team's edits. `plivo skill update` replaces it only if it " +
-		"matches a released version; --force overwrites it anyway."
+	e.Hint = "A copy that matches no released version holds someone's edits, so it was kept. " +
+		"--force overwrites it anyway; the edits are lost."
 	e.Context = map[string]any{"kept": kept}
 	return e
 }
@@ -336,8 +336,8 @@ func runSkillList(cmd *cobra.Command, _ []string) error {
 
 // installSkill writes one skill to its resolved directory, honouring --dir and
 // --dry-run; under --project, projectRoot is the repository's skills root. A
-// project copy that differs from the bundled one is left alone unless --force,
-// and its path returned.
+// copy that holds edits is left alone unless --force, and its path returned:
+// home and --dir copies used to be overwritten without a look.
 func installSkill(s bundledSkill, projectRoot string) (kept string, err error) {
 	dir := filepath.Join(projectRoot, s.dirName)
 	if projectRoot == "" {
@@ -347,8 +347,8 @@ func installSkill(s bundledSkill, projectRoot string) (kept string, err error) {
 	}
 	dest := filepath.Join(dir, skillFileName)
 
-	if projectRoot != "" && !skillForce {
-		if b, err := os.ReadFile(dest); err == nil && crlfToLF(string(b)) != crlfToLF(s.content) {
+	if !skillForce {
+		if b, err := os.ReadFile(dest); err == nil && skillEdited(s, b) {
 			return dest, nil
 		}
 	}
@@ -368,11 +368,11 @@ func installSkill(s bundledSkill, projectRoot string) (kept string, err error) {
 
 	// --dir names this skill's own folder, so there is no telling where an
 	// older copy of a replaced skill would be. No release wrote a retired
-	// skill into a project, so a project has none of the CLI's to remove.
+	// skill into a project, so a project has none of the CLI's to retire.
 	if skillDir != "" || projectRoot != "" {
 		return "", nil
 	}
-	removeReplacedSkills(s)
+	retireReplacedSkills(s)
 	return "", nil
 }
 
@@ -415,7 +415,7 @@ func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 			switch {
 			case have == skillDigest([]byte(s.content)):
 				row.Result = "up_to_date"
-			case !skillForce && !slices.Contains(shippedSkillHashes[s.dirName], have):
+			case !skillForce && skillEdited(s, b):
 				row.Result = "kept"
 			case dryRunFlag:
 				row.Result = "would_update"
@@ -486,6 +486,13 @@ func retiredSkillRows(s bundledSkill, root string, isHome bool) []skillUpdateRow
 	return rows
 }
 
+// skillEdited reports whether b, an installed copy of s, matches neither the
+// bundled version nor one a release shipped, and so holds someone's edits.
+func skillEdited(s bundledSkill, b []byte) bool {
+	have := skillDigest(b)
+	return have != skillDigest([]byte(s.content)) && !slices.Contains(shippedSkillHashes[s.dirName], have)
+}
+
 // skillDigest is the sha256 of a SKILL.md with CRLF read as LF, so a copy a
 // Windows checkout converted still matches the version it came from.
 // tools/skillhashes computes the same digest for cmd/skill_hashes.go.
@@ -503,39 +510,30 @@ func lineCount(b []byte) int {
 	return n
 }
 
-// removeReplacedSkills removes, from the default skills root, the skills that s
-// supersedes, so an agent never sees both. Earlier releases wrote only
-// SKILL.md: a folder that holds other files keeps them. A failure is only a
+// retireReplacedSkills renames, in the default skills root, the SKILL.md of
+// each skill that s supersedes to SKILL.md.retired, so an agent never loads
+// both. It is renamed, not deleted, since the copy may hold edits; the folder
+// stays, as an agent finds a skill by its SKILL.md. A failure is only a
 // warning, because the new skill is already installed.
-func removeReplacedSkills(s bundledSkill) {
+func retireReplacedSkills(s bundledSkill) {
 	for _, name := range s.replaces {
 		old, err := resolveSkillDir("", name)
 		if err != nil {
 			continue
 		}
-		info, err := os.Lstat(old)
-		if err != nil {
+		path := filepath.Join(old, skillFileName)
+		if _, err := os.Stat(path); err != nil {
 			continue
 		}
 		if dryRunFlag {
-			fmt.Fprintf(os.Stderr, "Would remove retired skill: %s\n", old)
+			fmt.Fprintf(os.Stderr, "Would retire skill: %s\n", old)
 			continue
 		}
-		if info.IsDir() {
-			if err := os.Remove(filepath.Join(old, skillFileName)); err != nil && !os.IsNotExist(err) {
-				fmt.Fprintf(os.Stderr, "Warning: could not remove retired skill %s: %v\n", old, err)
-				continue
-			}
-		}
-		if err := os.Remove(old); err != nil {
-			if info.IsDir() {
-				fmt.Fprintf(os.Stderr, "Removed the retired skill file from %s; kept the folder, which holds other files\n", old)
-			} else {
-				fmt.Fprintf(os.Stderr, "Warning: could not remove retired skill %s: %v\n", old, err)
-			}
+		if err := os.Rename(path, path+".retired"); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not retire skill %s: %v\n", old, err)
 			continue
 		}
-		fmt.Fprintf(os.Stderr, "Removed retired skill: %s (now part of %s)\n", old, s.dirName)
+		fmt.Fprintf(os.Stderr, "Retired skill %s (now part of %s): renamed its SKILL.md to SKILL.md.retired\n", old, s.dirName)
 	}
 }
 

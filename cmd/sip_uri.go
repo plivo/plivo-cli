@@ -71,6 +71,12 @@ func parseSIPURI(raw string) (sipURI, error) {
 		if user == "" {
 			return sipURI{}, errors.New("has an empty user part before @")
 		}
+		// user:password@ would be stored, printed back by every read and sent
+		// by sip test to the probed host. The message never repeats it.
+		if strings.Contains(user, ":") {
+			return sipURI{}, errors.New("has a password in its user part (user:password@): leave it out; " +
+				"uris create and update read one from --password-stdin")
+		}
 		u.User, rest = user, hostPart
 	}
 

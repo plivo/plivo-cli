@@ -154,7 +154,7 @@ var sipACLGetCmd = &cobra.Command{
 	Use:   "get <ipacl_uuid>",
 	Short: "Get one IP access control list by UUID",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runSIPACLGet,
+	RunE:  sipObjectArg(runSIPACLGet),
 }
 
 func init() {

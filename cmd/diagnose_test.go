@@ -552,8 +552,8 @@ func TestDiagnose_messagePromptHasNoCallAnchors(t *testing.T) {
 	}
 }
 
-// A missing or invalid result block is an error, never a result with empty
-// fields. The answer is kept in the error's context, since the run is long.
+// A missing or invalid result block is an error, as is a blank what_happened.
+// The answer is kept in the error's context, since the run is long.
 func TestDiagnose_missingOrInvalidResultBlockFails(t *testing.T) {
 	valid := map[string]any{"what_happened": "x", "likely_cause": "y", "timeline": []any{}, "next_steps": []any{"z"}, "confidence": "low"}
 	without := func(key string, value any) string {
@@ -570,11 +570,8 @@ func TestDiagnose_missingOrInvalidResultBlockFails(t *testing.T) {
 	}
 	cases := map[string]struct{ turn, want string }{
 		"no block":         {sseTurn("token", `{"text":"The callee hung up."}`, "final", `{"answer":"","latency_ms":1}`), "no JSON result block"},
-		"not JSON":         {resultTurn(`{"what_happened": "x",`), "not valid JSON"},
-		"no likely_cause":  {resultTurn(without("likely_cause", nil)), "without likely_cause"},
+		"not JSON":         {resultTurn(`{"what_happened": "x",`), "no JSON result block"},
 		"blank what":       {resultTurn(without("what_happened", " ")), "without what_happened"},
-		"no timeline":      {resultTurn(without("timeline", nil)), "without timeline"},
-		"no next_steps":    {resultTurn(without("next_steps", nil)), "without next_steps"},
 		"bad confidence":   {resultTurn(without("confidence", "certain")), `confidence "certain"`},
 		"event-less entry": {resultTurn(without("timeline", []any{map[string]any{"at": nil}})), "timeline entry without an event"},
 	}
@@ -604,14 +601,22 @@ func TestDiagnose_missingOrInvalidResultBlockFails(t *testing.T) {
 	}
 }
 
-// The block may come untagged or tagged JSON; the last block is the result,
-// so an example earlier in the prose does not count.
+// The block may come untagged or tagged JSON. The result is the last JSON
+// block with what_happened: an example earlier does not count, nor does a
+// command or another JSON block after it. Its other fields may be blank, null
+// or missing, and its confidence wordy: each of these used to fail the result.
 func TestNewDiagnoseResult_findsTheLastBlock(t *testing.T) {
 	block := `{"what_happened": "w", "likely_cause": "c", "timeline": [], "next_steps": [], "confidence": "medium"}`
 	for name, answer := range map[string]string{
 		"untagged":        "Prose.\n```\n" + block + "\n```",
 		"uppercase tag":   "Prose.\n```JSON\n" + block + "\n```",
 		"example earlier": "Prose with an example:\n```json\n{\"what_happened\": \"example\"}\n```\nMore prose.\n```json\n" + block + "\n```",
+		"command first":   "Check it with:\n```bash\nplivo sip calls get x\n```\n```json\n" + block + "\n```",
+		"command after":   "Prose.\n```json\n" + block + "\n```\nThen run:\n```\nplivo sip calls get x\n```",
+		"JSON after":      "Prose.\n```json\n" + block + "\n```\nThe record:\n```json\n{\"call_uuid\": \"x\"}\n```",
+		"missing fields":  "```json\n" + `{"what_happened": "w", "confidence": "medium"}` + "\n```",
+		"null fields":     "```json\n" + `{"what_happened": "w", "likely_cause": null, "timeline": null, "next_steps": null, "confidence": "medium"}` + "\n```",
+		"blank, wordy":    "```json\n" + `{"what_happened": "w", "likely_cause": " ", "confidence": "Medium (60%)"}` + "\n```",
 	} {
 		t.Run(name, func(t *testing.T) {
 			res, err := newDiagnoseResult(answer, diagnoseTarget{label: "message", uuid: placeholderUUID, getCmd: "messaging get"})

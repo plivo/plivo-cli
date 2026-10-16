@@ -3218,7 +3218,8 @@ Update a trunk.
 
 Boolean and state flags take an explicit value so they can be reversed:
 --secure=false and --status disabled both turn something off. A flag you do not
-pass is left untouched.
+pass is left untouched, the fallback URI included. --fallback-uri "" removes
+the fallback URI.
 
 ```
 plivo sip trunks update <trunk_id> [flags]
@@ -3229,6 +3230,7 @@ Examples:
 ```
   plivo sip trunks update <id> --status disabled
   plivo sip trunks update <id> --secure=false
+  plivo sip trunks update <id> --fallback-uri ""   # remove the fallback URI
 ```
 
 Flags:
@@ -3236,7 +3238,7 @@ Flags:
 ```
       --credential string     credential uuid
       --direction string      inbound|outbound (read from the trunk when omitted)
-      --fallback-uri string   fallback origination URI uuid
+      --fallback-uri string   fallback origination URI uuid ("" removes it)
       --ip-acl string         IP access control list uuid
       --name string           trunk name
       --secure                enable TLS/SRTP (takes a value: --secure=false)
@@ -3422,8 +3424,11 @@ stdout so any other tool can capture it; both act on a single skill.
 
 --project installs into the git repository you are in instead, at
 <repo>/.claude/skills/<skill>/SKILL.md, so everyone who clones it gets the
-skill. A project copy that differs from the bundled one may hold your team's
-edits, so it is kept unless you pass --force.
+skill.
+
+An installed copy that matches no released version holds someone's edits, so
+it is kept unless you pass --force, as `plivo skill update` does. A retired
+skill that an install replaces keeps its file, renamed SKILL.md.retired.
 
 ```
 plivo skill install [cli|audio-streaming|sip-trunking|voice-xml|all] [flags]
@@ -3444,7 +3449,7 @@ Flags:
 
 ```
       --dir string   destination directory (default: ~/.claude/skills/<skill>)
-      --force        with --project, overwrite a skill file that differs from the bundled one
+      --force        also overwrite a copy that matches no released version (its edits are lost)
       --print        write the skill content to stdout instead of installing
       --project      install into the current git repository's .claude/skills
 ```
@@ -3472,7 +3477,7 @@ It looks in ~/.claude/skills and, inside a git repository, in
 release shipped; anything else is treated as your own edit and kept, and
 --force replaces it too. Skills that are not installed stay that way: add them
 with `plivo skill install`. A retired skill still installed next to the one
-that replaced it is reported with the command that removes it; update itself
+that replaced it is reported with the command that retires it; update itself
 deletes nothing.
 
 ```

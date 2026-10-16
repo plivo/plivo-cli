@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/plivo/plivo-cli/internal/cliupgrade"
@@ -25,6 +26,12 @@ import (
 // every outbound HTTP request carries the X-Plivo-CLI-Command header.
 // Used to attribute traffic per cobra command for usage analytics.
 var CLICommand string
+
+// WriteSent is set once a request other than a GET gets a 2xx answer: from
+// then on the run may have changed the account, so nothing after it may fail
+// in a way that invites a second send. Process-global like CLICommand; cmd
+// resets it before each command.
+var WriteSent atomic.Bool
 
 // addCLIHeaders injects the version + command + client-meta headers on
 // every request. Called once per request from Do / DoMultipart / StreamSSE.
@@ -286,6 +293,9 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 	if resp.StatusCode >= 400 {
 		return parseError(resp.StatusCode, resp.Header, respBytes), nil
 	}
+	if method != http.MethodGet {
+		WriteSent.Store(true)
+	}
 
 	if resp.StatusCode == 204 || len(respBytes) == 0 {
 		return nil, nil
@@ -383,6 +393,9 @@ func (c *Client) DoMultipart(method, fullURL string, dataJSON []byte, files map[
 	}
 	if resp.StatusCode >= 400 {
 		return parseError(resp.StatusCode, resp.Header, respBytes), nil
+	}
+	if method != http.MethodGet {
+		WriteSent.Store(true)
 	}
 	if resp.StatusCode == 204 || len(respBytes) == 0 {
 		return nil, nil

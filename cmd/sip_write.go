@@ -77,22 +77,62 @@ func trunksUsing(client *api.Client, segment, uuid string) ([]string, error) {
 }
 
 // trunksReferencing names every trunk pointing at uuid, so the user sees what a
-// delete would detach before it happens rather than after.
+// delete would detach before it happens rather than after. The API reads an ID
+// in any case, so this compares in any case too.
 func trunksReferencing(trunks []api.SIPTrunk, uuid string) []string {
 	var out []string
 	for _, t := range trunks {
-		switch uuid {
-		case t.PrimaryURIUUID:
+		switch {
+		case strings.EqualFold(uuid, t.PrimaryURIUUID):
 			out = append(out, t.TrunkID+" ("+t.Name+", primary URI)")
-		case t.FallbackURIUUID:
+		case strings.EqualFold(uuid, t.FallbackURIUUID):
 			out = append(out, t.TrunkID+" ("+t.Name+", fallback URI)")
-		case t.CredentialUUID:
+		case strings.EqualFold(uuid, t.CredentialUUID):
 			out = append(out, t.TrunkID+" ("+t.Name+", credential)")
-		case t.IPACLUUID:
+		case strings.EqualFold(uuid, t.IPACLUUID):
 			out = append(out, t.TrunkID+" ("+t.Name+", IP ACL)")
 		}
 	}
 	return out
+}
+
+// canonUUID returns a SIP object's ID as the API writes it: trimmed and
+// lower-case. ok is false when it is not a UUID.
+func canonUUID(v string) (id string, ok bool) {
+	id = strings.ToLower(strings.TrimSpace(v))
+	return id, looksLikeUUID(id)
+}
+
+// sipObjectArg runs run with its argument, a URI, credential or IP access
+// control list UUID, as canonUUID returns it, and refuses one that is not a
+// UUID before any request. The in-use check before a delete used to compare
+// the ID as typed with the API's lower-case IDs: an upper-case one matched no
+// trunk, so --yes deleted an object in use and the API deleted its trunks.
+func sipObjectArg(run func(*cobra.Command, []string) error) func(*cobra.Command, []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		id, ok := canonUUID(args[0])
+		if !ok {
+			return clierr.BadInput(fmt.Sprintf("%s needs a UUID, got %q", cmd.CommandPath(), args[0]))
+		}
+		return run(cmd, []string{id})
+	}
+}
+
+// canonUUIDFlags does the same for the trunk flags that name a URI,
+// credential or IP access control list. An empty value is not an ID and is
+// left as given.
+func canonUUIDFlags(cmd *cobra.Command) error {
+	for _, name := range []string{"uri", "fallback-uri", "credential", "ip-acl"} {
+		f := cmd.Flags().Lookup(name)
+		if v := f.Value.String(); v != "" {
+			id, ok := canonUUID(v)
+			if !ok {
+				return clierr.BadFlag(name, fmt.Sprintf("needs a UUID, got %q", v))
+			}
+			_ = f.Value.Set(id)
+		}
+	}
+	return nil
 }
 
 // firstNumberOnTrunk reads the account's numbers page by page, under --dry-run
@@ -278,9 +318,11 @@ var sipTrunksUpdateCmd = &cobra.Command{
 
 Boolean and state flags take an explicit value so they can be reversed:
 --secure=false and --status disabled both turn something off. A flag you do not
-pass is left untouched.`,
+pass is left untouched, the fallback URI included. --fallback-uri "" removes
+the fallback URI.`,
 	Example: `  plivo sip trunks update <id> --status disabled
-  plivo sip trunks update <id> --secure=false`,
+  plivo sip trunks update <id> --secure=false
+  plivo sip trunks update <id> --fallback-uri ""   # remove the fallback URI`,
 	Args: cobra.ExactArgs(1),
 	RunE: runSIPTrunksUpdate,
 }
@@ -301,6 +343,9 @@ read every page, the delete is refused.`,
 func runSIPTrunksCreate(cmd *cobra.Command, args []string) error {
 	p, err := sipPlatformFlag(trunkCreatePlatform)
 	if err != nil {
+		return err
+	}
+	if err := canonUUIDFlags(cmd); err != nil {
 		return err
 	}
 	switch trunkCreateDirection {
@@ -389,6 +434,9 @@ func runSIPTrunksCreate(cmd *cobra.Command, args []string) error {
 }
 
 func runSIPTrunksUpdate(cmd *cobra.Command, args []string) error {
+	if err := canonUUIDFlags(cmd); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -411,13 +459,28 @@ func runSIPTrunksUpdate(cmd *cobra.Command, args []string) error {
 		return clierr.BadInput("nothing to update — pass at least one flag")
 	}
 	// The API rejects any update without trunk_direction, including one that
-	// does not touch it. Carry the stored value rather than 400 on every flag.
+	// does not touch it, and clears a fallback URI an update leaves out: a
+	// rename used to drop it. Both come from the stored trunk unless given, and
+	// --fallback-uri "" leaves the fallback out on purpose, which clears it.
+	keepFallback := !cmd.Flags().Changed("fallback-uri")
+	if !keepFallback && trunkUpdateFallbackURI == "" {
+		delete(body, "fallback_uri_uuid")
+	}
 	dir := trunkUpdateDirection
-	if dir == "" {
-		var derr error
-		if dir, derr = trunkDirectionOf(client, args[0]); derr != nil {
-			return derr
+	if dir == "" || keepFallback {
+		stored, err := readTrunk(client, args[0])
+		if err != nil {
+			return err
 		}
+		if dir == "" {
+			dir = stored.TrunkDirection
+		}
+		if keepFallback && stored.FallbackURIUUID != "" {
+			body["fallback_uri_uuid"] = stored.FallbackURIUUID
+		}
+	}
+	if dir == "" {
+		return clierr.BadInput("could not read the trunk's direction — pass --direction")
 	}
 	body["trunk_direction"] = dir
 	if _, err := postSIP(client, body, "Zentrunk", "Trunk", args[0]); err != nil {
@@ -503,7 +566,7 @@ with a warning.`,
 }
 
 var sipURIsListCmd = &cobra.Command{Use: "list", Short: "List origination URIs", Args: cobra.NoArgs, RunE: runSIPURIsList}
-var sipURIsGetCmd = &cobra.Command{Use: "get <uri_uuid>", Short: "Get one origination URI", Args: cobra.ExactArgs(1), RunE: runSIPURIsGet}
+var sipURIsGetCmd = &cobra.Command{Use: "get <uri_uuid>", Short: "Get one origination URI", Args: cobra.ExactArgs(1), RunE: sipObjectArg(runSIPURIsGet)}
 
 var sipURIsUpdateCmd = &cobra.Command{
 	Use:   "update <uri_uuid>",
@@ -512,7 +575,7 @@ var sipURIsUpdateCmd = &cobra.Command{
 
 --uri is checked before sending, as on create.`,
 	Args: cobra.ExactArgs(1),
-	RunE: runSIPURIsUpdate,
+	RunE: sipObjectArg(runSIPURIsUpdate),
 }
 
 var sipURIsDeleteCmd = &cobra.Command{
@@ -522,7 +585,7 @@ var sipURIsDeleteCmd = &cobra.Command{
 also deletes those trunks, so an in-use URI needs --force on top of --yes. If
 the check fails, the delete is refused.`,
 	Args: cobra.ExactArgs(1),
-	RunE: runSIPURIsDelete,
+	RunE: sipObjectArg(runSIPURIsDelete),
 }
 
 // normalizeSIPURI keeps whatever shape the user gave. A bare host is legal, so
@@ -776,14 +839,14 @@ echoed, never printed back, and never generated for you.`,
 }
 
 var sipCredsListCmd = &cobra.Command{Use: "list", Short: "List credentials", Args: cobra.NoArgs, RunE: runSIPCredsList}
-var sipCredsGetCmd = &cobra.Command{Use: "get <credential_uuid>", Short: "Get one credential", Args: cobra.ExactArgs(1), RunE: runSIPCredsGet}
+var sipCredsGetCmd = &cobra.Command{Use: "get <credential_uuid>", Short: "Get one credential", Args: cobra.ExactArgs(1), RunE: sipObjectArg(runSIPCredsGet)}
 
 var sipCredsUpdateCmd = &cobra.Command{
 	Use:   "update <credential_uuid>",
 	Short: "Update a credential",
 	Long:  "As with create, a new password is read from stdin only.",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runSIPCredsUpdate,
+	RunE:  sipObjectArg(runSIPCredsUpdate),
 }
 
 var sipCredsDeleteCmd = &cobra.Command{
@@ -791,7 +854,7 @@ var sipCredsDeleteCmd = &cobra.Command{
 	Short: "Delete a credential (requires --yes)",
 	Long:  "Names any trunk using it first; an in-use one needs --force on top of --yes. If the check fails, the delete is refused.",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runSIPCredsDelete,
+	RunE:  sipObjectArg(runSIPCredsDelete),
 }
 
 // readPasswordStdin takes the password from stdin. Trailing newlines are
@@ -974,7 +1037,7 @@ var sipACLUpdateCmd = &cobra.Command{
 	Short: "Update an IP access control list",
 	Long:  "--ip replaces the whole list rather than appending, so pass every address you want kept.",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runSIPACLUpdate,
+	RunE:  sipObjectArg(runSIPACLUpdate),
 }
 
 var sipACLDeleteCmd = &cobra.Command{
@@ -982,7 +1045,7 @@ var sipACLDeleteCmd = &cobra.Command{
 	Short: "Delete an IP access control list (requires --yes)",
 	Long:  "Names any trunk using it first; an in-use one needs --force on top of --yes. If the check fails, the delete is refused.",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runSIPACLDelete,
+	RunE:  sipObjectArg(runSIPACLDelete),
 }
 
 // riskyCIDR reports a range that allows far more than a platform needs. It
@@ -1102,7 +1165,7 @@ func init() {
 	uf.StringVar(&trunkUpdateName, "name", "", "trunk name")
 	uf.StringVar(&trunkUpdateStatus, "status", "", "enabled|disabled")
 	uf.StringVar(&trunkUpdateURI, "uri", "", "primary origination URI uuid")
-	uf.StringVar(&trunkUpdateFallbackURI, "fallback-uri", "", "fallback origination URI uuid")
+	uf.StringVar(&trunkUpdateFallbackURI, "fallback-uri", "", "fallback origination URI uuid (\"\" removes it)")
 	uf.StringVar(&trunkUpdateCredential, "credential", "", "credential uuid")
 	uf.StringVar(&trunkUpdateIPACL, "ip-acl", "", "IP access control list uuid")
 	uf.BoolVar(&trunkUpdateSecure, "secure", false, "enable TLS/SRTP (takes a value: --secure=false)")
@@ -1174,9 +1237,10 @@ var readAllStdin = defaultReadAllStdin
 var errAuthNeedsUsername = clierr.BadInput(
 	"--authentication-needed=true also needs --username")
 
-// trunkDirectionOf reads a trunk's direction. Several write paths need it: the
-// update API demands it on every call, and a number may only attach inbound.
-func trunkDirectionOf(client *api.Client, trunkID string) (string, error) {
+// readTrunk reads a trunk, under --dry-run too. A trunk update needs what it
+// does not change: the direction, which the API demands on every call, and
+// the fallback URI, which the API clears when an update leaves it out.
+func readTrunk(client *api.Client, trunkID string) (api.SIPTrunk, error) {
 	var t api.SIPTrunk
 	var apiErr *api.APIError
 	err := readThrough(client, func() error {
@@ -1185,15 +1249,12 @@ func trunkDirectionOf(client *api.Client, trunkID string) (string, error) {
 		return e
 	})
 	if err != nil {
-		return "", err
+		return t, err
 	}
 	if apiErr != nil {
-		return "", apiErr
+		return t, apiErr
 	}
-	if t = unwrapSIPTrunk(t); t.TrunkDirection == "" {
-		return "", clierr.BadInput("could not read the trunk's direction — pass --direction")
-	}
-	return t.TrunkDirection, nil
+	return unwrapSIPTrunk(t), nil
 }
 
 // readThrough runs a pre-flight GET even under --dry-run.

@@ -231,13 +231,14 @@ func TestSkillInstall_allBundledSkillsInstallByteIdentical(t *testing.T) {
 // plivo-audio-streaming. Two skills claiming the same request make an agent
 // pick between them, so installing the replacement removes the old copy from
 // the default skills root, and from nowhere else.
+// Its SKILL.md is renamed SKILL.md.retired, not deleted: it may hold edits.
 func TestSkillInstall_removesRetiredFirstAgentSkill(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Cleanup(func() { skillDir = ""; skillPrint = false; dryRunFlag = false })
 
-	old := writeRetiredSkill(t, filepath.Join(home, ".claude", "skills"))
+	old := filepath.Join(writeRetiredSkill(t, filepath.Join(home, ".claude", "skills")), skillFileName)
 
 	dryRunFlag = true
 	if err := runSkillInstall(nil, []string{"audio-streaming"}); err != nil {
@@ -251,7 +252,7 @@ func TestSkillInstall_removesRetiredFirstAgentSkill(t *testing.T) {
 	// --dir names the skill's own folder: a sibling plivo-first-agent there, or
 	// the copy in the default root, is not the install's to remove.
 	other := t.TempDir()
-	sibling := writeRetiredSkill(t, other)
+	sibling := filepath.Join(writeRetiredSkill(t, other), skillFileName)
 	skillDir = filepath.Join(other, "plivo-audio-streaming")
 	if err := runSkillInstall(nil, []string{"audio-streaming"}); err != nil {
 		t.Fatalf("--dir install: %v", err)
@@ -266,8 +267,8 @@ func TestSkillInstall_removesRetiredFirstAgentSkill(t *testing.T) {
 	if err := runSkillInstall(nil, []string{"audio-streaming"}); err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	if _, err := os.Stat(old); !os.IsNotExist(err) {
-		t.Errorf("plivo-first-agent still installed after installing its replacement (stat err: %v)", err)
+	if _, err := os.Stat(old); !os.IsNotExist(err) || !fileIs(t, old+".retired", "---\nname: plivo-first-agent\n---\n") {
+		t.Errorf("plivo-first-agent not renamed SKILL.md.retired after installing its replacement (stat err: %v)", err)
 	}
 	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "plivo-audio-streaming", skillFileName)); err != nil {
 		t.Errorf("replacement not installed: %v", err)
@@ -609,24 +610,26 @@ func TestSkillInstall_projectReadsCRLFAsLF(t *testing.T) {
 	}
 }
 
-// --force only means something for a project copy; a home or --dir install
-// always overwrites, so the flag there is a mistake to report, not ignore.
-func TestSkillInstall_forceNeedsProject(t *testing.T) {
+// A home copy can hold edits too: one that matches no released version is
+// kept, as `skill update` keeps it, unless --force.
+func TestSkillInstall_homeKeepsAnEditedCopyUnlessForced(t *testing.T) {
 	_, home := fakeRepo(t, false)
-	err, _, _ := execCmd(t, "skill", "install", "--force")
+	p := writeSkillFile(t, home, "plivo-cli", "my own notes\n")
+	err, _, _ := execCmd(t, "skill", "install")
 	var ce *clierr.Error
-	if !errors.As(err, &ce) || ce.Code != clierr.CodeBadFlag {
-		t.Fatalf("err = %v, want BAD_FLAG", err)
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeDestructiveRefused || !fileIs(t, p, "my own notes\n") {
+		t.Fatalf("err = %v, want DESTRUCTIVE_REFUSED and the edited copy kept", err)
 	}
-	if _, err := os.Stat(filepath.Join(home, ".claude")); !os.IsNotExist(err) {
-		t.Errorf("a rejected command wrote under HOME (stat err: %v)", err)
+	if err, _, _ := execCmd(t, "skill", "install", "--force"); err != nil || !fileIs(t, p, cliskill.SkillMD) {
+		t.Errorf("--force did not replace the edited copy: %v", err)
 	}
 }
 
-// Without --project nothing changes: the home copy is the CLI's own and is
+// A home copy that a release shipped holds no edits, so it is still
 // overwritten, as every earlier release did.
 func TestSkillInstall_homeInstallStillOverwrites(t *testing.T) {
 	_, home := fakeRepo(t, false)
+	shipVersion(t, "plivo-cli", "older\n")
 	p := filepath.Join(home, ".claude", "skills", "plivo-cli", skillFileName)
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
