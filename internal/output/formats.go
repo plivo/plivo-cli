@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -78,12 +81,21 @@ func unknownFunction(expr string) error {
 	return nil
 }
 
-// calledFunctions lists the names expr calls: an unquoted identifier followed
-// by "(", outside string and JSON literals and quoted identifiers. expr has
-// compiled, so its quotes are balanced.
+// calledFunctions lists the names expr calls: an identifier followed by "(".
 func calledFunctions(expr string) []string {
+	return namesBefore(expr, '(')
+}
+
+// namesBefore lists, in order, the identifiers in expr followed (after any
+// whitespace) by next: with "(" the functions it calls, with ":" the keys of
+// its multiselect hashes ({key: ...}), the only names JMESPath puts before a
+// colon. String and JSON literals are skipped. A quoted identifier counts as a
+// key, unquoted, never as a function. expr has compiled, so its quotes are
+// balanced.
+func namesBefore(expr string, next byte) []string {
 	var names []string
 	for i := 0; i < len(expr); i++ {
+		start, name := i, ""
 		switch c := expr[i]; {
 		case c == '\'' || c == '`' || c == '"':
 			for i++; i < len(expr) && expr[i] != c; i++ {
@@ -91,14 +103,19 @@ func calledFunctions(expr string) []string {
 					i++
 				}
 			}
+			if c != '"' || next == '(' || i >= len(expr) || json.Unmarshal([]byte(expr[start:i+1]), &name) != nil {
+				continue
+			}
 		case identByte(c):
-			start := i
 			for i+1 < len(expr) && identByte(expr[i+1]) {
 				i++
 			}
-			if strings.HasPrefix(strings.TrimLeft(expr[i+1:], " \t\r\n"), "(") {
-				names = append(names, expr[start:i+1])
-			}
+			name = expr[start : i+1]
+		default:
+			continue
+		}
+		if rest := strings.TrimLeft(expr[i+1:], " \t\r\n"); rest != "" && rest[0] == next {
+			names = append(names, name)
 		}
 	}
 	return names
@@ -169,13 +186,22 @@ func encode(w io.Writer, env map[string]any, rowsKey string) error {
 }
 
 // runQuery evaluates --query against the envelope and returns the result as
-// compact JSON.
+// compact JSON. Objects keep their keys in order (see marshalOrdered): decoded
+// into Go maps they had none, and encoding sorted every column.
 func runQuery(doc []byte) (out []byte, err error) {
 	dec := json.NewDecoder(bytes.NewReader(doc))
 	dec.UseNumber()
 	var v any
 	if err := dec.Decode(&v); err != nil {
 		return nil, err
+	}
+	order := map[uintptr][]string{}
+	keyOrders(v, doc, order)
+	rank := map[string]int{}
+	for _, k := range namesBefore(queryExpr, ':') {
+		if _, ok := rank[k]; !ok {
+			rank[k] = len(rank)
+		}
 	}
 	defer func() {
 		if r := recover(); r != nil {
@@ -186,7 +212,71 @@ func runQuery(doc []byte) (out []byte, err error) {
 	if err != nil {
 		return nil, &QueryError{Expr: queryExpr, Err: err}
 	}
-	return Marshal(res)
+	return marshalOrdered(res, order, rank)
+}
+
+// keyOrders records each decoded object's keys, in the order raw has them,
+// under the map's identity: the search hands back the document's own maps.
+func keyOrders(v any, raw json.RawMessage, order map[uintptr][]string) {
+	switch t := v.(type) {
+	case map[string]any:
+		if keys, fields, ok := objectFields(raw); ok {
+			order[reflect.ValueOf(t).Pointer()] = keys
+			for _, k := range keys {
+				keyOrders(t[k], fields[k], order)
+			}
+		}
+	case []any:
+		var items []json.RawMessage
+		_ = json.Unmarshal(raw, &items)
+		for i := range min(len(t), len(items)) {
+			keyOrders(t[i], items[i], order)
+		}
+	}
+}
+
+// marshalOrdered is Marshal with each object's keys in order: an object from
+// the document as it has them, one the query built (a multiselect hash) in
+// rank order, the order the expression names them; unranked keys go last,
+// sorted.
+func marshalOrdered(v any, order map[uintptr][]string, rank map[string]int) ([]byte, error) {
+	var parts [][]byte
+	switch t := v.(type) {
+	case []any:
+		for _, e := range t {
+			b, err := marshalOrdered(e, order, rank)
+			if err != nil {
+				return nil, err
+			}
+			parts = append(parts, b)
+		}
+		return append(append([]byte{'['}, bytes.Join(parts, []byte{','})...), ']'), nil
+	case map[string]any:
+		keys, ok := order[reflect.ValueOf(t).Pointer()]
+		if !ok {
+			for k := range t {
+				keys = append(keys, k)
+			}
+			sort.Slice(keys, func(i, j int) bool {
+				ri, iok := rank[keys[i]]
+				rj, jok := rank[keys[j]]
+				if iok && jok {
+					return ri < rj
+				}
+				return iok || (!jok && keys[i] < keys[j])
+			})
+		}
+		for _, k := range keys {
+			b, err := marshalOrdered(t[k], order, rank)
+			if err != nil {
+				return nil, err
+			}
+			key, _ := Marshal(k)
+			parts = append(parts, append(append(key, ':'), b...))
+		}
+		return append(append([]byte{'{'}, bytes.Join(parts, []byte{','})...), '}'), nil
+	}
+	return Marshal(v)
 }
 
 // queryNumbers turns decoded numbers into float64, the only number type
@@ -265,6 +355,9 @@ func csvTable(rows []json.RawMessage) ([]byte, error) {
 	var buf bytes.Buffer
 	cw := csv.NewWriter(&buf)
 	if header, table, ok := objectTable(rows); ok {
+		for i, h := range header {
+			header[i] = csvText(h)
+		}
 		_ = cw.Write(header)
 		_ = cw.WriteAll(table)
 	} else {
@@ -344,13 +437,14 @@ func objectFields(raw json.RawMessage) (keys []string, fields map[string]json.Ra
 	return keys, fields, true
 }
 
-// csvCell is one JSON value as CSV text: a string without its quotes, null
-// as empty, and numbers, booleans, arrays and objects as their compact JSON.
+// csvCell is one JSON value as CSV text: a string without its quotes (and
+// through csvText), null as empty, and numbers, booleans, arrays and objects
+// as their compact JSON.
 func csvCell(v json.RawMessage) string {
 	if len(v) > 0 && v[0] == '"' {
 		var s string
 		if json.Unmarshal(v, &s) == nil {
-			return s
+			return csvText(s)
 		}
 	}
 	if string(v) == "null" {
@@ -358,6 +452,20 @@ func csvCell(v json.RawMessage) string {
 	}
 	return string(v)
 }
+
+// csvText keeps a spreadsheet from running a string: one that starts with =,
+// +, -, @, a tab or a CR is read there as a formula, so it gets a leading '.
+// A plain number keeps its sign (+14155551234, -0.05): it is no formula, and
+// scripts read the value as sent.
+func csvText(s string) string {
+	if s != "" && strings.IndexByte("=+-@\t\r", s[0]) >= 0 && !plainNumber.MatchString(s) {
+		return "'" + s
+	}
+	return s
+}
+
+// plainNumber is a signed integer or decimal.
+var plainNumber = regexp.MustCompile(`^[+-]?[0-9]+(\.[0-9]+)?$`)
 
 // yamlDoc re-encodes a JSON document as block-style YAML with the same key
 // order and two-space indent.
