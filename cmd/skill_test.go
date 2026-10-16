@@ -288,9 +288,17 @@ func TestSkillInstall_keepsUserFilesInRetiredSkillFolder(t *testing.T) {
 	if err := os.WriteFile(notes, []byte("mine"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// A copy retired before is the user's too, and os.Rename would replace it.
+	earlier := filepath.Join(old, skillFileName+".retired")
+	if err := os.WriteFile(earlier, []byte("retired before"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := runSkillInstall(nil, []string{"audio-streaming"}); err != nil {
 		t.Fatalf("install failed because the retired folder held another file: %v", err)
+	}
+	if !fileIs(t, earlier, "retired before") || !fileIs(t, earlier+".2", "---\nname: plivo-first-agent\n---\n") {
+		t.Error("want the copy retired before kept, and this one in SKILL.md.retired.2")
 	}
 	if _, err := os.Stat(filepath.Join(old, skillFileName)); !os.IsNotExist(err) {
 		t.Errorf("retired SKILL.md still there, so agents keep loading the old skill (stat err: %v)", err)
