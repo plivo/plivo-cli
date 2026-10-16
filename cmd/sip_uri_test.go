@@ -97,8 +97,9 @@ func TestCheckACLEntry(t *testing.T) {
 	}{
 		{"203.0.113.4", true},
 		{"198.51.100.0/24", true},
-		{"2001:db8::1", true},
-		{"2001:db8::/32", true},
+		{"2001:db8::1", false},
+		{"2001:db8::/32", false},
+		{"::ffff:203.0.113.4", false},
 		{"0.0.0.0/0", true},
 		{"203.0.113.4,198.51.100.7", false},
 		{"203.0.113.4, 198.51.100.7", false},
@@ -133,6 +134,10 @@ func TestSIPWrites_refuseBadValuesWithoutARequest(t *testing.T) {
 		{"trunks update status case", "status", []string{"sip", "trunks", "update", "T1", "--status", "Disabled"}},
 		{"trunks update empty status", "status", []string{"sip", "trunks", "update", "T1", "--status", ""}},
 		{"trunks update bad direction", "direction", []string{"sip", "trunks", "update", "T1", "--direction", "sideways"}},
+		{"uris create ipv6", "uri", []string{"sip", "uris", "create", "--name", "n", "--uri", "[2001:db8::1]:5061;transport=tls"}},
+		{"uris update ipv6", "uri", []string{"sip", "uris", "update", uriU1, "--uri", "sip:[2001:db8::1]"}},
+		{"ip-acl create ipv6", "ip", []string{"sip", "ip-acl", "create", "--name", "a", "--ip", "2001:db8::1"}},
+		{"ip-acl update ipv6 range", "ip", []string{"sip", "ip-acl", "update", aclA1, "--ip", "::/0"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setFakeCreds(t)
@@ -150,13 +155,13 @@ func TestSIPWrites_refuseBadValuesWithoutARequest(t *testing.T) {
 	}
 }
 
-// Valid IPv6 addresses and ranges reach the API exactly as typed.
+// Valid addresses and ranges reach the API exactly as typed.
 func TestSIPACLCreate_sendsValidEntriesVerbatim(t *testing.T) {
 	setFakeCreds(t)
 	resetWriteFlags(t)
 	reqs := sipWriteServer(t, trunksUsingU1)
 
-	if err, _, _ := execCmd(t, "sip", "ip-acl", "create", "--name", "a", "--ip", "2001:db8::1", "--ip", "198.51.100.0/24"); err != nil {
+	if err, _, _ := execCmd(t, "sip", "ip-acl", "create", "--name", "a", "--ip", "203.0.113.4", "--ip", "198.51.100.0/24"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	p := post(reqs(), "/Zentrunk/IPAccessControlList/")
@@ -164,7 +169,7 @@ func TestSIPACLCreate_sendsValidEntriesVerbatim(t *testing.T) {
 		t.Fatal("no create request")
 	}
 	got, _ := p.body["ip_addresses"].([]any)
-	if len(got) != 2 || got[0] != "2001:db8::1" || got[1] != "198.51.100.0/24" {
+	if len(got) != 2 || got[0] != "203.0.113.4" || got[1] != "198.51.100.0/24" {
 		t.Errorf("entries not sent verbatim: %v", p.body["ip_addresses"])
 	}
 }

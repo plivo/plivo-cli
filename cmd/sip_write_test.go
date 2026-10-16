@@ -288,7 +288,6 @@ func TestSIPURIsCreate_acceptsEveryDocumentedURIShape(t *testing.T) {
 		"sip:sip.example.com;transport=tls",
 		"sips:sip.example.com",
 		"203.0.113.4:5060",
-		"[2001:db8::1]:5061;transport=tls",
 	} {
 		t.Run(uri, func(t *testing.T) {
 			setFakeCreds(t)
@@ -412,12 +411,10 @@ func TestRiskyCIDR(t *testing.T) {
 		warn bool
 	}{
 		{"0.0.0.0/0", true},
-		{"::/0", true},
 		{"10.0.0.0/7", true},
 		{"10.0.0.0/8", false},
 		{"198.51.100.0/24", false},
 		{"203.0.113.4", false},
-		{"2001:db8::/32", false},
 		{"not-an-ip", false},
 	} {
 		got := riskyCIDR(tc.in) != ""

@@ -600,7 +600,7 @@ var sipURIsCreateCmd = &cobra.Command{
 	Long: `Create an origination URI.
 
 --uri accepts host, host:port, host;transport=udp|tcp|tls, sip:user@host or
-sips:host. The host is a name, an IPv4 address or an IPv6 address in brackets.
+sips:host. The host is a name or an IPv4 address: Plivo does not take IPv6.
 It is checked before sending: a space, a bad port, an unknown transport or a
 malformed host is refused. A missing port is fine: the platform decides the
 default. --transport adds ;transport= to --uri.
@@ -662,7 +662,7 @@ func runSIPURIsCreate(cmd *cobra.Command, args []string) error {
 	if uri == "" {
 		return clierr.BadInput("--uri is required (host, host:port, host;transport=…, or sip:user@host)")
 	}
-	if _, err := parseURIFlag(uri); err != nil {
+	if err := parseOriginationURI(uri); err != nil {
 		return err
 	}
 	if p != nil {
@@ -756,7 +756,7 @@ func runSIPURIsGet(cmd *cobra.Command, args []string) error {
 
 func runSIPURIsUpdate(cmd *cobra.Command, args []string) error {
 	if cmd.Flags().Changed("uri") {
-		if _, err := parseURIFlag(uriUpdateURI); err != nil {
+		if err := parseOriginationURI(uriUpdateURI); err != nil {
 			return err
 		}
 	}
@@ -1097,7 +1097,7 @@ var sipACLCreateCmd = &cobra.Command{
 	Short: "Create an IP access control list",
 	Long: `Create an IP access control list.
 
---ip is repeatable and takes one IPv4 or IPv6 address or CIDR range each. A
+--ip is repeatable and takes one IPv4 address or CIDR range each (no IPv6). A
 comma-separated list is refused rather than split. A range that allows the
 whole internet is reported but not blocked: it is occasionally deliberate, and
 refusing it outright would push people to the console instead.
@@ -1132,7 +1132,7 @@ var sipACLDeleteCmd = &cobra.Command{
 // refusal just moves the work to the console where nothing warns at all.
 func riskyCIDR(entry string) string {
 	e := strings.TrimSpace(entry)
-	if e == "0.0.0.0/0" || e == "::/0" {
+	if e == "0.0.0.0/0" {
 		return e + " allows every address on the internet"
 	}
 	_, bits, ok := strings.Cut(e, "/")
@@ -1143,7 +1143,7 @@ func riskyCIDR(entry string) string {
 	if err != nil {
 		return ""
 	}
-	if !strings.Contains(e, ":") && prefix < 8 {
+	if prefix < 8 {
 		return fmt.Sprintf("%s is wider than /8 (%d addresses)", e, 1<<(32-prefix))
 	}
 	return ""

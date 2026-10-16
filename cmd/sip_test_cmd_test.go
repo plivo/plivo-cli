@@ -327,6 +327,7 @@ func TestSIPTest_dryRunOnlyPrintsThePlan(t *testing.T) {
 		{"sips:sip.example.com", []string{"[dry-run]", "dns  resolve sip.example.com", "srv  look up _sips._tcp.sip.example.com", "tcp  connect to port 5061", "tls  handshake"}},
 		{"sip.example.com", []string{"dns  resolve sip.example.com", "udp  send one SIP OPTIONS to port 5060"}},
 		{"203.0.113.4:5080;transport=tcp", []string{"dns  skip", "tcp  connect to port 5080"}},
+		{"[2001:db8::1]:5080;transport=tcp", []string{"dns  skip", "tcp  connect to port 5080"}}, // IPv6 is refused only where the API stores a URI
 	} {
 		t.Run(tc.uri, func(t *testing.T) {
 			setEmptyHome(t)

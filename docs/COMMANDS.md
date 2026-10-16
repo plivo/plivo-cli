@@ -2950,7 +2950,7 @@ Create an IP access control list
 
 Create an IP access control list.
 
---ip is repeatable and takes one IPv4 or IPv6 address or CIDR range each. A
+--ip is repeatable and takes one IPv4 address or CIDR range each (no IPv6). A
 comma-separated list is refused rather than split. A range that allows the
 whole internet is reported but not blocked: it is occasionally deliberate, and
 refusing it outright would push people to the console instead.
@@ -3278,7 +3278,7 @@ Create an origination URI
 Create an origination URI.
 
 --uri accepts host, host:port, host;transport=udp|tcp|tls, sip:user@host or
-sips:host. The host is a name, an IPv4 address or an IPv6 address in brackets.
+sips:host. The host is a name or an IPv4 address: Plivo does not take IPv6.
 It is checked before sending: a space, a bad port, an unknown transport or a
 malformed host is refused. A missing port is fine: the platform decides the
 default. --transport adds ;transport= to --uri.
