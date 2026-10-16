@@ -276,8 +276,7 @@ func runPowerpackUpdate(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Updated powerpack %s: %s\n", id, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Updated powerpack %s: %s", id, resp.Message), resp.Raw())
 }
 
 func runPowerpackDelete(cmd *cobra.Command, args []string) error {
@@ -299,8 +298,7 @@ func runPowerpackDelete(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Deleted powerpack %s\n", id)
-	return nil
+	return emitWrite(fmt.Sprintf("Deleted powerpack %s", id), map[string]any{"uuid": id, "deleted": true})
 }
 
 func runPowerpackNumberList(cmd *cobra.Command, args []string) error {
@@ -346,8 +344,7 @@ func runPowerpackNumberAdd(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Added %s to powerpack %s: %s\n", number, id, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Added %s to powerpack %s: %s", number, id, resp.Message), resp.Raw())
 }
 
 func runPowerpackNumberRemove(cmd *cobra.Command, args []string) error {
@@ -369,6 +366,6 @@ func runPowerpackNumberRemove(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Removed %s from powerpack %s\n", number, id)
-	return nil
+	return emitWrite(fmt.Sprintf("Removed %s from powerpack %s", number, id),
+		map[string]any{"uuid": id, "number": number, "removed": true})
 }

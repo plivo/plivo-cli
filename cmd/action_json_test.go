@@ -31,6 +31,12 @@ func TestActions_printJSONOnStdout(t *testing.T) {
 		"account applications delete 31000000000000001 --yes", "account subaccounts update SAFAKESUBACCOUNT0001 --name qa",
 		"account subaccounts delete SAFAKESUBACCOUNT0001 --yes", "voice recordings delete UUID --yes",
 		"voice endpoints update 12345678 --alias qa", "voice endpoints delete 12345678 --yes",
+		"messaging sms powerpacks update UUID --name qa", "messaging sms powerpacks delete UUID --yes",
+		"messaging sms powerpacks numbers add UUID +14155550100",
+		"messaging sms powerpacks numbers remove UUID +14155550100 --yes",
+		"messaging sms 10dlc links delete UUID --yes", "messaging sms 10dlc brands update BFAKE01 --email a@example.com",
+		"messaging sms 10dlc campaigns update CFAKE01 --description qa", "numbers compliance delete UUID --yes",
+		"numbers masking sessions delete UUID --yes",
 	} {
 		args := strings.Fields(strings.ReplaceAll(line, "UUID", "d1e2f3a4-0000-4000-8000-000000000001"))
 		err, stdout, _ := execCmd(t, append(args, "-o", "json")...)
