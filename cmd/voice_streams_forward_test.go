@@ -290,6 +290,21 @@ func TestVoiceStreamsForward_dryRun_showsRealAppInfo(t *testing.T) {
 	}
 }
 
+// A read with no answer is the client's own NETWORK_ERROR, not wrapped in a
+// second one that repeats the code and the host.
+func TestVoiceStreamsForward_noAnswerIsOneNetworkError(t *testing.T) {
+	setFakeCreds(t)
+	srv := httptest.NewServer(http.NotFoundHandler())
+	srv.Close()
+	streamsFwdClientForTest = &api.Client{BaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", HTTP: &http.Client{}}
+	defer func() { streamsFwdClientForTest = nil }()
+	err, _, _ := execCmd(t, "voice", "streams", "forward", "--number", "+14155550142", "--app", "abc", "--to", "ws://localhost:7860/ws", "--yes")
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeNetworkError || strings.Contains(ce.Message, "[NETWORK_ERROR]") {
+		t.Errorf("got %v, want one NETWORK_ERROR", err)
+	}
+}
+
 // --dry-run -o json must emit a single parseable preview object, not prose.
 func TestVoiceStreamsForward_dryRun_json(t *testing.T) {
 	setFakeCreds(t)
@@ -499,6 +514,9 @@ func TestVoiceStreamsForward_failedRestoreIsAnError(t *testing.T) {
 			}
 			if !strings.Contains(ce.Hint, wantRestoreCmd) {
 				t.Errorf("hint lacks the restore command %q: %q", wantRestoreCmd, ce.Hint)
+			}
+			if c.status == 0 && (strings.Contains(ce.Message, "[NETWORK_ERROR]") || ce.Retryable) {
+				t.Errorf("a dropped restore: %q retryable=%v, want one NETWORK_ERROR, not retryable", ce.Message, ce.Retryable)
 			}
 			if strings.Contains(stdout, "All cleaned up") {
 				t.Errorf("reported success after a failed restore:\n%s", stdout)

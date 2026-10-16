@@ -44,6 +44,8 @@ either is refused before any request, and the error says what to run instead.`,
 	RunE: runCallList,
 }
 
+var callGetLive bool
+
 var callGetCmd = &cobra.Command{
 	Use:   "get <call_uuid>",
 	Short: "Get a call by UUID",
@@ -74,6 +76,7 @@ func init() {
 	callListCmd.Flags().StringVar(&callListTo, "to", "", "filter by to_number")
 	callListCmd.Flags().StringVar(&callListDirection, "direction", "", oneOf(directionValues))
 	registerTimeRangeFlags(callListCmd, &callListRange, "calls ending", rangeLimits{retainDays: listRetainDays, spanDays: listSpanDays})
+	callGetCmd.Flags().BoolVar(&callGetLive, "live", false, "get a call in progress, not its record (written once the call ends)")
 
 	callMakeCmd.Flags().StringVar(&callMakeFrom, "from", "", "source number (E.164) — must be on your account (required)")
 	_ = callMakeCmd.MarkFlagRequired("from")
@@ -542,6 +545,9 @@ func runCallGet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if callGetLive {
+		return runCallGetLive(client, uuid)
+	}
 	var c api.Call
 	apiErr, err := client.Do("GET", client.AccountURL("Call", uuid), nil, nil, &c)
 	if err != nil {
@@ -569,5 +575,36 @@ func runCallGet(cmd *cobra.Command, args []string) error {
 		{"hangup_cause", c.HangupCause},
 		{"hangup_source", c.HangupSource},
 		{"total_amount", c.TotalAmount},
+	})
+}
+
+// runCallGetLive reads a call in progress: the same URL with status=live,
+// answered in another shape (from and to, not from_number and to_number).
+func runCallGetLive(client *api.Client, uuid string) error {
+	var c api.LiveCall
+	apiErr, err := client.Do("GET", client.AccountURL("Call", uuid), nil, url.Values{"status": {"live"}}, &c)
+	if err != nil {
+		return err
+	}
+	if apiErr != nil {
+		if apiErr.Code == clierr.CodeResourceNotFound {
+			apiErr.Hint = "No call in progress has this UUID. If the call has ended, drop --live to get its record."
+		}
+		return apiErr
+	}
+	if dryRunFlag {
+		return nil
+	}
+	if effectiveFormat() == output.FormatJSON {
+		return output.JSONRaw(os.Stdout, c.Raw())
+	}
+	return output.KV(os.Stdout, [][2]string{
+		{"uuid", c.CallUUID},
+		{"status", c.CallStatus},
+		{"from", c.From},
+		{"to", c.To},
+		{"direction", c.Direction},
+		{"caller_name", c.CallerName},
+		{"session_start", c.SessionStart},
 	})
 }

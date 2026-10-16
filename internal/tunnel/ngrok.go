@@ -43,6 +43,9 @@ func watch(cmd *exec.Cmd) *Tunnel {
 // Err is why the tunnel process exited. Read it only after Done is closed.
 func (t *Tunnel) Err() error { return t.err }
 
+// ngrokTimeout bounds StartNgrok's wait for the tunnel URL; a test stretches it.
+var ngrokTimeout = 10 * time.Second
+
 // StartNgrok launches `ngrok http <localPort>` and returns when the
 // public URL is reachable via ngrok's local API (typically 1-2 seconds).
 // Caller MUST call Close() to stop the subprocess.
@@ -67,7 +70,7 @@ func StartNgrok(ctx context.Context, localPort int) (*Tunnel, error) {
 	// at http://127.0.0.1:4040/api/tunnels once it's bound. Default timeout
 	// is 10s; that's plenty for cold-start.
 	t := watch(cmd)
-	publicURL, err := waitForNgrokTunnel(ctx, 10*time.Second, localPort, t)
+	publicURL, err := waitForNgrokTunnel(ctx, ngrokTimeout, localPort, t)
 	if err != nil {
 		_ = t.Close()
 		return nil, fmt.Errorf("ngrok did not report a tunnel URL: %w (is ngrok already running on :4040?)", err)

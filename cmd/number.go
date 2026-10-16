@@ -245,6 +245,9 @@ func runNumberGet(cmd *cobra.Command, args []string) error {
 
 func runNumberUpdate(cmd *cobra.Command, args []string) error {
 	number := args[0]
+	if !isE164Digits(strings.TrimPrefix(number, "+")) {
+		return clierr.BadInput(fmt.Sprintf("%q is not a phone number in E.164, such as +14155551234", number))
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -394,7 +397,9 @@ func runNumberSearch(cmd *cobra.Command, args []string) error {
 
 // requireInboundTrunk refuses an outbound trunk. Numbers receive calls, and an
 // outbound trunk has no origination URI to send them to, so the attach would
-// succeed and the number would simply stop answering.
+// succeed and the number would simply stop answering. A disabled trunk is
+// routed to with a warning: the route is right, but no call comes through
+// until the trunk is enabled.
 func requireInboundTrunk(client *api.Client, trunkID string) error {
 	var t api.SIPTrunk
 	var apiErr *api.APIError
@@ -422,6 +427,10 @@ func requireInboundTrunk(client *api.Client, trunkID string) error {
 		return clierr.BadInput(fmt.Sprintf(
 			"trunk %s is outbound; a number can only be routed to an inbound trunk", trunkID))
 	}
+	if strings.EqualFold(t.TrunkStatus, "disabled") {
+		fmt.Fprintf(os.Stderr, "Warning: trunk %s is disabled, so no call to this number comes through it until "+
+			"`plivo sip trunks update %s --status enabled`.\n", trunkID, trunkID)
+	}
 	return nil
 }
 
@@ -439,8 +448,10 @@ const indiaKYCDocsURL = "https://www.plivo.com/docs/numbers/rent-india-numbers"
 //   - accepted: no warning, no error
 //   - none attached: a warning for the caller to print; routing goes ahead
 //   - not on this account: a refusal pointing at `plivo numbers list`
-//   - any other status, or any read failing: a refusal whose hint lists the
-//     KYC steps
+//   - any other status, or a read the API refused: a refusal whose hint lists
+//     the KYC steps
+//   - a read that failed on its own (no answer, login, rate limit, server
+//     error): a refusal that keeps that error's code and hint
 //
 // Both reads go through readThrough, so --dry-run runs the same check.
 func checkIndiaCompliance(client *api.Client, number string) (warning string, err error) {
@@ -513,9 +524,15 @@ func getForCheck(client *api.Client, endpoint string, out any) *clierr.Error {
 }
 
 // kycRefusal turns e into the refusal of a routing change: the reason in the
-// message, and the India KYC steps, as CLI commands, in the hint.
+// message, and the India KYC steps, as CLI commands, in the hint. A read that
+// failed on its own (any exit code but 1: no answer, login, rate limit, server
+// error) keeps its own hint: KYC steps would send the user to fix the wrong
+// thing.
 func kycRefusal(e *clierr.Error, number, appID string) *clierr.Error {
 	e.Message = fmt.Sprintf("refusing to route %s: %s", number, e.Message)
+	if e.ExitCode() != ExitUserError {
+		return e
+	}
 	see := "`plivo numbers compliance list --country IN` lists your applications"
 	if appID != "" {
 		see = fmt.Sprintf("`plivo numbers compliance get %s` shows its status and any rejection reason", appID)

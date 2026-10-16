@@ -35,6 +35,8 @@ expiry shown. UDP: resolve the host and send one SIP OPTIONS request.
 
 sips: and transport=tls are tested as TLS, on port 5061 unless the URI gives
 one; tcp and udp use 5060. With no transport, UDP is tested: SIP's default.
+A host given without a port that publishes a SIP SRV record gets a warning
+naming the record's target; the test probes the host itself.
 Quote a URI that has ;transport, or the shell cuts the command at the ;.
 
 A pass means the host answers, not that the platform will accept calls. Exit 0
@@ -50,6 +52,7 @@ result is "unknown". Each step waits up to 5 seconds, or --timeout when given.`,
 
 func init() {
 	sipTestCmd.Flags().StringVar(&sipTestURI, "uri", "", "SIP URI to test, e.g. \"sip.example.com;transport=tcp\" (required)")
+	markRequiredByHand(sipTestCmd, "uri")
 	sipCmd.AddCommand(sipTestCmd)
 }
 
@@ -58,10 +61,11 @@ func init() {
 // seconds an API request is allowed.
 const sipTestStep = 5 * time.Second
 
-// Seams for tests: the resolver, and the roots a TLS certificate must chain to
-// (nil means the system's).
+// Seams for tests: the resolvers, and the roots a TLS certificate must chain
+// to (nil means the system's).
 var (
 	sipLookup      = net.DefaultResolver.LookupIPAddr
+	sipLookupSRV   = net.DefaultResolver.LookupSRV
 	sipTestRootCAs *x509.CertPool
 )
 
@@ -86,6 +90,7 @@ type sipTestResult struct {
 	Transport string     `json:"transport"`
 	Checks    []sipCheck `json:"checks"`
 	Result    string     `json:"result"` // reachable, unreachable or unknown
+	Warnings  []string   `json:"warnings,omitempty"`
 }
 
 func runSIPTest(cmd *cobra.Command, _ []string) error {
@@ -112,6 +117,7 @@ func runSIPTest(cmd *cobra.Command, _ []string) error {
 
 	res := probeSIPURI(cmd.Context(), u, transport, port, step)
 	res.URI = normalizeSIPURI(sipTestURI)
+	res.Warnings = sipSRVWarnings(cmd.Context(), u, transport, step)
 	if err := renderSIPTest(res, defaulted); err != nil {
 		return err
 	}
@@ -201,6 +207,40 @@ func sipResolve(ctx context.Context, host string, step time.Duration) ([]string,
 	}
 	c.Status, c.Detail = "pass", host+" resolves to "+strings.Join(c.Addresses, ", ")
 	return c.Addresses, c
+}
+
+// sipSRVQuery is the SIP SRV record RFC 3263 has a client read for a host
+// given without a port: _sips._tcp for TLS, else _sip._udp or _sip._tcp. ok
+// is false when there is none to read: the URI has a port, or an IP host.
+func sipSRVQuery(u sipURI, transport string) (service, proto string, ok bool) {
+	if _, err := netip.ParseAddr(u.Host); err == nil || u.Port != 0 {
+		return "", "", false
+	}
+	if transport == "tls" {
+		return "sips", "tcp", true
+	}
+	return "sip", transport, true
+}
+
+// sipSRVWarnings names the target of the host's SIP SRV record, when it has
+// one. The test probes the host's own addresses and never follows SRV:
+// Plivo's docs do not say its calls do, so the target may be where the
+// platform listens while the host answers nothing. A failed lookup, or the
+// "." target that means no service, is not reported.
+func sipSRVWarnings(ctx context.Context, u sipURI, transport string, step time.Duration) []string {
+	service, proto, ok := sipSRVQuery(u, transport)
+	if !ok {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, step)
+	defer cancel()
+	_, srvs, err := sipLookupSRV(ctx, service, proto, u.Host)
+	if err != nil || len(srvs) == 0 || srvs[0].Target == "." {
+		return nil
+	}
+	target := net.JoinHostPort(strings.TrimSuffix(srvs[0].Target, "."), strconv.Itoa(int(srvs[0].Port)))
+	return []string{fmt.Sprintf("_%s._%s.%s points to %s; this test probes %s itself. To test that target: --uri \"%s;transport=%s\"",
+		service, proto, u.Host, target, u.Host, target, transport)}
 }
 
 // sipDialTCP connects to the first address that answers. What is left of the
@@ -382,6 +422,9 @@ func renderSIPTest(res sipTestResult, defaulted bool) error {
 	}
 	fmt.Fprintf(os.Stdout, "\nresult: %s (%s to %s)\n", res.Result, strings.ToUpper(res.Transport),
 		net.JoinHostPort(res.Host, strconv.Itoa(res.Port)))
+	for _, w := range res.Warnings {
+		fmt.Fprintf(os.Stderr, "Warning: %s\n", w)
+	}
 	if quietFlag {
 		return nil
 	}
@@ -434,6 +477,9 @@ func printSIPTestPlan(u sipURI, transport string, port int, step time.Duration) 
 		fmt.Fprintf(os.Stderr, "  dns  skip: %s is an IP address\n", u.Host)
 	} else {
 		fmt.Fprintf(os.Stderr, "  dns  resolve %s (A/AAAA) within %s\n", u.Host, step)
+	}
+	if service, proto, ok := sipSRVQuery(u, transport); ok {
+		fmt.Fprintf(os.Stderr, "  srv  look up _%s._%s.%s and name its target in a warning\n", service, proto, u.Host)
 	}
 	if transport == "udp" {
 		fmt.Fprintf(os.Stderr, "  udp  send one SIP OPTIONS to port %d and wait up to %s for a reply\n", port, step)

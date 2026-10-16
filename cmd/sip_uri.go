@@ -26,7 +26,7 @@ type sipURI struct {
 var sipTransports = []string{"udp", "tcp", "tls"}
 
 const sipURIHint = "Accepted: host, host:port, host;transport=udp|tcp|tls, sip:user@host or sips:host. " +
-	"The host is a name, an IPv4 address or an IPv6 address in brackets: [2001:db8::1]:5060."
+	"The host is a name or an IPv4 address."
 
 // parseURIFlag parses a --uri value and reports any problem as BAD_FLAG, before
 // a request is spent on a URI that would never answer a call.
@@ -38,6 +38,19 @@ func parseURIFlag(v string) (sipURI, error) {
 		return sipURI{}, e
 	}
 	return u, nil
+}
+
+// parseOriginationURI is parseURIFlag for a URI the API stores, which also
+// refuses an IPv6 host: the API answers one "IP from Private IP range is not
+// allowed". sip test keeps IPv6, as it only probes from this machine.
+func parseOriginationURI(v string) error {
+	u, err := parseURIFlag(v)
+	if err == nil && strings.Contains(u.Host, ":") {
+		e := clierr.BadFlag("uri", "has an IPv6 host, which Plivo does not accept: use a hostname or an IPv4 address")
+		e.Hint = sipURIHint
+		return e
+	}
+	return err
 }
 
 // parseSIPURI accepts the shapes Plivo's docs and the platforms' guides use:
@@ -112,7 +125,7 @@ func (u *sipURI) setHostPort(hp string) error {
 		}
 		host, port, hasPort = inner, strings.TrimPrefix(after, ":"), after != ""
 	case strings.Count(hp, ":") > 1:
-		return errors.New("looks like an IPv6 address: put it in brackets, e.g. [2001:db8::1]:5060")
+		return errors.New("looks like an IPv6 address, which Plivo does not accept (sip test takes one in brackets: [2001:db8::1]:5060)")
 	default:
 		host, port, hasPort = strings.Cut(hp, ":")
 		if host == "" {
@@ -190,8 +203,8 @@ func (u *sipURI) setParams(params string) error {
 }
 
 // checkACLEntries checks every --ip value before a request is spent. Each is
-// one IPv4 or IPv6 address or CIDR range. A comma-separated list is refused
-// rather than split, so what is sent is exactly what was typed.
+// one IPv4 address or CIDR range. A comma-separated list is refused rather
+// than split, so what is sent is exactly what was typed.
 func checkACLEntries(entries []string) error {
 	for _, e := range entries {
 		if err := checkACLEntry(e); err != nil {
@@ -207,14 +220,21 @@ func checkACLEntry(e string) error {
 	if strings.Contains(e, ",") {
 		return fmt.Errorf("%q holds more than one value: repeat --ip for each address", e)
 	}
+	a, err := netip.ParseAddr(e)
 	if strings.Contains(e, "/") {
-		if _, err := netip.ParsePrefix(e); err != nil {
+		var p netip.Prefix
+		if p, err = netip.ParsePrefix(e); err != nil {
 			return fmt.Errorf("%q is not a CIDR range such as <platform_ip>/24", e)
 		}
-		return nil
+		a = p.Addr()
 	}
-	if a, err := netip.ParseAddr(e); err != nil || a.Zone() != "" {
-		return fmt.Errorf("%q is not an IPv4 or IPv6 address", e)
+	if err != nil {
+		return fmt.Errorf("%q is not an IPv4 address", e)
+	}
+	// The API refuses an IPv6 address ("Local IP Address - <it> is not
+	// allowed"), so every IPv6 form is refused here, IPv4-mapped too.
+	if a.Is6() {
+		return fmt.Errorf("%q is IPv6, which Plivo does not accept: give IPv4 addresses and ranges", e)
 	}
 	return nil
 }

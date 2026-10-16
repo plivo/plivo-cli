@@ -109,7 +109,16 @@ const listPageBody = `{"api_id":"` + zeroUUID + `","meta":{"limit":20,"offset":0
 func TestOutputFormats_listCommandsHonourEveryFormat(t *testing.T) {
 	setFakeCreds(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(listPageBody))
+		body := listPageBody // rows under "objects", or under the list's own key
+		for suffix, key := range map[string]string{"/Brand/": "brands", "/Campaign/": "campaigns", "/Compliance/": "compliances"} {
+			if strings.HasSuffix(r.URL.Path, suffix) {
+				body = strings.Replace(body, `"objects"`, `"`+key+`"`, 1)
+			}
+		}
+		if strings.HasSuffix(r.URL.Path, "/Conference/") {
+			body = `{"api_id":"` + zeroUUID + `","conferences":["first","second"]}`
+		}
+		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(srv.Close)
 	clientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "MAFAKEFORTEST", AuthToken: "tok", HTTP: &http.Client{}}
@@ -150,8 +159,12 @@ func TestOutputFormats_listCommandsHonourEveryFormat(t *testing.T) {
 			if err != nil {
 				t.Fatalf("-o csv does not parse: %v", err)
 			}
-			if _, isObject := rows[0].(map[string]any); isObject && len(table) != len(rows)+1 {
-				t.Errorf("-o csv: %d lines, want a header and %d rows", len(table), len(rows))
+			want := len(rows)
+			if _, isObject := rows[0].(map[string]any); isObject {
+				want++ // the header
+			}
+			if len(table) != want {
+				t.Errorf("-o csv: %d lines, want %d for %d rows", len(table), want, len(rows))
 			}
 
 			var doc any
@@ -204,12 +217,14 @@ func listCommandPaths() [][]string {
 	return out
 }
 
-// rowsOf mirrors which records jsonl and csv write: a list's objects, an
-// array's elements, or the one value.
+// rowsOf mirrors which records jsonl and csv write: a list's rows (its page's
+// one array), an array's elements, or the one value.
 func rowsOf(data any) []any {
 	if page, ok := data.(map[string]any); ok {
-		if objects, ok := page["objects"].([]any); ok {
-			return objects
+		for _, v := range page {
+			if rows, ok := v.([]any); ok {
+				return rows
+			}
 		}
 	}
 	if items, ok := data.([]any); ok {

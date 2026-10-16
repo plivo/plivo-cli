@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -22,6 +23,27 @@ const (
 	dirInbound  = "inbound"
 	dirOutbound = "outbound"
 )
+
+var trunkStatusValues = []string{"enabled", "disabled"}
+
+// trunkFlagDirections pairs each trunk flag that names an object with the one
+// direction that uses it: an inbound trunk sends calls to its URIs, and an
+// outbound trunk authenticates with a credential, an IP list or both.
+var trunkFlagDirections = [][2]string{
+	{"uri", dirInbound}, {"fallback-uri", dirInbound}, {"credential", dirOutbound}, {"ip-acl", dirOutbound},
+}
+
+// checkTrunkFlags refuses a flag the trunk's direction does not use, before
+// any write. An empty value names nothing: --fallback-uri "" clears the
+// fallback.
+func checkTrunkFlags(cmd *cobra.Command, dir string) error {
+	for _, fd := range trunkFlagDirections {
+		if fd[1] != dir && cmd.Flags().Lookup(fd[0]).Value.String() != "" {
+			return clierr.BadFlag(fd[0], fmt.Sprintf("is for an %s trunk, and this one is %s", fd[1], dir))
+		}
+	}
+	return nil
+}
 
 // ─── helpers shared by the write verbs ───────────────────────────────────────
 
@@ -261,6 +283,16 @@ func deleteSIP(client *api.Client, parts ...string) error {
 	return nil
 }
 
+// requireName refuses a blank --name on a URI, trunk or IP access control list
+// create. The API answers "name cannot be empty" to those, though its docs call
+// the name optional; cobra only checks that the flag was passed.
+func requireName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return clierr.BadInput("--name is required: the API refuses an empty name")
+	}
+	return nil
+}
+
 // emitWrite renders the result of an update or delete. These used to print
 // prose on stderr and nothing on stdout, so `-o json` produced an empty stream
 // and exit 0 — indistinguishable from success with no data to a jq pipeline.
@@ -347,6 +379,9 @@ read every page, the delete is refused.`,
 }
 
 func runSIPTrunksCreate(cmd *cobra.Command, args []string) error {
+	if err := requireName(trunkCreateName); err != nil {
+		return err
+	}
 	p, err := sipPlatformFlag(trunkCreatePlatform)
 	if err != nil {
 		return err
@@ -373,6 +408,9 @@ func runSIPTrunksCreate(cmd *cobra.Command, args []string) error {
 		}
 	default:
 		return clierr.BadInput("--direction must be inbound or outbound")
+	}
+	if err := checkTrunkFlags(cmd, trunkCreateDirection); err != nil {
+		return err
 	}
 	if p != nil {
 		p.checkTrunk(trunkCreateDirection, trunkCreateCredential, trunkCreateIPACL, cmd.Flags().Changed("secure"))
@@ -443,6 +481,17 @@ func runSIPTrunksUpdate(cmd *cobra.Command, args []string) error {
 	if err := canonUUIDFlags(cmd); err != nil {
 		return err
 	}
+	if err := validateEnum("status", &trunkUpdateStatus, trunkStatusValues...); err != nil {
+		return err
+	}
+	// validateEnum reads "" as not given, but --status "" was given: an empty
+	// status is not one to send.
+	if cmd.Flags().Changed("status") && trunkUpdateStatus == "" {
+		return badEnumValue("status", "", "empty value", trunkStatusValues)
+	}
+	if err := validateEnum("direction", &trunkUpdateDirection, directionValues...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -481,12 +530,15 @@ func runSIPTrunksUpdate(cmd *cobra.Command, args []string) error {
 		if dir == "" {
 			dir = stored.TrunkDirection
 		}
-		if keepFallback && stored.FallbackURIUUID != "" {
+		if keepFallback && dir == dirInbound && stored.FallbackURIUUID != "" {
 			body["fallback_uri_uuid"] = stored.FallbackURIUUID
 		}
 	}
 	if dir == "" {
 		return clierr.BadInput("could not read the trunk's direction — pass --direction")
+	}
+	if err := checkTrunkFlags(cmd, dir); err != nil {
+		return err
 	}
 	body["trunk_direction"] = dir
 	if _, err := postSIP(client, body, "Zentrunk", "Trunk", args[0]); err != nil {
@@ -554,7 +606,7 @@ var sipURIsCreateCmd = &cobra.Command{
 	Long: `Create an origination URI.
 
 --uri accepts host, host:port, host;transport=udp|tcp|tls, sip:user@host or
-sips:host. The host is a name, an IPv4 address or an IPv6 address in brackets.
+sips:host. The host is a name or an IPv4 address: Plivo does not take IPv6.
 It is checked before sending: a space, a bad port, an unknown transport or a
 malformed host is refused. A missing port is fine: the platform decides the
 default. --transport adds ;transport= to --uri.
@@ -599,6 +651,9 @@ the check fails, the delete is refused.`,
 func normalizeSIPURI(v string) string { return strings.TrimSpace(v) }
 
 func runSIPURIsCreate(cmd *cobra.Command, args []string) error {
+	if err := requireName(uriCreateName); err != nil {
+		return err
+	}
 	p, err := sipPlatformFlag(uriCreatePlatform)
 	if err != nil {
 		return err
@@ -613,7 +668,7 @@ func runSIPURIsCreate(cmd *cobra.Command, args []string) error {
 	if uri == "" {
 		return clierr.BadInput("--uri is required (host, host:port, host;transport=…, or sip:user@host)")
 	}
-	if _, err := parseURIFlag(uri); err != nil {
+	if err := parseOriginationURI(uri); err != nil {
 		return err
 	}
 	if p != nil {
@@ -621,6 +676,9 @@ func runSIPURIsCreate(cmd *cobra.Command, args []string) error {
 	}
 	if uriCreateAuthNeeded && uriCreateUsername == "" {
 		return errAuthNeedsUsername
+	}
+	if err := uriAuthConflict(cmd, uriCreateAuthNeeded, uriCreateUsername, uriCreatePasswordStdin); err != nil {
+		return err
 	}
 	client, _, err := getClient()
 	if err != nil {
@@ -704,9 +762,12 @@ func runSIPURIsGet(cmd *cobra.Command, args []string) error {
 
 func runSIPURIsUpdate(cmd *cobra.Command, args []string) error {
 	if cmd.Flags().Changed("uri") {
-		if _, err := parseURIFlag(uriUpdateURI); err != nil {
+		if err := parseOriginationURI(uriUpdateURI); err != nil {
 			return err
 		}
+	}
+	if err := uriAuthConflict(cmd, uriUpdateAuthNeeded, uriUpdateUsername, uriUpdatePasswordStdin); err != nil {
+		return err
 	}
 	client, _, err := getClient()
 	if err != nil {
@@ -739,17 +800,16 @@ func runSIPURIsUpdate(cmd *cobra.Command, args []string) error {
 		// With authentication_needed true the API also demands a username, so a
 		// password-only rotation is impossible on the wire. Carry the stored one.
 		if body["username"] == nil {
-			var cur api.SIPTrunkURI
-			apiErr, gerr := client.Do("GET", client.AccountURL("Zentrunk", "URI", args[0]), nil, nil, &cur)
-			if gerr != nil || apiErr != nil || cur.Username == "" {
-				return clierr.BadInput(
-					"could not read the current username, which the API requires alongside a password — pass --username too")
+			stored, err := storedUsername(client, "URI", args[0])
+			if err != nil {
+				return err
 			}
-			body["username"] = cur.Username
+			body["username"] = stored
 		}
 	}
 	boolFlagPatch(cmd, "authentication-needed", "authentication_needed", uriUpdateAuthNeeded, body)
-	if uriUpdateAuthNeeded && cmd.Flags().Changed("authentication-needed") && uriUpdateUsername == "" {
+	// The username sent, given or carried: a password brings the stored one.
+	if user, _ := body["username"].(string); uriUpdateAuthNeeded && cmd.Flags().Changed("authentication-needed") && user == "" {
 		return errAuthNeedsUsername
 	}
 	if len(body) == 0 {
@@ -839,7 +899,7 @@ var sipCredsCreateCmd = &cobra.Command{
 The password is read from stdin only. There is no --password flag: a password in
 an argument lands in shell history, process listings and CI logs. It is never
 echoed, never printed back, and never generated for you.`,
-	Example: `  printf '%s' "$SIP_PASSWORD" | plivo sip credentials create --name c1 --username u1 --password-stdin`,
+	Example: `  printf '%s' "$SIP_PASSWORD" | plivo sip credentials create --name c1 --username sipuser1 --password-stdin`,
 	Args:    cobra.NoArgs,
 	RunE:    runSIPCredsCreate,
 }
@@ -861,6 +921,35 @@ var sipCredsDeleteCmd = &cobra.Command{
 	Long:  "Names any trunk using it first; an in-use one needs --force on top of --yes. If the check fails, the delete is refused.",
 	Args:  cobra.ExactArgs(1),
 	RunE:  sipObjectArg(runSIPCredsDelete),
+}
+
+// credentialPassword is the API's rule for a credential password: 5 to 20
+// letters, digits and the symbols ~!@#$%^&*()_+, with at least one symbol.
+// It answers anything else with a 400, after the round trip.
+var credentialPassword = regexp.MustCompile(`^[A-Za-z0-9~!@#$%^&*()_+]{5,20}$`)
+
+// checkCredentialPassword applies that rule. The error never repeats the
+// password.
+func checkCredentialPassword(pw string) error {
+	if !credentialPassword.MatchString(pw) || !strings.ContainsAny(pw, "~!@#$%^&*()_+") {
+		return clierr.BadInput("the password on stdin must be 5 to 20 letters, digits and ~!@#$%^&*()_+, " +
+			"with at least one of those symbols")
+	}
+	return nil
+}
+
+// credentialUsername is the API's rule for a credential username: 5 to 20
+// letters and digits. It answers anything else "Username length should be
+// between 5 and 20, should contain only alphanumeric characters".
+var credentialUsername = regexp.MustCompile(`^[A-Za-z0-9]{5,20}$`)
+
+// checkCredentialUsername applies that rule to --username. A username is not
+// a secret, so the error names it.
+func checkCredentialUsername(u string) error {
+	if !credentialUsername.MatchString(u) {
+		return clierr.BadFlag("username", fmt.Sprintf("%q must be 5 to 20 letters and digits", u))
+	}
+	return nil
 }
 
 // readPasswordStdin takes the password from stdin. Trailing newlines are
@@ -885,8 +974,14 @@ func runSIPCredsCreate(cmd *cobra.Command, args []string) error {
 	if credCreateUsername == "" {
 		return clierr.BadInput("--username is required")
 	}
+	if err := checkCredentialUsername(credCreateUsername); err != nil {
+		return err
+	}
 	pw, err := readPasswordStdin()
 	if err != nil {
+		return err
+	}
+	if err := checkCredentialPassword(pw); err != nil {
 		return err
 	}
 	client, _, err := getClient()
@@ -957,6 +1052,11 @@ func runSIPCredsGet(cmd *cobra.Command, args []string) error {
 }
 
 func runSIPCredsUpdate(cmd *cobra.Command, args []string) error {
+	if cmd.Flags().Changed("username") {
+		if err := checkCredentialUsername(credUpdateUsername); err != nil {
+			return err
+		}
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -973,18 +1073,19 @@ func runSIPCredsUpdate(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
+		if err := checkCredentialPassword(pw); err != nil {
+			return err
+		}
 		body["password"] = pw
 		// The API rejects a password with no username, so rotating a password
 		// alone is impossible on the wire. Carry the stored username across
 		// rather than making the user restate something that is not changing.
 		if _, ok := body["username"]; !ok {
-			var cur api.SIPTrunkCredential
-			apiErr, gerr := client.Do("GET", client.AccountURL("Zentrunk", "Credential", args[0]), nil, nil, &cur)
-			if gerr != nil || apiErr != nil || cur.Username == "" {
-				return clierr.BadInput(
-					"could not read the current username, which the API requires alongside a password — pass --username too")
+			stored, err := storedUsername(client, "Credential", args[0])
+			if err != nil {
+				return err
 			}
-			body["username"] = cur.Username
+			body["username"] = stored
 		}
 	}
 	if len(body) == 0 {
@@ -1024,7 +1125,7 @@ var sipACLCreateCmd = &cobra.Command{
 	Short: "Create an IP access control list",
 	Long: `Create an IP access control list.
 
---ip is repeatable and takes one IPv4 or IPv6 address or CIDR range each. A
+--ip is repeatable and takes one IPv4 address or CIDR range each (no IPv6). A
 comma-separated list is refused rather than split. A range that allows the
 whole internet is reported but not blocked: it is occasionally deliberate, and
 refusing it outright would push people to the console instead.
@@ -1059,7 +1160,7 @@ var sipACLDeleteCmd = &cobra.Command{
 // refusal just moves the work to the console where nothing warns at all.
 func riskyCIDR(entry string) string {
 	e := strings.TrimSpace(entry)
-	if e == "0.0.0.0/0" || e == "::/0" {
+	if e == "0.0.0.0/0" {
 		return e + " allows every address on the internet"
 	}
 	_, bits, ok := strings.Cut(e, "/")
@@ -1070,7 +1171,7 @@ func riskyCIDR(entry string) string {
 	if err != nil {
 		return ""
 	}
-	if !strings.Contains(e, ":") && prefix < 8 {
+	if prefix < 8 {
 		return fmt.Sprintf("%s is wider than /8 (%d addresses)", e, 1<<(32-prefix))
 	}
 	return ""
@@ -1085,6 +1186,9 @@ func warnRiskyIPs(ips []string) {
 }
 
 func runSIPACLCreate(cmd *cobra.Command, args []string) error {
+	if err := requireName(aclCreateName); err != nil {
+		return err
+	}
 	p, err := sipPlatformFlag(aclCreatePlatform)
 	if err != nil {
 		return err
@@ -1158,7 +1262,7 @@ func runSIPACLDelete(cmd *cobra.Command, args []string) error {
 
 func init() {
 	cf := sipTrunksCreateCmd.Flags()
-	cf.StringVar(&trunkCreateName, "name", "", "trunk name")
+	cf.StringVar(&trunkCreateName, "name", "", "trunk name (required)")
 	cf.StringVar(&trunkCreateDirection, "direction", "", "inbound|outbound (required)")
 	cf.StringVar(&trunkCreateURI, "uri", "", "primary origination URI uuid (inbound)")
 	cf.StringVar(&trunkCreateFallbackURI, "fallback-uri", "", "fallback origination URI uuid")
@@ -1166,10 +1270,11 @@ func init() {
 	cf.StringVar(&trunkCreateIPACL, "ip-acl", "", "IP access control list uuid (outbound)")
 	cf.BoolVar(&trunkCreateSecure, "secure", false, "enable TLS/SRTP")
 	cf.StringVar(&trunkCreatePlatform, "platform", "", "check against a platform's guide: livekit|elevenlabs|retell|vapi")
+	markRequiredByHand(sipTrunksCreateCmd, "direction")
 
 	uf := sipTrunksUpdateCmd.Flags()
 	uf.StringVar(&trunkUpdateName, "name", "", "trunk name")
-	uf.StringVar(&trunkUpdateStatus, "status", "", "enabled|disabled")
+	uf.StringVar(&trunkUpdateStatus, "status", "", oneOf(trunkStatusValues))
 	uf.StringVar(&trunkUpdateURI, "uri", "", "primary origination URI uuid")
 	uf.StringVar(&trunkUpdateFallbackURI, "fallback-uri", "", "fallback origination URI uuid (\"\" removes it)")
 	uf.StringVar(&trunkUpdateCredential, "credential", "", "credential uuid")
@@ -1178,7 +1283,7 @@ func init() {
 	uf.StringVar(&trunkUpdateDirection, "direction", "", "inbound|outbound (read from the trunk when omitted)")
 
 	ucf := sipURIsCreateCmd.Flags()
-	ucf.StringVar(&uriCreateName, "name", "", "URI name")
+	ucf.StringVar(&uriCreateName, "name", "", "URI name (required)")
 	ucf.StringVar(&uriCreateURI, "uri", "", "host, host:port, host;transport=…, or sip:user@host")
 	ucf.StringVar(&uriCreateUsername, "username", "", "username when authentication is needed")
 	ucf.BoolVar(&uriCreatePasswordStdin, "password-stdin", false, "read the URI password from stdin")
@@ -1197,14 +1302,16 @@ func init() {
 	ccf.StringVar(&credCreateName, "name", "", "credential name")
 	ccf.StringVar(&credCreateUsername, "username", "", "SIP username (required)")
 	ccf.BoolVar(&credCreatePasswordStdin, "password-stdin", false, "read the password from stdin (required)")
+	markRequiredByHand(sipCredsCreateCmd, "username", "password-stdin")
 	registerListFlags(sipCredsListCmd, &credListLimit, &credListOffset)
 	cuf := sipCredsUpdateCmd.Flags()
 	cuf.StringVar(&credUpdateName, "name", "", "credential name")
 	cuf.StringVar(&credUpdateUsername, "username", "", "SIP username")
 	cuf.BoolVar(&credUpdatePasswordStdin, "password-stdin", false, "read the password from stdin (required: every update rewrites it)")
+	markRequiredByHand(sipCredsUpdateCmd, "password-stdin")
 
 	acf := sipACLCreateCmd.Flags()
-	acf.StringVar(&aclCreateName, "name", "", "list name")
+	acf.StringVar(&aclCreateName, "name", "", "list name (required)")
 	acf.StringArrayVar(&aclCreateIPs, "ip", nil, "IP or CIDR (repeatable)")
 	acf.StringVar(&aclCreatePlatform, "platform", "", "fill --ip with a platform's published addresses: vapi")
 	auf := sipACLUpdateCmd.Flags()
@@ -1213,6 +1320,9 @@ func init() {
 
 	for _, c := range []*cobra.Command{sipTrunksDeleteCmd, sipURIsDeleteCmd, sipCredsDeleteCmd, sipACLDeleteCmd} {
 		c.Flags().BoolVar(&sipDeleteForce, "force", false, "delete even though something depends on it (with --yes)")
+	}
+	for _, c := range []*cobra.Command{sipTrunksCreateCmd, sipURIsCreateCmd, sipACLCreateCmd} {
+		_ = c.MarkFlagRequired("name")
 	}
 
 	sipTrunksCmd.AddCommand(sipTrunksCreateCmd, sipTrunksUpdateCmd, sipTrunksDeleteCmd)
@@ -1242,6 +1352,33 @@ var readAllStdin = defaultReadAllStdin
 // the round trip, and its message names the field rather than the flag.
 var errAuthNeedsUsername = clierr.BadInput(
 	"--authentication-needed=true also needs --username")
+
+// uriAuthConflict refuses --authentication-needed=false with --username or
+// --password-stdin, which only apply with authentication on: the request
+// would turn it off and set them at once.
+func uriAuthConflict(cmd *cobra.Command, authNeeded bool, username string, passwordStdin bool) error {
+	if cmd.Flags().Changed("authentication-needed") && !authNeeded && (username != "" || passwordStdin) {
+		return clierr.BadInput("--authentication-needed=false turns authentication off, " +
+			"so --username and --password-stdin do not apply: pass one or the other")
+	}
+	return nil
+}
+
+// storedUsername reads a URI's or credential's username, under --dry-run too:
+// the API refuses a password sent without one, and a preview that skipped the
+// read would fail on a username it never asked for.
+func storedUsername(client *api.Client, segment, id string) (string, error) {
+	var cur struct {
+		Username string `json:"username"`
+	}
+	if e := getForCheck(client, client.AccountURL("Zentrunk", segment, id), &cur); e != nil {
+		return "", e
+	}
+	if cur.Username == "" {
+		return "", clierr.BadInput("could not read the current username, which the API requires alongside a password — pass --username too")
+	}
+	return cur.Username, nil
+}
 
 // readTrunk reads a trunk, under --dry-run too. A trunk update needs what it
 // does not change: the direction, which the API demands on every call, and

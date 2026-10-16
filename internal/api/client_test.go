@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/plivo/plivo-cli/internal/clierr"
 )
 
 // captureStderr swaps os.Stderr for a pipe, runs fn, then returns whatever
@@ -345,8 +347,8 @@ func TestDo_decodeError_includesBodyInError(t *testing.T) {
 
 	var out struct{ X string }
 	_, err := c.Do("GET", srv.URL+"/x", nil, nil, &out)
-	if err == nil {
-		t.Fatal("expected decode error")
+	if _, network := err.(*clierr.Error); err == nil || network {
+		t.Fatalf("want a plain decode error, got %#v", err)
 	}
 	if !strings.Contains(err.Error(), "decode response") {
 		t.Errorf("error doesn't mention decode: %v", err)
@@ -358,15 +360,16 @@ func TestDo_decodeError_includesBodyInError(t *testing.T) {
 
 func TestDo_transportError(t *testing.T) {
 	c := New("MAabc", "tok", time.Second)
-	// Unroutable URL → DNS/connection error.
-	c.BaseURL = "http://nonexistent.invalid"
+	srv := httptest.NewServer(http.NotFoundHandler())
+	srv.Close() // nothing listens: the connection is refused
 
-	_, err := c.Do("GET", "http://nonexistent.invalid/x", nil, nil, nil)
-	if err == nil {
-		t.Fatal("expected transport error")
+	_, err := c.Do("GET", srv.URL+"/x", nil, nil, nil)
+	if e, ok := err.(*clierr.Error); !ok || e.Code != clierr.CodeNetworkError || !e.Retryable {
+		t.Errorf("GET: want a retryable NETWORK_ERROR, got %#v", err)
 	}
-	if !strings.Contains(err.Error(), "http:") {
-		t.Errorf("transport error should be wrapped: %v", err)
+	_, err = c.DoMultipart("POST", srv.URL+"/x", []byte("{}"), nil, nil)
+	if e, ok := err.(*clierr.Error); !ok || e.Code != clierr.CodeNetworkError || e.Retryable {
+		t.Errorf("multipart POST: want a NETWORK_ERROR not marked retryable, got %#v", err)
 	}
 }
 

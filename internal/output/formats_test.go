@@ -160,6 +160,12 @@ func TestQuery_runsOnTheWholeEnvelope(t *testing.T) {
 		{"csv", "data.objects[].[number, voice_enabled]", "+14155551234,true\n+14155556789,false\n"},
 		{"csv", "data.meta", "limit,next,offset,total_count\n20,,0,2\n"},
 		{"yaml", "data.objects[0].application", "app_id: \"1\"\nname: a\n"},
+		// Objects keep the response's key order, or the order a hash asks for.
+		{"csv", "data.objects[1]", "number,sms_rate,voice_enabled,tags\n+14155556789,0.0075,false,\"[\"\"x\"\",\"\"y\"\"]\"\n"},
+		{"csv", "data.objects[].{z: number, a: voice_enabled}", "z,a\n+14155551234,true\n+14155556789,false\n"},
+		{"jsonl", "data.objects[].{z: number, a: voice_enabled}", "{\"z\":\"+14155551234\",\"a\":true}\n{\"z\":\"+14155556789\",\"a\":false}\n"},
+		{"yaml", "data.objects[0].{z: number, a: alias}", "z: \"+14155551234\"\na: null\n"},
+		{"json", `data.objects[0].{"b c": join(',', ['x', number]), a: alias}`, "{\n  \"b c\": \"x,+14155551234\",\n  \"a\": null\n}\n"},
 		// No match is null, which has no records to write.
 		{"json", "data.nope", "null\n"},
 		{"csv", "data.nope", ""},
@@ -174,6 +180,14 @@ func TestQuery_runsOnTheWholeEnvelope(t *testing.T) {
 				t.Errorf("got %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// A cell a spreadsheet would run as a formula gets a leading '; a number keeps its sign.
+func TestCSV_neutralisesFormulaCells(t *testing.T) {
+	got, err := render(t, "csv", "", `{"objects":[{"=h":"=1+2","b":"@SUM(1)","c":"+SUM(1)","d":"-2+3","e":"+14155551234","f":"-0.05","g":"\tx","h":-5}]}`)
+	if want := "'=h,b,c,d,e,f,g,h\n'=1+2,'@SUM(1),'+SUM(1),'-2+3,+14155551234,-0.05,'\tx,-5\n"; err != nil || got != want {
+		t.Errorf("got %q (%v), want %q", got, err, want)
 	}
 }
 

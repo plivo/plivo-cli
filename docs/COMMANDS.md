@@ -1356,13 +1356,11 @@ Flags:
 ```
       --all                fetch every page (stops after 100 pages)
       --direction string   inbound|outbound
-      --from string        filter by from_number
       --from-date string   same as --since
       --limit int          results per page (1-20) (default 20)
       --offset int         pagination offset
       --since string       messages sent or received at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]]), within the last 90 days
       --state string       queued|sent|delivered|undelivered|failed|received
-      --to string          filter by to_number
       --to-date string     same as --until
       --until string       messages sent or received at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
 ```
@@ -1739,13 +1737,11 @@ Flags:
 ```
       --all                fetch every page (stops after 100 pages)
       --direction string   inbound|outbound
-      --from string        filter by from_number
       --from-date string   same as --since
       --limit int          results per page (1-20) (default 20)
       --offset int         pagination offset
       --since string       messages sent or received at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]]), within the last 90 days
       --state string       queued|sent|delivered|undelivered|failed|received
-      --to string          filter by to_number
       --to-date string     same as --until
       --until string       messages sent or received at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
 ```
@@ -2065,13 +2061,11 @@ Flags:
 ```
       --all                fetch every page (stops after 100 pages)
       --direction string   inbound|outbound
-      --from string        filter by from_number
       --from-date string   same as --since
       --limit int          results per page (1-20) (default 20)
       --offset int         pagination offset
       --since string       messages sent or received at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]]), within the last 90 days
       --state string       queued|sent|delivered|undelivered|failed|received
-      --to string          filter by to_number
       --to-date string     same as --until
       --until string       messages sent or received at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
 ```
@@ -2749,7 +2743,7 @@ Flags:
       --stir-verification string   "Verified"|"Not Verified"|"Not Applicable"
       --to-date string             same as --until
       --to-number string           filter by destination
-      --until string               calls ending at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]])
+      --until string               calls ending at or before this UTC time (YYYY-MM-DD[ HH:MM[:SS]]); defaults to now when --since is given
 ```
 
 ---
@@ -2846,7 +2840,7 @@ plivo sip credentials create [flags]
 Examples:
 
 ```
-  printf '%s' "$SIP_PASSWORD" | plivo sip credentials create --name c1 --username u1 --password-stdin
+  printf '%s' "$SIP_PASSWORD" | plivo sip credentials create --name c1 --username sipuser1 --password-stdin
 ```
 
 Flags:
@@ -2952,7 +2946,7 @@ Create an IP access control list
 
 Create an IP access control list.
 
---ip is repeatable and takes one IPv4 or IPv6 address or CIDR range each. A
+--ip is repeatable and takes one IPv4 address or CIDR range each (no IPv6). A
 comma-separated list is refused rather than split. A range that allows the
 whole internet is reported but not blocked: it is occasionally deliberate, and
 refusing it outright would push people to the console instead.
@@ -2976,7 +2970,7 @@ Flags:
 
 ```
       --ip stringArray    IP or CIDR (repeatable)
-      --name string       list name
+      --name string       list name (required)
       --platform string   fill --ip with a platform's published addresses: vapi
 ```
 
@@ -3060,6 +3054,8 @@ expiry shown. UDP: resolve the host and send one SIP OPTIONS request.
 
 sips: and transport=tls are tested as TLS, on port 5061 unless the URI gives
 one; tcp and udp use 5060. With no transport, UDP is tested: SIP's default.
+A host given without a port that publishes a SIP SRV record gets a warning
+naming the record's target; the test probes the host itself.
 Quote a URI that has ;transport, or the shell cuts the command at the ;.
 
 A pass means the host answers, not that the platform will accept calls. Exit 0
@@ -3146,7 +3142,7 @@ Flags:
       --direction string      inbound|outbound (required)
       --fallback-uri string   fallback origination URI uuid
       --ip-acl string         IP access control list uuid (outbound)
-      --name string           trunk name
+      --name string           trunk name (required)
       --platform string       check against a platform's guide: livekit|elevenlabs|retell|vapi
       --secure                enable TLS/SRTP
       --uri string            primary origination URI uuid (inbound)
@@ -3278,7 +3274,7 @@ Create an origination URI
 Create an origination URI.
 
 --uri accepts host, host:port, host;transport=udp|tcp|tls, sip:user@host or
-sips:host. The host is a name, an IPv4 address or an IPv6 address in brackets.
+sips:host. The host is a name or an IPv4 address: Plivo does not take IPv6.
 It is checked before sending: a space, a bad port, an unknown transport or a
 malformed host is refused. A missing port is fine: the platform decides the
 default. --transport adds ;transport= to --uri.
@@ -3305,7 +3301,7 @@ Flags:
 
 ```
       --authentication-needed   require authentication
-      --name string             URI name
+      --name string             URI name (required)
       --password-stdin          read the URI password from stdin
       --platform string         fill in a platform's published values: livekit|elevenlabs|retell|vapi
       --transport string        udp|tcp|tls, added to --uri as ;transport=
@@ -3768,7 +3764,13 @@ Flags:
 Get a call by UUID
 
 ```
-plivo voice calls get <call_uuid>
+plivo voice calls get <call_uuid> [flags]
+```
+
+Flags:
+
+```
+      --live   get a call in progress, not its record (written once the call ends)
 ```
 
 ---
