@@ -14,8 +14,9 @@ fresh conversation, /help lists commands, and /exit or Ctrl-D leaves.
 
 Pass --call-uuid for voice-debug context; --verbose to show the assistant's
 tool calls; -o json or -o jsonl to emit each SSE event as one JSON line
-(handy for scripts and AI agents). A stream has no single result, so -o yaml,
--o csv and --query are refused.
+(handy for scripts and AI agents). Either way the output is JSON Lines, one
+object per line, not one JSON document: read it a line at a time. A stream
+has no single result, so -o yaml, -o csv and --query are refused.
 
 Usage:
   plivo ask [message] [flags]
