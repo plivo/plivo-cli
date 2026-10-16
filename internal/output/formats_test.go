@@ -202,10 +202,10 @@ func TestConfigure_rejectsAnExpressionThatDoesNotParse(t *testing.T) {
 	}
 }
 
-// A query can parse yet fail on the data (an unknown function, a wrong
-// argument type). That is still the flag's fault, and nothing is written.
+// A query can parse yet fail on the data (a function given the wrong type).
+// That is still the flag's fault, and nothing is written.
 func TestQuery_runtimeFailureWritesNothing(t *testing.T) {
-	for _, expr := range []string{"lenght(data.objects)", "abs(data.api_id)"} {
+	for _, expr := range []string{"sum(data.objects)", "abs(data.api_id)"} {
 		got, err := render(t, "json", expr, listPage)
 		var qe *QueryError
 		if !errors.As(err, &qe) {
@@ -213,6 +213,27 @@ func TestQuery_runtimeFailureWritesNothing(t *testing.T) {
 		}
 		if got != "" {
 			t.Errorf("%s: wrote %q before failing", expr, got)
+		}
+	}
+}
+
+// The search meets a function only when it reaches the call, which for a
+// write is after the request. So an unknown name is refused when the query is
+// configured, wherever it sits; a name inside a literal is not a call.
+func TestConfigure_refusesAnUnknownFunction(t *testing.T) {
+	t.Cleanup(func() { _ = Configure("", "") })
+	for expr, refused := range map[string]bool{
+		"lenght(data.objects)":                    true,
+		"data.objects[?lenght (tags) > `1`].id":   true,
+		"data.objects[].to_strng(number)":         true,
+		"length(data.objects)":                    false,
+		"data.objects[?contains(alias, 'x(')]":    false,
+		"data.\"lenght(\"":                        false,
+		"data.objects[?alias == `\"y(\"`].number": false,
+	} {
+		var qe *QueryError
+		if got := errors.As(Configure("json", expr), &qe); got != refused {
+			t.Errorf("Configure(%q) refused = %v, want %v", expr, got, refused)
 		}
 	}
 }

@@ -304,6 +304,7 @@ func TestOutputFormats_queryNeedsJSONAndValidSyntax(t *testing.T) {
 		{"with -o table", []string{"numbers", "list", "-o", "table", "--query", "data"}},
 		{"unparseable", []string{"numbers", "list", "--query", "data.objects["}},
 		{"unparseable with yaml", []string{"sip", "trunks", "list", "-o", "yaml", "--query", "[?"}},
+		{"unknown function", []string{"numbers", "list", "--query", "lenght(data.objects)"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -330,7 +331,7 @@ func TestOutputFormats_queryFailingOnTheDataIsBadFlag(t *testing.T) {
 	clientForTest = &api.Client{BaseURL: srv.URL, AuthID: "MAFAKEFORTEST", AuthToken: "tok", HTTP: &http.Client{}}
 	t.Cleanup(func() { clientForTest = nil })
 
-	err, stdout, _ := execCmd(t, "numbers", "list", "--query", "lenght(data.objects)")
+	err, stdout, _ := execCmd(t, "numbers", "list", "--query", "abs(data.objects)")
 	var qe *output.QueryError
 	if !errors.As(err, &qe) {
 		t.Fatalf("want *output.QueryError, got %v", err)
@@ -338,8 +339,24 @@ func TestOutputFormats_queryFailingOnTheDataIsBadFlag(t *testing.T) {
 	if stdout != "" {
 		t.Errorf("wrote %q before failing", stdout)
 	}
-	if got := queryFlagError(err); !isBadFlag(got) || !strings.Contains(got.Error(), "lenght") {
-		t.Errorf("queryFlagError = %v, want BAD_FLAG naming the function", got)
+	if got := queryFlagError(err); !isBadFlag(got) || !strings.Contains(got.Error(), "Invalid type") {
+		t.Errorf("queryFlagError = %v, want BAD_FLAG naming the type error", got)
+	}
+}
+
+// After a write the API accepted, an error would read as "nothing happened"
+// and invite a second send: the result is printed whole, with a warning.
+func TestOutputFormats_queryFailingAfterAWritePrintsTheResult(t *testing.T) {
+	setFakeCreds(t)
+	resetWriteFlags(t)
+	sipWriteServer(t, trunksUsingU1)
+
+	err, stdout, stderr := execCmd(t, "sip", "uris", "create", "--name", "n", "--uri", "sip.example.com", "--query", "abs(data)")
+	if err != nil {
+		t.Fatalf("want exit 0 after the write, got %v", err)
+	}
+	if !strings.Contains(stdout, `"uri_uuid": "U1"`) || !strings.Contains(stderr, "do not run it again") {
+		t.Errorf("want the unfiltered result and a warning:\nstdout: %s\nstderr: %s", stdout, stderr)
 	}
 }
 

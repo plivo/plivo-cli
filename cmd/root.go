@@ -156,6 +156,8 @@ func init() {
 	}
 	// Set here, not in the literal: runRoot walks rootCmd itself.
 	rootCmd.RunE = runRoot
+	// A --query that fails after a write prints the result instead of an error.
+	output.Committed = api.WriteSent.Load
 
 	rootCmd.PersistentFlags().StringVar(&profileFlag, "profile", "", "named profile from ~/.plivo/config.toml")
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "", "output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)")
