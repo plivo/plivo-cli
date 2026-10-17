@@ -20,6 +20,7 @@ var outputTypes = map[string]reflect.Type{
 	"plivo account get":                           reflect.TypeFor[api.Account](),
 	"plivo account subaccounts get":               reflect.TypeFor[api.Subaccount](),
 	"plivo account subaccounts list":              reflect.TypeFor[api.SubaccountList](),
+	"plivo account usage":                         reflect.TypeFor[api.UsageSummary](),
 	"plivo agents get":                            reflect.TypeFor[api.Agent](),
 	"plivo agents list":                           reflect.TypeFor[api.AgentList](),
 	"plivo agents nodes get":                      reflect.TypeFor[api.AgentFlowNode](),

@@ -63,7 +63,7 @@ func TestSubcommands_registered(t *testing.T) {
 		path  string // space-separated grammar path to the group
 		verbs []string
 	}{
-		{"account", []string{"get", "update"}},
+		{"account", []string{"get", "update", "usage"}},
 		{"auth", []string{"list", "use", "remove", "whoami"}}, // `token` is not registered in this build; login/logout are top-level
 		{"account subaccounts", []string{"list", "get", "create", "update", "delete"}},
 		{"account applications", []string{"create", "list", "get", "update", "delete"}},

@@ -9,6 +9,7 @@ Available Commands:
   get          Get account details (name, billing mode, credits, address)
   subaccounts  Manage subaccounts under the master account
   update       Update account profile fields
+  usage        Show usage and spend for a date window: by product, other charges, total
 
 Flags:
   -h, --help   help for account

@@ -1,0 +1,54 @@
+Show what the account used and spent over a date window, from Plivo's usage
+summary: a row per period, product, type, country and direction, then other
+charges (number rentals, lookups, fees, taxes), then the total spend. Answer
+spend questions with this, never by adding up call or message records.
+
+--since and --until are UTC dates, YYYY-MM-DD, sent as given. --until is
+exclusive: the window ends as that day starts, so --until 2026-11-01 ends with
+October 31. Without --since the window is the 7 days before --until; without
+--until it runs through today. Plivo caps the window by --granularity (hour 7
+days, day 92 days, month 24 months, year no cap) and answers a longer one with
+a 400 naming the granularity to use.
+
+Other charges are left out with --subaccount, or when --product leaves out
+other, and total_spend then covers only the usage rows that match.
+
+--all reads every page of usage rows. The totals and other charges come with
+the first page and cover the whole window. --limit 1000 needs the fewest
+requests: Plivo allows 20 a minute. -o jsonl and -o csv write one record per
+usage row; the totals and other charges are in -o json and the table.
+
+Usage:
+  plivo account usage [flags]
+
+Examples:
+  plivo account usage --since 2026-10-01 --until 2026-11-01 --granularity month
+  plivo account usage --since 2026-10-01 --product voice --direction outbound --all -o json
+
+Flags:
+      --all                   fetch every page (stops after 100 pages)
+      --country string        two-letter country code, e.g. US
+      --direction string      inbound|outbound
+      --error-code string     message rows with this error code
+      --from-date string      same as --since
+      --granularity string    period of a row: hour|day|month|year (Plivo's default: day)
+      --hangup-cause string   voice and SIP trunk rows with this hangup cause
+  -h, --help                  help for usage
+      --limit int             usage rows per page (1-1000) (default 100)
+      --product stringArray   only this product: message|voice|zentrunk|transcription|other (repeatable)
+      --since string          first day of the window, YYYY-MM-DD (UTC)
+      --subaccount string     only this subaccount (its auth ID)
+      --to-date string        same as --until
+      --until string          day the window ends before, YYYY-MM-DD (UTC): exclusive, that day is left out
+
+Global Flags:
+      --dry-run            print the HTTP request without sending
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+      --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
+  -q, --quiet              suppress non-data output
+      --schema             describe the command (arguments, flags, output fields) instead of running it
+      --timeout int        request timeout in seconds (default 30)
+  -y, --yes                skip confirmation prompts

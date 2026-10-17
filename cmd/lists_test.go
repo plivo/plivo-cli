@@ -101,6 +101,13 @@ func TestListFilters_unknownValueFailsBeforeAnyRequest(t *testing.T) {
 		{"status", []string{"numbers", "compliance", "list", "--status", "approved"}},
 		{"number-type", []string{"numbers", "compliance", "list", "--number-type", "national"}},
 		{"user-type", []string{"numbers", "compliance", "list", "--user-type", "company"}},
+		{"granularity", []string{"account", "usage", "--granularity", "Day"}},
+		{"product", []string{"account", "usage", "--product", "voice", "--product", "sms"}},
+		{"direction", []string{"account", "usage", "--direction", "in"}},
+		{"country", []string{"account", "usage", "--country", "USA"}},
+		{"limit", []string{"account", "usage", "--limit", "1001"}},
+		{"limit", []string{"account", "usage", "--limit", "0"}},
+		{"subaccount", []string{"account", "usage", "--subaccount", " "}},
 		// The Message API has no number filter: every message came back.
 		{"from", []string{"messaging", "sms", "list", "--from", "+14155551234"}},
 		{"to", []string{"messaging", "sms", "list", "--to", "+14155551234", "--dry-run"}},
@@ -352,11 +359,12 @@ func TestListTimeFlags_refusedBeforeAnyRequest(t *testing.T) {
 	lists := 0
 	walkOwnCommands(func(c *cobra.Command, path []string) {
 		since := c.Flags().Lookup("since")
-		if since == nil {
+		name := strings.Join(path, " ")
+		// account usage sends its dates as given: Plivo reads a lone --until.
+		if since == nil || name == "account usage" {
 			return
 		}
 		lists++
-		name := strings.Join(path, " ")
 		if got := strings.Contains(since.Usage, "within the last 90 days"); got != retains[name] {
 			t.Errorf("%s: --since help names the 90 days = %v, want %v", name, got, retains[name])
 		}
@@ -534,7 +542,8 @@ func TestListFlags_everyPagedListChecksThePageFirst(t *testing.T) {
 	var walk func(c *cobra.Command)
 	walk = func(c *cobra.Command) {
 		// docs search is local: its --limit caps search hits, not an API page.
-		if c.Flags().Lookup("limit") != nil && c.CommandPath() != "plivo docs search" {
+		// account usage pages by token, up to 1000 rows: its own case is above.
+		if c.Flags().Lookup("limit") != nil && c.CommandPath() != "plivo docs search" && c.CommandPath() != "plivo account usage" {
 			lists = append(lists, c)
 		}
 		for _, sub := range c.Commands() {

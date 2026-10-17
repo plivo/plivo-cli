@@ -99,6 +99,10 @@ assert_url "account get" \
   "GET ${BASE}/api/v1/Account/[A-Z0-9]+/" \
   "$BIN" account get --dry-run
 
+assert_url "account usage" \
+  "GET ${BASE}/api/v1/Account/[A-Z0-9]+/UsageSummary/\?from_date=2026-10-01&page_size=100" \
+  "$BIN" account usage --since 2026-10-01 --dry-run
+
 assert_url "account subaccounts list" \
   "GET ${BASE}/api/v1/Account/[A-Z0-9]+/Subaccount/" \
   "$BIN" account subaccounts list --dry-run --limit 5

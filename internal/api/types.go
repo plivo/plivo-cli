@@ -927,3 +927,58 @@ type SIPTrunkCredentialList struct {
 	Meta    ListMeta             `json:"meta"`
 	Objects []SIPTrunkCredential `json:"objects"`
 }
+
+// UsageSummary — /Account/{id}/UsageSummary/: usage and spend over a date
+// window, one usage row per period and dimension. Paged by next_page_token;
+// the totals and other_charges come on the first page only. Amounts are
+// numbers, and a field the API leaves out stays nil.
+type UsageSummary struct {
+	RawBody
+	APIID        string             `json:"api_id"`
+	Meta         UsageSummaryMeta   `json:"meta"`
+	Usage        []UsageRow         `json:"usage"`
+	OtherCharges []UsageOtherCharge `json:"other_charges"`
+}
+
+type UsageSummaryMeta struct {
+	AuthID               string             `json:"auth_id"`
+	SubaccountAuth       string             `json:"subaccount_auth,omitempty"`
+	Granularity          string             `json:"granularity"`
+	FromDate             string             `json:"from_date"`
+	ToDate               string             `json:"to_date"`
+	Currency             string             `json:"currency"`
+	PageSize             int                `json:"page_size"`
+	NextPageToken        string             `json:"next_page_token,omitempty"`
+	TotalSpend           *float64           `json:"total_spend,omitempty"`
+	TotalSubaccountSpend *float64           `json:"total_subaccount_spend,omitempty"`
+	SubaccountSpend      map[string]float64 `json:"subaccount_spend,omitempty"`
+}
+
+// UsageRow is one period of one product. The API splits rows by subaccount
+// and by error code or hangup cause, so two rows can share every other field.
+type UsageRow struct {
+	FromDate        string     `json:"from_date"`
+	ToDate          string     `json:"to_date"`
+	Product         string     `json:"product"`
+	Type            string     `json:"type"`
+	SubaccountAuth  string     `json:"subaccount_auth,omitempty"`
+	Country         string     `json:"country,omitempty"`
+	Direction       string     `json:"direction,omitempty"`
+	TotalUnits      *float64   `json:"total_units"`
+	DurationSeconds *float64   `json:"duration_seconds,omitempty"`
+	TotalAmount     *float64   `json:"total_amount"`
+	Surcharge       *float64   `json:"surcharge,omitempty"`
+	ErrorCode       FlexString `json:"error_code,omitempty"`
+	HangupCause     FlexString `json:"hangup_cause,omitempty"`
+	ErrorReason     string     `json:"error_reason,omitempty"`
+}
+
+// UsageOtherCharge is a charge outside telecom traffic: number rentals,
+// lookups, fees, taxes and adjustments.
+type UsageOtherCharge struct {
+	FromDate    string   `json:"from_date"`
+	ToDate      string   `json:"to_date"`
+	Description string   `json:"description"`
+	TotalUnits  *float64 `json:"total_units"`
+	TotalAmount *float64 `json:"total_amount"`
+}
