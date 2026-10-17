@@ -2537,9 +2537,9 @@ Update settings on a rented number
 Update settings on a rented number.
 
 Routing an India (+91) number with --app-id or --trunk-id first reads its
-compliance application. The update is refused when that application is not
-accepted or cannot be read, and goes ahead with a warning when none is
-attached. --force skips only this check; Plivo still enforces KYC.
+compliance application. The update is refused when none is attached, or when
+that application is not accepted or cannot be read. --force skips only this
+check; Plivo still enforces KYC.
 
 ```
 plivo numbers update <number> [flags]

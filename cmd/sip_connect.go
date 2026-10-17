@@ -193,8 +193,7 @@ func (c *connectPlan) check(client *api.Client, p *sipPlatform, digits string) e
 	}
 	c.add("platform", "warn", "Indian numbers on "+p.label+" "+p.india)
 
-	warning, err := checkIndiaCompliance(client, digits)
-	if err != nil {
+	if err := checkIndiaCompliance(client, digits); err != nil {
 		msg := err.Error()
 		var ce *clierr.Error
 		if errors.As(err, &ce) {
@@ -203,11 +202,7 @@ func (c *connectPlan) check(client *api.Client, p *sipPlatform, digits string) e
 		c.add("compliance", "fail", msg)
 		return err
 	}
-	if warning != "" {
-		c.add("compliance", "warn", warning)
-	} else {
-		c.add("compliance", "pass", "its compliance application is accepted")
-	}
+	c.add("compliance", "pass", "its compliance application is accepted")
 	return nil
 }
 

@@ -5,6 +5,115 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-10-17
+
+### Added
+
+- `voice calls get --live` reads a call that is still in progress. Without
+  it, `get` reads the call record, which is written when the call ends.
+- `sip test` warns when a host given without a port has a SIP SRV record,
+  and names the target to test with `--uri`. It still probes the host
+  itself: Plivo's docs don't say calls follow SRV.
+- `numbers update --trunk-id` warns when the trunk is disabled.
+
+### Changed
+
+- A network failure is `NETWORK_ERROR` (refused, DNS, cut off) or
+  `UPSTREAM_TIMEOUT`, both exit 3; they used to exit 1 as a usage mistake.
+  Only a GET is marked `retryable`: after a failed write, check before
+  sending it again.
+- The HTTP status decides the error code. An ID or name inside an error
+  message (a UUID containing "2fa", say) no longer turns a 404 into an auth
+  error.
+- With `-o json`, about 50 action commands print a result on stdout:
+  hangups, transfers, play/speak/DTMF, stream and recording stops,
+  conference and multiparty actions, number release and update, application,
+  endpoint and subaccount updates and deletes, and agent operations. It is
+  the API's response, or the ID and what was done, such as
+  `{"data": {"call_uuid": "<id>", "hung_up": true}}`. They used to print
+  only a line on stderr.
+- Deletes, hangups and kicks preview with `--dry-run` alone, like the spend
+  commands; an in-use SIP delete previews with `--dry-run --force`. They
+  used to refuse `--dry-run` without `--yes`.
+- Refused before any request, each where the API would reject or ignore it:
+  no `--name` on `sip uris|trunks|ip-acl create`; a SIP credential username
+  that isn't 5 to 20 letters and digits, or a password that isn't 5 to 20
+  characters with at least one of `~!@#$%^&*()_+`; IPv6 in SIP URIs and IP
+  access control lists; a SIP URI, credential or IP ACL ID that isn't a
+  UUID; a malformed number in `numbers update` and in
+  `sip calls list --from-number|--to-number`; trunk flags that don't fit the
+  direction, and a bad `--status`; an `--until` not after `--since`; and
+  `--from`/`--to` on `messaging sms|mms|whatsapp list`, which the Message API
+  doesn't filter on (the error shows a `--query` that does).
+- `voice streams test` signs its WebSocket upgrade like Plivo signs a stream
+  (`X-Plivo-Signature-V3`) when you are logged in, so an endpoint that checks
+  the signature accepts it. A 401 or 403 on the upgrade is now
+  `AUTH_FORBIDDEN` (exit 2, was `NETWORK_ERROR` exit 3), and `-o json` adds
+  `signed`.
+- `skill install` keeps a SKILL.md you edited (one that matches no released
+  version) unless you add `--force`, and renames a retired skill's file to
+  `SKILL.md.retired` instead of deleting it.
+- The feedback prompt never blocks a pipe, stays off while telemetry or
+  feedback sending is off, and its off switches take `0`, `false`, `off` or
+  `no`. The bug-report scrubber also catches spaced and bare phone numbers,
+  card numbers, IP addresses, subaccount IDs and SIP URIs.
+- The SIP trunking, CLI and Voice XML skills run as guided conversations,
+  like the audio-streaming skill, and say what changed in v1.2.1. The Voice
+  XML skill's local test server serves only the folder you name.
+
+### Fixed
+
+- An upper-case SIP URI, credential or IP ACL ID skipped the in-use check on
+  delete, so `--yes` deleted an object a trunk used, and the API deleted the
+  trunk with it. IDs are now trimmed and lower-cased everywhere.
+- `sip trunks update` dropped an inbound trunk's fallback URI on a rename,
+  `--status` or `--secure`, because the API clears a field an update leaves
+  out. It now sends the stored fallback again; `--fallback-uri ""` removes
+  it.
+- A `--query` that failed at run time exited 1 after a send, buy or create
+  had already gone through, inviting a retry that duplicated it. It now
+  prints the unfiltered result with a warning and exits 0.
+- `sip:user:password@host` is refused. The password used to be stored with
+  the URI, printed by reads and `--dry-run`, and sent by `sip test`.
+- `diagnose -o json` (and piped) exited 3 on good answers with small format
+  slips: an extra code block, an empty field, a confidence like
+  "High (90%)".
+- `ask` and `diagnose` ignored `--timeout` once the answer was streaming, so
+  a stalled answer hung. A `--timeout` you pass now ends it with exit 3
+  (`UPSTREAM_TIMEOUT`), and an `ask` answer cut off before its end exits 3.
+- `voice streams forward` didn't notice its tunnel dying and left the app on
+  a dead URL. It now restores the answer URL and exits 3, and `auto` falls
+  back to localhost.run when ngrok can't start.
+- `voice streams test` passed against an endpoint that closed early. A close
+  before the stop frame now fails with the endpoint's close code and reason,
+  and the `start` and `media` frames match Plivo's.
+- `sip calls list --since` without `--until` searched only the 30 days after
+  the start. It now runs to now.
+- `--all` left `meta.next` set after reading every page; it is now null. A
+  rate-limited page is retried for up to 61 seconds (the Message API allows
+  20 requests a minute and sends no Retry-After); if it still fails, the
+  rows read so far print with `meta.truncated: true` and exit 4.
+- `-o jsonl` and `-o csv` gave one record holding the whole response for
+  compliance, 10DLC brand and campaign, and conference lists. They now give
+  one per row.
+- CSV cells a spreadsheet would run as a formula are neutralised (`+E.164`
+  numbers and negative numbers are kept), and `--query` keeps the response's
+  key order.
+- `sip calls diagnose` reported a failed read as "call not found", and the
+  India compliance check showed KYC steps for any failed read.
+- SIP URI and credential auth updates failed under `--dry-run`, checked a
+  missing username against the flags instead of what is sent, and accepted
+  contradictory auth flags.
+- `sips:` URIs with `--platform` got the guide's 5060/TCP values instead of
+  its TLS ones.
+- `upgrade` told a script install inside a Homebrew bin folder to use
+  `brew upgrade`; only a binary in a Homebrew Cellar is told that now.
+- `--schema` showed flags that a command requires by its own check as
+  optional.
+- `powerpacks list` and `get` failed to decode `number_priority`.
+- The `sip ip-acl create` example and `--ip` hints used addresses the API
+  rejects.
+
 ## [1.2.0] - 2026-10-15
 
 ### Added
