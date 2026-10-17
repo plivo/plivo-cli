@@ -69,7 +69,7 @@ If the user names a voice agent, an IVR or a SIP platform in "Other", route to t
 
 Pick the right command:
 
-- Spend or usage over a period: `plivo account usage` (v1.3.0+; before that, `plivo api GET /UsageSummary/`). Never add up call or message records for it.
+- Spend or usage over a period: `plivo account usage` (v1.3.0+; before that, `plivo api GET /UsageSummary/`). Its `--until` is exclusive (that day is left out), unlike on the `list` commands. Never add up call or message records for it.
 - Balance: `cash_credits` in `plivo auth whoami -o json`.
 - Why a call failed: `voice calls diagnose <call_uuid>` for a Voice API call, `sip calls diagnose <call_uuid>` for a SIP trunk call.
 - Call quality: `sip calls insights <call_uuid>` (v1.2.0+).
