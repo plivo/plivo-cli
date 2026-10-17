@@ -219,9 +219,16 @@ func installSkills(skills []bundledSkill) error {
 		}
 		projectRoot = root
 	}
+	return installSkillsIn(skills, projectRoot)
+}
+
+// installSkillsIn installs each skill into root, or where --dir or the default
+// (~/.claude/skills) puts it when root is "". A copy that was kept fails the
+// call once the rest are installed.
+func installSkillsIn(skills []bundledSkill, root string) error {
 	var kept []string
 	for _, s := range skills {
-		k, err := installSkill(s, projectRoot)
+		k, err := installSkill(s, root)
 		if err != nil {
 			return err
 		}
@@ -355,13 +362,14 @@ func skillStateAt(s bundledSkill, path string) string {
 	return skillStateCurrent
 }
 
-// installSkill writes one skill to its resolved directory, honouring --dir and
-// --dry-run; under --project, projectRoot is the repository's skills root. A
-// copy that holds edits is left alone unless --force, and its path returned:
-// home and --dir copies used to be overwritten without a look.
-func installSkill(s bundledSkill, projectRoot string) (kept string, err error) {
-	dir := filepath.Join(projectRoot, s.dirName)
-	if projectRoot == "" {
+// installSkill writes one skill into root, or to its resolved directory when
+// root is "", honouring --dir and --dry-run; under --project, root is the
+// repository's skills root. A copy that holds edits is left alone unless
+// --force, and its path returned: home and --dir copies used to be
+// overwritten without a look.
+func installSkill(s bundledSkill, root string) (kept string, err error) {
+	dir := filepath.Join(root, s.dirName)
+	if root == "" {
 		if dir, err = resolveSkillDir(skillDir, s.dirName); err != nil {
 			return "", err
 		}
@@ -390,10 +398,10 @@ func installSkill(s bundledSkill, projectRoot string) (kept string, err error) {
 	// --dir names this skill's own folder, so there is no telling where an
 	// older copy of a replaced skill would be. No release wrote a retired
 	// skill into a project, so a project has none of the CLI's to retire.
-	if skillDir != "" || projectRoot != "" {
+	if skillDir != "" || skillProject {
 		return "", nil
 	}
-	retireReplacedSkills(s)
+	retireReplacedSkills(s, filepath.Dir(dir))
 	return "", nil
 }
 
@@ -531,19 +539,16 @@ func lineCount(b []byte) int {
 	return n
 }
 
-// retireReplacedSkills renames, in the default skills root, the SKILL.md of
-// each skill that s supersedes to SKILL.md.retired, so an agent never loads
-// both. It is renamed, not deleted, since the copy may hold edits, and for the
-// same reason a copy retired before is kept: os.Rename would replace it, so
-// this one takes SKILL.md.retired.2 or the next free name. The folder stays,
-// as an agent finds a skill by its SKILL.md. A failure is only a warning,
-// because the new skill is already installed.
-func retireReplacedSkills(s bundledSkill) {
+// retireReplacedSkills renames, in the skills root s was installed into, the
+// SKILL.md of each skill that s supersedes to SKILL.md.retired, so an agent
+// never loads both. It is renamed, not deleted, since the copy may hold edits,
+// and for the same reason a copy retired before is kept: os.Rename would
+// replace it, so this one takes SKILL.md.retired.2 or the next free name. The
+// folder stays, as an agent finds a skill by its SKILL.md. A failure is only a
+// warning, because the new skill is already installed.
+func retireReplacedSkills(s bundledSkill, root string) {
 	for _, name := range s.replaces {
-		old, err := resolveSkillDir("", name)
-		if err != nil {
-			continue
-		}
+		old := filepath.Join(root, name)
 		path := filepath.Join(old, skillFileName)
 		if _, err := os.Stat(path); err != nil {
 			continue
