@@ -78,7 +78,15 @@ var (
 	skillPrint   bool
 	skillProject bool
 	skillForce   bool
+	skillAgent   string
 )
+
+// agentSkillsDirs maps each --agent value to the user skills directory that
+// coding agent reads, under the home directory.
+var agentSkillsDirs = map[string]string{
+	"claude": filepath.Join(".claude", "skills"),
+	"codex":  filepath.Join(".agents", "skills"),
+}
 
 // skillFileName is the on-disk name of the skill file inside the target dir.
 const skillFileName = "SKILL.md"
@@ -108,9 +116,11 @@ They are bundled in the binary, so this writes them out without a network call.
   all              every listed skill
 
 With no argument, installs the CLI skill (unchanged from previous releases).
-Each skill lands at ~/.claude/skills/<skill>/SKILL.md by default. Use --dir to
-target another agent's skills directory, or --print to write the content to
-stdout so any other tool can capture it; both act on a single skill.
+Each skill lands at ~/.claude/skills/<skill>/SKILL.md by default, where Claude
+Code and Cursor read skills; --agent codex installs into ~/.agents/skills, where
+Codex reads them. Use --dir to target another agent's skills directory, or
+--print to write the content to stdout so any other tool can capture it; both
+act on a single skill.
 
 --project installs into the git repository you are in instead, at
 <repo>/.claude/skills/<skill>/SKILL.md, so everyone who clones it gets the
@@ -124,6 +134,7 @@ skill that an install replaces keeps its file, renamed SKILL.md.retired.`,
   plivo skill install voice-xml          # -> ~/.claude/skills/plivo-voice-xml/
   plivo skill install all                # every listed skill
   plivo skill install all --project      # -> <repo>/.claude/skills/, for the whole team
+  plivo skill install all --agent codex  # -> ~/.agents/skills/, where Codex reads them
   plivo skill install all --dry-run      # show destinations, write nothing`,
 	Args:      cobra.MaximumNArgs(1),
 	ValidArgs: []string{"cli", "audio-streaming", "sip-trunking", "voice-xml", "all"},
@@ -170,6 +181,7 @@ func init() {
 	skillInstallCmd.Flags().BoolVar(&skillPrint, "print", false, "write the skill content to stdout instead of installing")
 	skillInstallCmd.Flags().BoolVar(&skillProject, "project", false, "install into the current git repository's .claude/skills")
 	skillInstallCmd.Flags().BoolVar(&skillForce, "force", false, "also overwrite a copy that matches no released version (its edits are lost)")
+	skillInstallCmd.Flags().StringVar(&skillAgent, "agent", "", "coding agent to install for: claude (~/.claude/skills) or codex (~/.agents/skills) (default: claude)")
 	skillListCmd.Flags().BoolVar(&skillProject, "project", false, "show the skills installed in the current git repository's .claude/skills")
 	skillCmd.AddCommand(skillInstallCmd, skillListCmd, skillUpdateCmd)
 	rootCmd.AddCommand(skillCmd)
@@ -182,6 +194,14 @@ func runSkillInstall(cmd *cobra.Command, args []string) error {
 	}
 	if skillProject && skillDir != "" {
 		return clierr.BadFlag("project", "can't be combined with --dir; --project installs into the repository's .claude/skills")
+	}
+	if skillAgent != "" {
+		if _, ok := agentSkillsDirs[skillAgent]; !ok {
+			return clierr.BadFlag("agent", fmt.Sprintf("unknown agent %q; use claude or codex", skillAgent))
+		}
+		if skillDir != "" || skillProject {
+			return clierr.BadFlag("agent", "can't be combined with --dir or --project, which name the destination themselves")
+		}
 	}
 
 	// "all" fans out; --dir and --print each name a single destination, so they
@@ -208,18 +228,31 @@ func runSkillInstall(cmd *cobra.Command, args []string) error {
 	return installSkills([]bundledSkill{s})
 }
 
-// installSkills installs each skill, into the repository under --project. A
-// copy that was kept fails the command once the rest are installed.
+// installSkills installs each skill, into the repository under --project and
+// into the agent's skills directory under --agent. A copy that was kept fails
+// the command once the rest are installed.
 func installSkills(skills []bundledSkill) error {
-	projectRoot := ""
-	if skillProject {
-		root, err := projectSkillsRoot()
-		if err != nil {
-			return err
-		}
-		projectRoot = root
+	var root string
+	var err error
+	switch {
+	case skillProject:
+		root, err = projectSkillsRoot()
+	case skillAgent != "":
+		root, err = agentSkillsRoot(skillAgent)
 	}
-	return installSkillsIn(skills, projectRoot)
+	if err != nil {
+		return err
+	}
+	return installSkillsIn(skills, root)
+}
+
+// agentSkillsRoot returns the user skills directory the named agent reads.
+func agentSkillsRoot(agent string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", clierr.Wrap(fmt.Errorf("resolve home directory: %w", err))
+	}
+	return filepath.Join(home, agentSkillsDirs[agent]), nil
 }
 
 // installSkillsIn installs each skill into root, or where --dir or the default

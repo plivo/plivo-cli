@@ -3422,9 +3422,11 @@ They are bundled in the binary, so this writes them out without a network call.
   all              every listed skill
 
 With no argument, installs the CLI skill (unchanged from previous releases).
-Each skill lands at ~/.claude/skills/<skill>/SKILL.md by default. Use --dir to
-target another agent's skills directory, or --print to write the content to
-stdout so any other tool can capture it; both act on a single skill.
+Each skill lands at ~/.claude/skills/<skill>/SKILL.md by default, where Claude
+Code and Cursor read skills; --agent codex installs into ~/.agents/skills, where
+Codex reads them. Use --dir to target another agent's skills directory, or
+--print to write the content to stdout so any other tool can capture it; both
+act on a single skill.
 
 --project installs into the git repository you are in instead, at
 <repo>/.claude/skills/<skill>/SKILL.md, so everyone who clones it gets the
@@ -3446,16 +3448,18 @@ Examples:
   plivo skill install voice-xml          # -> ~/.claude/skills/plivo-voice-xml/
   plivo skill install all                # every listed skill
   plivo skill install all --project      # -> <repo>/.claude/skills/, for the whole team
+  plivo skill install all --agent codex  # -> ~/.agents/skills/, where Codex reads them
   plivo skill install all --dry-run      # show destinations, write nothing
 ```
 
 Flags:
 
 ```
-      --dir string   destination directory (default: ~/.claude/skills/<skill>)
-      --force        also overwrite a copy that matches no released version (its edits are lost)
-      --print        write the skill content to stdout instead of installing
-      --project      install into the current git repository's .claude/skills
+      --agent string   coding agent to install for: claude (~/.claude/skills) or codex (~/.agents/skills) (default: claude)
+      --dir string     destination directory (default: ~/.claude/skills/<skill>)
+      --force          also overwrite a copy that matches no released version (its edits are lost)
+      --print          write the skill content to stdout instead of installing
+      --project        install into the current git repository's .claude/skills
 ```
 
 ---

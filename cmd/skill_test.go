@@ -539,6 +539,32 @@ func TestSkillList_projectShowsTheRepositorysSkills(t *testing.T) {
 	}
 }
 
+func TestSkillInstall_agentCodexInstallsIntoAgentsSkills(t *testing.T) {
+	_, home := fakeRepo(t, false)
+	if err, _, stderr := execCmd(t, "skill", "install", "all", "--agent", "codex"); err != nil {
+		t.Fatalf("install all --agent codex: %v\n%s", err, stderr)
+	}
+	for _, s := range bundledSkills {
+		if !fileIs(t, filepath.Join(home, ".agents", "skills", s.dirName, skillFileName), s.content) {
+			t.Errorf("%s is not in ~/.agents/skills", s.selector)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude")); !os.IsNotExist(err) {
+		t.Errorf("--agent codex also wrote ~/.claude (stat err: %v)", err)
+	}
+	for _, args := range [][]string{
+		{"skill", "install", "--agent", "codex", "--project"},
+		{"skill", "install", "--agent", "codex", "--dir", t.TempDir()},
+		{"skill", "install", "--agent", "cursor"},
+	} {
+		err, _, _ := execCmd(t, args...)
+		var ce *clierr.Error
+		if !errors.As(err, &ce) || ce.Code != clierr.CodeBadFlag {
+			t.Errorf("%v: err = %v, want BAD_FLAG", args, err)
+		}
+	}
+}
+
 func TestSkillInstall_projectAndDirConflict(t *testing.T) {
 	root, _ := fakeRepo(t, false)
 	other := filepath.Join(t.TempDir(), "plivo-cli")
