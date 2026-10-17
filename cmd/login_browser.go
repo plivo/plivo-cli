@@ -103,7 +103,7 @@ func runLoginBrowser(nameExplicit bool) error {
 	// giving up first.
 	cbCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	code, err := awaitCallback(cbCtx, listener, state, pasteSource(os.Stdin), os.Stderr)
+	code, err := awaitCallback(cbCtx, listener, state, pasteSource(), os.Stderr)
 	if err != nil {
 		return err
 	}
@@ -300,8 +300,8 @@ func readPastedLine(line string, out io.Writer, addr, expectedState string) (cod
 // pasteSource returns stdinLines if the callback URL can be pasted into stdin:
 // a terminal this process can read without being stopped. Otherwise nil, and
 // stdin is never read.
-func pasteSource(stdin *os.File) <-chan string {
-	if isTTY(stdin) && inForeground(stdin) {
+func pasteSource() <-chan string {
+	if isTTY(os.Stdin) && inForeground(os.Stdin) {
 		return stdinLines()
 	}
 	return nil

@@ -156,7 +156,11 @@ func TestAwaitCallback_nonTerminalStdinIsNeverRead(t *testing.T) {
 	}
 	_ = w.Close()
 
-	run := runAwait(ln, pasteSource(stdin), 50*time.Millisecond)
+	prevStdin := os.Stdin
+	os.Stdin = stdin
+	paste := pasteSource()
+	os.Stdin = prevStdin
+	run := runAwait(ln, paste, 50*time.Millisecond)
 	if run.code != "" || run.err == nil || !strings.Contains(run.err.Error(), "timed out") {
 		t.Fatalf("got (%q, %v), want the browser-only timeout", run.code, run.err)
 	}
