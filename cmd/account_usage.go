@@ -47,9 +47,13 @@ October 31. Without --since the window is the 7 days before --until; without
 days, day 92 days, month 24 months, year no cap) and answers a longer one with
 a 400 naming the granularity to use.
 
+Other charges are left out with --subaccount, or when --product leaves out
+other, and total_spend then covers only the usage rows that match.
+
 --all reads every page of usage rows. The totals and other charges come with
 the first page and cover the whole window. --limit 1000 needs the fewest
-requests: Plivo allows 20 a minute.`,
+requests: Plivo allows 20 a minute. -o jsonl and -o csv write one record per
+usage row; the totals and other charges are in -o json and the table.`,
 	Example: `  plivo account usage --since 2026-10-01 --until 2026-11-01 --granularity month
   plivo account usage --since 2026-10-01 --product voice --direction outbound --all -o json`,
 	Args: cobra.NoArgs,
@@ -91,19 +95,23 @@ func runAccountUsage(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONList(os.Stdout, resp.Raw(), "usage")
+		return listJSON(os.Stdout, resp.Raw(), "usage")
 	}
 	if err := usageTable(&resp); err != nil {
 		return err
 	}
 	if resp.Meta.NextPageToken != "" && !allFlag && !quietFlag {
-		fmt.Fprintf(os.Stderr, "More usage rows than this page holds: add --all, or a larger --limit (up to %d). "+
-			"total_spend already covers the whole window.\n", maxUsageLimit)
+		more := "add --all"
+		if usageLimit < maxUsageLimit {
+			more += fmt.Sprintf(", or a larger --limit (up to %d)", maxUsageLimit)
+		}
+		fmt.Fprintf(os.Stderr, "More usage rows than this page holds: %s. total_spend already covers the whole window.\n", more)
 	}
 	return nil
 }
 
-// countryCode is an ISO 3166-1 alpha-2 code, written as the API's docs do.
+// countryCode is an ISO 3166-1 alpha-2 code, upper-cased as the API's docs
+// write it.
 var countryCode = regexp.MustCompile(`^[A-Z]{2}$`)
 
 // usageQuery checks the flags before any request and maps each to its API
@@ -117,6 +125,13 @@ func usageQuery(cmd *cobra.Command) (url.Values, error) {
 	}
 	if err := oneFlagPerEnd(cmd, [2][]string{{"since", "from-date"}, {"until", "to-date"}}); err != nil {
 		return nil, err
+	}
+	// An empty --subaccount left out would read the whole account; sent, Plivo
+	// refuses it.
+	if cmd.Flags().Changed("subaccount") && strings.TrimSpace(usageSubaccount) == "" {
+		e := clierr.BadFlag("subaccount", "is empty")
+		e.Hint = "Pass a subaccount's auth ID (`plivo account subaccounts list` shows them), or leave --subaccount out for the whole account."
+		return nil, e
 	}
 	if err := validateEnum("granularity", &usageGranularity, usageGranularities...); err != nil {
 		return nil, err
@@ -135,7 +150,7 @@ func usageQuery(cmd *cobra.Command) (url.Values, error) {
 	}
 	for field, v := range map[string]string{
 		"from_date": usageSince, "to_date": usageUntil, "granularity": usageGranularity,
-		"direction": usageDirection, "country": usageCountry, "subaccount_auth": usageSubaccount,
+		"direction": usageDirection, "country": strings.ToUpper(usageCountry), "subaccount_auth": usageSubaccount,
 		"hangup_cause": usageHangupCause, "error_code": usageErrorCode,
 	} {
 		if v = strings.TrimSpace(v); v != "" {
@@ -150,7 +165,7 @@ func usageQuery(cmd *cobra.Command) (url.Values, error) {
 		}
 	}
 	if c := q.Get("country"); c != "" && !countryCode.MatchString(c) {
-		e := clierr.BadFlag("country", fmt.Sprintf("must be two capital letters, got %q", c))
+		e := clierr.BadFlag("country", fmt.Sprintf("must be a two-letter country code, got %q", c))
 		e.Hint = "Pass an ISO 3166-1 alpha-2 country code, such as US, GB or IN."
 		e.Context["value"] = c
 		return nil, e
@@ -189,7 +204,7 @@ func fetchUsage(client *api.Client, q url.Values, out *api.UsageSummary) error {
 			}
 			partialErr = err
 			fmt.Fprintf(os.Stderr, "Warning: --all stopped after %d usage rows on the error below. "+
-				"Those rows are printed; meta.next_page_token is where the rest start.\n", len(rows))
+				"Those rows and the window's totals are printed; run it again for the rest.\n", len(rows))
 			break
 		}
 		if first == nil {

@@ -104,8 +104,10 @@ func TestListFilters_unknownValueFailsBeforeAnyRequest(t *testing.T) {
 		{"granularity", []string{"account", "usage", "--granularity", "Day"}},
 		{"product", []string{"account", "usage", "--product", "voice", "--product", "sms"}},
 		{"direction", []string{"account", "usage", "--direction", "in"}},
-		{"country", []string{"account", "usage", "--country", "us"}},
+		{"country", []string{"account", "usage", "--country", "USA"}},
 		{"limit", []string{"account", "usage", "--limit", "1001"}},
+		{"limit", []string{"account", "usage", "--limit", "0"}},
+		{"subaccount", []string{"account", "usage", "--subaccount", " "}},
 		// The Message API has no number filter: every message came back.
 		{"from", []string{"messaging", "sms", "list", "--from", "+14155551234"}},
 		{"to", []string{"messaging", "sms", "list", "--to", "+14155551234", "--dry-run"}},

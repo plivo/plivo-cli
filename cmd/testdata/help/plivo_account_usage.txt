@@ -10,9 +10,13 @@ October 31. Without --since the window is the 7 days before --until; without
 days, day 92 days, month 24 months, year no cap) and answers a longer one with
 a 400 naming the granularity to use.
 
+Other charges are left out with --subaccount, or when --product leaves out
+other, and total_spend then covers only the usage rows that match.
+
 --all reads every page of usage rows. The totals and other charges come with
 the first page and cover the whole window. --limit 1000 needs the fewest
-requests: Plivo allows 20 a minute.
+requests: Plivo allows 20 a minute. -o jsonl and -o csv write one record per
+usage row; the totals and other charges are in -o json and the table.
 
 Usage:
   plivo account usage [flags]
