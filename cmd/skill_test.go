@@ -521,14 +521,9 @@ func TestSkillList_projectShowsTheRepositorysSkills(t *testing.T) {
 	if err, _, stderr := execCmd(t, "skill", "install", "voice-xml", "--project"); err != nil {
 		t.Fatalf("install --project: %v\n%s", err, stderr)
 	}
-	err, stdout, _ := execCmd(t, "skill", "list", "--project", "-o", "json")
-	var env struct {
-		Data []skillListEntry `json:"data"`
-	}
-	if err != nil || json.Unmarshal([]byte(stdout), &env) != nil || len(env.Data) != len(bundledSkills) {
-		t.Fatalf("skill list --project: %v\n%s", err, stdout)
-	}
-	for _, r := range env.Data {
+	outputFormat, skillProject = "json", true
+	t.Cleanup(func() { outputFormat, skillProject = "", false })
+	for _, r := range skillListRows(t) {
 		want := skillStateAbsent
 		if r.Selector == "voice-xml" {
 			want = skillStateCurrent
@@ -544,13 +539,8 @@ func TestSkillInstall_agentCodexInstallsIntoAgentsSkills(t *testing.T) {
 	if err, _, stderr := execCmd(t, "skill", "install", "all", "--agent", "codex"); err != nil {
 		t.Fatalf("install all --agent codex: %v\n%s", err, stderr)
 	}
-	for _, s := range bundledSkills {
-		if !fileIs(t, filepath.Join(home, ".agents", "skills", s.dirName, skillFileName), s.content) {
-			t.Errorf("%s is not in ~/.agents/skills", s.selector)
-		}
-	}
-	if _, err := os.Stat(filepath.Join(home, ".claude")); !os.IsNotExist(err) {
-		t.Errorf("--agent codex also wrote ~/.claude (stat err: %v)", err)
+	if _, err := os.Stat(filepath.Join(home, ".claude")); !skillsCurrentIn(filepath.Join(home, ".agents", "skills")) || !os.IsNotExist(err) {
+		t.Errorf("want every skill in ~/.agents/skills and none in ~/.claude (stat err: %v)", err)
 	}
 	for _, args := range [][]string{
 		{"skill", "install", "--agent", "codex", "--project"},

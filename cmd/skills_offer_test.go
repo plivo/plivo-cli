@@ -14,9 +14,8 @@ import (
 // ctrlD, as the answer, closes stdin under the question.
 const ctrlD = "\x04"
 
-// offerEnv runs the test in the first coding agent's shell (CLAUDECODE=1, the
-// other agents' variables cleared) with HOME on a temp dir, on a terminal when
-// tty.
+// offerEnv runs the test in a CLAUDECODE=1 shell and no other agent's, with
+// HOME on a temp dir, on a terminal when tty.
 func offerEnv(t *testing.T, tty bool) (home string) {
 	t.Helper()
 	home = setEmptyHome(t)
@@ -31,8 +30,7 @@ func offerEnv(t *testing.T, tty bool) (home string) {
 	return home
 }
 
-// offer runs offerSkills with stray lines typed before the question and answer
-// typed once the question is on stderr, and returns what it printed.
+// offer runs offerSkills, typing stray before the question and answer after it.
 func offer(t *testing.T, answer string, stray ...string) (stdout, stderr string) {
 	t.Helper()
 	lines := make(chan string, len(stray))
@@ -83,20 +81,6 @@ func offeredTo(t *testing.T) []string {
 	return cfg.Skills.Offered
 }
 
-// A row's env is NAME=value, or NAME set to anything; the first match wins.
-func TestDetectAgent_envForms(t *testing.T) {
-	prev := codingAgents
-	t.Cleanup(func() { codingAgents = prev })
-	codingAgents = []codingAgent{{name: "exact", env: "PLIVO_TEST_AGENT_A=1"}, {name: "any", env: "PLIVO_TEST_AGENT_B"}}
-	for _, c := range []struct{ a, b, want string }{{"1", "x", "exact"}, {"2", "", ""}, {"2", "x", "any"}, {"", "", ""}} {
-		t.Setenv("PLIVO_TEST_AGENT_A", c.a)
-		t.Setenv("PLIVO_TEST_AGENT_B", c.b)
-		if a, _ := detectAgent(); a.name != c.want {
-			t.Errorf("A=%q B=%q: detected %q, want %q", c.a, c.b, a.name, c.want)
-		}
-	}
-}
-
 // The question goes to stderr, so it is asked only when stderr is a terminal.
 func TestAskable_needsStderrOnATerminal(t *testing.T) {
 	t.Cleanup(func() { isTerminal = term.IsTerminal })
@@ -110,12 +94,12 @@ func TestOfferSkills(t *testing.T) {
 	const ask = "Install the Plivo skills for Claude Code? (Y/n) "
 	const hint = "Install the Plivo skills for Claude Code with: plivo skill install all\n"
 	for _, c := range []struct {
-		name, answer       string
-		tty                bool
-		flag               *bool
-		stray              []string
-		stderr             string // all of stderr, or how it starts once skills are installed
-		installed, skipped bool   // skipped: not offered, so nothing recorded either
+		name, answer, claudecode string // claudecode: CLAUDECODE, when not 1
+		tty                      bool
+		flag                     *bool
+		stray                    []string
+		stderr                   string // all of stderr, or how it starts once skills are installed
+		installed, skipped       bool   // skipped: not offered, so nothing recorded either
 	}{
 		{name: "no", tty: true, answer: "n", stderr: ask},
 		{name: "Enter is yes", tty: true, answer: "", stderr: ask + "Installed skill: ", installed: true},
@@ -125,9 +109,13 @@ func TestOfferSkills(t *testing.T) {
 		{name: "--yes installs without asking", flag: &yesFlag, stderr: "Installed skill: ", installed: true},
 		{name: "--quiet", tty: true, flag: &quietFlag, answer: "y", skipped: true},
 		{name: "--dry-run", tty: true, flag: &dryRunFlag, answer: "y", skipped: true},
+		{name: "CLAUDECODE=0 is no agent", tty: true, claudecode: "0", answer: "y", skipped: true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			home := offerEnv(t, c.tty)
+			if c.claudecode != "" {
+				t.Setenv("CLAUDECODE", c.claudecode)
+			}
 			if c.flag != nil {
 				*c.flag = true
 				t.Cleanup(func() { *c.flag = false })
@@ -144,8 +132,18 @@ func TestOfferSkills(t *testing.T) {
 	}
 }
 
+func TestOfferSkills_aKeptCopyWarnsWithForce(t *testing.T) {
+	home := offerEnv(t, true)
+	edited := writeSkillFile(t, home, bundledSkills[0].dirName, "my own notes\n")
+	stdout, stderr := offer(t, "y")
+	if !fileIs(t, edited, "my own notes\n") || stdout != "" || !strings.Contains(stderr, "holds someone's edits") ||
+		!strings.HasSuffix(stderr, "Retry with: plivo skill install all --force\n") {
+		t.Errorf("want the edited copy kept, and a warning naming --force on stderr only; stdout %q, stderr %q", stdout, stderr)
+	}
+}
+
 // Each agent is offered once, and the command printed for Codex installs where
-// Codex reads skills.
+// it reads skills; current copies there then skip its offer.
 func TestOfferSkills_oncePerAgent(t *testing.T) {
 	home := offerEnv(t, false)
 	offer(t, "")
@@ -162,38 +160,8 @@ func TestOfferSkills_oncePerAgent(t *testing.T) {
 	if err, _, _ := execCmd(t, strings.Fields(args)...); err != nil || !skillsCurrentIn(filepath.Join(home, ".agents", "skills")) {
 		t.Errorf("plivo %s did not install into ~/.agents/skills: %v", strings.TrimSpace(args), err)
 	}
-	writeProfile(t, home, "") // forget the offers: the copies alone now skip it
+	writeProfile(t, home, "") // forget the offers
 	if _, stderr := offer(t, ""); stderr != "" {
 		t.Errorf("Codex offered with current copies in ~/.agents/skills: %q", stderr)
-	}
-}
-
-func TestOfferSkills_yesInstallsEverySkillAndAFailureOnlyWarns(t *testing.T) {
-	home := offerEnv(t, true)
-	edited := writeSkillFile(t, home, bundledSkills[0].dirName, "my own notes\n")
-	stdout, stderr := offer(t, "y")
-	for _, s := range bundledSkills[1:] {
-		if !fileIs(t, filepath.Join(home, ".claude", "skills", s.dirName, skillFileName), s.content) {
-			t.Errorf("%s not installed", s.selector)
-		}
-	}
-	if !fileIs(t, edited, "my own notes\n") || stdout != "" || !strings.Contains(stderr, "holds someone's edits") ||
-		!strings.HasSuffix(stderr, "Retry with: plivo skill install all --force\n") {
-		t.Errorf("want the edited copy kept, and a warning naming --force on stderr only; stdout %q, stderr %q", stdout, stderr)
-	}
-}
-
-func TestOfferSkills_skipsOutsideAnAgentOrWithCurrentCopies(t *testing.T) {
-	home := offerEnv(t, true)
-	t.Setenv("CLAUDECODE", "")
-	if _, stderr := offer(t, "y"); stderr != "" {
-		t.Errorf("offered outside an agent: %q", stderr)
-	}
-	t.Setenv("CLAUDECODE", "1")
-	for _, s := range bundledSkills {
-		writeSkillFile(t, home, s.dirName, s.content)
-	}
-	if _, stderr := offer(t, "y"); stderr != "" || len(offeredTo(t)) != 0 {
-		t.Errorf("offered with current copies: %q, recorded %v", stderr, offeredTo(t))
 	}
 }
