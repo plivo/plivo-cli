@@ -67,12 +67,20 @@ If the user names a voice agent, an IVR or a SIP platform in "Other", route to t
 | Account | Nothing more for a read | `auth whoami`, `account get`, `account applications list`, `account subaccounts list`. Show the balance (`cash_credits`) when the user asks about their account status. |
 | A voice agent, an IVR or call XML, a SIP platform | Nothing; hand over | `plivo skill list`. If the matching skill is installed, follow it; if not, ask (header Install) "Install the Plivo <name> skill? It walks you through this step by step. Free, no network." · Install it (recommended) · Just use the CLI. Then `plivo skill install audio-streaming`, `voice-xml` or `sip-trunking`. |
 
+Pick the right command:
+
+- Spend or usage over a period: `plivo account usage` (v1.3.0+; before that, `plivo api GET /UsageSummary/`). Never add up call or message records for it.
+- Balance: `cash_credits` in `plivo auth whoami -o json`.
+- Why a call failed: `voice calls diagnose <call_uuid>` for a Voice API call, `sip calls diagnose <call_uuid>` for a SIP trunk call.
+- Call quality: `sip calls insights <call_uuid>` (v1.2.0+).
+- How a feature works: `plivo docs show <path or title>`, then `plivo ask "<question>"`.
+
 When a step fails, retell the error in plain words ("Plivo says the number isn't on this account"), name the fix, and ask before you try it. Switch on the error `code`, never the message text.
 
 ## Top-level command map
 
 ```
-account     applications | get | subaccounts | update
+account     applications | get | subaccounts | update | usage   (usage: v1.3.0+)
 agents      list | get | create | update | publish | pause | resume | delete | nodes | runs
 api         generic REST escape hatch (any api.plivo.com path)
 ask         one-shot question to Plivo's AI assistant
