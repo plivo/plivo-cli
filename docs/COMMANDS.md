@@ -1200,6 +1200,12 @@ Headless / CI use:
   Not supported. Browser OAuth (PKCE) is the only credential source, so
   scripts and CI need a profile that was logged in on that machine already.
 
+Inside a coding agent:
+  Run inside an AI coding agent such as Claude Code, a login offers once
+  per machine to install the Plivo skills for that agent, unless it has
+  current copies already. Without a terminal to ask on, it prints the
+  install command instead.
+
 By default the CLI validates credentials with GET /Account/ before
 saving. Pass --no-verify to skip (offline / mock use only).
 

@@ -203,6 +203,8 @@ curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/skills.sh | sh
 
 Both default to the Claude Code skills directory (`~/.claude/skills/plivo-cli`). For another agent, point it elsewhere — `plivo skill install --dir <path>` or `PLIVO_SKILL_DIR=<path>` for the installer. To capture the skill for an agent that loads it differently, `plivo skill install --print` writes it to stdout.
 
+Run `plivo login` inside Claude Code and it offers, once per machine, to install every Plivo skill there.
+
 The skill file lazy-loads on relevance — it only enters your context window when the user mentions Plivo / `auth_id`, etc.
 
 ## Documentation
