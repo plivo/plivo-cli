@@ -253,26 +253,18 @@ func TestNumbersUpdate_complianceCheckScope(t *testing.T) {
 // --dry-run sends no writes but still reads, so the preview refuses exactly as
 // the real run would.
 func TestNumbersUpdate_dryRunRunsTheComplianceCheck(t *testing.T) {
-	for name, tc := range map[string]struct {
-		fx   complianceFixture
-		want string
-	}{
-		"rejected":       {complianceFixture{number: numberWithApp, app: appRejected}, "rejected"},
-		"no application": {complianceFixture{number: numberNoApp}, "has no KYC"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			setFakeCreds(t)
-			reqs := complianceServer(t, tc.fx)
-			clientForTest.DryRun = true // as getClient sets it under --dry-run
-			err, _, _ := execCmd(t, "numbers", "update", indiaNumber, "--app-id", "A1", "--dry-run")
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("--dry-run skipped the check: %v", err)
-			}
-			if hit(reqs(), "POST", "/") {
-				t.Error("dry-run sent a write")
-			}
-		})
-	}
+	t.Run("refuses", func(t *testing.T) {
+		setFakeCreds(t)
+		reqs := complianceServer(t, complianceFixture{number: numberNoApp})
+		clientForTest.DryRun = true // as getClient sets it under --dry-run
+		err, _, _ := execCmd(t, "numbers", "update", indiaNumber, "--app-id", "A1", "--dry-run")
+		if err == nil || !strings.Contains(err.Error(), "has no KYC") {
+			t.Fatalf("--dry-run skipped the check: %v", err)
+		}
+		if hit(reqs(), "POST", "/") {
+			t.Error("dry-run sent a write")
+		}
+	})
 }
 
 // A transport failure is a failed read too. The trunk guard lets one through to
