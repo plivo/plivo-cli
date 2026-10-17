@@ -144,11 +144,27 @@ func TestOfferSkills(t *testing.T) {
 	}
 }
 
-func TestOfferSkills_asksOnce(t *testing.T) {
-	offerEnv(t, true)
-	offer(t, "n")
-	if _, stderr := offer(t, "y"); stderr != "" {
+// Each agent is offered once, and the command printed for Codex installs where
+// Codex reads skills.
+func TestOfferSkills_oncePerAgent(t *testing.T) {
+	home := offerEnv(t, false)
+	offer(t, "")
+	if _, stderr := offer(t, ""); stderr != "" {
 		t.Errorf("asked again: %q", stderr)
+	}
+	t.Setenv("CLAUDECODE", "")
+	t.Setenv("CODEX_THREAD_ID", "thread-1")
+	_, stderr := offer(t, "")
+	args, ok := strings.CutPrefix(stderr, "Install the Plivo skills for Codex with: plivo ")
+	if !ok {
+		t.Fatalf("Codex not offered after the first agent: %q", stderr)
+	}
+	if err, _, _ := execCmd(t, strings.Fields(args)...); err != nil || !skillsCurrentIn(filepath.Join(home, ".agents", "skills")) {
+		t.Errorf("plivo %s did not install into ~/.agents/skills: %v", strings.TrimSpace(args), err)
+	}
+	writeProfile(t, home, "") // forget the offers: the copies alone now skip it
+	if _, stderr := offer(t, ""); stderr != "" {
+		t.Errorf("Codex offered with current copies in ~/.agents/skills: %q", stderr)
 	}
 }
 

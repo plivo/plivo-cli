@@ -11,19 +11,28 @@ import (
 	"github.com/plivo/plivo-cli/internal/config"
 )
 
-// codingAgent is an AI coding agent the CLI can run inside, and where that
-// agent loads skills from. Adding a row is all it takes to offer the skills
-// to another agent after login.
+// codingAgent is an AI coding agent the CLI can run inside, and the skills
+// folder it reads. Adding a row is all it takes to offer the skills to another
+// agent after login.
 type codingAgent struct {
-	name    string // shown in the offer, and recorded once it is made
-	env     string // NAME=value, or a NAME set to anything, in the agent's shells
-	dir     string // its user skills directory, under the home directory
-	install string // the command that installs every skill into dir
+	name   string // shown in the offer, and recorded once it is made
+	env    string // NAME=value, or a NAME set to anything, in the agent's shells
+	skills string // the `skill install --agent` value of the folder it reads
 }
 
 // codingAgents is checked in order; the first one detected is offered.
 var codingAgents = []codingAgent{
-	{name: "Claude Code", env: "CLAUDECODE=1", dir: filepath.Join(".claude", "skills"), install: "plivo skill install all"},
+	{name: "Claude Code", env: "CLAUDECODE=1", skills: "claude"},
+	{name: "Cursor", env: "CURSOR_AGENT=1", skills: "claude"}, // it reads ~/.claude/skills too
+	{name: "Codex", env: "CODEX_THREAD_ID", skills: "codex"},
+}
+
+// install is the command that installs every skill where a reads them.
+func (a codingAgent) install() string {
+	if a.skills == "claude" {
+		return "plivo skill install all"
+	}
+	return "plivo skill install all --agent " + a.skills
 }
 
 // detectAgent returns the coding agent this process runs inside, if any.
@@ -57,11 +66,13 @@ var askable = func() bool {
 // can fail the login: stderr only, and a failed install warns.
 func offerSkills() {
 	a, ok := detectAgent()
-	home, err := os.UserHomeDir()
-	if !ok || err != nil || dryRunFlag || quietFlag {
+	if !ok || dryRunFlag || quietFlag {
 		return
 	}
-	root := filepath.Join(home, a.dir)
+	root, err := agentSkillsRoot(a.skills)
+	if err != nil {
+		return
+	}
 	cfg, err := config.Load()
 	if err != nil || slices.Contains(cfg.Skills.Offered, a.name) || skillsCurrentIn(root) {
 		return
@@ -73,7 +84,7 @@ func offerSkills() {
 	}
 	if err := installSkillsIn(bundledSkills, root); err != nil {
 		e := clierr.Wrap(err)
-		retry := a.install
+		retry := a.install()
 		if e.Code == clierr.CodeDestructiveRefused {
 			retry += " --force" // a copy holding someone's edits was kept
 		}
@@ -101,7 +112,7 @@ func askToInstall(a codingAgent) bool {
 			fmt.Fprintln(os.Stderr) // stdin closed under the question
 		}
 	}
-	fmt.Fprintf(os.Stderr, "Install the Plivo skills for %s with: %s\n", a.name, a.install)
+	fmt.Fprintf(os.Stderr, "Install the Plivo skills for %s with: %s\n", a.name, a.install())
 	return false
 }
 

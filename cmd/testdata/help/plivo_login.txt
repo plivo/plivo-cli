@@ -30,11 +30,11 @@ Headless / CI use:
   scripts and CI need a profile that was logged in on that machine already.
 
 Inside a coding agent:
-  Run inside an AI coding agent such as Claude Code, a login offers once
-  per machine to install the Plivo skills for that agent, unless it has
-  current copies already. Without a terminal to ask on, it prints the
-  install command instead. --yes installs them without asking, and
-  --quiet skips the offer.
+  Run inside Claude Code, Cursor or Codex, a login offers once per
+  machine to install the Plivo skills where that agent reads them, unless
+  current copies are there already. Without a terminal to ask on, it
+  prints the install command instead. --yes installs them without
+  asking, and --quiet skips the offer.
 
 By default the CLI validates credentials with GET /Account/ before
 saving. Pass --no-verify to skip (offline / mock use only).
