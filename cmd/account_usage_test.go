@@ -1,11 +1,15 @@
 package cmd
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -14,14 +18,15 @@ import (
 	"github.com/plivo/plivo-cli/internal/clierr"
 )
 
-// Each flag is its own API field, sent as given; --product repeats.
+// Each flag is its own API field, sent as given (the country upper-cased);
+// --product repeats.
 func TestAccountUsage_flagsReachTheQuery(t *testing.T) {
 	setFakeCreds(t)
 	urls, _ := sipServer(t, http.StatusOK, `{"meta":{},"usage":[]}`)
 
 	err, _, _ := execCmd(t, "account", "usage", "--from-date", "2026-10-01", "--to-date", "2026-11-01",
 		"--granularity", "month", "--product", "voice", "--product", "message, other", "--direction", "outbound",
-		"--country", "US", "--subaccount", "SA1", "--hangup-cause", "4000", "--error-code", "200", "--limit", "1000")
+		"--country", "us", "--subaccount", "SA1", "--hangup-cause", "4000", "--error-code", "200", "--limit", "1000")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -34,40 +39,63 @@ func TestAccountUsage_flagsReachTheQuery(t *testing.T) {
 	}
 }
 
+// usagePages serves a summary paged by token: page n holds one usage row and,
+// before page last, next_page_token "p<n+1>"; page 1 also the totals and other
+// charges. fail, when set, may answer request n (1-based) with a status
+// instead. Returns the page_token each request sent.
+func usagePages(t *testing.T, last int, fail func(n int) int) func() []string {
+	t.Helper()
+	var mu sync.Mutex
+	var tokens []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := r.URL.Query().Get("page_token")
+		mu.Lock()
+		tokens = append(tokens, token)
+		n := len(tokens)
+		mu.Unlock()
+		if fail != nil && fail(n) != 0 {
+			w.WriteHeader(fail(n))
+			return
+		}
+		page, _ := strconv.Atoi(strings.TrimPrefix(token, "p"))
+		page = max(page, 1)
+		meta, more := map[string]any{}, ""
+		if page == 1 {
+			meta["total_spend"], more = 3.5, `,"other_charges":[{"description":"Number Charges"}]`
+		}
+		if page < last {
+			meta["next_page_token"] = fmt.Sprintf("p%d", page+1)
+		}
+		m, _ := json.Marshal(meta)
+		_, _ = fmt.Fprintf(w, `{"meta":%s,"usage":[{"product":"row-%d"}]%s}`, m, page, more)
+	}))
+	t.Cleanup(srv.Close)
+	clientForTest = &api.Client{BaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
+	t.Cleanup(func() { clientForTest = nil })
+	return func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string(nil), tokens...)
+	}
+}
+
 // --all follows next_page_token, retrying a rate-limited page, and keeps the
 // first page's totals and other charges, which later pages do not send.
 func TestAccountUsage_allFollowsTheTokenAndKeepsPageOne(t *testing.T) {
 	setFakeCreds(t)
 	waits := recordWaits(t)
-	var mu sync.Mutex
-	var tokens []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		tokens = append(tokens, r.URL.Query().Get("page_token"))
-		n := len(tokens)
-		mu.Unlock()
-		switch n {
-		case 1:
-			_, _ = w.Write([]byte(`{"meta":{"total_spend":3.5,"next_page_token":"p2"},"usage":[{"product":"voice"}],` +
-				`"other_charges":[{"description":"Number Charges"}]}`))
-		case 2:
-			w.WriteHeader(http.StatusTooManyRequests)
-		default:
-			_, _ = w.Write([]byte(`{"meta":{},"usage":[{"product":"message"}]}`))
+	tokens := usagePages(t, 2, func(n int) int {
+		if n == 2 {
+			return http.StatusTooManyRequests
 		}
-	}))
-	t.Cleanup(srv.Close)
-	clientForTest = &api.Client{BaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
-	t.Cleanup(func() { clientForTest = nil })
+		return 0
+	})
 
 	err, stdout, _ := execCmd(t, "account", "usage", "--all", "-o", "json")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	mu.Lock()
-	got := strings.Join(tokens, ",")
-	mu.Unlock()
-	if got != ",p2,p2" || len(*waits) != 1 {
+	if got := strings.Join(tokens(), ","); got != ",p2,p2" || len(*waits) != 1 {
 		t.Fatalf("page tokens sent = %q after %d waits, want \",p2,p2\" after 1", got, len(*waits))
 	}
 	rows, meta := dataRows(t, stdout, "usage")
@@ -76,6 +104,50 @@ func TestAccountUsage_allFollowsTheTokenAndKeepsPageOne(t *testing.T) {
 	}
 	if !strings.Contains(stdout, `"Number Charges"`) {
 		t.Errorf("page 1's other_charges are gone:\n%s", stdout)
+	}
+}
+
+// A page that fails after the first ends the walk: the rows read print, with
+// truncated and the token of the page that failed, and the run fails with it.
+func TestAccountUsage_allPrintsTheRowsReadBeforeAPageFails(t *testing.T) {
+	setFakeCreds(t)
+	usagePages(t, 3, func(n int) int {
+		if n == 2 {
+			return http.StatusInternalServerError
+		}
+		return 0
+	})
+
+	err, stdout, stderr := execCmd(t, "account", "usage", "--all", "-o", "json")
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || ce.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("want page 2's 500 after the rows, got %v", err)
+	}
+	rows, meta := dataRows(t, stdout, "usage")
+	if len(rows) != 1 || meta["total_spend"] != 3.5 || meta["truncated"] != true || meta["next_page_token"] != "p2" {
+		t.Fatalf("rows=%v meta=%v, want page 1's row and totals, truncated, next_page_token p2", rows, meta)
+	}
+	if !strings.Contains(stderr, "stopped after 1 usage rows") {
+		t.Errorf("no warning on stderr: %q", stderr)
+	}
+}
+
+// --all stops after 100 pages and says where, in truncated and the token of
+// the first page left unread.
+func TestAccountUsage_allStopsAfter100Pages(t *testing.T) {
+	setFakeCreds(t)
+	tokens := usagePages(t, 105, nil)
+
+	err, stdout, stderr := execCmd(t, "account", "usage", "--all", "-o", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	rows, meta := dataRows(t, stdout, "usage")
+	if n := len(tokens()); n != 100 || len(rows) != 100 || meta["truncated"] != true || meta["next_page_token"] != "p101" {
+		t.Fatalf("%d requests, %d rows, meta=%v; want 100, 100, truncated, next_page_token p101", n, len(rows), meta)
+	}
+	if !strings.Contains(stderr, "stopped after 100 pages") {
+		t.Errorf("no warning on stderr: %q", stderr)
 	}
 }
 
@@ -103,8 +175,8 @@ func TestAccountUsage_table(t *testing.T) {
 		"2026-05 message sms PR outbound 5 0.17145 SA1 200 Opt-out block", "2026-05 voice pstn 3 61 0",
 		"2026-06 Number Lookup 1 0.3776", "total_spend: 472.3776", "currency: USD",
 	} {
-		if !strings.Contains(strings.Join(lines, "\n"), want) {
-			t.Errorf("table lacks %q:\n%s", want, stdout)
+		if !slices.Contains(lines, want) {
+			t.Errorf("table lacks the line %q:\n%s", want, stdout)
 		}
 	}
 	if !strings.Contains(stderr, "add --all") {
