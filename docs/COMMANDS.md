@@ -3459,7 +3459,20 @@ Flags:
 Show bundled skills and whether each is installed
 
 ```
-plivo skill list
+plivo skill list [flags]
+```
+
+Examples:
+
+```
+  plivo skill list              # in ~/.claude/skills
+  plivo skill list --project    # in <repo>/.claude/skills
+```
+
+Flags:
+
+```
+      --project   show the skills installed in the current git repository's .claude/skills
 ```
 
 ---

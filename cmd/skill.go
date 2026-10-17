@@ -136,8 +136,10 @@ skill that an install replaces keeps its file, renamed SKILL.md.retired.`,
 var skillListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "Show bundled skills and whether each is installed",
-	Args:  cobra.NoArgs,
-	RunE:  runSkillList,
+	Example: `  plivo skill list              # in ~/.claude/skills
+  plivo skill list --project    # in <repo>/.claude/skills`,
+	Args: cobra.NoArgs,
+	RunE: runSkillList,
 }
 
 // skillUpdateCmd brings installed skills up to the bundled version without
@@ -168,6 +170,7 @@ func init() {
 	skillInstallCmd.Flags().BoolVar(&skillPrint, "print", false, "write the skill content to stdout instead of installing")
 	skillInstallCmd.Flags().BoolVar(&skillProject, "project", false, "install into the current git repository's .claude/skills")
 	skillInstallCmd.Flags().BoolVar(&skillForce, "force", false, "also overwrite a copy that matches no released version (its edits are lost)")
+	skillListCmd.Flags().BoolVar(&skillProject, "project", false, "show the skills installed in the current git repository's .claude/skills")
 	skillCmd.AddCommand(skillInstallCmd, skillListCmd, skillUpdateCmd)
 	rootCmd.AddCommand(skillCmd)
 }
@@ -249,8 +252,8 @@ func projectSkillsRoot() (string, error) {
 	}
 	root, ok := findGitRoot(wd)
 	if !ok {
-		e := clierr.BadInput(wd + " is not inside a git repository, so --project has nowhere to install")
-		e.Hint = "Run it from inside the project, or drop --project to install for your user (~/.claude/skills)."
+		e := clierr.BadInput(wd + " is not inside a git repository, so --project has no repository to use")
+		e.Hint = "Run it from inside the project, or drop --project for your user's skills (~/.claude/skills)."
 		return "", e
 	}
 	return filepath.Join(root, ".claude", "skills"), nil
@@ -295,6 +298,12 @@ type skillListEntry struct {
 }
 
 func runSkillList(cmd *cobra.Command, _ []string) error {
+	root, rootErr := resolveSkillDir("", "") // ~/.claude/skills
+	if skillProject {
+		if root, rootErr = projectSkillsRoot(); rootErr != nil {
+			return rootErr
+		}
+	}
 	rows := make([]skillListEntry, 0, len(bundledSkills))
 	for _, sk := range bundledSkills {
 		row := skillListEntry{
@@ -303,17 +312,11 @@ func runSkillList(cmd *cobra.Command, _ []string) error {
 			State:      skillStateAbsent,
 			Summary:    sk.summary,
 		}
-		// A directory we cannot resolve is reported as absent rather than
-		// failing the whole listing.
-		if dir, err := resolveSkillDir("", sk.dirName); err == nil {
-			path := filepath.Join(dir, skillFileName)
-			row.Path = path
-			if b, rerr := os.ReadFile(path); rerr == nil {
-				row.State = skillStateCurrent
-				if string(b) != sk.content {
-					row.State = skillStateStale
-				}
-			}
+		// A home directory we cannot resolve is reported as absent rather
+		// than failing the whole listing.
+		if rootErr == nil {
+			row.Path = filepath.Join(root, sk.dirName, skillFileName)
+			row.State = skillStateAt(sk, row.Path)
 		}
 		rows = append(rows, row)
 	}
@@ -330,8 +333,26 @@ func runSkillList(cmd *cobra.Command, _ []string) error {
 	if err := w.Flush(); err != nil {
 		return clierr.Wrap(err)
 	}
-	fmt.Fprintf(os.Stderr, "\nInstall one with: plivo skill install <selector>  (or \"all\")\n")
+	install := "plivo skill install <selector>"
+	if skillProject {
+		install += " --project"
+	}
+	fmt.Fprintf(os.Stderr, "\nInstall one with: %s  (or \"all\")\n", install)
 	return nil
+}
+
+// skillStateAt reports the state of the copy of s at path. CRLF line endings
+// read as LF, as they do for `skill update`: a Windows checkout of a committed
+// skill is the same version.
+func skillStateAt(s bundledSkill, path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return skillStateAbsent
+	}
+	if skillDigest(b) != skillDigest([]byte(s.content)) {
+		return skillStateStale
+	}
+	return skillStateCurrent
 }
 
 // installSkill writes one skill to its resolved directory, honouring --dir and

@@ -3,8 +3,13 @@ Show bundled skills and whether each is installed
 Usage:
   plivo skill list [flags]
 
+Examples:
+  plivo skill list              # in ~/.claude/skills
+  plivo skill list --project    # in <repo>/.claude/skills
+
 Flags:
-  -h, --help   help for list
+  -h, --help      help for list
+      --project   show the skills installed in the current git repository's .claude/skills
 
 Global Flags:
       --dry-run            print the HTTP request without sending

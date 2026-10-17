@@ -504,13 +504,38 @@ func TestSkillInstall_projectRefusesOutsideARepo(t *testing.T) {
 	t.Chdir(dir)
 	t.Setenv("HOME", t.TempDir())
 
-	err, _, _ := execCmd(t, "skill", "install", "--project")
-	var ce *clierr.Error
-	if !errors.As(err, &ce) || ce.Code != clierr.CodeBadInput {
-		t.Fatalf("err = %v, want BAD_INPUT", err)
+	for _, verb := range []string{"install", "list"} {
+		err, _, _ := execCmd(t, "skill", verb, "--project")
+		var ce *clierr.Error
+		if !errors.As(err, &ce) || ce.Code != clierr.CodeBadInput {
+			t.Fatalf("%s: err = %v, want BAD_INPUT", verb, err)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".claude")); !os.IsNotExist(err) {
 		t.Errorf("wrote into a folder that is not a repository (stat err: %v)", err)
+	}
+}
+
+func TestSkillList_projectShowsTheRepositorysSkills(t *testing.T) {
+	root, _ := fakeRepo(t, false)
+	if err, _, stderr := execCmd(t, "skill", "install", "voice-xml", "--project"); err != nil {
+		t.Fatalf("install --project: %v\n%s", err, stderr)
+	}
+	err, stdout, _ := execCmd(t, "skill", "list", "--project", "-o", "json")
+	var env struct {
+		Data []skillListEntry `json:"data"`
+	}
+	if err != nil || json.Unmarshal([]byte(stdout), &env) != nil || len(env.Data) != len(bundledSkills) {
+		t.Fatalf("skill list --project: %v\n%s", err, stdout)
+	}
+	for _, r := range env.Data {
+		want := skillStateAbsent
+		if r.Selector == "voice-xml" {
+			want = skillStateCurrent
+		}
+		if r.State != want || r.Path != projectSkillPath(root, r.InstallsTo) {
+			t.Errorf("%+v, want %q at the project path", r, want)
+		}
 	}
 }
 
