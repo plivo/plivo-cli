@@ -504,13 +504,54 @@ func TestSkillInstall_projectRefusesOutsideARepo(t *testing.T) {
 	t.Chdir(dir)
 	t.Setenv("HOME", t.TempDir())
 
-	err, _, _ := execCmd(t, "skill", "install", "--project")
-	var ce *clierr.Error
-	if !errors.As(err, &ce) || ce.Code != clierr.CodeBadInput {
-		t.Fatalf("err = %v, want BAD_INPUT", err)
+	for _, verb := range []string{"install", "list"} {
+		err, _, _ := execCmd(t, "skill", verb, "--project")
+		var ce *clierr.Error
+		if !errors.As(err, &ce) || ce.Code != clierr.CodeBadInput {
+			t.Fatalf("%s: err = %v, want BAD_INPUT", verb, err)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".claude")); !os.IsNotExist(err) {
 		t.Errorf("wrote into a folder that is not a repository (stat err: %v)", err)
+	}
+}
+
+func TestSkillList_projectShowsTheRepositorysSkills(t *testing.T) {
+	root, _ := fakeRepo(t, false)
+	if err, _, stderr := execCmd(t, "skill", "install", "voice-xml", "--project"); err != nil {
+		t.Fatalf("install --project: %v\n%s", err, stderr)
+	}
+	outputFormat, skillProject = "json", true
+	t.Cleanup(func() { outputFormat, skillProject = "", false })
+	for _, r := range skillListRows(t) {
+		want := skillStateAbsent
+		if r.Selector == "voice-xml" {
+			want = skillStateCurrent
+		}
+		if r.State != want || r.Path != projectSkillPath(root, r.InstallsTo) {
+			t.Errorf("%+v, want %q at the project path", r, want)
+		}
+	}
+}
+
+func TestSkillInstall_agentCodexInstallsIntoAgentsSkills(t *testing.T) {
+	_, home := fakeRepo(t, false)
+	if err, _, stderr := execCmd(t, "skill", "install", "all", "--agent", "codex"); err != nil {
+		t.Fatalf("install all --agent codex: %v\n%s", err, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude")); !skillsCurrentIn(filepath.Join(home, ".agents", "skills")) || !os.IsNotExist(err) {
+		t.Errorf("want every skill in ~/.agents/skills and none in ~/.claude (stat err: %v)", err)
+	}
+	for _, args := range [][]string{
+		{"skill", "install", "--agent", "codex", "--project"},
+		{"skill", "install", "--agent", "codex", "--dir", t.TempDir()},
+		{"skill", "install", "--agent", "cursor"},
+	} {
+		err, _, _ := execCmd(t, args...)
+		var ce *clierr.Error
+		if !errors.As(err, &ce) || ce.Code != clierr.CodeBadFlag {
+			t.Errorf("%v: err = %v, want BAD_FLAG", args, err)
+		}
 	}
 }
 

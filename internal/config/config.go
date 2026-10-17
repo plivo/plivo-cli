@@ -58,6 +58,14 @@ type Config struct {
 	Profiles  map[string]Profile `toml:"profiles"`
 	Buddy     BuddyConfig        `toml:"buddy,omitempty"`
 	Telemetry TelemetryConfig    `toml:"telemetry,omitempty"`
+	Skills    SkillsConfig       `toml:"skills,omitempty"`
+}
+
+// SkillsConfig is the optional [skills] table in ~/.plivo/config.toml.
+// Offered names the coding agents `plivo login` has offered to install the
+// Plivo skills for, so it asks once per agent on a machine.
+type SkillsConfig struct {
+	Offered []string `toml:"offered,omitempty"`
 }
 
 // BuddyConfig is the optional [buddy] table in ~/.plivo/config.toml. Tunes

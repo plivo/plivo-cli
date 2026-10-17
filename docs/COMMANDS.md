@@ -1257,6 +1257,13 @@ Headless / CI use:
   Not supported. Browser OAuth (PKCE) is the only credential source, so
   scripts and CI need a profile that was logged in on that machine already.
 
+Inside a coding agent:
+  Run inside Claude Code, Cursor or Codex, a login offers once per
+  machine to install the Plivo skills where that agent reads them, unless
+  current copies are there already. Without a terminal to ask on, it
+  prints the install command instead. --yes installs them without
+  asking, and --quiet skips the offer.
+
 By default the CLI validates credentials with GET /Account/ before
 saving. Pass --no-verify to skip (offline / mock use only).
 
@@ -3473,9 +3480,11 @@ They are bundled in the binary, so this writes them out without a network call.
   all              every listed skill
 
 With no argument, installs the CLI skill (unchanged from previous releases).
-Each skill lands at ~/.claude/skills/<skill>/SKILL.md by default. Use --dir to
-target another agent's skills directory, or --print to write the content to
-stdout so any other tool can capture it; both act on a single skill.
+Each skill lands at ~/.claude/skills/<skill>/SKILL.md by default, where Claude
+Code and Cursor read skills; --agent codex installs into ~/.agents/skills, where
+Codex reads them. Use --dir to target another agent's skills directory, or
+--print to write the content to stdout so any other tool can capture it; both
+act on a single skill.
 
 --project installs into the git repository you are in instead, at
 <repo>/.claude/skills/<skill>/SKILL.md, so everyone who clones it gets the
@@ -3497,16 +3506,18 @@ Examples:
   plivo skill install voice-xml          # -> ~/.claude/skills/plivo-voice-xml/
   plivo skill install all                # every listed skill
   plivo skill install all --project      # -> <repo>/.claude/skills/, for the whole team
+  plivo skill install all --agent codex  # -> ~/.agents/skills/, where Codex reads them
   plivo skill install all --dry-run      # show destinations, write nothing
 ```
 
 Flags:
 
 ```
-      --dir string   destination directory (default: ~/.claude/skills/<skill>)
-      --force        also overwrite a copy that matches no released version (its edits are lost)
-      --print        write the skill content to stdout instead of installing
-      --project      install into the current git repository's .claude/skills
+      --agent string   coding agent to install for: claude (~/.claude/skills) or codex (~/.agents/skills) (default: claude)
+      --dir string     destination directory (default: ~/.claude/skills/<skill>)
+      --force          also overwrite a copy that matches no released version (its edits are lost)
+      --print          write the skill content to stdout instead of installing
+      --project        install into the current git repository's .claude/skills
 ```
 
 ---
@@ -3516,7 +3527,20 @@ Flags:
 Show bundled skills and whether each is installed
 
 ```
-plivo skill list
+plivo skill list [flags]
+```
+
+Examples:
+
+```
+  plivo skill list              # in ~/.claude/skills
+  plivo skill list --project    # in <repo>/.claude/skills
+```
+
+Flags:
+
+```
+      --project   show the skills installed in the current git repository's .claude/skills
 ```
 
 ---
