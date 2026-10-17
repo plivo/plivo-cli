@@ -140,8 +140,7 @@ func hit(reqs []string, method, pathPart string) bool {
 
 // An India number is routed only when its attached compliance application is
 // accepted, and any read the check needs refuses when it fails. A number with
-// no application attached gets a warning, not a refusal: live, routed India
-// numbers exist without one.
+// no application attached is refused too, and sent to file KYC.
 func TestNumbersUpdate_indiaComplianceRule(t *testing.T) {
 	cases := []struct {
 		name            string
@@ -154,7 +153,8 @@ func TestNumbersUpdate_indiaComplianceRule(t *testing.T) {
 		{"accepted, flat body", indiaNumber, complianceFixture{app: `{"status":"accepted"}`, number: numberWithApp}, false, false, ""},
 		{"rejected", "+" + indiaNumber, complianceFixture{app: appRejected, number: numberWithApp}, true, false, `"rejected"`},
 		{"submitted", indiaNumber, complianceFixture{app: `{"compliance":{"status":"submitted"}}`, number: numberWithApp}, true, false, `"submitted"`},
-		{"no application attached", indiaNumber, complianceFixture{number: numberNoApp}, false, true, ""},
+		{"no application attached", indiaNumber, complianceFixture{number: numberNoApp}, true, false,
+			"This number has no KYC. File KYC first at https://cx.plivo.com/phone-numbers?tab=compliance"},
 		{"application unreadable", indiaNumber, complianceFixture{appStatus: 404, app: `{"error":"application gone"}`, number: numberWithApp}, true, false, "application gone"},
 		{"application without a status", indiaNumber, complianceFixture{app: `{"api_id":"x"}`, number: numberWithApp}, true, false, "status"},
 		{"number unreadable", indiaNumber, complianceFixture{numberStatus: 500, number: `{"error":"number lookup broke"}`}, true, false, "number lookup broke"},
@@ -250,32 +250,16 @@ func TestNumbersUpdate_complianceCheckScope(t *testing.T) {
 	}
 }
 
-// --dry-run sends no writes but still reads, so the preview refuses and warns
-// exactly as the real run would.
+// --dry-run sends no writes but still reads, so the preview refuses exactly as
+// the real run would.
 func TestNumbersUpdate_dryRunRunsTheComplianceCheck(t *testing.T) {
 	t.Run("refuses", func(t *testing.T) {
 		setFakeCreds(t)
-		reqs := complianceServer(t, complianceFixture{number: numberWithApp, app: appRejected})
+		reqs := complianceServer(t, complianceFixture{number: numberNoApp})
 		clientForTest.DryRun = true // as getClient sets it under --dry-run
 		err, _, _ := execCmd(t, "numbers", "update", indiaNumber, "--app-id", "A1", "--dry-run")
-		if err == nil || !strings.Contains(err.Error(), "rejected") {
+		if err == nil || !strings.Contains(err.Error(), "has no KYC") {
 			t.Fatalf("--dry-run skipped the check: %v", err)
-		}
-		if hit(reqs(), "POST", "/") {
-			t.Error("dry-run sent a write")
-		}
-	})
-
-	t.Run("warns", func(t *testing.T) {
-		setFakeCreds(t)
-		reqs := complianceServer(t, complianceFixture{number: numberNoApp})
-		clientForTest.DryRun = true
-		err, _, stderr := execCmd(t, "numbers", "update", indiaNumber, "--app-id", "A1", "--dry-run")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !strings.Contains(stderr, "Warning:") || !strings.Contains(stderr, "[dry-run] POST") {
-			t.Errorf("want the warning and the previewed update, stderr:\n%s", stderr)
 		}
 		if hit(reqs(), "POST", "/") {
 			t.Error("dry-run sent a write")
