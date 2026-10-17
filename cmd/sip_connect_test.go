@@ -158,15 +158,15 @@ func TestSIPConnectPlan_indiaNumbers(t *testing.T) {
 	} {
 		t.Run(tc.platform, func(t *testing.T) {
 			setFakeCreds(t)
-			reqs := complianceServer(t, complianceFixture{number: indiaNumberRecord})
+			reqs := complianceServer(t, complianceFixture{number: indiaNumberWithApp, app: `{"compliance":{"status":"accepted"}}`})
 			err, stdout, _ := execCmd(t, "sip", "connect", "plan", "--number", "+"+indiaNumber, "--platform", tc.platform, "-o", "json")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			readOnly(t, reqs())
 			plan := decodeConnectPlan(t, stdout)
-			if checkStatus(plan, "platform") != "warn" || checkStatus(plan, "compliance") != "warn" {
-				t.Errorf("want platform and compliance warnings: %+v", plan.Checks)
+			if checkStatus(plan, "platform") != "warn" || checkStatus(plan, "compliance") != "pass" {
+				t.Errorf("want a platform warning and a compliance pass: %+v", plan.Checks)
 			}
 			if !strings.HasSuffix(plan.Requests[0].Command, tc.uriStep) {
 				t.Errorf("step 1 = %q, want it to end %q", plan.Requests[0].Command, tc.uriStep)
@@ -194,6 +194,8 @@ func TestSIPConnectPlan_stopsAtTheFirstFailedCheck(t *testing.T) {
 			complianceFixture{number: indiaNumberRecord}, clierr.CodeBadInput},
 		{"india with a rejected application", "livekit", "compliance",
 			complianceFixture{number: indiaNumberWithApp, app: appRejected}, clierr.CodeValidation},
+		{"india without an application", "livekit", "compliance",
+			complianceFixture{number: indiaNumberRecord}, clierr.CodeValidation},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setFakeCreds(t)
