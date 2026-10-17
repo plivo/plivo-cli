@@ -47,6 +47,20 @@ func offeredTo(t *testing.T) []string {
 	return cfg.Skills.Offered
 }
 
+// A row's env is NAME=value, or NAME set to anything; the first match wins.
+func TestDetectAgent_envForms(t *testing.T) {
+	prev := codingAgents
+	t.Cleanup(func() { codingAgents = prev })
+	codingAgents = []codingAgent{{name: "exact", env: "PLIVO_TEST_AGENT_A=1"}, {name: "any", env: "PLIVO_TEST_AGENT_B"}}
+	for _, c := range []struct{ a, b, want string }{{"1", "x", "exact"}, {"2", "", ""}, {"2", "x", "any"}, {"", "", ""}} {
+		t.Setenv("PLIVO_TEST_AGENT_A", c.a)
+		t.Setenv("PLIVO_TEST_AGENT_B", c.b)
+		if a, _ := detectAgent(); a.name != c.want {
+			t.Errorf("A=%q B=%q: detected %q, want %q", c.a, c.b, a.name, c.want)
+		}
+	}
+}
+
 func TestOfferSkills_asksOnceOnATerminal(t *testing.T) {
 	home := offerEnv(t, true, "n\n")
 	if stdout, stderr := offer(t); stdout != "" || stderr != "Install the Plivo skills for Claude Code? (Y/n) " {
