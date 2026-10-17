@@ -30,7 +30,7 @@ func listenLoopback(t *testing.T) net.Listener {
 }
 
 // runAwait calls awaitCallback and captures what it printed.
-func runAwait(ln net.Listener, paste io.Reader, timeout time.Duration) pasteRun {
+func runAwait(ln net.Listener, paste <-chan string, timeout time.Duration) pasteRun {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	var out bytes.Buffer
@@ -45,7 +45,7 @@ func awaitPaste(t *testing.T, typed string, timeout time.Duration) pasteRun {
 	ln := listenLoopback(t)
 	_, port, _ := net.SplitHostPort(ln.Addr().String())
 	typed = strings.NewReplacer("{addr}", ln.Addr().String(), "{port}", port).Replace(typed)
-	return runAwait(ln, strings.NewReader(typed), timeout)
+	return runAwait(ln, lineFeed(strings.NewReader(typed)), timeout)
 }
 
 // A browser on another machine or network namespace can't reach the
@@ -115,8 +115,9 @@ func TestAwaitCallback_browserCallbackWinsWhilePasteIsPending(t *testing.T) {
 	idle, typing := io.Pipe()
 	t.Cleanup(func() { _ = typing.Close() })
 
+	lines := lineFeed(idle)
 	done := make(chan pasteRun, 1)
-	go func() { done <- runAwait(ln, idle, 5*time.Second) }()
+	go func() { done <- runAwait(ln, lines, 5*time.Second) }()
 
 	resp, err := http.Get("http://" + ln.Addr().String() + "/?code=browser-code&state=" + pasteState)
 	if err != nil {
@@ -131,6 +132,12 @@ func TestAwaitCallback_browserCallbackWinsWhilePasteIsPending(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("still waiting on the terminal after the browser callback arrived")
+	}
+
+	// The next line typed answers the question after the login, not the wait.
+	go func() { _, _ = io.WriteString(typing, "y\n") }()
+	if got := <-lines; got != "y" {
+		t.Errorf("the next reader got %q, want the line typed after the login", got)
 	}
 }
 
