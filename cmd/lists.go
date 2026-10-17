@@ -154,16 +154,8 @@ func (r *listTimeRange) deprecatedNames(cmd *cobra.Command, since, until string)
 // matches nothing); an end not after the start (SIP Trunking blames that on
 // its 3-month limit); and a range past the list's API limits.
 func (r *listTimeRange) bounds(cmd *cobra.Command) (since, until time.Time, err error) {
-	for _, names := range r.names {
-		var given []string
-		for _, n := range names {
-			if cmd.Flags().Changed(n) {
-				given = append(given, "--"+n)
-			}
-		}
-		if len(given) > 1 {
-			return time.Time{}, time.Time{}, clierr.BadInput(strings.Join(given, " and ") + " are the same filter; pass one of them")
-		}
+	if err = oneFlagPerEnd(cmd, r.names); err != nil {
+		return time.Time{}, time.Time{}, err
 	}
 	if since, err = parseListTime(r.since, false); err != nil {
 		return time.Time{}, time.Time{}, err
@@ -194,6 +186,23 @@ func (r *listTimeRange) bounds(cmd *cobra.Command) (since, until time.Time, err 
 		}
 	}
 	return since, until, nil
+}
+
+// oneFlagPerEnd refuses two names for one end of a range given together: only
+// the last would count. names holds every flag for each end.
+func oneFlagPerEnd(cmd *cobra.Command, names [2][]string) error {
+	for _, end := range names {
+		var given []string
+		for _, n := range end {
+			if cmd.Flags().Changed(n) {
+				given = append(given, "--"+n)
+			}
+		}
+		if len(given) > 1 {
+			return clierr.BadInput(strings.Join(given, " and ") + " are the same filter; pass one of them")
+		}
+	}
+	return nil
 }
 
 // checkRetention refuses a start more than days back.
@@ -357,15 +366,6 @@ func fetchList(client *api.Client, endpoint string, q url.Values, key string, ou
 	if env == nil {
 		return werr // the first page failed: nothing was read
 	}
-	if rows == nil {
-		rows = []json.RawMessage{}
-	}
-	merged, err := output.Marshal(rows)
-	if err != nil {
-		return err
-	}
-	env[key] = merged
-	env["meta"] = walkMeta(env["meta"], next, capped || werr != nil)
 	switch {
 	case werr != nil:
 		partialErr = werr
@@ -375,6 +375,23 @@ func fetchList(client *api.Client, endpoint string, q url.Values, key string, ou
 		fmt.Fprintf(os.Stderr, "Warning: --all stopped after %d pages (%d rows) and the list has more. "+
 			"Narrow the filters to read the rest.\n", maxListPages, len(rows))
 	}
+	return mergePages(env, key, rows, "next", next, capped || werr != nil, out)
+}
+
+// mergePages decodes a walk into out as one page would read: rows under key in
+// the first page's envelope, and its meta from walkMeta.
+func mergePages(env map[string]json.RawMessage, key string, rows []json.RawMessage,
+	nextKey string, next json.RawMessage, truncated bool, out api.RawCapturer,
+) error {
+	if rows == nil {
+		rows = []json.RawMessage{}
+	}
+	merged, err := output.Marshal(rows)
+	if err != nil {
+		return err
+	}
+	env[key] = merged
+	env["meta"] = walkMeta(env["meta"], nextKey, next, truncated)
 	body, err := output.Marshal(env)
 	if err != nil {
 		return err
@@ -493,15 +510,15 @@ func retryWait(attempt int, retryAfter, timeout time.Duration) time.Duration {
 	return wait
 }
 
-// walkMeta is a merged list's meta: the first page's, with next where a script
-// reads on from (null once every row is read) and, when the walk stopped
-// early, truncated: true so a script can tell.
-func walkMeta(meta, next json.RawMessage, truncated bool) json.RawMessage {
+// walkMeta is a merged list's meta: the first page's, with key (next on most
+// lists) where a script reads on from (null once every row is read) and, when
+// the walk stopped early, truncated: true so a script can tell.
+func walkMeta(meta json.RawMessage, key string, next json.RawMessage, truncated bool) json.RawMessage {
 	m := map[string]json.RawMessage{}
 	if json.Unmarshal(meta, &m) != nil || m == nil {
 		m = map[string]json.RawMessage{}
 	}
-	m["next"] = next // a nil next encodes as null
+	m[key] = next // a nil next encodes as null
 	if truncated {
 		m["truncated"] = json.RawMessage("true")
 	}
