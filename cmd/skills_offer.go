@@ -36,11 +36,16 @@ func detectAgent() (codingAgent, bool) {
 	return codingAgent{}, false
 }
 
-// askable reports whether a question can be put to the user: stdin and stdout
-// are a terminal, and reading it won't stop this process (`plivo login &`).
-// Tests stand in a terminal.
+// askable reports whether a question can be put to the user: stdin, stdout and
+// stderr, where the question goes, are a terminal, and reading it won't stop
+// this process (`plivo login &`). Tests stand in a terminal.
 var askable = func() bool {
-	return isTerminal(int(os.Stdin.Fd())) && isTerminal(int(os.Stdout.Fd())) && inForeground(os.Stdin)
+	for _, f := range []*os.File{os.Stdin, os.Stdout, os.Stderr} {
+		if !isTerminal(int(f.Fd())) {
+			return false
+		}
+	}
+	return inForeground(os.Stdin)
 }
 
 // offerSkills runs after a successful login, and nowhere else. Inside a coding
@@ -61,20 +66,46 @@ func offerSkills() {
 	}
 	// Recorded before asking, so a question left unanswered isn't asked again.
 	cfg.Skills.Offered = append(cfg.Skills.Offered, a.name)
-	if config.Save(cfg) != nil {
-		return
-	}
-	if !askable() {
-		fmt.Fprintf(os.Stderr, "Install the Plivo skills for %s with: %s\n", a.name, a.install)
-		return
-	}
-	fmt.Fprintf(os.Stderr, "Install the Plivo skills for %s? (Y/n) ", a.name)
-	answer, ok := <-stdinLines()
-	if answer = strings.ToLower(strings.TrimSpace(answer)); !ok || (answer != "" && answer != "y" && answer != "yes") {
+	if config.Save(cfg) != nil || !askToInstall(a) {
 		return
 	}
 	if err := installSkillsIn(bundledSkills, root); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: not every skill was installed: %v\nRetry with: %s\n", err, a.install)
+	}
+}
+
+// askToInstall puts the offer to the user and reports a yes. Without a
+// terminal to ask on, or once stdin has closed, it prints the install command
+// instead.
+func askToInstall(a codingAgent) bool {
+	if askable() {
+		lines := stdinLines()
+		// A line typed before the question is not an answer to it.
+		if drainLines(lines) {
+			fmt.Fprintf(os.Stderr, "Install the Plivo skills for %s? (Y/n) ", a.name)
+			if answer, ok := <-lines; ok {
+				answer = strings.ToLower(strings.TrimSpace(answer))
+				return answer == "" || answer == "y" || answer == "yes"
+			}
+			fmt.Fprintln(os.Stderr) // stdin closed under the question
+		}
+	}
+	fmt.Fprintf(os.Stderr, "Install the Plivo skills for %s with: %s\n", a.name, a.install)
+	return false
+}
+
+// drainLines drops the lines already waiting in lines, without blocking, and
+// reports whether lines is still open.
+func drainLines(lines <-chan string) bool {
+	for {
+		select {
+		case _, ok := <-lines:
+			if !ok {
+				return false
+			}
+		default:
+			return true
+		}
 	}
 }
 
