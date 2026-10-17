@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/config"
 )
 
@@ -51,12 +52,13 @@ var askable = func() bool {
 // offerSkills runs after a successful login, and nowhere else. Inside a coding
 // agent whose skills folder lacks current copies of the Plivo skills, it asks
 // on a terminal whether to install them, or without one prints the command
-// that does. Each agent is offered once per machine whatever the answer, and
-// nothing here can fail the login: stderr only, and a failed install warns.
+// that does; --yes installs them without asking, and --quiet skips the offer.
+// Each agent is offered once per machine whatever the answer, and nothing here
+// can fail the login: stderr only, and a failed install warns.
 func offerSkills() {
 	a, ok := detectAgent()
 	home, err := os.UserHomeDir()
-	if !ok || err != nil || dryRunFlag {
+	if !ok || err != nil || dryRunFlag || quietFlag {
 		return
 	}
 	root := filepath.Join(home, a.dir)
@@ -66,11 +68,20 @@ func offerSkills() {
 	}
 	// Recorded before asking, so a question left unanswered isn't asked again.
 	cfg.Skills.Offered = append(cfg.Skills.Offered, a.name)
-	if config.Save(cfg) != nil || !askToInstall(a) {
+	if config.Save(cfg) != nil || (!yesFlag && !askToInstall(a)) {
 		return
 	}
 	if err := installSkillsIn(bundledSkills, root); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: not every skill was installed: %v\nRetry with: %s\n", err, a.install)
+		e := clierr.Wrap(err)
+		retry := a.install
+		if e.Code == clierr.CodeDestructiveRefused {
+			retry += " --force" // a copy holding someone's edits was kept
+		}
+		fmt.Fprintf(os.Stderr, "Warning: not every skill was installed: %s\n", e.Message)
+		if e.Hint != "" {
+			fmt.Fprintln(os.Stderr, e.Hint)
+		}
+		fmt.Fprintf(os.Stderr, "Retry with: %s\n", retry)
 	}
 }
 

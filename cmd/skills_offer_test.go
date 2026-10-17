@@ -110,26 +110,34 @@ func TestOfferSkills(t *testing.T) {
 	const ask = "Install the Plivo skills for Claude Code? (Y/n) "
 	const hint = "Install the Plivo skills for Claude Code with: plivo skill install all\n"
 	for _, c := range []struct {
-		name, answer string
-		tty          bool
-		stray        []string
-		stderr       string // all of stderr, or how it starts once skills are installed
-		installed    bool
+		name, answer       string
+		tty                bool
+		flag               *bool
+		stray              []string
+		stderr             string // all of stderr, or how it starts once skills are installed
+		installed, skipped bool   // skipped: not offered, so nothing recorded either
 	}{
 		{name: "no", tty: true, answer: "n", stderr: ask},
 		{name: "Enter is yes", tty: true, answer: "", stderr: ask + "Installed skill: ", installed: true},
 		{name: "lines typed before the question", tty: true, stray: []string{"", "y"}, answer: "n", stderr: ask},
 		{name: "stdin closes under the question", tty: true, answer: ctrlD, stderr: ask + "\n" + hint},
 		{name: "no terminal", answer: "y", stderr: hint},
+		{name: "--yes installs without asking", flag: &yesFlag, stderr: "Installed skill: ", installed: true},
+		{name: "--quiet", tty: true, flag: &quietFlag, answer: "y", skipped: true},
+		{name: "--dry-run", tty: true, flag: &dryRunFlag, answer: "y", skipped: true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			home := offerEnv(t, c.tty)
+			if c.flag != nil {
+				*c.flag = true
+				t.Cleanup(func() { *c.flag = false })
+			}
 			stdout, stderr := offer(t, c.answer, c.stray...)
 			if stdout != "" || !strings.HasPrefix(stderr, c.stderr) || (!c.installed && stderr != c.stderr) {
 				t.Errorf("stdout %q, stderr %q; want stderr %q", stdout, stderr, c.stderr)
 			}
 			_, err := os.Stat(filepath.Join(home, ".claude", "skills", bundledSkills[0].dirName, skillFileName))
-			if (err == nil) != c.installed || len(offeredTo(t)) != 1 {
+			if (err == nil) != c.installed || (len(offeredTo(t)) == 1) == c.skipped {
 				t.Errorf("installed: %v, want %v; offered to %v", err == nil, c.installed, offeredTo(t))
 			}
 		})
@@ -153,8 +161,9 @@ func TestOfferSkills_yesInstallsEverySkillAndAFailureOnlyWarns(t *testing.T) {
 			t.Errorf("%s not installed", s.selector)
 		}
 	}
-	if !fileIs(t, edited, "my own notes\n") || !strings.Contains(stderr, "Warning: not every skill was installed") || stdout != "" {
-		t.Errorf("want the edited copy kept, with a warning on stderr only; stdout %q, stderr %q", stdout, stderr)
+	if !fileIs(t, edited, "my own notes\n") || stdout != "" || !strings.Contains(stderr, "holds someone's edits") ||
+		!strings.HasSuffix(stderr, "Retry with: plivo skill install all --force\n") {
+		t.Errorf("want the edited copy kept, and a warning naming --force on stderr only; stdout %q, stderr %q", stdout, stderr)
 	}
 }
 
