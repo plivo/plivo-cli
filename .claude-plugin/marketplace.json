@@ -11,7 +11,7 @@
   "plugins": [
     {
       "name": "plivo",
-      "source": "./",
+      "source": "./plugin",
       "description": "Official Plivo skills for coding agents.",
       "category": "development",
       "tags": ["voice", "voice-agents", "sip-trunking", "telephony"]

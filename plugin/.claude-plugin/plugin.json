@@ -12,5 +12,9 @@
   "repository": "https://github.com/plivo/plivo-cli",
   "license": "Apache-2.0",
   "keywords": ["plivo", "voice", "voice-agents", "sip-trunking", "voice-xml", "sms", "telephony"],
-  "skills": ["./cli-skill", "./sip-trunking-skill", "./audio-streaming-skill", "./voice-xml-skill"]
+  "icon": "./icon.png",
+  "documentationUrl": "https://www.plivo.com/docs/",
+  "supportUrl": "https://support.plivo.com/",
+  "privacyPolicyUrl": "https://www.plivo.com/legal/privacy/",
+  "termsOfServiceUrl": "https://www.plivo.com/legal/tos/"
 }

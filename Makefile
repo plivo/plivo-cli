@@ -17,7 +17,7 @@ VERSION := $(shell git describe --tags --always 2>/dev/null || echo dev)
 # -s removes the symbol table, -w drops DWARF debug info — typical for release.
 LDFLAGS := -s -w -X $(PKG)/internal/version.Value=$(VERSION)
 
-.PHONY: default build tiny build-all install run clean fmt vet test docs skill-hashes help
+.PHONY: default build tiny build-all install run clean fmt vet test docs skill-hashes plugin-skills help
 
 default: ## Debug build with symbols (best for local dev)
 	go build -o $(BINARY) .
@@ -83,6 +83,10 @@ docs: ## Regenerate the command reference (docs/COMMANDS.md)
 
 skill-hashes: ## Regenerate cmd/skill_hashes.go after a SKILL.md change (git fetch origin first)
 	go run ./tools/skillhashes -o cmd/skill_hashes.go
+
+plugin-skills: ## Copy the product skills into plugin/skills after a SKILL.md change
+	@for p in cli-skill:plivo-cli audio-streaming-skill:plivo-audio-streaming sip-trunking-skill:plivo-sip-trunking voice-xml-skill:plivo-voice-xml; do \
+	  mkdir -p plugin/skills/$${p#*:} && cp $${p%%:*}/SKILL.md plugin/skills/$${p#*:}/SKILL.md; done
 
 clean: ## Remove build artefacts
 	rm -f $(BINARY)

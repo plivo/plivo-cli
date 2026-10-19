@@ -938,3 +938,18 @@ func TestSkillUpdate_reportsARetiredSkillInTheProject(t *testing.T) {
 		t.Errorf("update deleted the retired project copy: %v", err)
 	}
 }
+
+// The plugin in plugin/ ships copies of the bundled skills, refreshed by
+// `make plugin-skills`.
+func TestPluginSkillsMatchBundled(t *testing.T) {
+	dir := filepath.Join("..", "plugin", "skills")
+	for _, s := range bundledSkills {
+		got, err := os.ReadFile(filepath.Join(dir, s.dirName, "SKILL.md"))
+		if err != nil || string(got) != s.content {
+			t.Errorf("plugin/skills/%s/SKILL.md is not the bundled skill: run `make plugin-skills`", s.dirName)
+		}
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != len(bundledSkills) {
+		t.Errorf("plugin/skills has %d skills, want the %d bundled ones", len(entries), len(bundledSkills))
+	}
+}
