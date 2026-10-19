@@ -5,6 +5,41 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-10-19
+
+### Added
+
+- `plivo account usage` shows what the account used and spent over a date
+  window, from Plivo's usage summary: a row per period, product, type,
+  country and direction, then other charges (number rentals, lookups, fees,
+  taxes), then the total spend. Narrow it with `--product`, `--direction`,
+  `--country`, `--subaccount`, `--hangup-cause` and `--error-code`, and set
+  the row period with `--granularity`. `--since` and `--until` are UTC dates,
+  and `--until` is exclusive: `--until 2026-11-01` ends with October 31.
+  `--all` reads every page; the totals come with the first page and cover the
+  whole window.
+- Run inside Claude Code, Cursor or Codex, `plivo login` offers once per
+  machine to install the Plivo skills where that agent reads them, unless
+  current copies are there already. Without a terminal to ask on, it prints
+  the install command instead. `--yes` installs them without asking, and
+  `--quiet` skips the offer.
+- `skill install --agent codex` installs into `~/.agents/skills`, where Codex
+  reads skills. `--agent claude` is the default, `~/.claude/skills`, which
+  Claude Code and Cursor read.
+- `skill list --project` shows the skills installed in the git repository
+  you are in.
+- The CLI skill gains a "pick the right command" list, and sends spend
+  questions to `account usage` instead of adding up call or message records.
+
+### Changed
+
+- Routing an India (+91) number with `numbers update --app-id|--trunk-id` is
+  refused when the number has no KYC (compliance application) attached. It
+  used to go ahead with a warning. The error links the console page where
+  KYC is filed and lists the steps as CLI commands. `sip connect plan` fails
+  its compliance check the same way. `--force` still skips the check, and
+  Plivo still enforces KYC.
+
 ## [1.2.1] - 2026-10-17
 
 ### Added
