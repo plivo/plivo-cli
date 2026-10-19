@@ -38,6 +38,8 @@ check "verify URL pins the tag"      "$(printf '%s' "$body" | grep -c 'releases/
 current=$(grep -m1 '^## \[' CHANGELOG.md | sed 's/^## \[\([^]]*\)\].*/\1/')
 ./scripts/release-notes.sh "$current" >/dev/null 2>&1
 check "real CHANGELOG top ($current)" "$?" "0"
+# Plugin installs stay on the manifest's version until it changes, so it moves with each release.
+check "plugin version is $current" "$(sed -n 's/^  "version": "\(.*\)",$/\1/p' .claude-plugin/plugin.json)" "$current"
 
 if [ "$fails" -ne 0 ]; then echo "release-notes: $fails failed" >&2; exit 1; fi
 echo "release-notes: all checks passed"
