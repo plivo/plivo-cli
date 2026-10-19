@@ -1,0 +1,16 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "Plivo CLI",
+      "description": "Run any Plivo task from the plivo command line.",
+      "skills": ["plivo-cli"]
+    },
+    {
+      "title": "Voice agents",
+      "description": "Put a voice agent on real phone calls.",
+      "skills": ["plivo-sip-trunking", "plivo-audio-streaming", "plivo-voice-xml"]
+    }
+  ]
+}
