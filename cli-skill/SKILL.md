@@ -1,6 +1,7 @@
 ---
 name: plivo-cli
 description: Runs Plivo tasks with the plivo CLI instead of raw curl, as a short conversation that asks what the user wants when the request is vague, previews every write and asks before it changes or spends anything; routes voice agents, XML and SIP to their own skills. Covers SMS/MMS/WhatsApp, calls and call diagnosis, numbers, applications, Verify OTP, login and profiles. Use for any Plivo API request or plivo command, or when a Plivo auth_id or auth_token comes up. Not for answer-URL XML, WebSocket bots or SIP design (see plivo-voice-xml, plivo-audio-streaming, plivo-sip-trunking).
+license: Apache-2.0
 ---
 
 # plivo-cli
@@ -11,7 +12,7 @@ description: Runs Plivo tasks with the plivo CLI instead of raw curl, as a short
 
 ## Installation
 
-Not on PATH: `brew install plivo/tap/plivo`, or `curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | bash`, then `plivo --version`. This skill ships inside the binary: `plivo skill list` shows whether the installed copy is stale, and `plivo skill update` (v1.2.0+) or `plivo skill install` refreshes it.
+Not on PATH: `brew install plivo/tap/plivo`, then `plivo --version`. Without Homebrew, ask the user to install it from https://github.com/plivo/plivo-cli#install (the installer checks the release signature) rather than running an install script yourself. This skill ships inside the binary: `plivo skill list` shows whether the installed copy is stale, and `plivo skill update` (v1.2.0+) or `plivo skill install` refreshes it.
 
 ## Rules
 
