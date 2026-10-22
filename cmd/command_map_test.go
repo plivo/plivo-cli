@@ -157,6 +157,7 @@ func TestSchema_describesWithoutRunning(t *testing.T) {
 		{[]string{"numbers", "get", "--schema"}, "plivo numbers get", apiNote, fieldSchema{"number", "string"}, "", 1},
 		{[]string{"numbers", "list", "--schema"}, "plivo numbers list", apiNote, fieldSchema{"objects[].number", "string"}, "limit", 0},
 		{[]string{"sip", "calls", "list", "--schema", "--limit", "5"}, "plivo sip calls list", apiNote, fieldSchema{"meta.total_count", "number"}, "limit", 0},
+		{[]string{"voice", "calls", "list", "--schema"}, "plivo voice calls list", "calls[]", fieldSchema{"objects[].call_uuid", "string"}, "live", 0},
 		// A scalar the API may send as a string or a number.
 		{[]string{"sip", "calls", "insights", "--schema"}, "plivo sip calls insights", apiNote, fieldSchema{"post_dial_delay", "any"}, "", 1},
 		// Results the CLI builds rather than passes through.

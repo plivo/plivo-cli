@@ -189,6 +189,9 @@ func printSchema(c *cobra.Command) error {
 	} else if t, ok := resultTypes[d.Path]; ok {
 		d.OutputFields, d.OutputFieldsNote = outputFields(t), resultFieldsNote
 	}
+	if note := outputNotes[d.Path]; note != "" {
+		d.OutputFieldsNote += " " + note
+	}
 	if effectiveFormat() == output.FormatJSON {
 		return output.JSONSuccess(os.Stdout, d, nil)
 	}

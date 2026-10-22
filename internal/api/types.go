@@ -172,6 +172,14 @@ type CallList struct {
 	Objects []Call   `json:"objects"`
 }
 
+// LiveCallList is the calls in progress (GET Call/?status=live): their UUIDs
+// alone, not call objects.
+type LiveCallList struct {
+	RawBody
+	APIID string   `json:"api_id"`
+	Calls []string `json:"calls"`
+}
+
 // GenericResponse covers Plivo's typical "{message, api_id}" mutation response.
 type GenericResponse struct {
 	RawBody

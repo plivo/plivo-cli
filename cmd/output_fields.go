@@ -75,6 +75,12 @@ var outputTypes = map[string]reflect.Type{
 	"plivo voice recordings list":                 reflect.TypeFor[api.RecordingList](),
 }
 
+// outputNotes adds to the --schema note of a command whose flag changes what
+// -o json prints.
+var outputNotes = map[string]string{
+	"plivo voice calls list": "With --live, data is api_id and calls[], the UUIDs of the calls in progress.",
+}
+
 // resultTypes maps each command whose -o json prints a result the CLI builds,
 // not an API response, to that result's type, so --schema lists every field.
 var resultTypes = map[string]reflect.Type{
