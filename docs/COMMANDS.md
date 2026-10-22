@@ -555,9 +555,10 @@ spend questions with this, never by adding up call or message records.
 --since and --until are UTC dates, YYYY-MM-DD, sent as given. --until is
 exclusive: the window ends as that day starts, so --until 2026-11-01 ends with
 October 31. Without --since the window is the 7 days before --until; without
---until it runs through today. Plivo caps the window by --granularity (hour 7
-days, day 92 days, month 24 months, year no cap) and answers a longer one with
-a 400 naming the granularity to use.
+--until it ends as today starts. A window with no day in it is refused before
+any request. Plivo caps the window by --granularity (hour 7 days, day 92 days,
+month 24 months, year no cap) and answers a longer one with a 400 naming the
+granularity to use.
 
 Other charges are left out with --subaccount, or when --product leaves out
 other, and total_spend then covers only the usage rows that match.

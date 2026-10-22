@@ -43,9 +43,10 @@ spend questions with this, never by adding up call or message records.
 --since and --until are UTC dates, YYYY-MM-DD, sent as given. --until is
 exclusive: the window ends as that day starts, so --until 2026-11-01 ends with
 October 31. Without --since the window is the 7 days before --until; without
---until it runs through today. Plivo caps the window by --granularity (hour 7
-days, day 92 days, month 24 months, year no cap) and answers a longer one with
-a 400 naming the granularity to use.
+--until it ends as today starts. A window with no day in it is refused before
+any request. Plivo caps the window by --granularity (hour 7 days, day 92 days,
+month 24 months, year no cap) and answers a longer one with a 400 naming the
+granularity to use.
 
 Other charges are left out with --subaccount, or when --product leaves out
 other, and total_spend then covers only the usage rows that match.
@@ -157,12 +158,31 @@ func usageQuery(cmd *cobra.Command) (url.Values, error) {
 			q.Set(field, v)
 		}
 	}
-	for _, field := range []string{"from_date", "to_date"} {
+	var window [2]time.Time // --since, --until
+	for i, field := range []string{"from_date", "to_date"} {
 		if d := q.Get(field); d != "" {
-			if _, err := time.Parse(time.DateOnly, d); err != nil {
+			t, err := time.Parse(time.DateOnly, d)
+			if err != nil {
 				return nil, clierr.BadInput(fmt.Sprintf("could not read %q as a date: use YYYY-MM-DD (UTC)", d))
 			}
+			window[i] = t
 		}
+	}
+	// --until is exclusive, and left out it is today (UTC), so an end on or
+	// before --since leaves no day to read.
+	since, until := window[0], window[1]
+	switch today := listTimeNow().UTC().Truncate(24 * time.Hour); {
+	case !until.IsZero() && !until.After(since):
+		e := clierr.BadInput(fmt.Sprintf("--until (%s) must be after --since (%s)",
+			until.Format(time.DateOnly), since.Format(time.DateOnly)))
+		e.Hint = fmt.Sprintf("Pass the earlier date as --since. --until is exclusive, so one day is --since %s --until %s.",
+			since.Format(time.DateOnly), since.AddDate(0, 0, 1).Format(time.DateOnly))
+		return nil, e
+	case until.IsZero() && !since.Before(today):
+		e := clierr.BadInput(fmt.Sprintf("--since (%s) must be before today (%s, UTC) when there is no --until: "+
+			"the window then ends as today starts", since.Format(time.DateOnly), today.Format(time.DateOnly)))
+		e.Hint = "Pass an earlier --since, or an --until after it: --until is exclusive."
+		return nil, e
 	}
 	if c := q.Get("country"); c != "" && !countryCode.MatchString(c) {
 		e := clierr.BadFlag("country", fmt.Sprintf("must be a two-letter country code, got %q", c))
