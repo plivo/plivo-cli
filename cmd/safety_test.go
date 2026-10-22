@@ -69,7 +69,7 @@ func execCmd(t *testing.T, args ...string) (err error, stdout, stderr string) {
 	mapFlag = false
 	schemaFlag = false
 	logLevel = "warn"
-	timeoutSec = 30
+	timeoutFlag = 30 * time.Second
 	adminServer = ""
 
 	// Capture stdout via os.Stdout redirection (cobra writes to os.Stderr/Stdout

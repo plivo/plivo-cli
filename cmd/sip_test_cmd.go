@@ -103,10 +103,10 @@ func runSIPTest(cmd *cobra.Command, _ []string) error {
 	}
 	step := sipTestStep
 	if cmd.Flags().Changed("timeout") {
-		if timeoutSec < 1 {
+		if timeoutFlag < time.Second {
 			return clierr.BadFlag("timeout", "must be at least 1 second")
 		}
-		step = time.Duration(timeoutSec) * time.Second
+		step = timeoutFlag
 	}
 	transport, defaulted := u.testTransport()
 	port := u.testPort(transport)

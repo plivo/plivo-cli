@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,7 +31,7 @@ var (
 	// explainFlag backs --explain. Registered locally (not persistent) by
 	// registerExplainFlag, only on the commands that actually read it.
 	explainFlag bool
-	timeoutSec  int
+	timeoutFlag time.Duration // --timeout; see secondsOrDuration
 	adminServer string
 	// allFlag backs --all. Registered locally (not persistent) by
 	// registerAllFlag — see the removal note on that function for why this
@@ -169,7 +171,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "warn", "log level: debug|info|warn|error|none")
 	rootCmd.PersistentFlags().BoolVarP(&yesFlag, "yes", "y", false, "skip confirmation prompts")
 	rootCmd.PersistentFlags().BoolVar(&dryRunFlag, "dry-run", false, "print the HTTP request without sending")
-	rootCmd.PersistentFlags().IntVar(&timeoutSec, "timeout", 30, "request timeout in seconds")
+	timeoutFlag = 30 * time.Second
+	rootCmd.PersistentFlags().Var(secondsOrDuration{&timeoutFlag}, "timeout", "request timeout: seconds, or a duration such as 90s or 2m")
 	// Additional admin-only flags are registered in build-tag-gated files;
 	// the backing var (adminServer) lives above and stays "" in the public
 	// build.
@@ -180,6 +183,24 @@ func init() {
 	// call sites in api.go, application.go, auth.go, call.go, message.go,
 	// number.go, verify.go.
 }
+
+// secondsOrDuration is --timeout's value: a bare integer is seconds, the form
+// the flag always took, and anything else a Go duration such as 90s or 2m.
+type secondsOrDuration struct{ *time.Duration }
+
+func (d secondsOrDuration) Set(s string) error {
+	if _, err := strconv.Atoi(s); err == nil {
+		s += "s" // seconds, parsed as a duration so an overflow is refused
+	}
+	v, err := time.ParseDuration(s)
+	if err != nil {
+		return errors.New("want seconds, such as 30, or a duration, such as 90s or 2m")
+	}
+	*d.Duration = v
+	return nil
+}
+
+func (secondsOrDuration) Type() string { return "duration" }
 
 // registerExplainFlag adds a local (non-persistent) --explain flag to cmd.
 // Call this only on commands whose RunE actually reads explainFlag —
@@ -222,7 +243,7 @@ func getClient() (*api.Client, string, error) {
 	}
 	credSource = name
 	credAuthID = p.AuthID
-	c := api.New(p.AuthID, p.AuthToken, time.Duration(timeoutSec)*time.Second)
+	c := api.New(p.AuthID, p.AuthToken, timeoutFlag)
 	c.AdminBaseURL = adminServer
 	c.Email = p.Email
 	c.Region = p.Region
