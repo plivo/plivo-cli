@@ -62,8 +62,10 @@ var askable = func() bool {
 // agent whose skills folder lacks current copies of the Plivo skills, it asks
 // on a terminal whether to install them, or without one prints the command
 // that does; --yes installs them without asking, and --quiet skips the offer.
-// Each agent is offered once per machine whatever the answer, and nothing here
-// can fail the login: stderr only, and a failed install warns.
+// The question is put at most once per machine, whatever the answer. Without
+// a terminal, and in each other agent once it was put, the agent is given its
+// command instead, once. Nothing here can fail the login: stderr only, and a
+// failed install warns.
 func offerSkills() {
 	a, ok := detectAgent()
 	if !ok || dryRunFlag || quietFlag {
@@ -77,9 +79,23 @@ func offerSkills() {
 	if err != nil || slices.Contains(cfg.Skills.Offered, a.name) || skillsCurrentIn(root) {
 		return
 	}
-	// Recorded before asking, so a question left unanswered isn't asked again.
+	var lines <-chan string
+	if !yesFlag && len(cfg.Skills.Offered) == 0 {
+		lines = questionLines()
+	}
+	if !yesFlag && lines == nil {
+		if !slices.Contains(cfg.Skills.Hinted, a.name) {
+			cfg.Skills.Hinted = append(cfg.Skills.Hinted, a.name)
+			if config.Save(cfg) == nil {
+				printInstallCommand(a)
+			}
+		}
+		return
+	}
+	// The machine's one question, or a --yes install. Recorded before asking,
+	// so a question left unanswered isn't asked again.
 	cfg.Skills.Offered = append(cfg.Skills.Offered, a.name)
-	if config.Save(cfg) != nil || (!yesFlag && !askToInstall(a)) {
+	if config.Save(cfg) != nil || (!yesFlag && !askToInstall(a, lines)) {
 		return
 	}
 	if err := installSkillsIn(bundledSkills, root); err != nil {
@@ -96,24 +112,34 @@ func offerSkills() {
 	}
 }
 
-// askToInstall puts the offer to the user and reports a yes. Without a
-// terminal to ask on, or once stdin has closed, it prints the install command
-// instead.
-func askToInstall(a codingAgent) bool {
-	if askable() {
-		lines := stdinLines()
-		// A line typed before the question is not an answer to it.
-		if drainLines(lines) {
-			fmt.Fprintf(os.Stderr, "Install the Plivo skills for %s? (Y/n) ", a.name)
-			if answer, ok := <-lines; ok {
-				answer = strings.ToLower(strings.TrimSpace(answer))
-				return answer == "" || answer == "y" || answer == "yes"
-			}
-			fmt.Fprintln(os.Stderr) // stdin closed under the question
-		}
+// questionLines returns the lines to read an answer from, or nil when the
+// question can't be put: no terminal, or stdin closed already. A line typed
+// before the question is not an answer to it.
+func questionLines() <-chan string {
+	if !askable() {
+		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Install the Plivo skills for %s with: %s\n", a.name, a.install())
+	if lines := stdinLines(); drainLines(lines) {
+		return lines
+	}
+	return nil
+}
+
+// askToInstall puts the question and reports a yes. If stdin closes under it,
+// it prints the install command instead.
+func askToInstall(a codingAgent, lines <-chan string) bool {
+	fmt.Fprintf(os.Stderr, "Install the Plivo skills for %s? (Y/n) ", a.name)
+	if answer, ok := <-lines; ok {
+		answer = strings.ToLower(strings.TrimSpace(answer))
+		return answer == "" || answer == "y" || answer == "yes"
+	}
+	fmt.Fprintln(os.Stderr) // stdin closed under the question
+	printInstallCommand(a)
 	return false
+}
+
+func printInstallCommand(a codingAgent) {
+	fmt.Fprintf(os.Stderr, "Install the Plivo skills for %s with: %s\n", a.name, a.install())
 }
 
 // drainLines drops the lines already waiting in lines, without blocking, and

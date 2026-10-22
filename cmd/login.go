@@ -54,11 +54,12 @@ Headless / CI use:
   scripts and CI need a profile that was logged in on that machine already.
 
 Inside a coding agent:
-  Run inside Claude Code, Cursor or Codex, a login offers once per
-  machine to install the Plivo skills where that agent reads them, unless
-  current copies are there already. Without a terminal to ask on, it
-  prints the install command instead. --yes installs them without
-  asking, and --quiet skips the offer.
+  Run inside Claude Code, Cursor or Codex, a login asks once per machine
+  whether to install the Plivo skills where that agent reads them, unless
+  current copies are there already. Without a terminal to ask on, and in
+  each other agent once it has asked, it prints that agent's install
+  command instead, once. --yes installs them without asking, and --quiet
+  skips the offer.
 
 By default the CLI validates credentials with GET /Account/ before
 saving. Pass --no-verify to skip (offline / mock use only).`,

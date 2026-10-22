@@ -62,10 +62,13 @@ type Config struct {
 }
 
 // SkillsConfig is the optional [skills] table in ~/.plivo/config.toml.
-// Offered names the coding agents `plivo login` has offered to install the
-// Plivo skills for, so it asks once per agent on a machine.
+// `plivo login` asks once per machine whether to install the Plivo skills.
+// Offered names the coding agents it asked, or installed them for with --yes;
+// releases up to v1.3.0 also listed one only given the install command, and
+// that counts as asked too. Hinted names the agents given the command.
 type SkillsConfig struct {
 	Offered []string `toml:"offered,omitempty"`
+	Hinted  []string `toml:"hinted,omitempty"`
 }
 
 // BuddyConfig is the optional [buddy] table in ~/.plivo/config.toml. Tunes
