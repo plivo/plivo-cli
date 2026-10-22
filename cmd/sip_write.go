@@ -514,6 +514,10 @@ func runSIPTrunksUpdate(cmd *cobra.Command, args []string) error {
 	}
 	boolFlagPatch(cmd, "secure", "secure", trunkUpdateSecure, body)
 	if len(body) == 0 {
+		if cmd.Flags().Changed("direction") {
+			return clierr.BadInput("--direction alone sends no change; pass a flag that changes something " +
+				"(--name, --status, --uri, --fallback-uri, --credential, --ip-acl or --secure)")
+		}
 		return clierr.BadInput("nothing to update — pass at least one flag")
 	}
 	// The API rejects any update without trunk_direction, including one that

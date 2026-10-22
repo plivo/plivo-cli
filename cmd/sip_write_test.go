@@ -644,6 +644,12 @@ func TestSIPTrunksUpdate_alwaysSendsTrunkDirection(t *testing.T) {
 	}
 }
 
+// --direction alone sends no change, so it is refused as that, not as an
+// update with no flags.
+func TestSIPTrunksUpdate_directionAloneSendsNoChange(t *testing.T) {
+	requireRefusedBeforeAnyRequest(t, []string{"sip", "trunks", "update", "101", "--direction", "inbound"}, "--direction alone sends no change")
+}
+
 // The API clears a fallback URI an update leaves out, so the stored one is sent
 // again; --fallback-uri "" leaves it out, the only way to clear it. A trunk
 // turned outbound, which takes a credential and an IP list, gets none.
