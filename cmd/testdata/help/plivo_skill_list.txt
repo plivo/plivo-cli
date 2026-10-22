@@ -4,12 +4,14 @@ Usage:
   plivo skill list [flags]
 
 Examples:
-  plivo skill list              # in ~/.claude/skills
-  plivo skill list --project    # in <repo>/.claude/skills
+  plivo skill list                # in ~/.claude/skills
+  plivo skill list --agent codex  # in ~/.agents/skills
+  plivo skill list --project      # in <repo>/.claude/skills
 
 Flags:
-  -h, --help      help for list
-      --project   show the skills installed in the current git repository's .claude/skills
+      --agent string   coding agent whose skills to show: claude (~/.claude/skills) or codex (~/.agents/skills) (default: claude)
+  -h, --help           help for list
+      --project        show the skills installed in the current git repository's .claude/skills
 
 Global Flags:
       --dry-run            print the HTTP request without sending

@@ -3533,14 +3533,16 @@ plivo skill list [flags]
 Examples:
 
 ```
-  plivo skill list              # in ~/.claude/skills
-  plivo skill list --project    # in <repo>/.claude/skills
+  plivo skill list                # in ~/.claude/skills
+  plivo skill list --agent codex  # in ~/.agents/skills
+  plivo skill list --project      # in <repo>/.claude/skills
 ```
 
 Flags:
 
 ```
-      --project   show the skills installed in the current git repository's .claude/skills
+      --agent string   coding agent whose skills to show: claude (~/.claude/skills) or codex (~/.agents/skills) (default: claude)
+      --project        show the skills installed in the current git repository's .claude/skills
 ```
 
 ---
@@ -3551,13 +3553,13 @@ Update installed skills to the versions bundled in this binary
 
 Update every installed Plivo skill to the version bundled in this binary.
 
-It looks in ~/.claude/skills and, inside a git repository, in
-<repo>/.claude/skills. A copy is replaced only when it matches a version a
+It looks in each agent's skills folder, ~/.claude/skills (Claude Code and
+Cursor) and ~/.agents/skills (Codex), and inside a git repository in the same
+two folders under <repo>. A copy is replaced only when it matches a version a
 release shipped; anything else is treated as your own edit and kept, and
 --force replaces it too. Skills that are not installed stay that way: add them
-with `plivo skill install`. A retired skill still installed next to the one
-that replaced it is reported with the command that retires it; update itself
-deletes nothing.
+with `plivo skill install`. A retired skill still in a .claude/skills folder
+is reported with the command that retires it; update itself deletes nothing.
 
 ```
 plivo skill update [flags]
