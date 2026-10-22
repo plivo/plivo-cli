@@ -3923,7 +3923,7 @@ Flags:
       --hangup-url string          URL hit when call ends
       --machine-detection string   none|true|hangup
       --ring-url string            URL hit when call starts ringing
-      --to string                  destination number (E.164) (required)
+      --to string                  destination: an E.164 number or a sip: URI, or several joined with < (required)
 ```
 
 ---

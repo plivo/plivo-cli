@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
@@ -80,7 +81,7 @@ func init() {
 
 	callMakeCmd.Flags().StringVar(&callMakeFrom, "from", "", "source number (E.164) — must be on your account (required)")
 	_ = callMakeCmd.MarkFlagRequired("from")
-	callMakeCmd.Flags().StringVar(&callMakeTo, "to", "", "destination number (E.164) (required)")
+	callMakeCmd.Flags().StringVar(&callMakeTo, "to", "", "destination: an E.164 number or a sip: URI, or several joined with < (required)")
 	_ = callMakeCmd.MarkFlagRequired("to")
 	callMakeCmd.Flags().StringVar(&callMakeAnswerURL, "answer-url", "https://s3.amazonaws.com/static.plivo.com/answer.xml",
 		"URL returning PlivoXML to play on answer (default: Plivo's hello demo)")
@@ -439,6 +440,9 @@ func runSubresourceDelete(cmd *cobra.Command, uuidStr, sub, doneLabel string) er
 }
 
 func runCallMake(cmd *cobra.Command, args []string) error {
+	if err := validateCallParties(callMakeFrom, callMakeTo); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -494,6 +498,22 @@ func runCallMake(cmd *cobra.Command, args []string) error {
 		{"request_uuid", resp.RequestUUID},
 		{"message", resp.Message},
 	})
+}
+
+// validateCallParties refuses what the call API cannot dial, before anything is
+// sent: from is an E.164 number, to one or more joined by <, each an E.164
+// number or a sip: URI.
+func validateCallParties(from, to string) error {
+	if !isE164Digits(strings.TrimPrefix(from, "+")) {
+		return clierr.BadFlag("from", fmt.Sprintf("%q is not an E.164 number", from))
+	}
+	for _, part := range strings.Split(to, "<") {
+		sip := len(part) > len("sip:") && strings.EqualFold(part[:len("sip:")], "sip:")
+		if !sip && !isE164Digits(strings.TrimPrefix(part, "+")) {
+			return clierr.BadFlag("to", fmt.Sprintf("%q is not an E.164 number or a sip: URI", part))
+		}
+	}
+	return nil
 }
 
 func runCallList(cmd *cobra.Command, args []string) error {
