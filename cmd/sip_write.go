@@ -606,10 +606,13 @@ var sipURIsCreateCmd = &cobra.Command{
 	Long: `Create an origination URI.
 
 --uri accepts host, host:port, host;transport=udp|tcp|tls, sip:user@host or
-sips:host. The host is a name or an IPv4 address: Plivo does not take IPv6.
-It is checked before sending: a space, a bad port, an unknown transport or a
-malformed host is refused. A missing port is fine: the platform decides the
-default. --transport adds ;transport= to --uri.
+sips:host. The API refuses a scheme, so sip: is dropped and sips: becomes
+;transport=tls, on port 5061 unless one is given, or with --platform on the
+guide's TLS port where it gives one; with another transport it is refused.
+stderr names the URI sent. The host is a name or an IPv4 address: Plivo does
+not take IPv6. It is checked before sending: a space, a bad port, an unknown
+transport or a malformed host is refused. A missing port is fine: the
+platform decides the default. --transport adds ;transport= to --uri.
 
 --platform livekit|elevenlabs|retell|vapi fills in what Plivo's guide for that
 platform gives: host, port and transport, so you add only your own details,
@@ -631,7 +634,8 @@ var sipURIsUpdateCmd = &cobra.Command{
 	Short: "Update an origination URI",
 	Long: `--authentication-needed takes a value so it reverses: --authentication-needed=false turns it off.
 
---uri is checked before sending, as on create.`,
+--uri is checked before sending, and a sip: or sips: scheme rewritten, as on
+create.`,
 	Args: cobra.ExactArgs(1),
 	RunE: sipObjectArg(runSIPURIsUpdate),
 }
@@ -668,7 +672,7 @@ func runSIPURIsCreate(cmd *cobra.Command, args []string) error {
 	if uri == "" {
 		return clierr.BadInput("--uri is required (host, host:port, host;transport=…, or sip:user@host)")
 	}
-	if err := parseOriginationURI(uri); err != nil {
+	if uri, err = originationURI(uri); err != nil {
 		return err
 	}
 	if p != nil {
@@ -761,8 +765,10 @@ func runSIPURIsGet(cmd *cobra.Command, args []string) error {
 }
 
 func runSIPURIsUpdate(cmd *cobra.Command, args []string) error {
+	var uri string
 	if cmd.Flags().Changed("uri") {
-		if err := parseOriginationURI(uriUpdateURI); err != nil {
+		var err error
+		if uri, err = originationURI(uriUpdateURI); err != nil {
 			return err
 		}
 	}
@@ -778,7 +784,7 @@ func runSIPURIsUpdate(cmd *cobra.Command, args []string) error {
 		body["name"] = uriUpdateName
 	}
 	if cmd.Flags().Changed("uri") {
-		body["uri"] = normalizeSIPURI(uriUpdateURI)
+		body["uri"] = uri
 	}
 	if cmd.Flags().Changed("username") {
 		body["username"] = uriUpdateUsername

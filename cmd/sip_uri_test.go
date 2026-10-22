@@ -21,9 +21,10 @@ func TestParseSIPURI_acceptsEveryDocumentedShape(t *testing.T) {
 		{"sip.example.com:5061;transport=TLS", sipURI{Host: "sip.example.com", Port: 5061, Transport: "tls"}},
 		{"sip:user@sip.example.com", sipURI{Scheme: "sip", User: "user", Host: "sip.example.com"}},
 		{"sip:+14155551234@sip.example.com:5060", sipURI{Scheme: "sip", User: "+14155551234", Host: "sip.example.com", Port: 5060}},
+		{"user@sip.example.com", sipURI{User: "user", Host: "sip.example.com"}},
 		{"sip:sip.example.com;transport=tls", sipURI{Scheme: "sip", Host: "sip.example.com", Transport: "tls"}},
 		{"sips:sip.example.com", sipURI{Scheme: "sips", Host: "sip.example.com"}},
-		{"SIPS:sip.example.com;transport=tcp", sipURI{Scheme: "sips", Host: "sip.example.com", Transport: "tcp"}},
+		{"SIPS:sip.example.com;transport=TLS", sipURI{Scheme: "sips", Host: "sip.example.com", Transport: "tls"}},
 		{"203.0.113.4", sipURI{Host: "203.0.113.4"}},
 		{"203.0.113.4:5080;transport=udp", sipURI{Host: "203.0.113.4", Port: 5080, Transport: "udp"}},
 		{"[2001:db8::1]", sipURI{Host: "2001:db8::1"}},
@@ -64,7 +65,6 @@ func TestParseSIPURI_namesWhatIsWrong(t *testing.T) {
 		{"sip:user@", "no host"},
 		{"sip:@sip.example.com", "empty user part"},
 		{"sip:alice:s3cret@sip.example.com", "password in its user part"},
-		{"user@sip.example.com", "no scheme"},
 		{"sip_trunk.example.com", `contains '_'`},
 		{"-sip.example.com", "not a valid hostname"},
 		{"sip..example.com", "not a valid hostname"},
@@ -77,6 +77,7 @@ func TestParseSIPURI_namesWhatIsWrong(t *testing.T) {
 		{"[2001:db8::1]x", "only :port"},
 		{"sip://sip.example.com", "without //"},
 		{"sips:sip.example.com;transport=udp", "sips:"},
+		{"sips:sip.example.com;transport=tcp", "transport=tcp"},
 	} {
 		t.Run(tc.in, func(t *testing.T) {
 			_, err := parseSIPURI(tc.in)
@@ -136,6 +137,7 @@ func TestSIPWrites_refuseBadValuesWithoutARequest(t *testing.T) {
 		{"trunks update bad direction", "direction", []string{"sip", "trunks", "update", "T1", "--direction", "sideways"}},
 		{"uris create ipv6", "uri", []string{"sip", "uris", "create", "--name", "n", "--uri", "[2001:db8::1]:5061;transport=tls"}},
 		{"uris update ipv6", "uri", []string{"sip", "uris", "update", uriU1, "--uri", "sip:[2001:db8::1]"}},
+		{"uris create sips with tcp", "uri", []string{"sip", "uris", "create", "--name", "n", "--uri", "sips:sip.example.com;transport=tcp"}},
 		{"ip-acl create ipv6", "ip", []string{"sip", "ip-acl", "create", "--name", "a", "--ip", "2001:db8::1"}},
 		{"ip-acl update ipv6 range", "ip", []string{"sip", "ip-acl", "update", aclA1, "--ip", "::/0"}},
 		{"credentials create short username", "username", []string{"sip", "credentials", "create", "--name", "c", "--username", "ab", "--password-stdin"}},

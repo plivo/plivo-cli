@@ -278,29 +278,37 @@ func TestSIPDeletes_previewWhichTrunksUseTheObject(t *testing.T) {
 }
 
 // A bare host is a legal origination URI. Requiring a port would reject a
-// perfectly good value that the platform resolves itself.
-func TestSIPURIsCreate_acceptsEveryDocumentedURIShape(t *testing.T) {
-	for _, uri := range []string{
-		"sip.example.com",
-		"sip.example.com:5060",
-		"sip.example.com;transport=tcp",
-		"sip:user@sip.example.com",
-		"sip:sip.example.com;transport=tls",
-		"sips:sip.example.com",
-		"203.0.113.4:5060",
+// perfectly good value that the platform resolves itself. The API refuses a
+// sip: or sips: URI, so those go host first, and stderr says so.
+func TestSIPURIs_sendEveryDocumentedURIShapeHostFirst(t *testing.T) {
+	for uri, want := range map[string]string{
+		"sip.example.com":                   "sip.example.com",
+		"sip.example.com:5060":              "sip.example.com:5060",
+		"sip.example.com;transport=tcp":     "sip.example.com;transport=tcp",
+		"sip:user@sip.example.com":          "user@sip.example.com",
+		"sip:sip.example.com;transport=tls": "sip.example.com;transport=tls",
+		"sips:sip.example.com":              "sip.example.com:5061;transport=tls",
+		"SIPS:sip.example.com":              "sip.example.com:5061;transport=tls",
+		"sips:sip.example.com:5080;lr":      "sip.example.com:5080;lr;transport=tls",
+		"203.0.113.4:5060":                  "203.0.113.4:5060",
 	} {
-		t.Run(uri, func(t *testing.T) {
-			setFakeCreds(t)
-			resetWriteFlags(t)
-			reqs := sipWriteServer(t, trunksUsingU1)
-			if err, _, _ := execCmd(t, "sip", "uris", "create", "--name", "n", "--uri", uri); err != nil {
-				t.Fatalf("%q was rejected: %v", uri, err)
-			}
-			p := post(reqs(), "/Zentrunk/URI/")
-			if p == nil || p.body["uri"] != uri || p.body["name"] != "n" {
-				t.Errorf("uri not sent verbatim: %v", p)
-			}
-		})
+		for _, verb := range [][]string{{"create", "--name", "n"}, {"update", uriU1}} {
+			t.Run(verb[0]+" "+uri, func(t *testing.T) {
+				setFakeCreds(t)
+				resetWriteFlags(t)
+				reqs := sipWriteServer(t, trunksUsingU1)
+				err, _, stderr := execCmd(t, append([]string{"sip", "uris"}, append(verb, "--uri", uri)...)...)
+				if err != nil {
+					t.Fatalf("%q was rejected: %v", uri, err)
+				}
+				if p := post(reqs(), "/Zentrunk/URI/"); p == nil || p.body["uri"] != want {
+					t.Errorf("uri sent = %v, want %q", p, want)
+				}
+				if noted := strings.Contains(stderr, "--uri is rewritten to "+want+":"); noted != (want != uri) {
+					t.Errorf("rewrite noted = %v, want %v:\n%s", noted, want != uri, stderr)
+				}
+			})
+		}
 	}
 }
 
