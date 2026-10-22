@@ -1197,3 +1197,52 @@ func TestSIPDeletes_dryRunShowsDependents(t *testing.T) {
 		}
 	})
 }
+
+// A URI delete's effect on its trunks is only known for a primary URI, so each
+// trunk is read back after it and both renderings say what was found: 103
+// answers 404, deleted with the URI; 101 and 102 still point at it, kept; 104
+// answers 500 and 105 not at all, so neither is guessed. Only a URI delete
+// reports its trunks: a credential delete does not.
+func TestSIPURIsDelete_reportsWhatBecameOfEachTrunk(t *testing.T) {
+	setFakeCreds(t)
+	resetWriteFlags(t)
+	list := strings.ReplaceAll(`{"objects":[{"trunk_id":"101","primary_uri_uuid":"U"},{"trunk_id":"102","fallback_uri_uuid":"U"},`+
+		`{"trunk_id":"103","fallback_uri_uuid":"U"},{"trunk_id":"104","primary_uri_uuid":"U"},{"trunk_id":"105","primary_uri_uuid":"U"}]}`, `"U"`, `"`+uriU1+`"`)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch p := r.URL.Path; {
+		case r.Method == "DELETE":
+		case strings.HasSuffix(p, "/Zentrunk/Trunk/"):
+			_, _ = w.Write([]byte(list))
+		case strings.HasSuffix(p, "/Trunk/101/"):
+			_, _ = w.Write([]byte(`{"object":{"trunk_id":"101","primary_uri_uuid":"` + uriU1 + `"}}`))
+		case strings.HasSuffix(p, "/Trunk/102/"):
+			_, _ = w.Write([]byte(`{"object":{"trunk_id":"102","fallback_uri_uuid":"` + uriU1 + `"}}`))
+		case strings.HasSuffix(p, "/Trunk/104/"):
+			w.WriteHeader(http.StatusInternalServerError)
+		case strings.HasSuffix(p, "/Trunk/105/"):
+			conn, _, _ := w.(http.Hijacker).Hijack()
+			_ = conn.Close()
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	clientForTest = &api.Client{BaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
+	t.Cleanup(func() { clientForTest = nil })
+
+	err, stdout, _ := execCmd(t, "sip", "uris", "delete", uriU1, "--yes", "--force", "-o", "json")
+	data, _ := decodeOne(t, stdout)["data"].(map[string]any)
+	want := "[103] [map[fallback_points_at_deleted_uri:false primary_points_at_deleted_uri:true trunk_id:101] " +
+		"map[fallback_points_at_deleted_uri:true primary_points_at_deleted_uri:false trunk_id:102]] [104 105]"
+	if got := fmt.Sprint(data["trunks_deleted"], data["trunks_kept"], data["trunks_unchecked"]); err != nil || got != want {
+		t.Errorf("err %v; trunks_deleted, trunks_kept, trunks_unchecked = %s", err, got)
+	}
+	err, _, stderr := execCmd(t, "sip", "uris", "delete", uriU1, "--yes", "--force", "-o", "table")
+	if want := "trunks deleted with it: 103; trunks kept: 101 (still its primary URI), 102 (still its fallback URI); " +
+		"could not read back trunks 104, 105"; err != nil || !strings.Contains(stderr, want) {
+		t.Errorf("err %v; stderr should say %q:\n%s", err, want, stderr)
+	}
+	if err, stdout, _ := execCmd(t, "sip", "credentials", "delete", credC1, "--yes", "-o", "json"); err != nil || strings.Contains(stdout, "trunks_deleted") {
+		t.Errorf("a credential delete reports no trunks: err %v\n%s", err, stdout)
+	}
+}

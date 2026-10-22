@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"regexp"
@@ -59,12 +60,13 @@ var trunkFilters = map[string][]string{
 	"IPAccessControlList": {"ipacl_uuid"},
 }
 
-// trunksUsing names every trunk that points at an object. It reads the trunk
-// list through the filters, every page, under --dry-run too, and checks each
-// match again here, so a filter the server ignored cannot add a trunk that does
-// not use the object. An error means the check did not finish.
-func trunksUsing(client *api.Client, segment, uuid string) ([]string, error) {
-	var used []string
+// trunksUsing names every trunk that points at an object, and returns their
+// IDs. It reads the trunk list through the filters, every page, under
+// --dry-run too, and checks each match again here, so a filter the server
+// ignored cannot add a trunk that does not use the object. An error means the
+// check did not finish.
+func trunksUsing(client *api.Client, segment, uuid string) ([]string, []string, error) {
+	var used, ids []string
 	seen := map[string]bool{}
 	err := readThrough(client, func() error {
 		for _, filter := range trunkFilters[segment] {
@@ -82,6 +84,7 @@ func trunksUsing(client *api.Client, segment, uuid string) ([]string, error) {
 						if ref := trunksReferencing([]api.SIPTrunk{t}, uuid); len(ref) > 0 && !seen[t.TrunkID] {
 							seen[t.TrunkID] = true
 							used = append(used, ref...)
+							ids = append(ids, t.TrunkID)
 						}
 					}
 					return true
@@ -95,7 +98,7 @@ func trunksUsing(client *api.Client, segment, uuid string) ([]string, error) {
 		}
 		return nil
 	})
-	return used, err
+	return used, ids, err
 }
 
 // trunksReferencing names every trunk pointing at uuid, so the user sees what a
@@ -205,9 +208,9 @@ func firstNumberOnTrunk(client *api.Client, trunkID string) (string, error) {
 }
 
 // confirmDelete lets a delete through only with --yes or --dry-run, and one
-// that would break something only with --force on top: deleting an in-use URI
-// also deletes its trunks, and deleting a trunk stops calls to every number
-// routed to it.
+// that would break something only with --force on top: deleting a URI also
+// deletes the trunks it is the primary URI of, and deleting a trunk stops
+// calls to every number routed to it.
 func confirmDelete(action string, dependents []string) error {
 	if len(dependents) == 0 {
 		return confirmDestructive(action)
@@ -643,9 +646,12 @@ create.`,
 var sipURIsDeleteCmd = &cobra.Command{
 	Use:   "delete <uri_uuid>",
 	Short: "Delete an origination URI (requires --yes)",
-	Long: `Names any trunk using it as a primary or fallback URI first. Deleting a URI
-also deletes those trunks, so an in-use URI needs --force on top of --yes. If
-the check fails, the delete is refused.`,
+	Long: `Names any trunk using it as a primary or fallback URI first, and refuses an
+in-use URI unless --force is added to --yes: the API deletes a trunk whose
+primary URI it is. After the delete each of those trunks is read back, and
+the result says which were deleted, which kept and which could not be read
+(-o json: trunks_deleted, trunks_kept, trunks_unchecked). If the check fails,
+the delete is refused.`,
 	Args: cobra.ExactArgs(1),
 	RunE: sipObjectArg(runSIPURIsDelete),
 }
@@ -846,7 +852,7 @@ func deleteSIPObject(cmd *cobra.Command, uuid, segment, action string) error {
 	// Always read the dependents. --yes skips the confirmation, never the check:
 	// the whole point is to know what a delete detaches, and that matters most
 	// when nobody is there to be asked.
-	used, err := trunksUsing(client, segment, uuid)
+	used, ids, err := trunksUsing(client, segment, uuid)
 	if err != nil {
 		return checkFailed(action+uuid, err)
 	}
@@ -860,8 +866,63 @@ func deleteSIPObject(cmd *cobra.Command, uuid, segment, action string) error {
 	if dryRunFlag {
 		return nil
 	}
-	return emitWrite(fmt.Sprintf("Deleted %s %s", segment, uuid),
-		map[string]any{"uuid": uuid, "resource": segment, "deleted": true})
+	human := fmt.Sprintf("Deleted %s %s", segment, uuid)
+	fields := map[string]any{"uuid": uuid, "resource": segment, "deleted": true}
+	if segment == "URI" {
+		human += trunksAfterURIDelete(client, uuid, ids, fields)
+	}
+	return emitWrite(human, fields)
+}
+
+// trunksAfterURIDelete reads back each trunk that used a deleted URI, as the
+// API's effect is only known for a primary URI: that trunk goes too. A 404 is
+// a trunk deleted with it; a trunk read back is kept, with whether its primary
+// and its fallback still point at the URI; one that cannot be read, an error
+// status or no answer, is unchecked. It adds them to fields and returns them
+// as the tail of the human line.
+func trunksAfterURIDelete(client *api.Client, uuid string, ids []string, fields map[string]any) string {
+	deleted, kept := []string{}, []map[string]any{}
+	var keptText, unchecked []string
+	for _, id := range ids {
+		var t api.SIPTrunk
+		apiErr, err := client.Do("GET", client.AccountURL("Zentrunk", "Trunk", id), nil, nil, &t)
+		switch {
+		case err == nil && apiErr == nil:
+			t = unwrapSIPTrunk(t)
+			primary, fallback := strings.EqualFold(t.PrimaryURIUUID, uuid), strings.EqualFold(t.FallbackURIUUID, uuid)
+			kept = append(kept, map[string]any{"trunk_id": id,
+				"primary_points_at_deleted_uri": primary, "fallback_points_at_deleted_uri": fallback})
+			var still []string
+			if primary {
+				still = append(still, "primary")
+			}
+			if fallback {
+				still = append(still, "fallback")
+			}
+			text := id
+			if len(still) > 0 {
+				text += " (still its " + strings.Join(still, " and ") + " URI)"
+			}
+			keptText = append(keptText, text)
+		case err == nil && apiErr.StatusCode == http.StatusNotFound:
+			deleted = append(deleted, id)
+		default:
+			unchecked = append(unchecked, id)
+		}
+	}
+	fields["trunks_deleted"], fields["trunks_kept"] = deleted, kept
+	var tail string
+	if len(deleted) > 0 {
+		tail += "; trunks deleted with it: " + strings.Join(deleted, ", ")
+	}
+	if len(keptText) > 0 {
+		tail += "; trunks kept: " + strings.Join(keptText, ", ")
+	}
+	if len(unchecked) > 0 {
+		fields["trunks_unchecked"] = unchecked
+		tail += "; could not read back trunks " + strings.Join(unchecked, ", ")
+	}
+	return tail
 }
 
 func printCreated(created map[string]any, idField, label string) error {

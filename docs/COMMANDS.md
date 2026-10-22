@@ -3382,9 +3382,12 @@ Flags:
 
 Delete an origination URI (requires --yes)
 
-Names any trunk using it as a primary or fallback URI first. Deleting a URI
-also deletes those trunks, so an in-use URI needs --force on top of --yes. If
-the check fails, the delete is refused.
+Names any trunk using it as a primary or fallback URI first, and refuses an
+in-use URI unless --force is added to --yes: the API deletes a trunk whose
+primary URI it is. After the delete each of those trunks is read back, and
+the result says which were deleted, which kept and which could not be read
+(-o json: trunks_deleted, trunks_kept, trunks_unchecked). If the check fails,
+the delete is refused.
 
 ```
 plivo sip uris delete <uri_uuid> [flags]
