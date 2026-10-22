@@ -49,8 +49,9 @@ func parseURIFlag(v string) (sipURI, error) {
 
 // originationURI is parseURIFlag for a URI the API stores, and returns it as
 // sent: host first (hostFirstURI), named on stderr when that rewrote it. It
-// also refuses an IPv6 host: the API answers one "IP from Private IP range is
-// not allowed". sip test keeps both, as it only probes from this machine.
+// also refuses an IPv6 host, which the API answers "IP from Private IP range
+// is not allowed", and an IPv4 host Plivo can never reach (unreachableKind).
+// sip test keeps all of these, as it only probes from this machine.
 func originationURI(v string) (string, error) {
 	u, err := parseURIFlag(v)
 	if err != nil {
@@ -58,6 +59,12 @@ func originationURI(v string) (string, error) {
 	}
 	if strings.Contains(u.Host, ":") {
 		return "", badURI("has an IPv6 host, which Plivo does not accept: use a hostname or an IPv4 address")
+	}
+	if a, perr := netip.ParseAddr(u.Host); perr == nil {
+		if kind := unreachableKind(netip.PrefixFrom(a, 32)); kind != "" {
+			return "", badURI(fmt.Sprintf("has %s address as its host (%s), which Plivo can never reach: "+
+				"use a public hostname or IPv4 address", kind, u.Host))
+		}
 	}
 	s := normalizeSIPURI(v)
 	out, err := hostFirstURI(s, 5061)
@@ -257,12 +264,12 @@ func checkACLEntry(e string) error {
 		return fmt.Errorf("%q holds more than one value: repeat --ip for each address", e)
 	}
 	a, err := netip.ParseAddr(e)
+	p, noun := netip.PrefixFrom(a, 32), "address"
 	if strings.Contains(e, "/") {
-		var p netip.Prefix
 		if p, err = netip.ParsePrefix(e); err != nil {
 			return fmt.Errorf("%q is not a CIDR range such as <platform_ip>/24", e)
 		}
-		a = p.Addr()
+		a, noun = p.Addr(), "range"
 	}
 	if err != nil {
 		return fmt.Errorf("%q is not an IPv4 address", e)
@@ -272,5 +279,42 @@ func checkACLEntry(e string) error {
 	if a.Is6() {
 		return fmt.Errorf("%q is IPv6, which Plivo does not accept: give IPv4 addresses and ranges", e)
 	}
+	if kind := unreachableKind(p); kind != "" {
+		return fmt.Errorf("%q is %s %s, which Plivo never sees a call come from: give public IPv4 addresses", e, kind, noun)
+	}
 	return nil
+}
+
+// unreachableIPv4 are the IPv4 blocks Plivo can never reach or see an address
+// in, each with its kind as a refusal names it. The documentation ranges
+// (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24) are left out: help and tests
+// use them as examples.
+var unreachableIPv4 = []struct {
+	kind  string
+	block netip.Prefix
+}{
+	{"an unspecified", netip.MustParsePrefix("0.0.0.0/32")},
+	{"a reserved", netip.MustParsePrefix("0.0.0.0/8")},
+	{"a private", netip.MustParsePrefix("10.0.0.0/8")},
+	{"a carrier-grade NAT", netip.MustParsePrefix("100.64.0.0/10")},
+	{"a loopback", netip.MustParsePrefix("127.0.0.0/8")},
+	{"a link-local", netip.MustParsePrefix("169.254.0.0/16")},
+	{"a private", netip.MustParsePrefix("172.16.0.0/12")},
+	{"a private", netip.MustParsePrefix("192.168.0.0/16")},
+	{"a benchmarking", netip.MustParsePrefix("198.18.0.0/15")},
+	{"a multicast", netip.MustParsePrefix("224.0.0.0/4")},
+	{"a reserved", netip.MustParsePrefix("240.0.0.0/4")}, // 255.255.255.255 too
+}
+
+// unreachableKind names the kind of block p lies in, judged by its network
+// address, or returns "" when it lies in none. A range wider than the block
+// its network address is in, 0.0.0.0/0 say, holds public addresses too, so
+// it passes: an open range is warned about, not refused (riskyCIDR).
+func unreachableKind(p netip.Prefix) string {
+	for _, u := range unreachableIPv4 {
+		if p.Bits() >= u.block.Bits() && u.block.Contains(p.Masked().Addr()) {
+			return u.kind
+		}
+	}
+	return ""
 }

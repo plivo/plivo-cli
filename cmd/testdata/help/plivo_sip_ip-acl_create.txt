@@ -1,9 +1,12 @@
 Create an IP access control list.
 
 --ip is repeatable and takes one IPv4 address or CIDR range each (no IPv6). A
-comma-separated list is refused rather than split. A range that allows the
-whole internet is reported but not blocked: it is occasionally deliberate, and
-refusing it outright would push people to the console instead.
+comma-separated list is refused rather than split, and so is a private,
+loopback, link-local, carrier-grade NAT, multicast, benchmarking, reserved or
+0.0.0.0 address, or a range inside one of those blocks: Plivo never sees a
+call come from one. A range that allows the whole internet is reported but
+not blocked: it is occasionally deliberate, and refusing it outright would
+push people to the console instead.
 
 --platform vapi fills --ip with the addresses Plivo's Vapi guide allows. The
 other platforms authenticate with a credential, so they have none to fill.

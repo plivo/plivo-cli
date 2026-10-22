@@ -644,10 +644,12 @@ var sipURIsCreateCmd = &cobra.Command{
 sips:host. The API refuses a scheme, so sip: is dropped and sips: becomes
 ;transport=tls, on port 5061 unless one is given, or with --platform on the
 guide's TLS port where it gives one; with another transport it is refused.
-stderr names the URI sent. The host is a name or an IPv4 address: Plivo does
-not take IPv6. It is checked before sending: a space, a bad port, an unknown
-transport or a malformed host is refused. A missing port is fine: the
-platform decides the default. --transport adds ;transport= to --uri.
+stderr names the URI sent. The host is a name or a public IPv4 address:
+Plivo does not take IPv6, and can never reach a private, loopback,
+link-local, carrier-grade NAT, multicast, benchmarking, reserved or 0.0.0.0
+one. It is checked before sending: a space, a bad port, an unknown transport
+or a malformed host is refused. A missing port is fine: the platform decides
+the default. --transport adds ;transport= to --uri.
 
 --platform livekit|elevenlabs|retell|vapi fills in what Plivo's guide for that
 platform gives: host, port and transport, so you add only your own details,
@@ -1225,9 +1227,12 @@ var sipACLCreateCmd = &cobra.Command{
 	Long: `Create an IP access control list.
 
 --ip is repeatable and takes one IPv4 address or CIDR range each (no IPv6). A
-comma-separated list is refused rather than split. A range that allows the
-whole internet is reported but not blocked: it is occasionally deliberate, and
-refusing it outright would push people to the console instead.
+comma-separated list is refused rather than split, and so is a private,
+loopback, link-local, carrier-grade NAT, multicast, benchmarking, reserved or
+0.0.0.0 address, or a range inside one of those blocks: Plivo never sees a
+call come from one. A range that allows the whole internet is reported but
+not blocked: it is occasionally deliberate, and refusing it outright would
+push people to the console instead.
 
 --platform vapi fills --ip with the addresses Plivo's Vapi guide allows. The
 other platforms authenticate with a credential, so they have none to fill.
