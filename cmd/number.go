@@ -248,6 +248,15 @@ func runNumberUpdate(cmd *cobra.Command, args []string) error {
 	if !isE164Digits(strings.TrimPrefix(number, "+")) {
 		return clierr.BadInput(fmt.Sprintf("%q is not a phone number in E.164, such as +14155551234", number))
 	}
+	if numberUpdateTrunkID != "" {
+		id, ok := canonTrunkID(numberUpdateTrunkID)
+		if !ok {
+			e := clierr.BadFlag("trunk-id", notTrunkID(numberUpdateTrunkID))
+			e.Hint = trunkIDHint
+			return e
+		}
+		numberUpdateTrunkID = id
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err

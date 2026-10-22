@@ -160,6 +160,34 @@ func canonUUIDFlags(cmd *cobra.Command) error {
 	return nil
 }
 
+// canonTrunkID returns a trunk ID trimmed; ok is false unless it is digits,
+// as the API writes one. The ID goes into the request path, where anything
+// else can reach another endpoint: ../Number did.
+func canonTrunkID(v string) (id string, ok bool) {
+	id = strings.TrimSpace(v)
+	return id, id != "" && strings.Trim(id, "0123456789") == ""
+}
+
+// notTrunkID says why v is not a trunk ID, with an example of one.
+func notTrunkID(v string) string {
+	return fmt.Sprintf("needs a trunk ID, which is digits only, such as 12345678901234567: got %q", v)
+}
+
+const trunkIDHint = "`plivo sip trunks list` shows your trunks' IDs."
+
+// sipTrunkArg is sipObjectArg for a trunk ID argument (canonTrunkID).
+func sipTrunkArg(run func(*cobra.Command, []string) error) func(*cobra.Command, []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		id, ok := canonTrunkID(args[0])
+		if !ok {
+			e := clierr.BadInput(cmd.CommandPath() + " " + notTrunkID(args[0]))
+			e.Hint = trunkIDHint
+			return e
+		}
+		return run(cmd, []string{id})
+	}
+}
+
 // firstNumberOnTrunk reads the account's numbers page by page, under --dry-run
 // too, and returns the first one routed to the trunk: one is enough to refuse.
 // "" means every page was read and none is. No filter finds numbers by trunk,
@@ -365,7 +393,7 @@ the fallback URI.`,
   plivo sip trunks update <id> --secure=false
   plivo sip trunks update <id> --fallback-uri ""   # remove the fallback URI`,
 	Args: cobra.ExactArgs(1),
-	RunE: runSIPTrunksUpdate,
+	RunE: sipTrunkArg(runSIPTrunksUpdate),
 }
 
 var sipTrunksDeleteCmd = &cobra.Command{
@@ -378,7 +406,7 @@ routed to it, and inbound calls to those numbers stop. If one is routed there,
 the delete is refused unless --force is added to --yes. If the check cannot
 read every page, the delete is refused.`,
 	Args: cobra.ExactArgs(1),
-	RunE: runSIPTrunksDelete,
+	RunE: sipTrunkArg(runSIPTrunksDelete),
 }
 
 func runSIPTrunksCreate(cmd *cobra.Command, args []string) error {

@@ -140,7 +140,7 @@ var sipTrunksGetCmd = &cobra.Command{
 	Use:   "get <trunk_id>",
 	Short: "Get one trunk by ID",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runSIPTrunksGet,
+	RunE:  sipTrunkArg(runSIPTrunksGet),
 }
 
 var sipACLListCmd = &cobra.Command{

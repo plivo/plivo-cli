@@ -227,7 +227,7 @@ func TestNumbersUpdate_complianceCheckScope(t *testing.T) {
 		args            []string
 		checked, posted bool
 	}{
-		{"routing to a trunk", []string{indiaNumber, "--trunk-id", "T1"}, true, false},
+		{"routing to a trunk", []string{indiaNumber, "--trunk-id", "101"}, true, false},
 		{"--force skips it", []string{indiaNumber, "--app-id", "A1", "--force"}, false, true},
 		{"not a routing change", []string{indiaNumber, "--alias", "x"}, false, true},
 		{"not an India number", []string{"+14155551234", "--app-id", "A1"}, false, true},
