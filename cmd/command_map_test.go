@@ -145,22 +145,34 @@ func TestSchema_describesWithoutRunning(t *testing.T) {
 	clientForTest = &api.Client{BaseURL: srv.URL, AuthID: "MAFAKEFORTEST", AuthToken: "tok", HTTP: &http.Client{}}
 	t.Cleanup(func() { clientForTest = nil })
 
+	const apiNote, ownNote = "subset of the raw API response", "no others"
 	cases := []struct {
 		args       []string
 		path       string
-		hasFields  bool
+		note       string // in output_fields_note when fields are listed
 		someField  fieldSchema
 		wantFlag   string
 		wantArgLen int
 	}{
-		{[]string{"numbers", "get", "--schema"}, "plivo numbers get", true, fieldSchema{"number", "string"}, "", 1},
-		{[]string{"numbers", "list", "--schema"}, "plivo numbers list", true, fieldSchema{"objects[].number", "string"}, "limit", 0},
-		{[]string{"sip", "calls", "list", "--schema", "--limit", "5"}, "plivo sip calls list", true, fieldSchema{"meta.total_count", "number"}, "limit", 0},
-		// Not a get or list: no registered output type.
-		{[]string{"numbers", "update", "--schema"}, "plivo numbers update", false, fieldSchema{}, "app-id", 1},
+		{[]string{"numbers", "get", "--schema"}, "plivo numbers get", apiNote, fieldSchema{"number", "string"}, "", 1},
+		{[]string{"numbers", "list", "--schema"}, "plivo numbers list", apiNote, fieldSchema{"objects[].number", "string"}, "limit", 0},
+		{[]string{"sip", "calls", "list", "--schema", "--limit", "5"}, "plivo sip calls list", apiNote, fieldSchema{"meta.total_count", "number"}, "limit", 0},
+		// A scalar the API may send as a string or a number.
+		{[]string{"sip", "calls", "insights", "--schema"}, "plivo sip calls insights", apiNote, fieldSchema{"post_dial_delay", "any"}, "", 1},
+		// Results the CLI builds rather than passes through.
+		{[]string{"messaging", "sms", "diagnose", "--schema"}, "plivo messaging sms diagnose", ownNote, fieldSchema{"timeline[].source", "string"}, "", 1},
+		{[]string{"messaging", "mms", "diagnose", "--schema"}, "plivo messaging mms diagnose", ownNote, fieldSchema{"message_uuid", "string"}, "", 1},
+		{[]string{"messaging", "whatsapp", "diagnose", "--schema"}, "plivo messaging whatsapp diagnose", ownNote, fieldSchema{"next_steps[]", "string"}, "", 1},
+		{[]string{"voice", "calls", "diagnose", "--schema"}, "plivo voice calls diagnose", ownNote, fieldSchema{"hangup_cause_code", "number"}, "", 1},
+		{[]string{"sip", "calls", "diagnose", "--schema"}, "plivo sip calls diagnose", ownNote, fieldSchema{"call_uuid", "string"}, "", 1},
+		{[]string{"sip", "test", "--schema"}, "plivo sip test", ownNote, fieldSchema{"checks[].status", "string"}, "uri", 0},
+		{[]string{"sip", "connect", "plan", "--schema"}, "plivo sip connect plan", ownNote, fieldSchema{"requests[].command", "string"}, "platform", 0},
+		{[]string{"voice", "streams", "test", "--schema"}, "plivo voice streams test", ownNote, fieldSchema{"first_response_ms", "number"}, "to", 0},
+		// A write: no registered output type.
+		{[]string{"numbers", "update", "--schema"}, "plivo numbers update", "", fieldSchema{}, "app-id", 1},
 		// Required flags (--number, --app, --to) are not demanded either.
-		{[]string{"voice", "streams", "forward", "--schema"}, "plivo voice streams forward", false, fieldSchema{}, "to", 0},
-		{[]string{"--schema"}, "plivo", false, fieldSchema{}, "map", 0},
+		{[]string{"voice", "streams", "forward", "--schema"}, "plivo voice streams forward", "", fieldSchema{}, "to", 0},
+		{[]string{"--schema"}, "plivo", "", fieldSchema{}, "map", 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.path, func(t *testing.T) {
@@ -183,14 +195,14 @@ func TestSchema_describesWithoutRunning(t *testing.T) {
 				t.Errorf("global_flags %v lack --output", flagNames(d.GlobalFlags))
 			}
 			switch {
-			case tc.hasFields && !containsField(d.OutputFields, tc.someField):
+			case tc.note != "" && !containsField(d.OutputFields, tc.someField):
 				t.Errorf("output_fields lack %+v: %+v", tc.someField, d.OutputFields)
-			case tc.hasFields && !strings.Contains(d.OutputFieldsNote, "subset of the raw API response"):
-				t.Errorf("output_fields_note = %q, want it labelled a subset of the raw response", d.OutputFieldsNote)
-			case !tc.hasFields && (d.OutputFields != nil || d.OutputFieldsNote == ""):
+			case tc.note != "" && !strings.Contains(d.OutputFieldsNote, tc.note):
+				t.Errorf("output_fields_note = %q, want it to say %q", d.OutputFieldsNote, tc.note)
+			case tc.note == "" && (d.OutputFields != nil || d.OutputFieldsNote == ""):
 				t.Errorf("unregistered: want null output_fields and a note, got %+v / %q", d.OutputFields, d.OutputFieldsNote)
 			}
-			if !tc.hasFields && !strings.Contains(stdout, `"output_fields": null`) {
+			if tc.note == "" && !strings.Contains(stdout, `"output_fields": null`) {
 				t.Errorf("unregistered output_fields should be null in the JSON")
 			}
 		})
@@ -287,10 +299,12 @@ func TestOutputTypes_coverEveryGetAndList(t *testing.T) {
 	if !reflect.DeepEqual(gaps, wantGaps) {
 		t.Errorf("get/list commands without an output type: %v, want %v", gaps, wantGaps)
 	}
-	for path := range outputTypes {
-		c, _, err := rootCmd.Find(strings.Fields(path)[1:])
-		if err != nil || c.CommandPath() != path {
-			t.Errorf("outputTypes names %q, which is not a command", path)
+	for _, types := range []map[string]reflect.Type{outputTypes, resultTypes} {
+		for path := range types {
+			c, _, err := rootCmd.Find(strings.Fields(path)[1:])
+			if err != nil || c.CommandPath() != path {
+				t.Errorf("outputTypes or resultTypes names %q, which is not a command", path)
+			}
 		}
 	}
 }
