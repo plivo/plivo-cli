@@ -128,9 +128,9 @@ func canonUUID(v string) (id string, ok bool) {
 	return id, looksLikeUUID(id)
 }
 
-// sipObjectArg runs run with its argument, a URI, credential or IP access
-// control list UUID, as canonUUID returns it, and refuses one that is not a
-// UUID before any request. The in-use check before a delete used to compare
+// sipObjectArg runs run with its argument, a call, URI, credential or IP
+// access control list UUID, as canonUUID returns it, and refuses one that is
+// not a UUID before any request: it goes into the request path. The in-use check before a delete used to compare
 // the ID as typed with the API's lower-case IDs: an upper-case one matched no
 // trunk, so --yes deleted an object in use and the API deleted its trunks.
 func sipObjectArg(run func(*cobra.Command, []string) error) func(*cobra.Command, []string) error {

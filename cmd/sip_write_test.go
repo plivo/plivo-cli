@@ -1023,9 +1023,12 @@ func TestSIPDeletes_refuseAnInUseObjectWithoutForce(t *testing.T) {
 	}
 }
 
-// An object ID that is not a UUID never reaches the API.
+// An object or call ID that is not a UUID never reaches the API: it goes
+// into the request path, where ../Number reached another endpoint.
 func TestSIPObjects_refuseAnIDThatIsNotAUUID(t *testing.T) {
-	requireRefusedBeforeAnyRequest(t, []string{"sip", "ip-acl", "get", "A1"}, "needs a UUID")
+	for _, args := range [][]string{{"ip-acl", "get", "A1"}, {"calls", "get", "../Number"}, {"calls", "insights", "../Number"}, {"calls", "diagnose", "../Number"}} {
+		requireRefusedBeforeAnyRequest(t, append([]string{"sip"}, args...), "needs a UUID")
+	}
 }
 
 // A trunk ID goes into the request path, where ../Number reached another

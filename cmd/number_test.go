@@ -277,7 +277,7 @@ func TestUnreachable_isANetworkErrorNotKYCOrNotFound(t *testing.T) {
 	clientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
 	t.Cleanup(func() { clientForTest = nil })
 
-	for _, args := range [][]string{{"numbers", "update", indiaNumber, "--app-id", "A1"}, {"sip", "calls", "diagnose", "abc"}} {
+	for _, args := range [][]string{{"numbers", "update", indiaNumber, "--app-id", "A1"}, {"sip", "calls", "diagnose", placeholderUUID}} {
 		err, _, _ := execCmd(t, args...)
 		var ce *clierr.Error
 		if !errors.As(err, &ce) || ce.Code != clierr.CodeNetworkError || strings.Contains(ce.Hint, "KYC") {
