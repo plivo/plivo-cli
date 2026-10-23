@@ -28,6 +28,8 @@ var (
 	logLevel     string
 	yesFlag      bool
 	dryRunFlag   bool
+	// showSecretsFlag backs --show-secrets; see api.ShowSecrets.
+	showSecretsFlag bool
 	// explainFlag backs --explain. Registered locally (not persistent) by
 	// registerExplainFlag, only on the commands that actually read it.
 	explainFlag bool
@@ -154,6 +156,7 @@ func init() {
 	// directly see the same gate humans do.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		api.CLICommand = commandPath(cmd)
+		api.ShowSecrets = showSecretsFlag
 		return configureOutput(cmd)
 	}
 	// Set here, not in the literal: runRoot walks rootCmd itself.
@@ -171,6 +174,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "warn", "log level: debug|info|warn|error|none")
 	rootCmd.PersistentFlags().BoolVarP(&yesFlag, "yes", "y", false, "skip confirmation prompts")
 	rootCmd.PersistentFlags().BoolVar(&dryRunFlag, "dry-run", false, "print the HTTP request without sending")
+	rootCmd.PersistentFlags().BoolVar(&showSecretsFlag, "show-secrets", false, "show auth tokens and passwords in API responses instead of [REDACTED]")
 	timeoutFlag = 30 * time.Second
 	rootCmd.PersistentFlags().Var(secondsOrDuration{&timeoutFlag}, "timeout", "request timeout: seconds, or a duration such as 90s or 2m")
 	// Additional admin-only flags are registered in build-tag-gated files;

@@ -334,7 +334,7 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 		if err := json.Unmarshal(respBytes, out); err != nil {
 			return nil, fmt.Errorf("decode response: %w (body: %s)", err, string(respBytes))
 		}
-		// Keep the bytes so -o json can echo them losslessly.
+		// Keep the bytes so -o json can echo them; SetRaw hides credentials.
 		if rc, ok := out.(RawCapturer); ok {
 			rc.SetRaw(respBytes)
 		}
@@ -436,7 +436,7 @@ func (c *Client) DoMultipart(method, fullURL string, dataJSON []byte, files map[
 		if err := json.Unmarshal(respBytes, out); err != nil {
 			return nil, fmt.Errorf("decode response: %w (body: %s)", err, string(respBytes))
 		}
-		// Keep the bytes so -o json can echo them losslessly.
+		// Keep the bytes so -o json can echo them; SetRaw hides credentials.
 		if rc, ok := out.(RawCapturer); ok {
 			rc.SetRaw(respBytes)
 		}

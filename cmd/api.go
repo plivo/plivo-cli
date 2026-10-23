@@ -72,6 +72,9 @@ the CLI). Use --dry-run to preview without sending. GET and HEAD pass through.
 Here --query adds URL query parameters (key=value). It is not the JMESPath
 --query filter other commands take; -o jsonl, yaml and csv still apply.
 
+Auth tokens and passwords in a response read [REDACTED], as on every other
+command; pass --show-secrets to see them.
+
 Examples:
 
   plivo api GET /v1/Account/MA…/            # absolute: the account itself
@@ -424,9 +427,10 @@ func looksLikeJSON(b []byte) bool {
 }
 
 // renderAPIResponse converts the upstream response into our standard envelope
-// shape — success path emits the upstream body verbatim (in a `data` wrapper
-// for JSON mode), error path emits the unified error envelope with the
-// upstream payload nested under `context.upstream` so agents can branch on it.
+// shape — success path emits the upstream body, credential values hidden
+// unless --show-secrets (in a `data` wrapper for JSON mode), error path emits
+// the unified error envelope with the upstream payload nested under
+// `context.upstream` so agents can branch on it.
 func renderAPIResponse(resp *http.Response, body []byte) error {
 	contentType := resp.Header.Get("Content-Type")
 	isJSON := strings.Contains(strings.ToLower(contentType), "application/json")
@@ -435,6 +439,7 @@ func renderAPIResponse(resp *http.Response, body []byte) error {
 	if resp.StatusCode >= 300 { // a redirect too, as none is followed
 		return apiErrorFromUpstream(resp.StatusCode, resp.Header.Get("X-Request-ID"), body, isJSON)
 	}
+	body = api.Visible(body)
 
 	// Success — pretty-print JSON if upstream sent it; otherwise raw passthrough.
 	if format == output.FormatJSON {

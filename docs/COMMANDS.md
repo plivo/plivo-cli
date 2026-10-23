@@ -287,6 +287,7 @@ Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
+      --show-secrets       show auth tokens and passwords in API responses instead of [REDACTED]
       --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts
 ```
@@ -886,6 +887,9 @@ the CLI). Use --dry-run to preview without sending. GET and HEAD pass through.
 
 Here --query adds URL query parameters (key=value). It is not the JMESPath
 --query filter other commands take; -o jsonl, yaml and csv still apply.
+
+Auth tokens and passwords in a response read [REDACTED], as on every other
+command; pass --show-secrets to see them.
 
 Examples:
 
