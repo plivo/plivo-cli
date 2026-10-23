@@ -35,7 +35,7 @@ func TestActions_printJSONOnStdout(t *testing.T) {
 		"messaging sms powerpacks numbers add UUID +14155550100",
 		"messaging sms powerpacks numbers remove UUID +14155550100 --yes",
 		"messaging sms 10dlc links delete CFAKE01 +14155550100 --yes",
-		"messaging sms 10dlc campaigns update CFAKE01 --description qa", "numbers compliance delete UUID --yes",
+		"messaging sms 10dlc campaigns update CFAKE01 --description qa --yes", "numbers compliance delete UUID --yes",
 		"numbers masking sessions delete UUID --yes",
 		"agents publish UUID", "agents pause UUID", "agents resume UUID",
 		"agents update UUID --name qa", "agents delete UUID --yes",

@@ -1,6 +1,9 @@
-Update mutable campaign fields. The update sends the campaign to the
-carriers for review again, which is charged: USD 15 per the API reference
-(plivo docs show messaging/api/10dlc/campaign/update-a-campaign).
+Update a campaign and send it to the carriers for review again (spends money:
+USD 15 per the API reference; requires --yes, or --dry-run to preview).
+
+The API reference allows updates only for a campaign whose registration
+failed, registration_status FAILED. Its fields:
+plivo docs show messaging/api/10dlc/campaign
 
 Usage:
   plivo messaging sms 10dlc campaigns update <campaign_id> [flags]

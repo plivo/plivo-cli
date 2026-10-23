@@ -82,10 +82,13 @@ var (
 
 var campUpdateCmd = &cobra.Command{
 	Use:   "update <campaign_id>",
-	Short: "Update mutable campaign fields",
-	Long: `Update mutable campaign fields. The update sends the campaign to the
-carriers for review again, which is charged: USD 15 per the API reference
-(plivo docs show messaging/api/10dlc/campaign/update-a-campaign).`,
+	Short: "Update a failed campaign (spends money — carrier review fee, requires --yes)",
+	Long: `Update a campaign and send it to the carriers for review again (spends money:
+USD 15 per the API reference; requires --yes, or --dry-run to preview).
+
+The API reference allows updates only for a campaign whose registration
+failed, registration_status FAILED. Its fields:
+plivo docs show messaging/api/10dlc/campaign`,
 	Args: cobra.ExactArgs(1),
 	RunE: runCampaignUpdate,
 }
@@ -299,6 +302,11 @@ func runCampaignUpdate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	proceed, dryRun, gerr := guardSpend("update 10DLC campaign " + id)
+	if !proceed {
+		return gerr
+	}
+	applyDryRun(client, dryRun)
 	var resp api.Campaign10DLCResponse
 	apiErr, err := client.Do("POST", client.AccountURL("10dlc", "Campaign", id), body, nil, &resp)
 	if err != nil {
@@ -307,7 +315,7 @@ func runCampaignUpdate(cmd *cobra.Command, args []string) error {
 	if apiErr != nil {
 		return apiErr
 	}
-	if dryRunFlag {
+	if dryRun {
 		return nil
 	}
 	human := "Updated campaign " + id

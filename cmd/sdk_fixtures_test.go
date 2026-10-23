@@ -82,7 +82,7 @@ func TestRegistrationCommands_matchTheSDK(t *testing.T) {
 			"--subscriber-optin --subscriber-optout --subscriber-help --yes", `{"api_id":"x","campaign_id":"C1","message":"ok"}`,
 			"POST 10dlc/Campaign/", campaignRequired + " sub_usecases help_keywords optin_keywords optout_keywords",
 			map[string]any{"sample1": "s1", "sample2": "s2", "sub_usecases": []any{"2FA", "MARKETING"}}, []string{"C1"}},
-		{"10dlc campaigns update CY5NVUA --sample-message-1 s1", "campaignUpdateResponse.json", "POST 10dlc/Campaign/CY5NVUA/",
+		{"10dlc campaigns update CY5NVUA --sample-message-1 s1 --yes", "campaignUpdateResponse.json", "POST 10dlc/Campaign/CY5NVUA/",
 			"sample1", map[string]any{"sample1": "s1"}, []string{"FAILED"}},
 		{"10dlc links list --campaign-id CY5NVUA", "campaignNumbersGetResponse.json", "GET 10dlc/Campaign/CY5NVUA/Number/", "", nil, []string{"14155550101", "COMPLETED"}},
 		{"10dlc links list --campaign-id CY5NVUA --number 14155550100", "campaignNumbersGetResponse.json", "GET 10dlc/Campaign/CY5NVUA/Number/14155550100/", "", nil, nil},
