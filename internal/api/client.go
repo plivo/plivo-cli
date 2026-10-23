@@ -207,14 +207,15 @@ func (c *Client) LookupURL(number string) string {
 	return c.BaseURL + "/v1/Lookup/Number/" + c.pathPart(number)
 }
 
-// pathPart escapes one path segment. A blank, "." or ".." one names another
-// resource (/Call//, /Conference/../), so the first is kept as badPart.
+// pathPart escapes one path segment, all but its commas: member and
+// participant IDs take a comma list (1,2). A blank, "." or ".." one names
+// another resource (/Call//, /Conference/../), so the first is kept as badPart.
 func (c *Client) pathPart(p string) string {
 	if c.badPart == nil && (strings.TrimSpace(p) == "" || p == "." || p == "..") {
 		c.badPart = clierr.BadInput(fmt.Sprintf("%q is not an ID or name", p))
 		c.badPart.Hint = "IDs and names go into the request path, where a blank one, . or .. would reach a different resource."
 	}
-	return url.PathEscape(p)
+	return strings.ReplaceAll(url.PathEscape(p), "%2C", ",")
 }
 
 // BuddyURL joins BuddyBaseURL with the given absolute path. AI surfaces

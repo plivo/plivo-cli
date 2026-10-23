@@ -51,6 +51,7 @@ func TestAccountURL(t *testing.T) {
 		{"10dlc lowercase segment", []string{"10dlc", "Brand"}, "https://hodor.plivo.com/v1/cli/api/v1/Account/MAXYZ123/10dlc/Brand/"},
 		{"Masking/Session two-part", []string{"Masking", "Session"}, "https://hodor.plivo.com/v1/cli/api/v1/Account/MAXYZ123/Masking/Session/"},
 		{"reserved characters stay in their segment", []string{"Conference", "team#2", "a/b?c\n"}, "https://hodor.plivo.com/v1/cli/api/v1/Account/MAXYZ123/Conference/team%232/a%2Fb%3Fc%0A/"},
+		{"a comma list stays literal", []string{"Conference", "room", "Member", "1,2", "Mute"}, "https://hodor.plivo.com/v1/cli/api/v1/Account/MAXYZ123/Conference/room/Member/1,2/Mute/"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
