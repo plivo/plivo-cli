@@ -249,11 +249,13 @@ func runSkillInstall(cmd *cobra.Command, args []string) error {
 // into the agent's skills directory under --agent. A copy that was kept fails
 // the command once the rest are installed.
 func installSkills(skills []bundledSkill) error {
-	var root string
+	var root, repo string
 	var err error
 	switch {
 	case skillProject:
-		root, err = projectSkillsRoot()
+		if root, repo, err = projectSkillsRoot(); err == nil && !resolvesInside(repo, root) {
+			err = projectLinkErr(root + " resolves outside the repository " + repo)
+		}
 	case skillAgent != "":
 		root, err = agentSkillsRoot(skillAgent)
 	}
@@ -301,19 +303,19 @@ func installSkillsIn(skills []bundledSkill, root string) error {
 }
 
 // projectSkillsRoot returns <repo>/.claude/skills for the git repository the
-// working directory is in.
-func projectSkillsRoot() (string, error) {
+// working directory is in, and the repository's root.
+func projectSkillsRoot() (skills, repo string, err error) {
 	wd, err := os.Getwd()
 	if err != nil {
-		return "", clierr.Wrap(fmt.Errorf("resolve working directory: %w", err))
+		return "", "", clierr.Wrap(fmt.Errorf("resolve working directory: %w", err))
 	}
-	root, ok := findGitRoot(wd)
+	repo, ok := findGitRoot(wd)
 	if !ok {
 		e := clierr.BadInput(wd + " is not inside a git repository, so --project has no repository to use")
 		e.Hint = "Run it from inside the project, or drop --project for your user's skills (~/.claude/skills)."
-		return "", e
+		return "", "", e
 	}
-	return filepath.Join(root, ".claude", "skills"), nil
+	return filepath.Join(repo, ".claude", "skills"), repo, nil
 }
 
 // findGitRoot walks up from dir to the nearest folder holding .git: a
@@ -361,7 +363,7 @@ func runSkillList(cmd *cobra.Command, _ []string) error {
 	root, rootErr := resolveSkillDir("", "") // ~/.claude/skills
 	switch {
 	case skillProject:
-		if root, rootErr = projectSkillsRoot(); rootErr != nil {
+		if root, _, rootErr = projectSkillsRoot(); rootErr != nil {
 			return rootErr
 		}
 	case skillAgent != "":
@@ -434,6 +436,13 @@ func installSkill(s bundledSkill, root string) (kept string, err error) {
 		}
 	}
 	dest := filepath.Join(dir, skillFileName)
+	if skillProject {
+		for _, p := range []string{dir, dest} {
+			if fi, err := os.Lstat(p); err == nil && fi.Mode()&fs.ModeSymlink != 0 {
+				return "", projectLinkErr(p + " is a symbolic link")
+			}
+		}
+	}
 
 	if !skillForce {
 		if b, err := os.ReadFile(dest); err == nil && skillEdited(s, b) {
@@ -462,6 +471,39 @@ func installSkill(s bundledSkill, root string) (kept string, err error) {
 	}
 	retireReplacedSkills(s, filepath.Dir(dir))
 	return "", nil
+}
+
+// projectLinkErr refuses a project install that would write through a link: a
+// skills folder that resolves outside the repository, or a skill folder or
+// SKILL.md that is a link. A clone brings its links along, so one could aim
+// the install at any file the user can write. Home installs follow links, as
+// npx skills makes them there.
+func projectLinkErr(why string) error {
+	e := clierr.BadInput(why + ", so --project won't install through it")
+	e.Hint = "A link in a repository can point anywhere. Replace it with a folder, or install for yourself without --project."
+	return e
+}
+
+// resolvesInside reports whether dir, with its links resolved, lies inside
+// repo. The nearest part of dir that exists decides where the rest is made.
+func resolvesInside(repo, dir string) bool {
+	near := dir
+	for {
+		if _, err := os.Lstat(near); err == nil || filepath.Dir(near) == near {
+			break
+		}
+		near = filepath.Dir(near)
+	}
+	realRepo, err := filepath.EvalSymlinks(repo)
+	if err != nil {
+		return false
+	}
+	realNear, err := filepath.EvalSymlinks(near)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(realRepo, realNear)
+	return err == nil && filepath.IsLocal(rel)
 }
 
 // skillUpdateRow is one installed copy `skill update` looked at, and the JSON

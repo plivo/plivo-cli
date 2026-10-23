@@ -652,6 +652,31 @@ func TestSkillInstall_projectDryRunWritesNothing(t *testing.T) {
 	}
 }
 
+// A clone brings its links along: --project refuses a linked skill folder or
+// SKILL.md, even a dangling one, and a .claude that leads out of the
+// repository, so nothing is written outside it.
+func TestSkillInstall_projectRefusesToWriteThroughALink(t *testing.T) {
+	for _, link := range []string{".claude", ".claude/skills/plivo-cli", ".claude/skills/plivo-cli/SKILL.md"} {
+		root, _ := fakeRepo(t, false)
+		outside := t.TempDir()
+		target, p := outside, filepath.Join(root, filepath.FromSlash(link))
+		if strings.HasSuffix(link, skillFileName) {
+			target = filepath.Join(outside, skillFileName) // dangling: the install would create it
+		}
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, p); err != nil {
+			t.Skipf("no symlinks here: %v", err)
+		}
+		err, _, _ := execCmd(t, "skill", "install", "--project")
+		var ce *clierr.Error
+		if entries, _ := os.ReadDir(outside); !errors.As(err, &ce) || ce.Code != clierr.CodeBadInput || len(entries) > 0 {
+			t.Errorf("%s: err = %v, wrote %d entries outside; want BAD_INPUT and none", link, err, len(entries))
+		}
+	}
+}
+
 // Git for Windows checks a committed skill out with CRLF line endings by
 // default. That copy is the same skill, not an edit to keep.
 func TestSkillInstall_projectReadsCRLFAsLF(t *testing.T) {
