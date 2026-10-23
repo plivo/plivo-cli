@@ -99,3 +99,12 @@ func TestCallMake_answerMethodGETOnlyForTheDemoURL(t *testing.T) {
 		}
 	}
 }
+
+// machine_detection is true or hangup: none, which help offered, is refused here.
+func TestCallMake_refusesMachineDetectionNone(t *testing.T) {
+	setFakeCreds(t)
+	err, _, _ := execCmd(t, "voice", "calls", "make", "--from", "+14155550100", "--to", "+14155550101", "--machine-detection", "none", "--dry-run")
+	if e, ok := err.(*clierr.Error); !ok || e.Code != clierr.CodeBadFlag || e.Context["flag"] != "machine-detection" {
+		t.Errorf("got %v, want BAD_FLAG on --machine-detection", err)
+	}
+}

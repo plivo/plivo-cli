@@ -3956,7 +3956,7 @@ Flags:
       --explain                    narrate in plain English before executing
       --from string                source number (E.164) — must be on your account (required)
       --hangup-url string          URL hit when call ends
-      --machine-detection string   none|true|hangup
+      --machine-detection string   answering-machine detection: true|hangup (off when omitted)
       --ring-url string            URL hit when call starts ringing
       --to string                  destination: an E.164 number or a sip: URI, or several joined with < (required)
 ```

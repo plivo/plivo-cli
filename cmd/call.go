@@ -101,7 +101,7 @@ func init() {
 	callMakeCmd.Flags().StringVar(&callMakeAnswerMethod, "answer-method", "", "GET|POST (default: GET for the hello demo, else Plivo's POST)")
 	callMakeCmd.Flags().StringVar(&callMakeHangupURL, "hangup-url", "", "URL hit when call ends")
 	callMakeCmd.Flags().StringVar(&callMakeRingURL, "ring-url", "", "URL hit when call starts ringing")
-	callMakeCmd.Flags().StringVar(&callMakeMachineDetect, "machine-detection", "", "none|true|hangup")
+	callMakeCmd.Flags().StringVar(&callMakeMachineDetect, "machine-detection", "", "answering-machine detection: true|hangup (off when omitted)")
 	registerExplainFlag(callMakeCmd)
 
 	callTransferCmd.Flags().StringVar(&callTransferLegs, "legs", "aleg", "which leg(s) to act on: aleg|bleg|both")
@@ -454,6 +454,9 @@ func runSubresourceDelete(cmd *cobra.Command, uuidStr, sub, doneLabel string) er
 
 func runCallMake(cmd *cobra.Command, args []string) error {
 	if err := validateCallParties(callMakeFrom, callMakeTo); err != nil {
+		return err
+	}
+	if err := validateEnum("machine-detection", &callMakeMachineDetect, "true", "hangup"); err != nil {
 		return err
 	}
 	client, _, err := getClient()
