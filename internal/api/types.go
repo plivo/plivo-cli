@@ -687,22 +687,33 @@ type CampaignNumber10DLC struct {
 	Status string `json:"status"`
 }
 
-// TollFreeVerification — /Account/{id}/TollfreeVerification/
+// TollFreeVerification is a toll-free verification request, as the Go SDK's
+// TollfreeVerification reads it: GET /TollfreeVerification/{uuid}/, or a row
+// of the list.
 type TollFreeVerification struct {
 	RawBody
-	APIID                    string   `json:"api_id,omitempty"`
-	ProfileUUID              string   `json:"profile_uuid"`
-	Status                   string   `json:"status,omitempty"`
-	BusinessName             string   `json:"business_name,omitempty"`
-	BusinessWebsite          string   `json:"business_website,omitempty"`
-	UseCase                  string   `json:"use_case,omitempty"`
-	UseCaseSummary           string   `json:"use_case_summary,omitempty"`
-	MessageVolume            string   `json:"message_volume,omitempty"`
-	ProductionMessageContent string   `json:"production_message_content,omitempty"`
-	OptInWorkflow            string   `json:"opt_in_workflow,omitempty"`
-	NumbersList              []string `json:"numbers_list,omitempty"`
-	CreatedAt                string   `json:"created_at,omitempty"`
-	ResourceURI              string   `json:"resource_uri,omitempty"`
+	APIID                  string `json:"api_id,omitempty"`
+	UUID                   string `json:"uuid"`
+	ProfileUUID            string `json:"profile_uuid,omitempty"`
+	Number                 string `json:"number,omitempty"`
+	Usecase                string `json:"usecase,omitempty"`
+	UsecaseSummary         string `json:"usecase_summary,omitempty"`
+	MessageSample          string `json:"message_sample,omitempty"`
+	OptinType              string `json:"optin_type,omitempty"`
+	OptinImageURL          string `json:"optin_image_url,omitempty"`
+	Volume                 string `json:"volume,omitempty"`
+	AdditionalInformation  string `json:"additional_information,omitempty"`
+	TermsAndConditionsLink string `json:"terms_and_conditions_link,omitempty"`
+	PrivacyPolicyLink      string `json:"privacy_policy_link,omitempty"`
+	OptinMessage           string `json:"optin_message,omitempty"`
+	HelpMessage            string `json:"help_message,omitempty"`
+	ExtraData              string `json:"extra_data,omitempty"`
+	CallbackURL            string `json:"callback_url,omitempty"`
+	CallbackMethod         string `json:"callback_method,omitempty"`
+	Status                 string `json:"status,omitempty"`
+	ErrorMessage           string `json:"error_message,omitempty"`
+	Created                string `json:"created,omitempty"`
+	LastModified           string `json:"last_modified,omitempty"`
 }
 
 type TollFreeVerificationList struct {

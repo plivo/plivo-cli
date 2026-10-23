@@ -22,7 +22,10 @@ const (
 		"optin_message optin_keywords optout_message optout_keywords terms_and_conditions_link privacy_policy_link" // CampaignUpdateParams
 	sdkCampaignCreate = sdkCampaignUpdate + " brand_id campaign_alias vertical usecase sub_usecases embedded_link embedded_phone " +
 		"age_gated direct_lending affiliate_marketing subscriber_optin subscriber_optout subscriber_help url method" // CampaignCreationParams
-	sdkNumberLink = "numbers url method" // CampaignNumberLinkParams
+	sdkNumberLink     = "numbers url method" // CampaignNumberLinkParams
+	sdkTollfreeCreate = "profile_uuid number usecase usecase_summary message_sample optin_image_url optin_type volume " +
+		"additional_information extra_data callback_url callback_method terms_and_conditions_link privacy_policy_link " +
+		"optin_message help_message" // TollfreeVerificationCreateParams
 )
 
 // serveFixture answers every request with a response from the Go SDK's
@@ -86,6 +89,14 @@ func TestRegistrationCommands_matchTheSDK(t *testing.T) {
 		{"10dlc links create --campaign-id C1 --number 14155550100", `{"api_id":"x","message":"ok"}`, "POST 10dlc/Campaign/C1/Number/",
 			sdkNumberLink, map[string]any{"numbers": []any{"14155550100"}}, nil},
 		{"10dlc links delete C1 14155550100 --yes", `{"api_id":"x","message":"ok"}`, "DELETE 10dlc/Campaign/C1/Number/14155550100/", "", nil, nil},
+		{"tollfree get 8163b5f2-7955-498b-780f-b5e6f1062396", "tollFreeRequestVerificationGetResponse.json",
+			"GET TollfreeVerification/8163b5f2-7955-498b-780f-b5e6f1062396/", "", nil, []string{"18005550100", "MOBILE_QR_CODE", "Demo Testing Sanity"}},
+		{"tollfree list", "tollFreeRequestVerificationListResponse.json", "GET TollfreeVerification/", "", nil, []string{"96ec880d-b7ee-4eb5-7c9a-3ff28826e77c", "18005550100"}},
+		{"tollfree submit --profile-uuid P1 --number 18005550100 --use-case 2FA --use-case-summary s --production-message-content m " +
+			"--opt-in-type WEB_FORM --opt-in-image-url https://example.com/o --message-volume 1000 " +
+			"--terms-and-conditions-link https://example.com/t --privacy-policy-link https://example.com/p",
+			"tollFreeRequestVerificationCreateResponse.json", "POST TollfreeVerification/", sdkTollfreeCreate, map[string]any{"number": "18005550100",
+				"usecase": "2FA", "message_sample": "m", "optin_type": "WEB_FORM", "volume": "1000"}, []string{"f19c4773-4ae6-4b75-92ea-9cf3ea4227d6"}},
 	} {
 		t.Run(tc.args, func(t *testing.T) {
 			setFakeCreds(t)

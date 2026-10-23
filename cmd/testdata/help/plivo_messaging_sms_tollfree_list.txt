@@ -1,4 +1,5 @@
-List toll-free verification profiles
+List toll-free verification requests. The API returns only those created
+in the last 7 days; read an older one with tollfree get <uuid>.
 
 Usage:
   plivo messaging sms tollfree list [flags]
