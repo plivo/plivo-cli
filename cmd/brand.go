@@ -45,20 +45,23 @@ var (
 	brandCreateVetting bool
 )
 
-var brandTypes = []string{"STARTER", "STANDARD"}
+var brandTypes = []string{"STANDARD", "STARTER"}
 
 var brandCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Register a new brand (spends money — TCR registration fee, requires --yes)",
-	Long: `Register a 10DLC brand from a profile, which holds the company's details:
-legal name, EIN, address, website and authorized contact. A profile registers
-one brand. List your profiles with plivo api GET /Profile/, and create one in
-the Plivo console or with plivo api POST /Profile/
+	Long: `Register a new brand (spends money: the TCR registration fee; requires --yes,
+or --dry-run to preview).
+
+A brand is registered from a profile, which holds the company's details: legal
+name, EIN, address, website and authorized contact. A profile registers one
+brand. List your profiles with plivo api GET /Profile/, and create one in the
+Plivo console or with plivo api POST /Profile/
 (fields: plivo docs show messaging/api/10dlc/profile).
 
-STARTER is the default. STANDARD needs a profile with an EIN, and also sends
-the brand for secondary vetting, a separate one-time fee, unless
---secondary-vetting=false.`,
+Without --brand-type the API registers a STANDARD brand; Starter brands are
+paused. A STANDARD brand needs a profile with an EIN, and is also sent for
+secondary vetting, a separate one-time fee, unless --secondary-vetting=false.`,
 	Args: cobra.NoArgs,
 	RunE: runBrandCreate,
 }
@@ -88,7 +91,7 @@ func init() {
 	_ = brandCreateCmd.MarkFlagRequired("profile-uuid")
 	brandCreateCmd.Flags().StringVar(&brandCreateAlias, "alias", "", "human-friendly alias (required)")
 	_ = brandCreateCmd.MarkFlagRequired("alias")
-	brandCreateCmd.Flags().StringVar(&brandCreateType, "brand-type", "STARTER", oneOf(brandTypes))
+	brandCreateCmd.Flags().StringVar(&brandCreateType, "brand-type", "", "registration type, "+oneOf(brandTypes)+"; sent only when given")
 	brandCreateCmd.Flags().BoolVar(&brandCreateVetting, "secondary-vetting", true, "STANDARD only: send the brand for secondary vetting, a separate fee")
 
 	brandCmd.AddCommand(brandListCmd, brandGetCmd, brandCreateCmd, brandUpdateCmd)
@@ -169,7 +172,9 @@ func runBrandCreate(cmd *cobra.Command, args []string) error {
 	body := map[string]any{
 		"brand_alias":  brandCreateAlias,
 		"profile_uuid": brandCreateProfile,
-		"brand_type":   brandCreateType,
+	}
+	if brandCreateType != "" {
+		body["brand_type"] = brandCreateType
 	}
 	if cmd.Flags().Changed("secondary-vetting") {
 		body["secondary_vetting"] = brandCreateVetting

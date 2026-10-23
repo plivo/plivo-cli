@@ -1514,15 +1514,18 @@ Subcommands:
 
 Register a new brand (spends money — TCR registration fee, requires --yes)
 
-Register a 10DLC brand from a profile, which holds the company's details:
-legal name, EIN, address, website and authorized contact. A profile registers
-one brand. List your profiles with plivo api GET /Profile/, and create one in
-the Plivo console or with plivo api POST /Profile/
+Register a new brand (spends money: the TCR registration fee; requires --yes,
+or --dry-run to preview).
+
+A brand is registered from a profile, which holds the company's details: legal
+name, EIN, address, website and authorized contact. A profile registers one
+brand. List your profiles with plivo api GET /Profile/, and create one in the
+Plivo console or with plivo api POST /Profile/
 (fields: plivo docs show messaging/api/10dlc/profile).
 
-STARTER is the default. STANDARD needs a profile with an EIN, and also sends
-the brand for secondary vetting, a separate one-time fee, unless
---secondary-vetting=false.
+Without --brand-type the API registers a STANDARD brand; Starter brands are
+paused. A STANDARD brand needs a profile with an EIN, and is also sent for
+secondary vetting, a separate one-time fee, unless --secondary-vetting=false.
 
 ```
 plivo messaging sms 10dlc brands create [flags]
@@ -1532,7 +1535,7 @@ Flags:
 
 ```
       --alias string          human-friendly alias (required)
-      --brand-type string     STARTER|STANDARD (default "STARTER")
+      --brand-type string     registration type, STANDARD|STARTER; sent only when given
       --profile-uuid string   the 10DLC profile holding the company's details (required)
       --secondary-vetting     STANDARD only: send the brand for secondary vetting, a separate fee (default true)
 ```

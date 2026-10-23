@@ -74,7 +74,7 @@ func TestRegistrationCommands_matchTheSDK(t *testing.T) {
 		{"10dlc campaigns get CY5NVUA", "campaignGetResponse.json", "GET 10dlc/Campaign/CY5NVUA/", "", nil, []string{"BOZ5T2X", "2FA,MARKETING", "ACTIVE"}},
 		{"10dlc campaigns list", "campaignListResponse.json", "GET 10dlc/Campaign/", "", nil, []string{"CUSDYQ0", "FAILED"}},
 		{"10dlc brands create --profile-uuid P1 --alias A1 --yes", `{"api_id":"x","brand_id":"B1","message":"ok"}`, "POST 10dlc/Brand/",
-			brandRequired + " brand_type", map[string]any{"profile_uuid": "P1", "brand_alias": "A1"}, []string{"B1"}},
+			brandRequired, map[string]any{"profile_uuid": "P1", "brand_alias": "A1"}, []string{"B1"}},
 		{"10dlc brands create --profile-uuid P1 --alias A1 --brand-type STANDARD --secondary-vetting=false --yes", `{}`, "POST 10dlc/Brand/",
 			brandRequired + " brand_type secondary_vetting", map[string]any{"brand_type": "STANDARD", "secondary_vetting": false}, nil},
 		{"10dlc campaigns create --alias a --brand-id B1 --vertical TECHNOLOGY --usecase MIXED --sub-usecases 2FA,MARKETING " +
