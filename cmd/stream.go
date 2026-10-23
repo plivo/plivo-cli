@@ -137,6 +137,9 @@ func runStreamStart(cmd *cobra.Command, args []string) error {
 	if err := validateEnum("audio-track", &streamStartTrack, streamTracks...); err != nil {
 		return err
 	}
+	if streamStartTrack == "" {
+		streamStartTrack = "inbound" // the default, as when the flag is left out
+	}
 	if streamStartBiDi && streamStartTrack != "inbound" {
 		return clierr.BadFlag("audio-track", streamStartTrack+" with --bidirectional: Plivo takes a two-way stream on the inbound track only")
 	}

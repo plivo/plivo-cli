@@ -42,6 +42,9 @@ func TestStreamStart_sendsTheAPIsFieldNamesAndTracks(t *testing.T) {
 	if err, _, stderr := execCmd(t, append(start, "--stream-status-callback", "https://example.com/cb")...); err != nil || !strings.Contains(stderr, `"status_callback_url": "https://example.com/cb"`) {
 		t.Errorf("%v, %q; want status_callback_url", err, stderr)
 	}
+	if err, _, stderr := execCmd(t, append(start, "--bidirectional", "--audio-track", "")...); err != nil || !strings.Contains(stderr, `"audio_track": "inbound"`) {
+		t.Errorf(`--audio-track "": %v, %q; want the inbound track`, err, stderr)
+	}
 	for _, track := range []string{"outbound", "both"} {
 		err, _, stderr := execCmd(t, append(start, "--bidirectional", "--audio-track", track)...)
 		if e, ok := err.(*clierr.Error); !ok || e.Code != clierr.CodeBadFlag || strings.Contains(stderr, "[dry-run]") {
