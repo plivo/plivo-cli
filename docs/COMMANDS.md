@@ -4390,7 +4390,7 @@ plivo voice endpoints create [flags]
 Flags:
 
 ```
-      --alias string      human-friendly label
+      --alias string      human-friendly label (required)
       --app-id string     application to attach
       --password string   SIP password (required)
       --username string   SIP username (required)

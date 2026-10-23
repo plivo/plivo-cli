@@ -80,7 +80,8 @@ func init() {
 	_ = epCreateCmd.MarkFlagRequired("username")
 	epCreateCmd.Flags().StringVar(&epCreatePassword, "password", "", "SIP password (required)")
 	_ = epCreateCmd.MarkFlagRequired("password")
-	epCreateCmd.Flags().StringVar(&epCreateAlias, "alias", "", "human-friendly label")
+	epCreateCmd.Flags().StringVar(&epCreateAlias, "alias", "", "human-friendly label (required)")
+	_ = epCreateCmd.MarkFlagRequired("alias")
 	epCreateCmd.Flags().StringVar(&epCreateAppID, "app-id", "", "application to attach")
 
 	epUpdateCmd.Flags().StringVar(&epUpdatePassword, "password", "", "new password")
@@ -154,9 +155,7 @@ func runEndpointCreate(cmd *cobra.Command, args []string) error {
 	body := map[string]any{
 		"username": epCreateUsername,
 		"password": epCreatePassword,
-	}
-	if epCreateAlias != "" {
-		body["alias"] = epCreateAlias
+		"alias":    epCreateAlias,
 	}
 	if epCreateAppID != "" {
 		body["app_id"] = epCreateAppID

@@ -198,7 +198,7 @@ func TestRequiredFlags(t *testing.T) {
 		{[]string{"voice", "calls", "speak"}, []string{"text"}},
 		{[]string{"voice", "calls", "dtmf"}, []string{"digits"}},
 		{[]string{"account", "applications", "create"}, []string{"app-name", "answer-url"}},
-		{[]string{"voice", "endpoints", "create"}, []string{"username", "password"}},
+		{[]string{"voice", "endpoints", "create"}, []string{"username", "password", "alias"}},
 		{[]string{"account", "subaccounts", "create"}, []string{"name"}},
 		{[]string{"numbers", "search"}, []string{"country"}},
 		{[]string{"numbers", "compliance", "requirements"}, []string{"country", "number-type", "user-type"}},
