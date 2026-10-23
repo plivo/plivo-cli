@@ -31,7 +31,8 @@ type Client struct {
 func New(profile *config.ContactoProfile) *Client {
 	return &Client{
 		Profile: profile,
-		HTTP:    &http.Client{Timeout: 60 * time.Second},
+		// A redirect is returned, not followed: it would take the session token elsewhere.
+		HTTP: &http.Client{Timeout: 60 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 	}
 }
 

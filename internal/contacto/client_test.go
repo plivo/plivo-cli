@@ -65,6 +65,19 @@ func TestNew_setsProfileAndTimeout(t *testing.T) {
 	}
 }
 
+// A redirect comes back as the answer, not followed with the session token.
+func TestDo_returnsARedirectUnfollowed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://127.0.0.1:1/elsewhere", http.StatusTemporaryRedirect)
+	}))
+	defer srv.Close()
+	c := New(makeProfile())
+	c.HTTP.Transport = &rewritingTransport{target: srv.URL}
+	if resp, err := c.Do(context.Background(), "POST", "/x", map[string]string{"k": "v"}); err != nil || resp.Status != http.StatusTemporaryRedirect {
+		t.Errorf("got %v, %v; want the 307 itself", resp, err)
+	}
+}
+
 // ─── Do — happy path + headers ───────────────────────────────────────────────
 
 func TestDo_setsAllStandardHeaders(t *testing.T) {
