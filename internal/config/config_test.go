@@ -8,7 +8,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/zalando/go-keyring"
 )
 
@@ -177,6 +179,36 @@ func TestUpdate_keepsEveryConcurrentChange(t *testing.T) {
 	}
 	if len(c.Profiles) != 8 || c.Active != "" || failed == nil {
 		t.Errorf("kept %d of 8 changes, active %q, failed change err %v", len(c.Profiles), c.Active, failed)
+	}
+}
+
+// A change that finds the config locked by another command waits for it, then
+// gives up with an error that says so, instead of hanging.
+func TestUpdate_givesUpOnALockAnotherCommandHolds(t *testing.T) {
+	home := withHomeDir(t)
+	if err := Update(func(*Config) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	held, err := os.Open(filepath.Join(home, ".plivo", "config.lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	if ok, err := tryLock(held); !ok {
+		t.Fatalf("taking the lock: %v", err)
+	}
+	defer func(w time.Duration) { lockWait = w }(lockWait)
+	lockWait = 100 * time.Millisecond
+	done := make(chan error, 1)
+	go func() { done <- Update(func(c *Config) error { c.Active = "x"; return nil }) }()
+	select {
+	case err := <-done:
+		var ce *clierr.Error
+		if !errors.As(err, &ce) || ce.Code != clierr.CodeResourceConflict || !strings.Contains(ce.Message, "another plivo command") {
+			t.Errorf("err = %v, want RESOURCE_CONFLICT naming another plivo command", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Update is still waiting on the lock another command holds")
 	}
 }
 

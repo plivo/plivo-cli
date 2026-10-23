@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/plivo/plivo-cli/internal/clierr"
@@ -223,8 +224,8 @@ func Update(change func(*Config) error) error {
 		return err
 	}
 	defer lock.Close()
-	if err := lockFile(lock); err != nil {
-		return fmt.Errorf("locking %s: %w", lock.Name(), err)
+	if err := lockWithin(lock, lockWait); err != nil {
+		return err
 	}
 	defer func() { _ = unlockFile(lock) }()
 	c, err := Load()
@@ -235,6 +236,32 @@ func Update(change func(*Config) error) error {
 		return err
 	}
 	return Save(c)
+}
+
+// lockWait is how long Update waits for another command to finish changing the
+// config before it gives up.
+var lockWait = 10 * time.Second
+
+// lockWithin takes the lock on f, trying again until wait has passed.
+func lockWithin(f *os.File, wait time.Duration) error {
+	for start := time.Now(); ; time.Sleep(50 * time.Millisecond) {
+		ok, err := tryLock(f)
+		if err != nil {
+			return fmt.Errorf("locking %s: %w", f.Name(), err)
+		}
+		if ok {
+			return nil
+		}
+		if time.Since(start) >= wait {
+			return &clierr.Error{
+				Code:      clierr.CodeResourceConflict,
+				Message:   fmt.Sprintf("another plivo command is updating the config, so this one gave up after %s", wait),
+				Hint:      "Run it again once the other command has finished.",
+				Retryable: true,
+				Context:   map[string]any{"lock": f.Name()},
+			}
+		}
+	}
 }
 
 // Resolve returns the credentials to use.

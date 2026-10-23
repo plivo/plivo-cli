@@ -3,19 +3,21 @@
 package config
 
 import (
+	"errors"
 	"os"
 
 	"golang.org/x/sys/unix"
 )
 
-// lockFile blocks until f holds an exclusive lock, which unlockFile, closing f
-// or the process exiting releases. A signal can cut the wait short with EINTR.
-func lockFile(f *os.File) error {
-	for {
-		if err := unix.Flock(int(f.Fd()), unix.LOCK_EX); err != unix.EINTR {
-			return err
-		}
+// tryLock takes an exclusive lock on f unless another open file holds one, and
+// reports whether it did. unlockFile, closing f or the process exiting
+// releases it.
+func tryLock(f *os.File) (bool, error) {
+	err := unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB)
+	if errors.Is(err, unix.EWOULDBLOCK) {
+		return false, nil
 	}
+	return err == nil, err
 }
 
 func unlockFile(f *os.File) error { return unix.Flock(int(f.Fd()), unix.LOCK_UN) }
