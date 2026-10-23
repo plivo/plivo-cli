@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -233,6 +234,16 @@ func TestQuery_runtimeFailureWritesNothing(t *testing.T) {
 		if got != "" {
 			t.Errorf("%s: wrote %q before failing", expr, got)
 		}
+	}
+}
+
+// [@,@] doubles the result at each step while the search stays cheap: past
+// its budget the query fails, instead of writing 2^n copies of the response.
+func TestQuery_refusesAResultThatOutgrowsItsBudget(t *testing.T) {
+	got, err := render(t, "json", "data"+strings.Repeat(" | [@,@]", 12), listPage)
+	var qe *QueryError
+	if !errors.As(err, &qe) || got != "" {
+		t.Errorf("wrote %d bytes, err %v; want a *QueryError and nothing written", len(got), err)
 	}
 }
 
