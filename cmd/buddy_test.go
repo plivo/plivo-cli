@@ -405,3 +405,24 @@ func TestAsk_timeoutEndsTheStream(t *testing.T) {
 		t.Errorf("-i stderr = %q, want the turn's timeout", stderr)
 	}
 }
+
+// Requests to the assistant carry the account's credentials, so an override
+// must be https, or http to this machine.
+func TestApplyBuddyURL_refusesPlainHTTPOffThisMachine(t *testing.T) {
+	home := setEmptyHome(t)
+	for u, ok := range map[string]bool{
+		"https://example.com": true, "http://127.0.0.1:8080": true, "http://[::1]:80": true, "http://localhost:3000": true,
+		"http://example.com": false, "http://127.0.0.1.example.com": false, "ftp://127.0.0.1": false, "https://": false, "localhost:3000": false,
+	} {
+		t.Setenv("PLIVO_BUDDY_URL", u)
+		c := &api.Client{BuddyBaseURL: api.DefaultBuddyBase}
+		if err := applyBuddyURL(c); (err == nil) != ok || (c.BuddyBaseURL == u) != ok {
+			t.Errorf("%q: err %v, base %q", u, err, c.BuddyBaseURL)
+		}
+	}
+	t.Setenv("PLIVO_BUDDY_URL", "")
+	writeProfile(t, home, "[buddy]\nurl = \"http://example.com\"\n")
+	if err := applyBuddyURL(&api.Client{}); err == nil || !strings.Contains(err.Error(), "[buddy].url") {
+		t.Errorf("[buddy].url over plain http: got %v", err)
+	}
+}

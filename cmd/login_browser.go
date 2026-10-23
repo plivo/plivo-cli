@@ -83,7 +83,9 @@ func runLoginBrowser(nameExplicit bool) error {
 	// env, config, default. The CLI's --buddy-url override applies here too
 	// since both surfaces share the same edge.
 	client := api.New("", "", 30*time.Second) // creds-less; auth happens in /token
-	applyBuddyURL(client)
+	if err := applyBuddyURL(client); err != nil {
+		return err
+	}
 
 	// Send only the loopback port (see buildAuthorizeURL — dodges the WAF SSRF block).
 	authURL := buildAuthorizeURL(client.BuddyBaseURL, port, state, challenge, deviceHint())
