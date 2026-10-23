@@ -9,6 +9,19 @@ import (
 	"github.com/plivo/plivo-cli/internal/clierr"
 )
 
+// A participant ID is escaped like any path part: a # cut the URL to the whole
+// participant list.
+func TestMPCParticipantKick_escapesTheID(t *testing.T) {
+	setFakeCreds(t)
+	srv, hits := startCapturingHTTPServer(t, 200, `{}`)
+	clientForTest = &api.Client{BaseURL: srv.URL, AuthID: "MAFAKEFORTEST", AuthToken: "tok", HTTP: srv.Client()}
+	t.Cleanup(func() { clientForTest = nil })
+	err, _, _ := execCmd(t, "voice", "multiparty", "participant", "kick", "room", "#", "--yes")
+	if got := hits(); err != nil || len(got) != 1 || got[0] != "DELETE /v1/Account/MAFAKEFORTEST/MultiPartyCall/name_room/Participant/#/" {
+		t.Errorf("err %v, sent %q; want one DELETE of participant #", err, got)
+	}
+}
+
 // create must send nothing and point at `participant add`, and nothing may stop
 // an old invocation first: not a missing credential, --yes or --name, nor one
 // of its old flags.
