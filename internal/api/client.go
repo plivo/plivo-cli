@@ -158,6 +158,11 @@ type Client struct {
 	HTTP       *http.Client
 	DryRun     bool
 	LogRequest func(method, url string, body []byte)
+
+	// badPart is the first path part AccountURL or LookupURL refused. Do and
+	// DoMultipart return it instead of sending or printing anything, so the
+	// commands building those URLs need no check of their own.
+	badPart *clierr.Error
 }
 
 // IsScopedToken reports whether AuthToken is a scoped token (stk_ prefix).
@@ -180,19 +185,31 @@ func New(authID, authToken string, timeout time.Duration) *Client {
 	}
 }
 
-// AccountURL returns BaseURL + "/v1/Account/{auth_id}/" + joined parts + "/".
+// AccountURL returns BaseURL + "/v1/Account/{auth_id}/" + parts + "/", each
+// part path-escaped, so an ID holding '/', '?', '#' or a newline stays one
+// segment: unescaped, `conferences hangup 'team#2'` ended conference team.
 func (c *Client) AccountURL(parts ...string) string {
-	u := c.BaseURL + "/v1/Account/" + c.AuthID + "/"
-	if len(parts) == 0 {
-		return u
+	u := c.BaseURL + "/v1/Account/" + url.PathEscape(c.AuthID) + "/"
+	for _, p := range parts {
+		u += c.pathPart(p) + "/"
 	}
-	return u + strings.Join(parts, "/") + "/"
+	return u
 }
 
-// LookupURL returns the Lookup API URL for a number.
-// No trailing slash; the caller appends ?type=carrier.
+// LookupURL returns the Lookup API URL for a number, escaped as AccountURL
+// escapes a part. No trailing slash; the caller appends ?type=carrier.
 func (c *Client) LookupURL(number string) string {
-	return c.BaseURL + "/v1/Lookup/Number/" + number
+	return c.BaseURL + "/v1/Lookup/Number/" + c.pathPart(number)
+}
+
+// pathPart escapes one path segment. A blank, "." or ".." one names another
+// resource (/Call//, /Conference/../), so the first is kept as badPart.
+func (c *Client) pathPart(p string) string {
+	if c.badPart == nil && (strings.TrimSpace(p) == "" || p == "." || p == "..") {
+		c.badPart = clierr.BadInput(fmt.Sprintf("%q is not an ID or name", p))
+		c.badPart.Hint = "IDs and names go into the request path, where a blank one, . or .. would reach a different resource."
+	}
+	return url.PathEscape(p)
 }
 
 // BuddyURL joins BuddyBaseURL with the given absolute path. AI surfaces
@@ -220,6 +237,9 @@ func (c *Client) BuddyURL(path string) string {
 // On transport errors (no answer, or a cut-off one), returns a nil *APIError
 // and, as the Go error, a NETWORK_ERROR or UPSTREAM_TIMEOUT *clierr.Error.
 func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, out any) (*APIError, error) {
+	if c.badPart != nil {
+		return nil, c.badPart
+	}
 	if len(queryParams) > 0 {
 		sep := "?"
 		if strings.Contains(fullURL, "?") {
@@ -322,6 +342,9 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 // e.g. "documents[0].file" -> "/path/passport.pdf"). Auth, headers, dry-run,
 // and error handling mirror Do; used by the compliance create/update verbs.
 func (c *Client) DoMultipart(method, fullURL string, dataJSON []byte, files map[string]string, out any) (*APIError, error) {
+	if c.badPart != nil {
+		return nil, c.badPart
+	}
 	if c.DryRun {
 		fmt.Fprintf(os.Stderr, "[dry-run] %s %s (multipart/form-data)\n", method, fullURL)
 		if len(dataJSON) > 0 {

@@ -1,9 +1,14 @@
 package api
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/plivo/plivo-cli/internal/clierr"
 )
 
 func TestNew_defaults(t *testing.T) {
@@ -45,6 +50,7 @@ func TestAccountURL(t *testing.T) {
 		{"deep nesting", []string{"Conference", "demo", "Member", "42", "Mute"}, "https://hodor.plivo.com/v1/cli/api/v1/Account/MAXYZ123/Conference/demo/Member/42/Mute/"},
 		{"10dlc lowercase segment", []string{"10dlc", "Brand"}, "https://hodor.plivo.com/v1/cli/api/v1/Account/MAXYZ123/10dlc/Brand/"},
 		{"Masking/Session two-part", []string{"Masking", "Session"}, "https://hodor.plivo.com/v1/cli/api/v1/Account/MAXYZ123/Masking/Session/"},
+		{"reserved characters stay in their segment", []string{"Conference", "team#2", "a/b?c\n"}, "https://hodor.plivo.com/v1/cli/api/v1/Account/MAXYZ123/Conference/team%232/a%2Fb%3Fc%0A/"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -53,6 +59,31 @@ func TestAccountURL(t *testing.T) {
 				t.Errorf("AccountURL(%v) = %q, want %q", tc.parts, got, tc.want)
 			}
 		})
+	}
+}
+
+// A blank, "." or ".." part reaches another resource, so nothing is sent, or
+// printed under --dry-run, and the client sends nothing after it either.
+func TestDo_refusesBlankOrDotPart(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits.Add(1) }))
+	defer srv.Close()
+	for _, part := range []string{"", " ", ".", ".."} {
+		for _, dryRun := range []bool{false, true} {
+			c, l := New("MA1", "tok", time.Second), New("MA1", "tok", time.Second)
+			c.BaseURL, c.DryRun, l.BaseURL, l.DryRun = srv.URL, dryRun, srv.URL, dryRun
+			_, err := c.Do("DELETE", c.AccountURL("Conference", part, "Record"), nil, nil, nil)
+			_, merr := c.DoMultipart("PATCH", c.AccountURL("PhoneNumber", "Compliance", "x"), nil, nil, nil)
+			_, lerr := l.Do("GET", l.LookupURL(part), nil, nil, nil)
+			for _, e := range []error{err, merr, lerr} {
+				if ce, ok := e.(*clierr.Error); !ok || ce.Code != clierr.CodeBadInput {
+					t.Errorf("part %q, dry-run %v: got %v, want BAD_INPUT", part, dryRun, e)
+				}
+			}
+		}
+	}
+	if n := hits.Load(); n != 0 {
+		t.Errorf("%d requests reached the server", n)
 	}
 }
 
