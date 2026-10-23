@@ -17,7 +17,11 @@ import (
 
 // The json names of the Go SDK's request params: all a command may send.
 const (
-	sdkBrandCreate = "brand_alias brand_type profile_uuid secondary_vetting url method" // BrandCreationParams
+	sdkBrandCreate    = "brand_alias brand_type profile_uuid secondary_vetting url method" // BrandCreationParams
+	sdkCampaignUpdate = "description sample1 sample2 sample3 sample4 sample5 message_flow help_message help_keywords " +
+		"optin_message optin_keywords optout_message optout_keywords terms_and_conditions_link privacy_policy_link" // CampaignUpdateParams
+	sdkCampaignCreate = sdkCampaignUpdate + " brand_id campaign_alias vertical usecase sub_usecases embedded_link embedded_phone " +
+		"age_gated direct_lending affiliate_marketing subscriber_optin subscriber_optout subscriber_help url method" // CampaignCreationParams
 )
 
 // serveFixture answers every request with a response from the Go SDK's
@@ -69,6 +73,13 @@ func TestRegistrationCommands_matchTheSDK(t *testing.T) {
 		{"10dlc campaigns list", "campaignListResponse.json", "GET 10dlc/Campaign/", "", nil, []string{"CUSDYQ0", "FAILED"}},
 		{"10dlc brands create --profile-uuid P1 --alias A1 --yes", `{"api_id":"x","brand_id":"B1","message":"ok"}`, "POST 10dlc/Brand/",
 			sdkBrandCreate, map[string]any{"profile_uuid": "P1", "brand_alias": "A1", "brand_type": "STARTER"}, []string{"B1"}},
+		{"10dlc campaigns create --alias a --brand-id B1 --vertical TECHNOLOGY --usecase MIXED --sub-usecases 2FA,MARKETING " +
+			"--description d --message-flow f --sample-message-1 s1 --sample-message-2 s2 --help-message h --opt-out-message o " +
+			"--subscriber-optin --subscriber-optout --subscriber-help --yes", `{"api_id":"x","campaign_id":"C1","message":"ok"}`,
+			"POST 10dlc/Campaign/", sdkCampaignCreate, map[string]any{"sample1": "s1", "sample2": "s2", "vertical": "TECHNOLOGY",
+				"optin_keywords": "START", "optout_message": "o", "subscriber_help": true, "sub_usecases": []any{"2FA", "MARKETING"}}, []string{"C1"}},
+		{"10dlc campaigns update CY5NVUA --sample-message-1 s1", "campaignUpdateResponse.json", "POST 10dlc/Campaign/CY5NVUA/",
+			sdkCampaignUpdate, map[string]any{"sample1": "s1"}, []string{"FAILED"}},
 	} {
 		t.Run(tc.args, func(t *testing.T) {
 			setFakeCreds(t)

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"net/url"
 	"os"
 	"strconv"
@@ -44,6 +43,7 @@ var campGetCmd = &cobra.Command{
 var (
 	campCreateAlias        string
 	campCreateBrand        string
+	campCreateVertical     string
 	campCreateUsecase      string
 	campCreateSubUsecases  string
 	campCreateDescription  string
@@ -61,7 +61,9 @@ var (
 	campCreateAgeGated     bool
 	campCreateDirectLend   bool
 	campCreateAffiliate    bool
-	campCreateNumberPool   bool
+	campCreateSubOptin     bool
+	campCreateSubOptout    bool
+	campCreateSubHelp      bool
 )
 
 var campCreateCmd = &cobra.Command{
@@ -81,8 +83,11 @@ var (
 var campUpdateCmd = &cobra.Command{
 	Use:   "update <campaign_id>",
 	Short: "Update mutable campaign fields",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runCampaignUpdate,
+	Long: `Update mutable campaign fields. The update sends the campaign to the
+carriers for review again, which is charged: USD 15 per the API reference
+(plivo docs show messaging/api/10dlc/campaign/update-a-campaign).`,
+	Args: cobra.ExactArgs(1),
+	RunE: runCampaignUpdate,
 }
 
 func init() {
@@ -93,6 +98,8 @@ func init() {
 	_ = campCreateCmd.MarkFlagRequired("alias")
 	campCreateCmd.Flags().StringVar(&campCreateBrand, "brand-id", "", "brand to register under (required)")
 	_ = campCreateCmd.MarkFlagRequired("brand-id")
+	campCreateCmd.Flags().StringVar(&campCreateVertical, "vertical", "", "industry, e.g. TECHNOLOGY, RETAIL, HEALTHCARE (required)")
+	_ = campCreateCmd.MarkFlagRequired("vertical")
 	campCreateCmd.Flags().StringVar(&campCreateUsecase, "usecase", "", "primary use case, e.g. MARKETING, MIXED (required)")
 	_ = campCreateCmd.MarkFlagRequired("usecase")
 	campCreateCmd.Flags().StringVar(&campCreateSubUsecases, "sub-usecases", "", "comma-separated sub use cases")
@@ -102,19 +109,28 @@ func init() {
 	_ = campCreateCmd.MarkFlagRequired("message-flow")
 	campCreateCmd.Flags().StringVar(&campCreateSample1, "sample-message-1", "", "sample message (required)")
 	_ = campCreateCmd.MarkFlagRequired("sample-message-1")
-	campCreateCmd.Flags().StringVar(&campCreateSample2, "sample-message-2", "", "second sample message")
+	campCreateCmd.Flags().StringVar(&campCreateSample2, "sample-message-2", "", "second sample message (required)")
+	_ = campCreateCmd.MarkFlagRequired("sample-message-2")
 	campCreateCmd.Flags().StringVar(&campCreateHelpKeywords, "help-keywords", "HELP", "comma-separated help keywords")
-	campCreateCmd.Flags().StringVar(&campCreateHelpMessage, "help-message", "", "auto-reply to HELP")
+	campCreateCmd.Flags().StringVar(&campCreateHelpMessage, "help-message", "", "auto-reply to HELP (required)")
+	_ = campCreateCmd.MarkFlagRequired("help-message")
 	campCreateCmd.Flags().StringVar(&campCreateOptInKW, "opt-in-keywords", "START", "opt-in keywords")
 	campCreateCmd.Flags().StringVar(&campCreateOptInMsg, "opt-in-message", "", "opt-in confirmation message")
 	campCreateCmd.Flags().StringVar(&campCreateOptOutKW, "opt-out-keywords", "STOP", "opt-out keywords")
-	campCreateCmd.Flags().StringVar(&campCreateOptOutMsg, "opt-out-message", "", "opt-out confirmation message")
+	campCreateCmd.Flags().StringVar(&campCreateOptOutMsg, "opt-out-message", "", "auto-reply to STOP (required)")
+	_ = campCreateCmd.MarkFlagRequired("opt-out-message")
 	campCreateCmd.Flags().BoolVar(&campCreateEmbedLink, "embedded-link", false, "messages contain links")
 	campCreateCmd.Flags().BoolVar(&campCreateEmbedPhone, "embedded-phone", false, "messages contain phone numbers")
 	campCreateCmd.Flags().BoolVar(&campCreateAgeGated, "age-gated", false, "campaign targets adult content")
 	campCreateCmd.Flags().BoolVar(&campCreateDirectLend, "direct-lending", false, "direct-lending arrangements")
 	campCreateCmd.Flags().BoolVar(&campCreateAffiliate, "affiliate-marketing", false, "affiliate marketing campaign")
-	campCreateCmd.Flags().BoolVar(&campCreateNumberPool, "number-pool", false, "campaign uses a number pool")
+	// Declarations the API takes only as true: required, so each is made on purpose.
+	campCreateCmd.Flags().BoolVar(&campCreateSubOptin, "subscriber-optin", false, "declare that you collect and process opt-ins (required)")
+	campCreateCmd.Flags().BoolVar(&campCreateSubOptout, "subscriber-optout", false, "declare that you process opt-outs (required)")
+	campCreateCmd.Flags().BoolVar(&campCreateSubHelp, "subscriber-help", false, "declare that a HELP reply tells recipients how to reach you (required)")
+	for _, f := range []string{"subscriber-optin", "subscriber-optout", "subscriber-help"} {
+		_ = campCreateCmd.MarkFlagRequired(f)
+	}
 
 	campUpdateCmd.Flags().StringVar(&campUpdateDescription, "description", "", "new description")
 	campUpdateCmd.Flags().StringVar(&campUpdateMessageFlow, "message-flow", "", "new message flow")
@@ -200,16 +216,22 @@ func runCampaignCreate(cmd *cobra.Command, args []string) error {
 	body := map[string]any{
 		"campaign_alias":      campCreateAlias,
 		"brand_id":            campCreateBrand,
+		"vertical":            campCreateVertical,
 		"usecase":             campCreateUsecase,
 		"description":         campCreateDescription,
 		"message_flow":        campCreateMessageFlow,
-		"sample_message_1":    campCreateSample1,
+		"sample1":             campCreateSample1,
+		"sample2":             campCreateSample2,
+		"help_message":        campCreateHelpMessage,
+		"optout_message":      campCreateOptOutMsg,
 		"embedded_link":       campCreateEmbedLink,
 		"embedded_phone":      campCreateEmbedPhone,
 		"age_gated":           campCreateAgeGated,
 		"direct_lending":      campCreateDirectLend,
 		"affiliate_marketing": campCreateAffiliate,
-		"number_pool":         campCreateNumberPool,
+		"subscriber_optin":    campCreateSubOptin,
+		"subscriber_optout":   campCreateSubOptout,
+		"subscriber_help":     campCreateSubHelp,
 	}
 	addIfSet := func(k, v string) {
 		if v != "" {
@@ -219,13 +241,10 @@ func runCampaignCreate(cmd *cobra.Command, args []string) error {
 	if campCreateSubUsecases != "" {
 		body["sub_usecases"] = strings.Split(campCreateSubUsecases, ",")
 	}
-	addIfSet("sample_message_2", campCreateSample2)
 	addIfSet("help_keywords", campCreateHelpKeywords)
-	addIfSet("help_message", campCreateHelpMessage)
-	addIfSet("opt_in_keywords", campCreateOptInKW)
-	addIfSet("opt_in_message", campCreateOptInMsg)
-	addIfSet("opt_out_keywords", campCreateOptOutKW)
-	addIfSet("opt_out_message", campCreateOptOutMsg)
+	addIfSet("optin_keywords", campCreateOptInKW)
+	addIfSet("optin_message", campCreateOptInMsg)
+	addIfSet("optout_keywords", campCreateOptOutKW)
 
 	proceed, dryRun, gerr := guardSpend("register 10DLC campaign " + campCreateAlias)
 	if !proceed {
@@ -268,10 +287,10 @@ func runCampaignUpdate(cmd *cobra.Command, args []string) error {
 		body["message_flow"] = campUpdateMessageFlow
 	}
 	if campUpdateSample1 != "" {
-		body["sample_message_1"] = campUpdateSample1
+		body["sample1"] = campUpdateSample1
 	}
 	if campUpdateSample2 != "" {
-		body["sample_message_2"] = campUpdateSample2
+		body["sample2"] = campUpdateSample2
 	}
 	if len(body) == 0 {
 		return clierr.BadInput("at least one of --description, --message-flow, --sample-message-1, --sample-message-2 required")
@@ -280,7 +299,7 @@ func runCampaignUpdate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	var resp api.GenericResponse
+	var resp api.Campaign10DLCResponse
 	apiErr, err := client.Do("POST", client.AccountURL("10dlc", "Campaign", id), body, nil, &resp)
 	if err != nil {
 		return err
@@ -291,5 +310,9 @@ func runCampaignUpdate(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	return emitResponse(fmt.Sprintf("Updated campaign %s: %s", id, resp.Message), resp.Raw())
+	human := "Updated campaign " + id
+	if status := resp.Campaign.RegistrationStatus; status != "" {
+		human += ", registration status " + status
+	}
+	return emitResponse(human, resp.Raw())
 }

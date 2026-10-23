@@ -331,7 +331,8 @@ func spendVerbCases() []struct {
 			"--usecase", "MARKETING",
 			"--description", "x",
 			"--message-flow", "x",
-			"--sample-message-1", "x",
+			"--sample-message-1", "x", "--sample-message-2", "x", "--vertical", "TECHNOLOGY", "--help-message", "x",
+			"--opt-out-message", "x", "--subscriber-optin", "--subscriber-optout", "--subscriber-help",
 		}},
 	}
 }

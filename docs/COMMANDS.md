@@ -1607,17 +1607,20 @@ Flags:
       --embedded-link             messages contain links
       --embedded-phone            messages contain phone numbers
       --help-keywords string      comma-separated help keywords (default "HELP")
-      --help-message string       auto-reply to HELP
+      --help-message string       auto-reply to HELP (required)
       --message-flow string       describe how recipients opt in (required)
-      --number-pool               campaign uses a number pool
       --opt-in-keywords string    opt-in keywords (default "START")
       --opt-in-message string     opt-in confirmation message
       --opt-out-keywords string   opt-out keywords (default "STOP")
-      --opt-out-message string    opt-out confirmation message
+      --opt-out-message string    auto-reply to STOP (required)
       --sample-message-1 string   sample message (required)
-      --sample-message-2 string   second sample message
+      --sample-message-2 string   second sample message (required)
       --sub-usecases string       comma-separated sub use cases
+      --subscriber-help           declare that a HELP reply tells recipients how to reach you (required)
+      --subscriber-optin          declare that you collect and process opt-ins (required)
+      --subscriber-optout         declare that you process opt-outs (required)
       --usecase string            primary use case, e.g. MARKETING, MIXED (required)
+      --vertical string           industry, e.g. TECHNOLOGY, RETAIL, HEALTHCARE (required)
 ```
 
 ---
@@ -1654,6 +1657,10 @@ Flags:
 ## `plivo messaging sms 10dlc campaigns update`
 
 Update mutable campaign fields
+
+Update mutable campaign fields. The update sends the campaign to the
+carriers for review again, which is charged: USD 15 per the API reference
+(plivo docs show messaging/api/10dlc/campaign/update-a-campaign).
 
 ```
 plivo messaging sms 10dlc campaigns update <campaign_id> [flags]
