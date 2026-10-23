@@ -374,13 +374,18 @@ func doConferenceMemberPost(name, member, sub string, body map[string]any, label
 }
 
 // doConferenceMemberCall sends method to the member's sub resource: POST Kick,
-// or a DELETE that undoes a mute, deafen, play or speak.
+// with the empty JSON object the API's docs send, or a DELETE that undoes a
+// mute, deafen, play or speak.
 func doConferenceMemberCall(method, name, member, sub string) error {
 	client, _, err := getClient()
 	if err != nil {
 		return err
 	}
-	apiErr, err := client.Do(method, client.AccountURL("Conference", name, "Member", member, sub), nil, nil, nil)
+	var body any
+	if method == "POST" {
+		body = map[string]any{}
+	}
+	apiErr, err := client.Do(method, client.AccountURL("Conference", name, "Member", member, sub), body, nil, nil)
 	if err != nil {
 		return err
 	}
