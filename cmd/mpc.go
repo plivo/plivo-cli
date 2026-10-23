@@ -327,14 +327,16 @@ func runMPCPartUnhold(cmd *cobra.Command, args []string) error {
 
 // mpcResourceURL returns the full URL for an MPC, choosing the path segment
 // (`/MultiPartyCall/uuid_<uuid>/` vs `/MultiPartyCall/name_<n>/`) based on
-// whether `id` looks like a UUID or a friendly name.
-func mpcResourceURL(c *api.Client, id string) string {
+// whether `id` looks like a UUID or a friendly name. parts follow it, escaped
+// by AccountURL as the rest is.
+func mpcResourceURL(c *api.Client, id string, parts ...string) string {
 	// Plivo accepts both. We use the `uuid_<id>/` form when the id has dashes
 	// (UUID-shaped), otherwise treat it as a friendly_name.
+	seg := "name_" + id
 	if looksLikeUUID(id) {
-		return c.AccountURL("MultiPartyCall", "uuid_"+id)
+		seg = "uuid_" + id
 	}
-	return c.AccountURL("MultiPartyCall", "name_"+id)
+	return c.AccountURL(append([]string{"MultiPartyCall", seg}, parts...)...)
 }
 
 func looksLikeUUID(s string) bool {
@@ -361,7 +363,7 @@ func mpcParticipantPost(id, part, sub, label string) error {
 		return err
 	}
 	var resp api.GenericResponse
-	apiErr, err := client.Do("POST", mpcResourceURL(client, id)+"Participant/"+part+"/"+sub+"/", nil, nil, &resp)
+	apiErr, err := client.Do("POST", mpcResourceURL(client, id, "Participant", part, sub), nil, nil, &resp)
 	if err != nil {
 		return err
 	}
@@ -379,7 +381,7 @@ func mpcParticipantDelete(id, part, sub string) error {
 	if err != nil {
 		return err
 	}
-	urlPath := mpcResourceURL(client, id) + "Participant/" + part + "/"
+	urlPath := mpcResourceURL(client, id, "Participant", part)
 	if sub != "" {
 		urlPath += sub + "/"
 	}
