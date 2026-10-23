@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -429,6 +431,9 @@ func TestNumbersAffectedWarning_fetchFailureDegrades(t *testing.T) {
 
 const forwardOriginal = "https://old.example.com/answer"
 
+// fakeTunnelPID is the fake tunnel's pid: 1<<22 is never a live one.
+const fakeTunnelPID = 1 << 22
+
 // runForwardTeardown runs `voice streams forward` against a fake app and a
 // fake tunnel with the context already cancelled, so it goes straight from
 // setup to teardown; with tunnelDies the tunnel has exited instead. restoreStatus
@@ -482,7 +487,7 @@ func runForward(t *testing.T, current string, restoreStatus int, tunnelDies bool
 	t.Cleanup(srv.Close)
 
 	streamsFwdClientForTest = &api.Client{BaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", HTTP: &http.Client{}}
-	tn := &tunnel.Tunnel{PublicURL: tunnelURL}
+	tn := &tunnel.Tunnel{PublicURL: tunnelURL, PID: fakeTunnelPID, Args: []string{"fake-tunnel"}}
 	startTunnel = func(context.Context, int, string) (*tunnel.Tunnel, error) { return tn, nil }
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) // a forward that misses the stop fails, not hangs
 	if tunnelDies {
@@ -583,10 +588,31 @@ func TestVoiceStreamsForward_appLeftOnATunnel(t *testing.T) {
 				t.Errorf("restored %q (%v), state left %v, stderr %q; want %q and a %q warning",
 					got, data["restored"], readForwardState(path), stderr, tc.restored, tc.warning)
 			}
-			if (atRepoint == nil) != (tc.restored == "") || atRepoint != nil && (atRepoint.AnswerURL != tc.restored || atRepoint.PID != os.Getpid()) {
+			if (atRepoint == nil) != (tc.restored == "") || atRepoint != nil && (atRepoint.AnswerURL != tc.restored || atRepoint.PID != os.Getpid() || atRepoint.TunnelPID != fakeTunnelPID) {
 				t.Errorf("state when the app was repointed = %+v, want %q saved by this run", atRepoint, tc.restored)
 			}
 		})
+	}
+}
+
+// The next run stops the tunnel a killed forward left running.
+func TestVoiceStreamsForward_stopsTheTunnelAKilledRunLeft(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("reads another process's command line on linux and darwin only")
+	}
+	setFakeCreds(t)
+	leftover := exec.Command("sleep", "30")
+	if err := leftover.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = leftover.Process.Kill() })
+	path, _ := forwardStatePath("APP123")
+	const dead = "https://abc123.lhr.life/answer"
+	if err := writeForwardState(path, forwardState{AnswerURL: forwardOriginal, AnswerMethod: "GET", TunnelAnswerURL: dead, TunnelPID: leftover.Process.Pid, TunnelArgs: leftover.Args}); err != nil {
+		t.Fatal(err)
+	}
+	if err, _, stderr, _, _ := runForward(t, dead, http.StatusOK, false); err != nil || !strings.Contains(stderr, "Stopped the tunnel") || leftover.Wait() == nil {
+		t.Errorf("%v, stderr %q; want the leftover tunnel stopped", err, stderr)
 	}
 }
 

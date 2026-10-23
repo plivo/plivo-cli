@@ -5,7 +5,8 @@ HTTP/WebSocket server, points the app at the tunnel, and forwards
 incoming call audio to your local WebSocket handler. Restores the
 original answer_url on Ctrl+C, or when the tunnel stops (then exits 3).
 The original is saved in ~/.plivo first, so after a killed run the next
-one restores it, and a second forward on the app is refused while one runs.
+one restores it and stops the tunnel it left running, and a second forward
+on the app is refused while one runs.
 A localhost.run or trycloudflare.com answer_url is never taken as the
 original. An ngrok one is, with a warning: ngrok also gives fixed domains.
 
