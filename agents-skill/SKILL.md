@@ -1,416 +1,359 @@
 ---
 name: plivo-cx-agents
-description: Build, update and publish Plivo CX Agents (conversation flows made of nodes) through the public Agents API. Trigger whenever the user wants to create, edit, wire, validate or publish a Plivo CX agent or flow, asks which Plivo nodes to use, or mentions AgentFlowNode / agent_uuid / the Agents API.
+description: Build, update, test and publish Plivo CX Agents (conversation flows made of nodes) through the Agents API and the Plivo CLI. Trigger whenever the user wants to create, edit, wire, validate, test or publish a Plivo CX agent or flow, asks which Plivo nodes to use, or mentions AgentFlowNode / agent_uuid / the Agents API.
 metadata:
   internal: true
 ---
 
 # Plivo CX Agents skill
 
-A Plivo CX **Agent** is a directed graph: `nodes` (what happens) plus `connections` (what happens next). You build one by POSTing that graph as JSON. This file exists because the graph has a handful of non-obvious rules, and getting any one of them wrong produces an agent that returns `201 Created` and then does not work.
+A Plivo CX **Agent** is a directed graph: `nodes` (what happens) plus `connections` (what happens next). You build one by sending that graph as JSON. A `201` only means the graph was stored. The agent is done when the [preflight](#preflight-check) passes, publish leaves it `ACTIVE`, and it opens cleanly in the console builder.
 
-## If you are an AI agent — the rules that actually break flows
+The Agents API is for US data region accounts only. It isn't available to India data region accounts (a CLI profile with `region = "ap-south-1"` in `~/.plivo/config.toml`), and subaccounts aren't supported. With several CLI profiles, pass `--profile <name>` to every `plivo` command.
 
-Read these eight. Everything else you can discover from the API.
+## Rules that break flows
 
-1. **Never invent node config.** `GET /AgentFlowNode/{node_type}/` returns the node's JSON Schema *and a working example*. Read it and copy its shape. Guessing field names is the single most common failure.
-2. **You do not supply node `id` or position.** Send `name`, `type` and `config`; the server mints the id and lays out the canvas. Ids are `<type>_<n>`, numbered per type in the order you sent them: `start_1`, `send_message_1`, `send_message_2`. Your `connections` must use those names — so either predict them from that rule, or create the agent first and read the ids back before wiring.
-3. **Every node must be reachable by a connection.** Membership in a flow version is derived from the connection graph, not from the `nodes` array. A node no connection points at is **not part of the flow**. The API rejects this with `422` and names the orphans.
-4. **Connections use node `id`. Variables use node `name`.** Different namespaces. Mixing them is the most expensive mistake here because it fails at *runtime*, not on save. See below.
-5. **A connection endpoint is `<node_id>.<handle>`**, never a bare node id. Target handle is `Input`.
-6. **Nothing validates a source handle — not the API, not save time.** A misspelled or invented handle returns `201`, round-trips through `GET` unchanged, publishes happily, and is a permanently dead branch. This is the one mistake with no server-side safety net, which is why the preflight check below verifies handles against the live catalogue. **Do not skip it, especially on a branching flow.**
-7. **Once minted, an id is permanent.** On update, send every node back with the `id` it came back with. A node sent *without* an id is treated as new and gets the next free number; changing an existing id rewires or orphans the graph.
-8. **`config.model` is flat on write, but not always flat on read.** Post it flat. Some node types (e.g. `http_request`, `conference_bridge`, `multi_party_call`, `voicemail`) return it *nested under a key named after the node type or one of its fields*, and the server also injects a `name` key you did not send. **For those types, posting back exactly what you read currently NULLS the node's config** — verified on dev: an `http_request` node's `url` and `headers` came back `null` after an unmodified round trip, under a `202`. Until that is fixed server-side, flatten the nested group yourself before posting (lift its inner keys to the top level of `model` and drop the group key), or send the node's config explicitly rather than echoing a GET. Node types without such a group (e.g. `send_message`) round-trip losslessly.
+1. **Set every id yourself, as a new UUID v4**: every node `id`, every intent `id` on an AI node and every condition `id` on a `branch_v2` node. Send each one back unchanged on every update. If you leave a node id out, Plivo assigns one such as `send_message_1`, and those ids repeat across agents, so always send your own. Never copy ids from an example, the catalogue or another agent. Make them with `python3 -c 'import uuid; print(uuid.uuid4())'` or the fill script in the [worked example](#worked-example-voice-receptionist).
+2. **Set `left` and `top` on every node.** The builder draws top-down: Start at `400, 50`, each step about 250 lower, siblings about 480 apart. Without positions the server lays nodes out left to right, which reads badly in the builder.
+3. **Never invent node config.** Run `plivo agents nodes get <type>` for every type you use and send only fields from its schema. A missing required field still saves with `201`, then fails at publish with `422`.
+4. **Every node except Start needs an incoming connection and must be reachable from Start.** The API rejects a node that no connection mentions (`422`, naming it), and a node with no incoming connection never runs.
+5. **Connections use node `id`; variables use node `name`.** A connection end is `<node_id>.<handle>`, and the target handle is always `Input`. A variable is `{{<node name>.<field>}}`. Mixing them up fails at runtime, not on save.
+6. **Nothing validates a source handle.** A misspelled handle saves, publishes, and becomes a dead branch the builder doesn't draw. The preflight checks every handle against the catalogue.
+7. **In a flow you save, send empty values, never `null`.** Lists are `[]`, strings `""`. A `null` list can crash the builder's node editor.
+8. **Node `name` allows letters, numbers, spaces, `-` and `_` only.** Anything else saves, then blocks publish. Names are the variable namespace, so pick them once.
+9. **Build with the node types the builder offers.** Being in the catalogue doesn't make a type current. See [Node types](#node-types).
 
-Also: send `Content-Type: application/json`, keep the **trailing slash** on collection paths, and note `limit` is capped at 20 — a larger value is silently clamped to 20 rather than rejected, so check `meta.limit` if the page size matters to you.
+## Workflow
 
-## The workflow that works
+Use the Plivo CLI (`brew install plivo/tap/plivo`, then `plivo login`). It handles auth and adds `/v1/Account/<auth_id>` to paths.
 
-```
-1. GET /AgentFlowNode/                     → which node types exist
-2. GET /AgentFlowNode/{type}/              → schema + working example, per node you need
-3. build the graph                     → names, types, config, connections
-4. run the preflight check (below)     → orphans, namespaces, and real handles
-5. POST /AgentFlow/                        → 201, returns agent_uuid
-6. GET /AgentFlow/{agent_uuid}/              → confirm nodes + connections came back
-7. POST /AgentFlow/{agent_uuid}/Publish      → DRAFT → ACTIVE
-```
+1. `plivo api GET /AgentFlowNode/ > catalogue.json`: every node type and its handles. The preflight reads this file.
+2. `plivo agents nodes get <type>`: the JSON Schema, once per type you use.
+3. Write `flow.json`: `{"name", "description", "nodes", "connections"}`.
+4. Run the [preflight](#preflight-check) and fix every error.
+5. `plivo agents create --file flow.json`: prints the `agent_uuid` and the stored name (a taken name gets ` 1` appended).
+6. `plivo agents get <agent_uuid> -o json`: the same node ids and connection count must come back.
+7. `plivo agents publish <agent_uuid>`, then `plivo agents get <agent_uuid>` must show `ACTIVE`. A `422` names the node and field to fix.
+8. [Test it](#testing).
 
-Do not skip step 4. Steps 5 and 6 will happily report success on a flow with a dead branch or a variable that resolves to nothing — the preflight is the only thing that catches those.
+Anything else goes through `plivo api <METHOD> <path>`, for example `plivo api GET /AgentFlowNode/`. Writes need `--yes` and take a body with `--body @file.json`. With `-o json`, or whenever stdout is piped, the CLI wraps the response in `{"data": ...}`.
 
-## Auth and base URL
-
-HTTP Basic, `auth_id:auth_token`. The `auth_id` in the path **must** equal the one you authenticate with, or you get `401`.
-
-```bash
-export A=YOUR_AUTH_ID
-export T=YOUR_AUTH_TOKEN
-export B=https://api.plivo.com/v1/Account/$A
-```
+Without the CLI: HTTP Basic auth (`auth_id:auth_token`) against `https://api.plivo.com/v1/Account/<auth_id>/`, with `Content-Type: application/json`. The `auth_id` in the path must be the one you authenticate with, or you get `401`.
 
 ## Endpoints
 
+Under `/v1/Account/<auth_id>/`. Paths are case-sensitive; keep the trailing slash on collections.
+
 | Method | Path | Result |
 |---|---|---|
-| GET | `/AgentFlow/` | list; `?limit=` (clamped to 20), `?offset=`, `?state=DRAFT\|ACTIVE\|PAUSED` |
-| POST | `/AgentFlow/` | `201` → `{api_id, message:"agent created", agent_uuid, name, resource_uri}` |
-| GET | `/AgentFlow/{agent_uuid}/` | detail incl. `nodes` + `connections` |
-| POST | `/AgentFlow/{agent_uuid}/` | update; `202` → `{api_id, message:"changed"}` |
-| DELETE | `/AgentFlow/{agent_uuid}/` | `204` |
-| POST | `/AgentFlow/{agent_uuid}/Publish` | `202` → `{api_id, message:"changed"}`; `DRAFT` → `ACTIVE`. **Empty body.** |
-| POST | `/AgentFlow/{agent_uuid}/Pause` | `202`; → `PAUSED`. Empty body. |
-| POST | `/AgentFlow/{agent_uuid}/Resume` | `202`; → `ACTIVE`. Empty body. |
-| GET | `/AgentFlow/{agent_uuid}/Run/` | run history |
-| GET | `/AgentFlow/{agent_uuid}/Run/{run_uuid}/` | one run + execution logs |
-| GET | `/AgentFlowNode/` | all node types; `?types=a,b,c` fetches several schemas in one call |
-| GET | `/AgentFlowNode/{node_type}/` | schema + examples for one type |
+| GET | `/AgentFlow/` | list; `?limit=` (max 20), `?offset=`, `?state=DRAFT\|ACTIVE\|PAUSED` |
+| POST | `/AgentFlow/` | create; `201` with `agent_uuid` |
+| GET | `/AgentFlow/<agent_uuid>/` | detail, incl. `nodes` and `connections` |
+| POST | `/AgentFlow/<agent_uuid>/` | update; `202`. The full graph, not a patch |
+| DELETE | `/AgentFlow/<agent_uuid>/` | `204` |
+| POST | `/AgentFlow/<agent_uuid>/Publish` (or `Pause`, `Resume`) | `202`; empty body |
+| GET | `/AgentFlow/<agent_uuid>/Run/[<run_uuid>/]` | run history, or one run with its logs |
+| GET | `/AgentFlowNode/[<node_type>/]` | the catalogue, or one type's schema |
 
-The resource key is **`agent_uuid`** in every response, including list rows — not a bare `id`. Run ids are
-`run_uuid`. Every object also carries a `resource_uri`.
-
-Timestamps are `YYYY-MM-DD HH:MM:SS.ffffff+00:00` (space-separated, numeric offset) — the same shape the rest of
-the Plivo API uses, and the shape its datetime filters accept. Not ISO-8601 with `T`/`Z`.
+Resources are keyed `agent_uuid` and `run_uuid`, never a bare `id`. Timestamps look like `2026-08-10 09:15:00.000000+00:00`. The limit is 60 requests per 60 seconds per `auth_id`. Testing routes are under [Testing](#testing).
 
 ## Node shape
 
-What you send:
 ```json
-{
-  "name": "Send Message",
-  "type": "send_message",
-  "config": { "model": { "...": "per-node, from GET /AgentFlowNode/{type}/" } }
-}
-```
-What comes back, with the server's additions:
-```json
-{
-  "id": "send_message_1",
-  "name": "Send Message",
-  "type": "send_message",
-  "left": 440, "top": 200,
-  "config": { "model": { "..." : "..." } }
-}
+{"id": "<new uuid4>", "name": "Front Desk", "type": "ai_agent_v2", "left": 400, "top": 300,
+ "config": {"model": {"...": "fields from plivo agents nodes get ai_agent_v2"}}}
 ```
 
-- `id` — **omit it**; the server mints `<type>_<n>` per type. Supply one only if you are managing ids yourself, and never change one that already exists.
-- `name` — human label, **and the namespace variables use**.
-- `type` — must be an exact `node_type` from the catalogue.
-- `left` / `top` — canvas coordinates. **Omit them too**; the server lays the flow out left to right. Supply them only to control the layout.
-- `config.model` — a flat dict of the node's fields **when you write it**. See Rule 8: the read shape can differ.
-
-## Rule 4, expanded — the namespace trap
-
-Connections address nodes by **id**. Template variables address them by **name**.
-
-```json
-{ "nodes": [
-    { "name": "Start", "type": "start", ... },
-    { "name": "Send Message", "type": "send_message",
-      "config": { "model": {
-        "to": ["{{Start.message.from}}"]        ← name  ✅
-      } } } ],
-  "connections": [
-    { "source": "start_1.message", "target": "send_message_1.Input" }   ← ids  ✅
-  ] }
-```
-
-The ids in `connections` are the ones the server will mint from the node types
-above, in order. The names in `{{...}}` are the `name` fields.
-
-```
-❌ "to": ["{{send_message_1.message.from}}"]  id in a variable — saves fine, resolves to nothing at runtime
-❌ "source": "Start.message"                  name in a connection — 400 or a broken graph
-```
-
-If you rename a node, every variable referencing it must change too. This is a good reason to set `name` once and leave it.
-
-**Which trigger fields exist is not published.** The node schemas do not enumerate the trigger payload, so the only variable paths you can rely on are the ones that appear in the served examples — `{{Start.message.from}}`, `{{Start.call.header1}}`, `{{Start.outbound_call.to}}`. If you need a field you have not seen in an example (a message's body text, for instance), **do not invent a path**. Either read it off a real run via `GET /AgentFlow/{agent_uuid}/Run/{run_uuid}/`, or ask the user to confirm it from the console's variable picker. An invented path saves cleanly and silently resolves to nothing.
-
-There is also a separate `{{secrets.NAME}}` namespace for stored credentials — use it instead of putting a token in `config`.
+Post `config.model` flat, with every field at its top level, even for the few types (`http_request`, `conference_bridge`, `multi_party_call`, `voicemail`) that read back with fields nested under a group key.
 
 ## Handles
 
-Target handle is always `Input`. A source handle comes from **one of two places**, and missing the second one is the classic branching bug:
+A source handle is one of the node's `output_states` from the catalogue, an `intent_name` of an AI node, or a condition `alias` of a `branch_v2` node.
 
-1. **Static** — an `id` from the source node's `output_states`, as returned by `GET /AgentFlowNode/{type}/`.
-2. **Dynamic — minted by the node's own config.** A `branch` node names one handle per condition, using that condition's `alias`. Those aliases are legal source handles even though they never appear in `output_states`.
-
-```json
-{ "id": "branch-1", "name": "Is VIP caller?", "type": "branch",
-  "config": { "model": { "conditions": [
-      { "alias": "vip_caller", "expressions": [ ... ] } ] } } }
-```
-```json
-{ "source": "branch-1.vip_caller", "target": "prompt-vip.Input" },   ← the alias
-{ "source": "branch-1.no_match",   "target": "prompt-def.Input" }    ← an output_state
-```
-
-So `branch`'s valid handles are `no_match`, `error`, **plus every `conditions[].alias` you defined**. If you rename an alias, the connection using it must change too or that branch goes dead.
-
-| Node | Source handles (`output_states[].id`) |
+| Type | Handles |
 |---|---|
-| `start` | `message`, `call`, `chat`, `whatsapp`, `email`, `http`, `outbound_call`, `outbound_message`, `outbound_whatsapp`, `outbound_email`, `destination`, `call_hangup`, `incoming_slack` |
-| `send_message` | `sent`, `failed` |
+| `start` | the trigger: `call`, `message`, `whatsapp`, `chat`, `email`, `http`, `outbound_call`, ... |
+| `ai_agent_v2` | each `intent_name`, plus `error` |
+| `call_forward` | `completed`, `no_answer`, `busy_rejected`, `failed` |
+| `branch_v2` | each condition `alias`, plus `no_match` and `error` |
 | `http_request` | `success`, `failed` |
-| `ai_agent_v2` | `sent`, `error` |
-| `queue_and_route` | `completed`, `timeout`, `enqueue_failed`, `assignment_failed`, plus DTMF digits |
+| `end_conversation` | none; it ends the flow |
 
-Four types have **no** output states at all (`ai_action`, `end_conversation`, `hangup`, `queue`) — nothing can lead out of them, so they are terminal. Anything else: read `output_states` from the catalogue. Do not guess.
+Start's `config.model.triggers` must contain the handle its connection uses. The trigger sets the agent's type: `call` for voice, `message` for SMS, `http` for an agent you trigger through the API.
 
-**The Start trigger you pick decides the agent's type.** `message` → an SMS-triggered agent; `http` → an API-triggered agent you can fire programmatically. The backend derives this for you; you only choose the handle. Keep `config.model.triggers` on the Start node in agreement with the handle its connection uses.
+## AI agent node
 
-To branch, give one node two outgoing connections on different handles, and offset the targets vertically so they do not overlap:
+`ai_agent_v2` is the AI node; the builder calls it **AI Conversation**. The catalogue's description calls it legacy, which is wrong. `ai_agent_v29` is a newer voice-only variant with the same shape. The catalogue also points to `agent_node`, which the builder shows only to some orgs, so use `ai_agent_v2` unless the user asks for it. Don't use `ai_agent_call`, `ai_agent_chat`, `ai_agent_message` or `ai_agent_whatsapp` in new flows.
+
+- Required: `channel` (`call` for voice), `instructions` (the system prompt) and `initial_wait_time` (seconds, e.g. `3`).
+- Send `actions`, `extract_variables` and `instruction_attachments` as `[]` when unused.
+- Don't set `first_response`. It's dropped on save, and the greeting comes from `instructions`.
+- The node exits through `intents`. Each needs `id` (a new UUID v4), `intent_name` and `intent_instructions` (when it applies). Each `intent_name` is a source handle, spaces included: `<node_id>.Transfer To Human`.
+- Wire every intent, plus the `error` handle. Don't wire `sent`: the builder doesn't draw it.
+- **Transfer to a human** is an intent wired into `call_forward` (voice; needs `from`, `to` and `ring_timeout`, and `from` must differ from `to`) or `queue_and_route` (needs the UUID of a queue made in the console). Wire `call_forward`'s `no_answer`, `busy_rejected` and `failed` handles too.
+- **Functions** are `actions[]` entries with `action_type` `CUSTOM_CODE` or `HTTP`. `EXECUTE_ACTION` (a connected integration) needs an `org_app_uuid` the API can't list.
+- **Knowledge bases** attach at flow level and aren't on the API yet. `instruction_attachments` isn't a knowledge base.
+
+## Node types
+
+The catalogue lists 54 types, including superseded ones. Build with the types the builder's palette offers:
+
+| Group | Types |
+|---|---|
+| Trigger | `start` |
+| AI | `ai_agent_v2`, `ai_action`, `ai_skills` |
+| Conversation | `agent_preset_conversation`, `end_conversation` |
+| Functions | `queue_and_route`, `business_hour`, `create_task`, `http_request` |
+| Call | `initiate_call`, `ivr_menu`, `get_input`, `call_forward`, `voicemail`, `prompt`, `conference_bridge`, `multi_party_call_v2`, `stream` |
+| Customer input | `customer_feedback`, `user_input` |
+| Logic | `branch_v2`, `counter` |
+
+`queue_and_route` and `business_hour` take UUIDs of a queue and business hours made in the console. Don't add any other type. Old flows still show `ai_agent_call`, `ai_agent_chat`, `ai_agent_message` and `ai_agent_whatsapp` (use `ai_agent_v2`), `hangup` (use `end_conversation`), and `send_message`, `send_whatsapp` and `send_chat`. These save but the builder can't show them at all: `agent_assignment`, `ai_chatbot`, `api_integration`, `branch` (use `branch_v2`), `chat_menu_button`, `customer_feedback_call`, `email_conversation`, `get_object`, `multi_party_call`, `queue`, `send_chat_and_wait_reply`, `send_email`, `send_message_and_wait_reply`, `send_whatsapp_and_wait_reply`, `set_attribute`, `waiting_room`.
+
+### `branch_v2`
 
 ```json
-"nodes": [
-  { "id": "http-1", "left": 440, "top": 180, ... },
-  { "id": "ok-1",   "left": 800, "top":  80, ... },
-  { "id": "oops-1", "left": 800, "top": 320, ... } ],
-"connections": [
-  { "source": "http-1.success", "target": "ok-1.Input" },
-  { "source": "http-1.failed",  "target": "oops-1.Input" } ]
+{"id": "<new uuid4>", "name": "VIP Sender", "type": "branch_v2", "left": 400, "top": 300,
+ "config": {"model": {"conditions": [
+   {"id": "<new uuid4>", "alias": "vip", "expression_operators": [],
+    "expressions": [{"lhs": "{{Start.message.from}}", "rhs": ["+15551234567"],
+                     "operation": "exact match", "case_sensitive": false}]}]}}}
 ```
 
-## Node catalogue at a glance
+`expression_operators` has one entry fewer than `expressions`: `[]` for one, `["and"]` for two. `exact match` compares one value, so to match any of N values use N conditions, all wired to the same target. Other operations: `contains`, `starts with`, `ends with`, `in`.
 
-52 types. Use `GET /AgentFlowNode/` for the live list; this is orientation only.
+## Variables
 
-| Category | Types |
-|---|---|
-| Flow Trigger | `start` |
-| Messaging | `send_message`, `send_message_and_wait_reply`, `send_whatsapp`, `send_whatsapp_and_wait_reply`, `send_email`, `send_chat`, `send_chat_and_wait_reply`, `message_conversation`, `whatsapp_conversation`, `email_conversation`, `chat_menu_button` |
-| AI Agent | `ai_agent_v2`, `ai_agent_call`, `ai_agent_chat`, `ai_agent_message`, `ai_agent_whatsapp`, `ai_chatbot`, `ai_assist`, `ai_action`, `ai_skills`, `agent_node`, `agent_preset_conversation`, `contact_screening` |
-| Voice & Telephony | `initiate_call`, `call_forward`, `ivr_menu`, `get_input`, `prompt`, `hangup`, `voicemail`, `conference_bridge`, `multi_party_call`, `multi_party_call_v2`, `multi_party_call_outbound`, `stream`, `waiting_room`, `customer_feedback_call` |
-| Routing & Queueing | `queue`, `queue_and_route`, `agent_assignment`, `business_hour` |
-| Flow Control | `branch`, `counter`, `set_attribute`, `end_conversation` |
-| Integrations & Data | `http_request`, `api_integration`, `get_object`, `create_task` |
-| Feedback & Input | `user_input`, `customer_feedback` |
+`{{<node name>.<field>}}`, for example `{{Start.call.to}}`, the number that was called. No schema lists the trigger fields, so use only paths you've seen work (`{{Start.call.to}}`, `{{Start.message.from}}`, `{{Start.outbound_call.to}}`), or read one off a real run with `plivo agents runs get <agent_uuid> <run_uuid>`. Publish rejects a path it doesn't know. Stored credentials go in `{{secrets.NAME}}`, never in `config`. Renaming a node breaks every variable that uses its old name.
 
-There is no `branch_v2` — the type is `branch`.
+## Worked example: voice receptionist
 
-## Worked example — SMS auto-reply
+Start, an AI receptionist, a transfer to a human, and an end. Write it to `flow.json`:
 
-Two nodes, one connection, no ids and no coordinates. Verified end to end.
-
-```bash
-curl -s -u "$A:$T" -H "Content-Type: application/json" -d '{
-  "name": "SMS auto-reply",
-  "description": "replies to any inbound SMS",
+```json
+{
+  "name": "Bright Smile Front Desk",
+  "description": "Inbound voice receptionist with transfer to a human",
   "nodes": [
-    { "name": "Start", "type": "start",
-      "config": { "model": { "triggers": ["message"] } } },
-    { "name": "Send Message", "type": "send_message",
-      "config": { "model": {
-        "from": "YOUR_PLIVO_NUMBER",
-        "to": ["{{Start.message.from}}"],
-        "text": "Thanks for your message, we will be right with you." } } }
+    {"id": "<uuid:start>", "name": "Start", "type": "start", "left": 400, "top": 50,
+     "config": {"model": {"triggers": ["call"]}}},
+    {"id": "<uuid:ai>", "name": "Front Desk", "type": "ai_agent_v2", "left": 400, "top": 300,
+     "config": {"model": {
+       "channel": "call",
+       "initial_wait_time": 3,
+       "instructions": "You are the receptionist for Bright Smile Dental. Book, move or cancel appointments. Hours: Mon-Fri 9am-6pm. Address: 12 Main Street. Greet callers warmly and keep replies short.",
+       "intents": [
+         {"id": "<uuid:human>", "intent_name": "Transfer To Human",
+          "intent_instructions": "The caller asks for a person, is upset, or needs something you can't do."},
+         {"id": "<uuid:done>", "intent_name": "Call Complete",
+          "intent_instructions": "The caller has what they need and the call is over."}],
+       "actions": [], "extract_variables": [], "instruction_attachments": []}}},
+    {"id": "<uuid:forward>", "name": "Transfer", "type": "call_forward", "left": 160, "top": 560,
+     "config": {"model": {"from": "{{Start.call.to}}", "to": "+15551234567", "ring_timeout": 30}}},
+    {"id": "<uuid:end>", "name": "End", "type": "end_conversation", "left": 640, "top": 560,
+     "config": {"model": {"end_message": "Thanks for calling Bright Smile Dental. Goodbye!"}}}
   ],
   "connections": [
-    { "source": "start_1.message", "target": "send_message_1.Input" }
-  ] }' "$B/AgentFlow/"
+    {"source": "<uuid:start>.call", "target": "<uuid:ai>.Input"},
+    {"source": "<uuid:ai>.Transfer To Human", "target": "<uuid:forward>.Input"},
+    {"source": "<uuid:ai>.Call Complete", "target": "<uuid:end>.Input"},
+    {"source": "<uuid:ai>.error", "target": "<uuid:end>.Input"},
+    {"source": "<uuid:forward>.no_answer", "target": "<uuid:end>.Input"},
+    {"source": "<uuid:forward>.busy_rejected", "target": "<uuid:end>.Input"},
+    {"source": "<uuid:forward>.failed", "target": "<uuid:end>.Input"}
+  ]
+}
 ```
 
-`start_1` and `send_message_1` are the ids the server mints for those two node
-types, in that order. Read them back with `GET /AgentFlow/{agent_uuid}/` if you would
-rather confirm than predict.
-
-Then publish it:
-
-```bash
-curl -s -X POST -u "$A:$T" "$B/AgentFlow/AGENT_ID/Publish"
-```
-
-Note `config.model.triggers` on the Start node matches the handle used in the connection (`message`). Keep those two in agreement.
-
-## Preflight check — run this before every POST
-
-Catches the failures that a `201` will not tell you about. No dependencies.
+Set `to` to the human's number. `call_forward` records the transferred call unless you send `"record": false`. Swap each `<uuid:...>` for a new UUID v4, the same value everywhere it appears, then run the preflight, create and publish:
 
 ```bash
 python3 - flow.json <<'PY'
-import json, os, re, sys, urllib.request, base64
-d = json.load(open(sys.argv[1]))
-nodes, conns = d.get("nodes") or [], d.get("connections") or []
-err, warn, note = [], [], []
+import re, sys, uuid
+ids, path = {}, sys.argv[1]
+text = re.sub(r"<uuid:(\w+)>", lambda m: ids.setdefault(m[1], str(uuid.uuid4())), open(path).read())
+open(path, "w").write(text)
+PY
+plivo agents create --file flow.json
+plivo agents publish <agent_uuid>
+```
 
-# Mint the ids the SERVER will mint, using its rule: <type>_<n>, numbered per
-# type in payload order, and never overriding an id you supplied. Without this
-# the checks below would compare your connections against ids that do not exist
-# yet and call every node an orphan -- which is exactly the bug this mirrors.
-def mint(nodes):
-    taken = {n.get("id") for n in nodes if isinstance(n, dict) and n.get("id")}
-    counters, out = {}, []
-    for n in nodes:
-        if not isinstance(n, dict):
-            out.append(n); continue
-        n = dict(n)
-        if not n.get("id"):
-            base = re.sub(r"[^a-z0-9_]+", "_", str(n.get("type") or "node").strip().lower()).strip("_") or "node"
-            k = counters.get(base, 0) + 1
-            cand = f"{base}_{k}"
-            while cand in taken:
-                k += 1; cand = f"{base}_{k}"
-            counters[base] = k; n["id"] = cand; taken.add(cand)
-        out.append(n)
-    return out
+## Preflight check
 
-nodes = mint(nodes)
-ids   = [n.get("id") for n in nodes if isinstance(n, dict)]
-names = {n.get("name") for n in nodes if isinstance(n, dict) and n.get("name")}
-bytype = {n.get("id"): n.get("type") for n in nodes if isinstance(n, dict)}
+Run it before every create and update, and fix every error; warnings are worth fixing too. It checks ids, handles, wiring, names and nulls. It doesn't check required fields, field types or loops: publish does, and its `422` names the node and field. It reads the catalogue from a file, so it holds no credentials. To reuse it, save the lines between the `PY` markers as `preflight.py` and run `python3 preflight.py flow.json catalogue.json`.
 
-if not nodes: err.append("no nodes")
-for dup in {i for i in ids if ids.count(i) > 1}: err.append(f"duplicate node id: {dup}")
-for n in nodes:
-    if not isinstance(n, dict): continue
-    for f in ("name", "type"):
-        if not n.get(f): err.append(f"node {n.get('id') or '?'}: missing {f}")
+```bash
+plivo api GET /AgentFlowNode/ > catalogue.json
+python3 - flow.json catalogue.json <<'PY'
+import json, re, sys, uuid
+flow, cat = (json.load(open(p)) for p in sys.argv[1:3])
+flow, cat = flow.get("data", flow), cat.get("data", cat)  # the CLI wraps JSON output in "data"
+nodes, conns = flow.get("nodes") or [], flow.get("connections") or []
+states = {t["node_type"]: {s["id"] for s in t.get("output_states") or []} for t in cat["objects"]}
+err, warn = [], []
 
-starts = [n for n in nodes if n.get("type") == "start"]
-if len(starts) != 1: err.append(f"expected exactly 1 start node, found {len(starts)}")
-
-# Endpoints must be <node_id>.<handle> and the id must exist.
-seen, srcs = set(), []
-for c in conns:
-    for end in ("source", "target"):
-        v = c.get(end, "")
-        if "." not in v:
-            err.append(f"connection {end} '{v}' is not <node_id>.<handle>"); continue
-        nid, handle = v.split(".", 1)
-        if nid not in ids: err.append(f"connection {end} '{v}' points at unknown node '{nid}'")
-        else:
-            seen.add(nid)
-            if end == "source": srcs.append((nid, handle))
-        if end == "target" and handle != "Input":
-            warn.append(f"target handle '{handle}' is unusual; it is normally 'Input'")
-
-# Orphans are excluded from the saved version.
-for o in [i for i in ids if i not in seen]:
-    err.append(f"node '{o}' is referenced by no connection and will NOT be saved")
-
-# Variables use node NAME, not node id.
-for m in re.finditer(r"\{\{\s*([A-Za-z0-9_-]+)\s*\.", json.dumps(d)):
-    ref = m.group(1)
-    if ref in ids and ref not in names:
-        err.append(f"variable '{{{{{ref}...}}}}' uses a node id; variables use the node NAME")
-
-# ---- source handles. Nothing server-side validates these: a typo saves with
-# 201 and becomes a permanently dead branch. Needs the catalogue, so it only
-# runs when credentials are present.
-A, T = os.environ.get("PLIVO_AUTH_ID"), os.environ.get("PLIVO_AUTH_TOKEN")
-# HARDCODED ON PURPOSE -- do not make this configurable. This script sends Basic
-# Auth to whatever host it resolves, and it is designed to be run autonomously by
-# an LLM agent with no human watching the request leave. An env var here means a
-# copy-pasted export line, a poisoned shell profile, or prompt injection can
-# silently redirect live Plivo credentials to a host of someone else's choosing.
-# That is the same reasoning that removed --api-url/PLIVO_API_URL from the CLI
-# itself, and it applies more strongly here, not less. Pointing at a non-prod
-# gateway is local-build territory.
-BASE = "https://api.plivo.com"
-if not (A and T):
-    note.append("handle check SKIPPED (set PLIVO_AUTH_ID/PLIVO_AUTH_TOKEN to enable) "
-                "-- a wrong source handle is not caught anywhere else")
-else:
+def is_uuid4(v):
     try:
-        req = urllib.request.Request(f"{BASE}/v1/Account/{A}/AgentFlowNode/")
-        req.add_header("Authorization", "Basic " +
-                       base64.b64encode(f"{A}:{T}".encode()).decode())
-        cat = json.load(urllib.request.urlopen(req, timeout=20))
-        static = {o["node_type"]: {s["id"] for s in (o.get("output_states") or [])}
-                  for o in cat["objects"]}
-        for nid, handle in srcs:
-            ntype = bytype.get(nid)
-            if ntype not in static:
-                warn.append(f"node '{nid}': unknown type '{ntype}', cannot check handles")
-                continue
-            allowed = set(static[ntype])
-            # Some nodes mint handles from their own config -- branch names one
-            # per condition alias -- so those are legal despite not being in
-            # output_states.
-            model = ((next(n for n in nodes if n.get("id") == nid).get("config") or {})
-                     .get("model") or {})
-            if isinstance(model, dict):
-                for cond in (model.get("conditions") or []):
-                    if isinstance(cond, dict) and cond.get("alias"):
-                        allowed.add(cond["alias"])
-            if handle not in allowed:
-                err.append(f"'{nid}.{handle}' is not a valid handle for type '{ntype}'. "
-                           f"Valid: {', '.join(sorted(allowed)) or '(none)'}")
-    except Exception as e:
-        note.append(f"handle check could not run ({e}); source handles NOT verified")
+        return uuid.UUID(str(v)).version == 4 and str(uuid.UUID(str(v))) == v
+    except ValueError:
+        return False
 
-for e in err:  print("ERROR  ", e)
-for w in warn: print("warn   ", w)
-for n in note: print("note   ", n)
-print(f"\n{len(err)} error(s), {len(warn)} warning(s)")
+def model(n):
+    return (n.get("config") or {}).get("model") or {}
+
+def handles(n):
+    m = model(n)
+    h = set(states.get(n.get("type"), ())) | {i.get("intent_name") for i in m.get("intents") or []}
+    h |= {c.get("alias") for c in m.get("conditions") or []}
+    if str(n.get("type")).startswith("ai_agent_v2"):
+        h.discard("sent")  # the builder doesn't draw it
+    return h - {None}
+
+byid = {}
+for n in nodes:
+    nid, label = n.get("id"), repr(n.get("name") or n.get("id"))
+    if not is_uuid4(nid):
+        err.append(f"{label}: id {nid!r} is not a new UUID v4")
+    elif nid in byid:
+        err.append(f"{label}: id {nid} is used twice")
+    byid[nid] = n
+    if not re.fullmatch(r"[A-Za-z0-9 _-]+", str(n.get("name") or "")):
+        err.append(f"{label}: name may use only letters, numbers, spaces, - and _")
+    if n.get("type") not in states:
+        err.append(f"{label}: unknown type {n.get('type')!r}")
+    if n.get("left") is None or n.get("top") is None:
+        warn.append(f"{label}: no left/top, so the builder draws it out of place")
+    m = model(n)
+    subs = (m.get("intents") or []) + (m.get("conditions") or [])
+    exits = [s.get("intent_name") or s.get("alias") for s in subs]
+    for sub, exit_name in zip(subs, exits):
+        if not is_uuid4(sub.get("id")):
+            err.append(f"{label}: {exit_name!r} needs its own UUID v4 id")
+    for dup in {x for x in exits if exits.count(x) > 1}:
+        err.append(f"{label}: two intents or conditions are named {dup!r}")
+    for k, v in m.items():
+        if v is None:
+            err.append(f"{label}: config.model.{k} is null; drop it, or send [] or \"\"")
+    if "first_response" in m:
+        warn.append(f"{label}: first_response is dropped on save; put the greeting in instructions")
+
+out, nxt, inc = {}, {}, set()
+for c in conns:
+    src, dst = str(c.get("source", "")), str(c.get("target", ""))
+    (s, _, sh), (t, _, th) = src.partition("."), dst.partition(".")
+    if s not in byid or t not in byid or not sh or not th:
+        err.append(f"{src} -> {dst}: each end must be <node_id>.<handle> of a node in this flow")
+        continue
+    if th != "Input":
+        err.append(f"{src} -> {dst}: the target handle is always Input")
+    if sh not in handles(byid[s]):
+        valid = ", ".join(sorted(handles(byid[s]))) or "none"
+        err.append(f"{byid[s].get('name')!r}.{sh}: not a handle of {byid[s].get('type')}; valid: {valid}")
+    out.setdefault(s, set()).add(sh)
+    nxt.setdefault(s, set()).add(t)
+    inc.add(t)
+
+starts = [i for i, n in byid.items() if n.get("type") == "start"]
+if len(starts) != 1:
+    err.append(f"found {len(starts)} start nodes; a flow needs exactly 1")
+seen, todo = set(), list(starts)
+while todo:
+    cur = todo.pop()
+    if cur not in seen:
+        seen.add(cur)
+        todo += nxt.get(cur, ())
+for i, n in byid.items():
+    label = repr(n.get("name") or i)
+    if n.get("type") != "start" and i not in inc:
+        err.append(f"{label} has no incoming connection")
+    elif i not in seen:
+        err.append(f"{label} isn't reachable from Start")
+    if handles(n) and i not in out:
+        (err if n.get("type") == "start" else warn).append(f"{label} has no outgoing connection")
+    for intent in model(n).get("intents") or []:
+        if intent.get("intent_name") not in out.get(i, ()):
+            err.append(f"{label}: intent {intent.get('intent_name')!r} isn't wired to anything")
+    if str(n.get("type")).startswith("ai_agent_v2") and "error" not in out.get(i, ()):
+        warn.append(f"{label}: wire its error handle")
+    if n.get("type") == "start" and out.get(i, set()) - set(model(n).get("triggers") or []):
+        warn.append(f"{label}: config.model.triggers must include the handle its connection uses")
+
+names = {n.get("name") for n in nodes}
+for ref in set(re.findall(r"\{\{\s*([^.{}]+?)\s*\.", json.dumps(flow))):
+    if ref in byid and ref not in names:
+        err.append(f"variable {{{{{ref}...}}}} uses a node id; variables use the node name")
+
+for line in [f"ERROR {e}" for e in err] + [f"warn  {w}" for w in warn]:
+    print(line)
+print(f"{len(err)} error(s), {len(warn)} warning(s)")
 sys.exit(1 if err else 0)
 PY
 ```
 
-Exit code is non-zero if anything must be fixed. Fix errors before POSTing; warnings are cosmetic but worth doing.
+## Testing
 
-## When it goes wrong
+**Scenarios** are test conversations generated from the flow, ready in about 30 seconds:
 
-| Response | Cause | Fix |
+```bash
+plivo agents get <agent_uuid> -o json | python3 -c 'import json, sys; a = json.load(sys.stdin)["data"]; json.dump({"flow_json": {"nodes": a["nodes"], "connections": a["connections"]}, "max_scenarios": 3}, open("scenarios.json", "w"))'
+plivo api POST /AgentFlow/<agent_uuid>/Scenario/ --body @scenarios.json --yes
+plivo api GET /AgentFlow/<agent_uuid>/Scenario/ | python3 -c '
+import json, sys
+for s in json.load(sys.stdin)["data"]["data"]["scenarios"]:
+    print(s["scenario"]["name"], "|", s["scenario"]["goal"])'
+```
+
+**Simulations** run scenarios against the flow and return a `run_uuid` to poll or stream. A run started over the API can fail to save. If `GET Simulation/<run_uuid>/` keeps returning `404`, or these routes return `500`, test in the console instead (below).
+
+| Method | Path under `/AgentFlow/<agent_uuid>/` | Result |
 |---|---|---|
-| `422` "not referenced by any connection" | Rule 2 — orphan node | Wire it, or drop it from `nodes` |
-| `400` on a connection | Rule 4 — endpoint is not `<id>.<handle>` | Add the handle; targets take `.Input` |
-| `400` "Payload is not a valid JSON" | Body is not a JSON **object** | Send an object, not an array or string |
-| `401` | Path `auth_id` ≠ authenticated `auth_id` | Make them the same value |
-| `422` on Publish | Agent is already `ACTIVE` | Check `state` first; `Pause` then `Resume` to cycle |
-| wrong page size | `limit` > 20 | NOT an error — silently clamped to 20. Read `meta.limit`, and page with `offset` |
-| Saves fine, does nothing at runtime | Rule 3 — variable used a node id, or an invented trigger field | Switch it to the node `name`; verify the path against an example or a real run |
-| **One branch never fires; no error anywhere** | Rule 5 — source handle is misspelled or invented. **`201`, `GET` and `Publish` all report success** | Run the preflight with credentials so handles are checked against the catalogue |
-| Update returns `202` but nothing changed | You changed a node `id` | Keep ids stable; post the full graph |
+| POST | `Scenario/` | generate; `202`. Needs `flow_json`, takes `max_scenarios` |
+| GET | `Scenario/` | list |
+| DELETE | `Scenario/[<scenario_uuid>/]` | delete all, or one |
+| POST | `Simulation/` | run; `202`. Needs `flow_json` and `scenario_uuids` |
+| GET | `Simulation/[<run_uuid>/]` | runs, or one run with per-scenario results |
+| GET | `Simulation/<run_uuid>/Export/` | full results |
+| GET | `Simulation/<run_uuid>/Stream/` | live transcript, `text/event-stream` |
+
+`flow_json` is the whole graph from the agent's GET. Ids in these paths must be real UUIDs, or you get `400`. Generating and running are limited to 5 requests per 10 minutes per `auth_id`.
+
+**In the console**, at `https://cx.plivo.com/agent/builder/<agent_uuid>`:
+- The **Simulations** tab, where it's enabled, generates and runs scenarios.
+- **Playground** places a test call in the browser. Testing a transfer rings the real `to` number.
+- **Phone Numbers** attaches a number, which you need before you can call the agent from a phone.
+- After a call, `plivo agents runs list <agent_uuid>` lists the run, and `plivo agents runs get <agent_uuid> <run_uuid>` shows its logs.
 
 ## Updating an agent
 
-POST the **whole** graph, not a patch. The safe pattern is read-modify-write:
+Send the whole graph back, with every id exactly as it came back. Reads return unset fields as `null`, so drop those before you send:
 
 ```bash
-curl -s -u "$A:$T" "$B/AgentFlow/AGENT_ID/" > flow.json
-# edit flow.json — keep every node id exactly as it came back
-python3 -c "
-import json; d=json.load(open('flow.json'))
-json.dump({'nodes':d['nodes'],'connections':d['connections']}, open('body.json','w'))"
-curl -s -X POST -u "$A:$T" -H "Content-Type: application/json" \
-  --data-binary @body.json "$B/AgentFlow/AGENT_ID/"
+plivo agents get <agent_uuid> -o json | python3 -c '
+import json, sys
+def clean(o):
+    if isinstance(o, dict):
+        return {k: clean(v) for k, v in o.items() if v is not None}
+    return [clean(v) for v in o] if isinstance(o, list) else o
+a = clean(json.load(sys.stdin)["data"])
+json.dump({"nodes": a["nodes"], "connections": a["connections"]}, open("flow.json", "w"), indent=2)'
+# edit flow.json, run the preflight, then:
+plivo agents update <agent_uuid> --file flow.json
 ```
 
-`name` and `description` can be sent on their own, but a graph edit must include the full `nodes` + `connections`.
+- A new node needs a new UUID v4 id. A node's `type` can't change: remove the node and add a replacement under a new id.
+- Removing a node needs `"allow_node_deletion": true` in the body, and no connection may still point at it. `plivo agents update` doesn't send that field, so use `plivo api POST /AgentFlow/<agent_uuid>/ --body @flow.json --yes`.
+- `name` can change alone (`plivo agents update <agent_uuid> --name "..."`). A `description` change must include the full graph.
+- Reads mask secret fields (`token`, `password`, `secret`, `api_key`, `authorization`, `cookie`) as `***REDACTED***`, and the server restores them on write. It can't for a list under a secret-named key, or for list entries without a unique `id`, `uuid`, `key` or `name`: those updates return `400` until you send the real values.
 
-### Secrets in a round trip
+## When it goes wrong
 
-Reads **mask** secret-shaped fields (`token`, `password`, `secret`, `api_key`,
-`authorization`, `cookie`) as the literal `***REDACTED***`. Masking covers the
-**whole value** under such a key, so a nested object's inner fields are masked too
-even when their own names look harmless. On write the server puts
-the stored value back for you, so the read-modify-write pattern above works normally
-and you do **not** need to re-supply a credential you never saw.
-
-Two cases it cannot do that for, where the write is **rejected with 400** rather than
-guessing — and you must re-send the real value explicitly:
-
-| shape | why |
-|---|---|
-| a list under a secret-named key, whether of bare strings (`"api_tokens": ["***REDACTED***", ...]`) or of objects with no `id`/`uuid`/`key`/`name` | nothing distinguishes one element from another, so pairing would be positional and reordering the list would swap your credentials |
-| two entries in the same list sharing an `id`/`uuid`/`key`/`name`/`node_type` | the identity does not pick out one stored entry, so restoring would be a guess |
-
-Be aware of the consequence: a node whose config holds one of those shapes **cannot
-be saved through a full-graph update at all** until you include the real secret values
-in the payload — even if you changed nothing else. The 400 names the exact path it
-found the placeholder at. This is deliberate: handing back the wrong credential
-silently is worse than making you re-send the right one.
-
-## Sanity check
-
-If all of these hold, the flow is very likely correct:
-
-- The preflight script exits `0` **and did not print "handle check SKIPPED"**. A skipped handle check means the riskiest mistake went unverified.
-- `GET /AgentFlow/{agent_uuid}/` returns the same node **and connection** counts you sent.
-- Every `{{...}}` reference matches a node `name` in the same flow, and every path after that name came from an example or a real run rather than from you.
-- The Start node's `config.model.triggers` contains the handle its outgoing connection uses.
-- Each branching node has one connection per outcome you care about, and every one of those handles appeared in the preflight's "Valid:" list.
-- After `Publish`, `state` is `ACTIVE`.
-
-Note: `GET /AgentFlowNode/{type}/` also returns `x-plivo-coverage`, listing validation rules that are dropped or degraded for that node type. Worth reading when a node's config is accepted but behaves oddly — it tells you which checks are not being applied.
+| Symptom | Cause | Fix |
+|---|---|---|
+| `422` naming nodes | a node no connection mentions | wire it, or drop it |
+| `400` on a connection | an end isn't `<node_id>.<handle>` | add the handle; targets use `.Input` |
+| `401` | the path `auth_id` isn't the authenticated one | use the same `auth_id` |
+| `422` on publish | a missing required field, an unknown variable, a loop, or already `ACTIVE` | read the message; it names the node and field |
+| a branch never fires | an invented source handle | run the preflight |
+| a node on the canvas has no parent | its only incoming edge uses a handle the builder doesn't draw | wire a real handle |
+| the builder shows "Cannot read properties of null" | a `null` list in `config.model` | send `[]` |
+| `202` on update, but a change didn't stick | a node's `type` changed (the old one is kept), or its id did | keep ids and types; replace the node under a new id |
