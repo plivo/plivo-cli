@@ -77,7 +77,7 @@ func init() {
 		name, usage string
 	}{
 		{&tfvSubmitProfile, "profile-uuid", "the profile holding the business's details"},
-		{&tfvSubmitNumber, "number", "the toll-free number to verify, E.164"},
+		{&tfvSubmitNumber, "number", "the toll-free number: digits with the country code, e.g. 18005550100"},
 		{&tfvSubmitUseCase, "use-case", "use case, or several comma-separated, e.g. 2FA,CUSTOMER_CARE"},
 		{&tfvSubmitUseCaseSummary, "use-case-summary", "how the number's messages are used"},
 		{&tfvSubmitMessageContent, "production-message-content", "sample messages you will send"},

@@ -1714,7 +1714,7 @@ Flags:
 
 ```
       --campaign-id string   10DLC campaign id (required)
-      --number string        E.164 number (required)
+      --number string        the number: digits with the country code, e.g. 14155550100 (required)
 ```
 
 ---
@@ -2058,7 +2058,7 @@ Flags:
 
 ```
       --message-volume string               messages a month: 10, 100, 1000, 10000, 100000, 250000, 500000, 750000, 1000000, 5000000 or 10,000,000+ (required)
-      --number string                       the toll-free number to verify, E.164 (required)
+      --number string                       the toll-free number: digits with the country code, e.g. 18005550100 (required)
       --opt-in-image-url string             URL of an image or document that shows the opt-in (required)
       --opt-in-type string                  how recipients opt in: VERBAL|WEB_FORM|PAPER_FORM|VIA_TEXT|MOBILE_QR_CODE (required)
       --privacy-policy-link string          public URL of your privacy policy (required)

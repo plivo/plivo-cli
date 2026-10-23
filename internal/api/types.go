@@ -638,8 +638,8 @@ type Campaign10DLC struct {
 	TermsAndConditionsLink string                  `json:"terms_and_conditions_link,omitempty"`
 	PrivacyPolicyLink      string                  `json:"privacy_policy_link,omitempty"`
 	CampaignAttributes     Campaign10DLCAttributes `json:"campaign_attributes"`
-	// Throughput per carrier. Raw: the API reference's examples disagree on
-	// the case of the carrier names and on whether tpm is a number.
+	// Throughput per carrier, kept as sent: T-Mobile's entry has a brand_tier
+	// where the others have a tpm.
 	MnoMetadata json.RawMessage `json:"mno_metadata,omitempty"`
 	ErrorReason string          `json:"error_reason,omitempty"`
 	CreatedAt   string          `json:"created_at,omitempty"`

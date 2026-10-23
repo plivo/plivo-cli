@@ -59,7 +59,7 @@ func init() {
 	_ = linkListCmd.MarkFlagRequired("campaign-id")
 	linkListCmd.Flags().StringVar(&linkListNumber, "number", "", "only this number's link (no --limit, --offset or --all)")
 
-	linkCreateCmd.Flags().StringVar(&linkCreateNumber, "number", "", "E.164 number (required)")
+	linkCreateCmd.Flags().StringVar(&linkCreateNumber, "number", "", "the number: digits with the country code, e.g. 14155550100 (required)")
 	_ = linkCreateCmd.MarkFlagRequired("number")
 	linkCreateCmd.Flags().StringVar(&linkCreateCampaign, "campaign-id", "", "10DLC campaign id (required)")
 	_ = linkCreateCmd.MarkFlagRequired("campaign-id")
