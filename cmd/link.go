@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/plivo/plivo-cli/internal/api"
+	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -56,7 +57,7 @@ func init() {
 	registerListFlags(linkListCmd, &linkListLimit, &linkListOffset)
 	linkListCmd.Flags().StringVar(&linkListCampaign, "campaign-id", "", "the campaign whose numbers to list (required)")
 	_ = linkListCmd.MarkFlagRequired("campaign-id")
-	linkListCmd.Flags().StringVar(&linkListNumber, "number", "", "only this number")
+	linkListCmd.Flags().StringVar(&linkListNumber, "number", "", "only this number's link (no --limit, --offset or --all)")
 
 	linkCreateCmd.Flags().StringVar(&linkCreateNumber, "number", "", "E.164 number (required)")
 	_ = linkCreateCmd.MarkFlagRequired("number")
@@ -68,6 +69,11 @@ func init() {
 }
 
 func runLinkList(cmd *cobra.Command, args []string) error {
+	for _, f := range []string{"limit", "offset", "all"} {
+		if linkListNumber != "" && cmd.Flags().Changed(f) {
+			return clierr.BadFlag(f, "cannot be combined with --number: one number's link has no pages")
+		}
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -76,7 +82,7 @@ func runLinkList(cmd *cobra.Command, args []string) error {
 	q.Set("limit", strconv.Itoa(linkListLimit))
 	q.Set("offset", strconv.Itoa(linkListOffset))
 	parts := []string{"10dlc", "Campaign", linkListCampaign, "Number"}
-	if linkListNumber != "" { // one number's link: no paging
+	if linkListNumber != "" {
 		parts, q = append(parts, linkListNumber), nil
 	}
 	var resp api.CampaignNumbers10DLC

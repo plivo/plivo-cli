@@ -130,13 +130,19 @@ func TestRegistrationCommands_matchTheSDK(t *testing.T) {
 	}
 }
 
-// Neither the SDK nor the API reference has a brand update: the command says so
-// and sends nothing.
-func TestBrandsUpdate_sendsNothing(t *testing.T) {
-	setFakeCreds(t)
-	sent := serveFixture(t, `{}`)
-	err, _, _ := execCmd(t, "messaging", "sms", "10dlc", "brands", "update", "B1", "--email", "a@example.com")
-	if calls, _ := sent(); err == nil || !strings.Contains(err.Error(), "no endpoint") || len(calls) != 0 {
-		t.Errorf("got %v after %d requests, want a refusal and none", err, len(calls))
+// Refused, naming the problem, before any request.
+func TestRegistrationCommands_refuse(t *testing.T) {
+	for args, want := range map[string]string{
+		"10dlc brands update B1 --email a@example.com":                      "no endpoint", // in neither the SDK nor the API reference
+		"10dlc links list --campaign-id C1 --number 14155550100 --limit 5":  "--number",
+		"10dlc links list --campaign-id C1 --number 14155550100 --offset 1": "--number",
+		"10dlc links list --campaign-id C1 --number 14155550100 --all":      "--number",
+	} {
+		setFakeCreds(t)
+		sent := serveFixture(t, `{}`)
+		err, _, _ := execCmd(t, strings.Fields("messaging sms "+args)...)
+		if calls, _ := sent(); err == nil || !strings.Contains(err.Error(), want) || len(calls) != 0 {
+			t.Errorf("%s: got %v after %d requests, want a refusal naming %s and none", args, err, len(calls), want)
+		}
 	}
 }

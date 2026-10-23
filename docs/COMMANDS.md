@@ -1743,7 +1743,7 @@ Flags:
       --all                  fetch every page (stops after 100 pages)
       --campaign-id string   the campaign whose numbers to list (required)
       --limit int            results per page (1-20) (default 20)
-      --number string        only this number
+      --number string        only this number's link (no --limit, --offset or --all)
       --offset int           pagination offset
 ```
 
