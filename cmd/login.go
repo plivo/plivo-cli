@@ -275,7 +275,7 @@ func runLogout(cmd *cobra.Command, args []string) error {
 		name = args[0]
 	}
 	noneActive := false
-	if err := config.Update(func(cfg *config.Config) error {
+	if err := updateConfig(func(cfg *config.Config) error {
 		if len(args) == 0 {
 			if name = cfg.Active; name == "" {
 				return clierr.BadInput("no active profile to log out — pass a profile name")
@@ -292,6 +292,10 @@ func runLogout(cmd *cobra.Command, args []string) error {
 		return nil
 	}); err != nil {
 		return err
+	}
+	if dryRunFlag {
+		fmt.Fprintf(os.Stderr, "[dry-run] Would log out profile %q and delete its keychain token\n", name)
+		return nil
 	}
 
 	// Best-effort keychain removal (no-op if the token lived inline), once

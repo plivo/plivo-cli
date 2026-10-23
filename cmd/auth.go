@@ -89,7 +89,7 @@ func runAuthList(cmd *cobra.Command, args []string) error {
 
 func runAuthUse(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	if err := config.Update(func(cfg *config.Config) error {
+	if err := updateConfig(func(cfg *config.Config) error {
 		if _, ok := cfg.Profiles[name]; !ok {
 			return fmt.Errorf("profile %q not found", name)
 		}
@@ -98,13 +98,17 @@ func runAuthUse(cmd *cobra.Command, args []string) error {
 	}); err != nil {
 		return err
 	}
+	if dryRunFlag {
+		fmt.Fprintf(os.Stderr, "[dry-run] Would set the active profile to %s\n", name)
+		return nil
+	}
 	fmt.Fprintf(os.Stderr, "Active profile: %s\n", name)
 	return nil
 }
 
 func runAuthRemove(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	if err := config.Update(func(cfg *config.Config) error {
+	if err := updateConfig(func(cfg *config.Config) error {
 		if _, ok := cfg.Profiles[name]; !ok {
 			return fmt.Errorf("profile %q not found", name)
 		}
@@ -115,6 +119,10 @@ func runAuthRemove(cmd *cobra.Command, args []string) error {
 		return nil
 	}); err != nil {
 		return err
+	}
+	if dryRunFlag {
+		fmt.Fprintf(os.Stderr, "[dry-run] Would remove profile %q and its keychain token\n", name)
+		return nil
 	}
 	// Best-effort removal from the OS keychain (no-op if the token lived in
 	// the config file instead), once the profile is gone.
