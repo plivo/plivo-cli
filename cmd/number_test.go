@@ -294,3 +294,13 @@ func TestUnreachable_isANetworkErrorNotKYCOrNotFound(t *testing.T) {
 		}
 	}
 }
+
+// A search Plivo cannot fill answers 200 with the reason in "error", which was
+// dropped: an empty table and exit 0 were all anyone saw.
+func TestNumberSearch_printsTheReasonInA2xxBody(t *testing.T) {
+	setFakeCreds(t)
+	pointCommandsAtTestServer(t, `{"api_id":"x","meta":{"total_count":0},"objects":[],"error":"We are currently unable to offer your requested numbers"}`)
+	if err, _, stderr := execCmd(t, "numbers", "search", "--country", "US"); err != nil || !strings.Contains(stderr, "unable to offer your requested numbers") {
+		t.Errorf("%v, stderr %q: want the API's reason", err, stderr)
+	}
+}
