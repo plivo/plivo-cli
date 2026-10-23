@@ -81,16 +81,11 @@ var confMemberUndeafCmd = &cobra.Command{
 	RunE:  runConferenceMemberUndeaf,
 }
 
-var (
-	confMemberPlayURLs   string
-	confMemberPlayLength int
-	confMemberPlayLoop   bool
-	confMemberPlayMix    bool
-)
+var confMemberPlayURL string
 
 var confMemberPlayCmd = &cobra.Command{
 	Use:   "play <conference_name> <member_id>",
-	Short: "Play audio file(s) into a member's channel",
+	Short: "Play an audio file into a member's channel",
 	Args:  cobra.ExactArgs(2),
 	RunE:  runConferenceMemberPlay,
 }
@@ -145,11 +140,8 @@ var confStopRecordCmd = &cobra.Command{
 }
 
 func init() {
-	confMemberPlayCmd.Flags().StringVar(&confMemberPlayURLs, "urls", "", "comma-separated audio file URLs (required)")
-	_ = confMemberPlayCmd.MarkFlagRequired("urls")
-	confMemberPlayCmd.Flags().IntVar(&confMemberPlayLength, "length", 0, "stop after N seconds")
-	confMemberPlayCmd.Flags().BoolVar(&confMemberPlayLoop, "loop", false, "loop playback")
-	confMemberPlayCmd.Flags().BoolVar(&confMemberPlayMix, "mix", true, "mix with conference audio")
+	confMemberPlayCmd.Flags().StringVar(&confMemberPlayURL, "url", "", "URL of the .mp3 or .wav file to play (required)")
+	_ = confMemberPlayCmd.MarkFlagRequired("url")
 
 	confMemberSpeakCmd.Flags().StringVar(&confMemberSpeakText, "text", "", "TTS text (required)")
 	_ = confMemberSpeakCmd.MarkFlagRequired("text")
@@ -268,16 +260,10 @@ func runConferenceMemberUndeaf(cmd *cobra.Command, args []string) error {
 	return doConferenceMemberCall("DELETE", args[0], args[1], "Deaf")
 }
 
+// runConferenceMemberPlay sends the one url the member Play API takes; it has
+// no urls, length, loop or mix, unlike a call's.
 func runConferenceMemberPlay(cmd *cobra.Command, args []string) error {
-	body := map[string]any{
-		"urls": confMemberPlayURLs,
-		"loop": confMemberPlayLoop,
-		"mix":  confMemberPlayMix,
-	}
-	if confMemberPlayLength > 0 {
-		body["length"] = confMemberPlayLength
-	}
-	return doConferenceMemberPost(args[0], args[1], "Play", body, "playing audio")
+	return doConferenceMemberPost(args[0], args[1], "Play", map[string]any{"url": confMemberPlayURL}, "playing audio")
 }
 
 func runConferenceMemberStopPlay(cmd *cobra.Command, args []string) error {
