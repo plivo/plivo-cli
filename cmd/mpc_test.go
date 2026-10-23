@@ -65,6 +65,7 @@ func TestParticipantVerbs_sendWhatTheAPITakes(t *testing.T) {
 		"multiparty participant unmute room 11": `/MultiPartyCall/name_room/Participant/11/ body: { "mute": false }`,
 		"multiparty participant hold room 11":   `/MultiPartyCall/name_room/Participant/11/ body: { "hold": true }`,
 		"multiparty participant unhold room 11": `/MultiPartyCall/name_room/Participant/11/ body: { "hold": false }`,
+		"conferences member kick room 11":       "/Conference/room/Member/11/Kick/",
 	} {
 		err, _, stderr := execCmd(t, append(strings.Fields("voice "+args), "--yes", "--dry-run")...)
 		if got := strings.Join(strings.Fields(stderr), " "); err != nil || !strings.HasPrefix(got, "[dry-run] POST ") || !strings.HasSuffix(got, want) {

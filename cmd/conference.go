@@ -248,7 +248,8 @@ func runConferenceMemberKick(cmd *cobra.Command, args []string) error {
 	if err := confirmDestructive("kick member " + member + " from " + name); err != nil {
 		return err
 	}
-	return doConferenceMemberDelete(name, member, "")
+	// POST .../Kick/: a DELETE on the member hangs up its call instead.
+	return doConferenceMemberCall("POST", name, member, "Kick")
 }
 
 func runConferenceMemberMute(cmd *cobra.Command, args []string) error {
@@ -256,7 +257,7 @@ func runConferenceMemberMute(cmd *cobra.Command, args []string) error {
 }
 
 func runConferenceMemberUnmute(cmd *cobra.Command, args []string) error {
-	return doConferenceMemberDelete(args[0], args[1], "Mute")
+	return doConferenceMemberCall("DELETE", args[0], args[1], "Mute")
 }
 
 func runConferenceMemberDeaf(cmd *cobra.Command, args []string) error {
@@ -264,7 +265,7 @@ func runConferenceMemberDeaf(cmd *cobra.Command, args []string) error {
 }
 
 func runConferenceMemberUndeaf(cmd *cobra.Command, args []string) error {
-	return doConferenceMemberDelete(args[0], args[1], "Deaf")
+	return doConferenceMemberCall("DELETE", args[0], args[1], "Deaf")
 }
 
 func runConferenceMemberPlay(cmd *cobra.Command, args []string) error {
@@ -280,7 +281,7 @@ func runConferenceMemberPlay(cmd *cobra.Command, args []string) error {
 }
 
 func runConferenceMemberStopPlay(cmd *cobra.Command, args []string) error {
-	return doConferenceMemberDelete(args[0], args[1], "Play")
+	return doConferenceMemberCall("DELETE", args[0], args[1], "Play")
 }
 
 func runConferenceMemberSpeak(cmd *cobra.Command, args []string) error {
@@ -293,7 +294,7 @@ func runConferenceMemberSpeak(cmd *cobra.Command, args []string) error {
 }
 
 func runConferenceMemberStopSpeak(cmd *cobra.Command, args []string) error {
-	return doConferenceMemberDelete(args[0], args[1], "Speak")
+	return doConferenceMemberCall("DELETE", args[0], args[1], "Speak")
 }
 
 func runConferenceRecord(cmd *cobra.Command, args []string) error {
@@ -386,16 +387,14 @@ func doConferenceMemberPost(name, member, sub string, body map[string]any, label
 	return emitResponse(fmt.Sprintf("%s: %s/%s — %s", label, name, member, resp.Message), resp.Raw())
 }
 
-func doConferenceMemberDelete(name, member, sub string) error {
+// doConferenceMemberCall sends method to the member's sub resource: POST Kick,
+// or a DELETE that undoes a mute, deafen, play or speak.
+func doConferenceMemberCall(method, name, member, sub string) error {
 	client, _, err := getClient()
 	if err != nil {
 		return err
 	}
-	parts := []string{"Conference", name, "Member", member}
-	if sub != "" {
-		parts = append(parts, sub)
-	}
-	apiErr, err := client.Do("DELETE", client.AccountURL(parts...), nil, nil, nil)
+	apiErr, err := client.Do(method, client.AccountURL("Conference", name, "Member", member, sub), nil, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -405,7 +404,7 @@ func doConferenceMemberDelete(name, member, sub string) error {
 	if dryRunFlag {
 		return nil
 	}
-	if sub == "" {
+	if sub == "Kick" {
 		return emitWrite(fmt.Sprintf("Kicked member %s from %s", member, name),
 			map[string]any{"conference_name": name, "member_id": member, "kicked": true})
 	}
