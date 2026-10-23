@@ -88,3 +88,14 @@ func TestCallList_liveListsTheCallsInProgress(t *testing.T) {
 		t.Errorf("no calls in progress: %v, want calls: [] in\n%s", err, stdout)
 	}
 }
+
+// GET is for the static demo XML; another answer URL gets Plivo's default POST.
+func TestCallMake_answerMethodGETOnlyForTheDemoURL(t *testing.T) {
+	setFakeCreds(t)
+	for args, get := range map[string]bool{"": true, "--answer-url https://example.com/a": false, "--answer-url https://example.com/a --answer-method GET": true} {
+		err, _, stderr := execCmd(t, append([]string{"voice", "calls", "make", "--from", "+14155550100", "--to", "+14155550101", "--dry-run"}, strings.Fields(args)...)...)
+		if err != nil || strings.Contains(stderr, `"answer_method": "GET"`) != get || strings.Contains(stderr, "answer_method") != get {
+			t.Errorf("%q: %v, want answer_method GET sent = %v:\n%s", args, err, get, stderr)
+		}
+	}
+}

@@ -3951,7 +3951,7 @@ plivo voice calls make [flags]
 Flags:
 
 ```
-      --answer-method string       GET|POST (default "GET")
+      --answer-method string       GET|POST (default: GET for the hello demo, else Plivo's POST)
       --answer-url string          URL returning PlivoXML to play on answer (default: Plivo's hello demo) (default "https://s3.amazonaws.com/static.plivo.com/answer.xml")
       --explain                    narrate in plain English before executing
       --from string                source number (E.164) — must be on your account (required)
