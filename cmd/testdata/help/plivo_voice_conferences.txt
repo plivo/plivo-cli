@@ -13,7 +13,7 @@ Available Commands:
   list        List active conference names
   member      Per-member actions inside a conference
   record      Start recording a conference
-  stop-record Stop the active recording on a conference
+  stop-record Stop the active recording on a conference (requires --yes)
 
 Flags:
   -h, --help   help for conferences

@@ -1,4 +1,4 @@
-Stop the active recording on a conference
+Stop the active recording on a conference (requires --yes)
 
 Usage:
   plivo voice conferences stop-record <conference_name> [flags]

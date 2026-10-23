@@ -139,7 +139,7 @@ var confRecordCmd = &cobra.Command{
 
 var confStopRecordCmd = &cobra.Command{
 	Use:   "stop-record <conference_name>",
-	Short: "Stop the active recording on a conference",
+	Short: "Stop the active recording on a conference (requires --yes)",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runConferenceStopRecord,
 }
@@ -338,6 +338,9 @@ func runConferenceRecord(cmd *cobra.Command, args []string) error {
 }
 
 func runConferenceStopRecord(cmd *cobra.Command, args []string) error {
+	if err := confirmDestructive("stop recording conference " + args[0]); err != nil {
+		return err
+	}
 	return doConferenceDelete(args[0], "Record")
 }
 

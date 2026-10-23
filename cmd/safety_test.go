@@ -219,6 +219,7 @@ func destructiveVerbCases() []struct {
 		{"numbers compliance delete", []string{"numbers", "compliance", "delete", "DOC-ID"}},
 		{"numbers masking sessions delete", []string{"numbers", "masking", "sessions", "delete", "SESS-UUID"}},
 		{"voice conferences hangup", []string{"voice", "conferences", "hangup", "room-1"}},
+		{"voice conferences stop-record", []string{"voice", "conferences", "stop-record", "room-1"}},
 		{"voice conferences member kick", []string{"voice", "conferences", "member", "kick", "room-1", "member-id"}},
 		{"voice multiparty end", []string{"voice", "multiparty", "end", "MPC-UUID"}},
 		{"voice multiparty participant kick", []string{"voice", "multiparty", "participant", "kick", "MPC-UUID", "PART-ID"}},
