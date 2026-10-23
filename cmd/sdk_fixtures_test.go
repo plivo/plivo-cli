@@ -62,7 +62,7 @@ func serveFixture(t *testing.T, fixture string) func() (calls []string, bodies [
 // Each command sends exactly the body keys listed and reads the SDK's fixtures.
 func TestRegistrationCommands_matchTheSDK(t *testing.T) {
 	for _, tc := range []struct {
-		args    string         // after "messaging sms", split on spaces
+		args    string         // after "messaging sms", split on spaces; "~" is a space in an argument
 		fixture string         // the response
 		call    string         // the request, under /v1/Account/{auth_id}/
 		keys    string         // every body key sent; "" for no body
@@ -77,7 +77,7 @@ func TestRegistrationCommands_matchTheSDK(t *testing.T) {
 			brandRequired, map[string]any{"profile_uuid": "P1", "brand_alias": "A1"}, []string{"B1"}},
 		{"10dlc brands create --profile-uuid P1 --alias A1 --brand-type STANDARD --secondary-vetting=false --yes", `{}`, "POST 10dlc/Brand/",
 			brandRequired + " brand_type secondary_vetting", map[string]any{"brand_type": "STANDARD", "secondary_vetting": false}, nil},
-		{"10dlc campaigns create --alias a --brand-id B1 --vertical TECHNOLOGY --usecase MIXED --sub-usecases 2FA,MARKETING " +
+		{"10dlc campaigns create --alias a --brand-id B1 --vertical TECHNOLOGY --usecase MIXED --sub-usecases 2FA,~MARKETING " +
 			"--description d --message-flow f --sample-message-1 s1 --sample-message-2 s2 --help-message h --opt-out-message o " +
 			"--subscriber-optin --subscriber-optout --subscriber-help --yes", `{"api_id":"x","campaign_id":"C1","message":"ok"}`,
 			"POST 10dlc/Campaign/", campaignRequired + " sub_usecases help_keywords optin_keywords optout_keywords",
@@ -101,7 +101,11 @@ func TestRegistrationCommands_matchTheSDK(t *testing.T) {
 		t.Run(tc.args, func(t *testing.T) {
 			setFakeCreds(t)
 			sent := serveFixture(t, tc.fixture)
-			err, stdout, stderr := execCmd(t, append(strings.Fields("messaging sms "+tc.args), "-o", "table")...)
+			args := strings.Fields("messaging sms " + tc.args)
+			for i := range args {
+				args[i] = strings.ReplaceAll(args[i], "~", " ")
+			}
+			err, stdout, stderr := execCmd(t, append(args, "-o", "table")...)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

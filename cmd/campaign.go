@@ -241,8 +241,14 @@ func runCampaignCreate(cmd *cobra.Command, args []string) error {
 			body[k] = v
 		}
 	}
-	if campCreateSubUsecases != "" {
-		body["sub_usecases"] = strings.Split(campCreateSubUsecases, ",")
+	var subs []string
+	for _, sub := range strings.Split(campCreateSubUsecases, ",") {
+		if sub = strings.TrimSpace(sub); sub != "" {
+			subs = append(subs, sub)
+		}
+	}
+	if len(subs) > 0 {
+		body["sub_usecases"] = subs
 	}
 	addIfSet("help_keywords", campCreateHelpKeywords)
 	addIfSet("optin_keywords", campCreateOptInKW)
