@@ -2373,7 +2373,7 @@ Flags:
       --all                  fetch every page (stops after 100 pages)
       --country string       filter by ISO country code
       --limit int            results per page (1-20) (default 20)
-      --number-type string   filter by number type: local|mobile|tollfree
+      --number-type string   filter by number type: local|mobile|tollfree|national
       --offset int           pagination offset
       --status string        filter by status: draft|submitted|accepted|rejected|suspended|expired
       --user-type string     filter by user type: individual|business
