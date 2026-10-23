@@ -148,7 +148,7 @@ func runCampaignList(cmd *cobra.Command, args []string) error {
 	}
 	rows := [][]string{{"CAMPAIGN_ID", "ALIAS", "BRAND_ID", "USECASE", "STATUS"}}
 	for _, c := range resp.Campaigns {
-		rows = append(rows, []string{c.CampaignID, c.CampaignAlias, c.BrandID, c.Usecase, c.CampaignStatus})
+		rows = append(rows, []string{c.CampaignID, c.CampaignAlias, c.BrandID, c.Usecase, c.RegistrationStatus})
 	}
 	return output.Table(os.Stdout, rows)
 }
@@ -159,8 +159,8 @@ func runCampaignGet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	var c api.Campaign10DLC
-	apiErr, err := client.Do("GET", client.AccountURL("10dlc", "Campaign", id), nil, nil, &c)
+	var resp api.Campaign10DLCResponse
+	apiErr, err := client.Do("GET", client.AccountURL("10dlc", "Campaign", id), nil, nil, &resp)
 	if err != nil {
 		return err
 	}
@@ -171,20 +171,24 @@ func runCampaignGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, c.Raw())
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
+	c := resp.Campaign
 	return output.KV(os.Stdout, [][2]string{
 		{"campaign_id", c.CampaignID},
 		{"alias", c.CampaignAlias},
 		{"brand_id", c.BrandID},
 		{"usecase", c.Usecase},
-		{"sub_usecases", strings.Join(c.SubUsecases, ", ")},
-		{"status", c.CampaignStatus},
+		{"sub_usecases", c.SubUsecase},
+		{"vertical", c.Vertical},
+		{"status", c.RegistrationStatus},
+		{"error_reason", c.ErrorReason},
 		{"description", c.Description},
 		{"message_flow", c.MessageFlow},
 		{"help_keywords", c.HelpKeywords},
-		{"opt_in_keywords", c.OptInKeywords},
-		{"opt_out_keywords", c.OptOutKeywords},
+		{"opt_in_keywords", c.OptinKeywords},
+		{"opt_out_keywords", c.OptoutKeywords},
+		{"created_at", c.CreatedAt},
 	})
 }
 

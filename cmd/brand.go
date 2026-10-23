@@ -120,7 +120,7 @@ func runBrandList(cmd *cobra.Command, args []string) error {
 	}
 	rows := [][]string{{"BRAND_ID", "ALIAS", "LEGAL_NAME", "TYPE", "STATUS", "VERTICAL"}}
 	for _, b := range resp.Brands {
-		rows = append(rows, []string{b.BrandID, b.BrandAlias, b.LegalEntityName, b.BrandType, b.BrandStatus, b.Vertical})
+		rows = append(rows, []string{b.BrandID, b.BrandAlias, b.CompanyName, b.BrandType, b.RegistrationStatus, b.Vertical})
 	}
 	return output.Table(os.Stdout, rows)
 }
@@ -131,8 +131,8 @@ func runBrandGet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	var b api.Brand10DLC
-	apiErr, err := client.Do("GET", client.AccountURL("10dlc", "Brand", id), nil, nil, &b)
+	var resp api.Brand10DLCResponse
+	apiErr, err := client.Do("GET", client.AccountURL("10dlc", "Brand", id), nil, nil, &resp)
 	if err != nil {
 		return err
 	}
@@ -143,19 +143,23 @@ func runBrandGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, b.Raw())
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
+	b := resp.Brand
 	return output.KV(os.Stdout, [][2]string{
 		{"brand_id", b.BrandID},
 		{"alias", b.BrandAlias},
-		{"legal_name", b.LegalEntityName},
+		{"profile_uuid", b.ProfileUUID},
+		{"legal_name", b.CompanyName},
 		{"brand_type", b.BrandType},
 		{"entity_type", b.EntityType},
-		{"status", b.BrandStatus},
+		{"status", b.RegistrationStatus},
+		{"vetting_status", b.VettingStatus},
 		{"vertical", b.Vertical},
 		{"website", b.Website},
-		{"email", b.Email},
-		{"phone", b.Phone},
+		{"email", b.AuthorizedContact.Email},
+		{"phone", b.AuthorizedContact.Phone},
+		{"created_at", b.CreatedAt},
 	})
 }
 
