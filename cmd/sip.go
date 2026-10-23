@@ -96,7 +96,7 @@ Only SIP Trunking calls. For a Voice call use ` + "`plivo voice calls diagnose`"
 the two read different stores, so neither can answer for the other.` + diagnoseOutputHelp,
 	Example: `  plivo sip calls diagnose 8f3c1a2e-0d44-4a6f-9c31-2b7e5a90d1f7`,
 	Args:    cobra.ExactArgs(1),
-	RunE:    runSIPCallsDiagnose,
+	RunE:    sipObjectArg(runSIPCallsDiagnose),
 }
 
 var sipCallsGetCmd = &cobra.Command{
@@ -109,7 +109,7 @@ source, then the platform's final SIP response. No API returns that response,
 so it shows as not available; the console's SIP logs have it.`,
 	Example: `  plivo sip calls get 8f3c1a2e-0d44-4a6f-9c31-2b7e5a90d1f7`,
 	Args:    cobra.ExactArgs(1),
-	RunE:    runSIPCallsGet,
+	RunE:    sipObjectArg(runSIPCallsGet),
 }
 
 var sipCallsInsightsCmd = &cobra.Command{
@@ -125,7 +125,7 @@ The table ends with which side ended the call, as in ` + "`sip calls get`" + `.
 -o json returns the API response unchanged.`,
 	Example: `  plivo sip calls insights 8f3c1a2e-0d44-4a6f-9c31-2b7e5a90d1f7`,
 	Args:    cobra.ExactArgs(1),
-	RunE:    runSIPCallsInsights,
+	RunE:    sipObjectArg(runSIPCallsInsights),
 }
 
 var sipTrunksListCmd = &cobra.Command{
@@ -140,7 +140,7 @@ var sipTrunksGetCmd = &cobra.Command{
 	Use:   "get <trunk_id>",
 	Short: "Get one trunk by ID",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runSIPTrunksGet,
+	RunE:  sipTrunkArg(runSIPTrunksGet),
 }
 
 var sipACLListCmd = &cobra.Command{

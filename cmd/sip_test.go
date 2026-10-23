@@ -205,7 +205,7 @@ func TestSIPCallsGet_jsonPassesThroughUnmodelledFields(t *testing.T) {
 	resetSIPFlags(t)
 	sipServer(t, http.StatusOK, `{"call_uuid":"8f3c1a2e","a_field_we_do_not_model":"keep me"}`)
 
-	err, stdout, _ := execCmd(t, "sip", "calls", "get", "8f3c1a2e", "-o", "json")
+	err, stdout, _ := execCmd(t, "sip", "calls", "get", placeholderUUID, "-o", "json")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -286,7 +286,7 @@ func TestSIPCallsGet_decodesARealResponse(t *testing.T) {
 	resetSIPFlags(t)
 	sipServer(t, http.StatusOK, realSIPTrunkCDR)
 
-	err, stdout, _ := execCmd(t, "sip", "calls", "get", "f3f74402", "-o", "table")
+	err, stdout, _ := execCmd(t, "sip", "calls", "get", "f3f74402-59af-40b3-909c-80c50a4b063f", "-o", "table")
 	if err != nil {
 		t.Fatalf("real response failed to decode: %v", err)
 	}
@@ -371,7 +371,7 @@ func TestSIPCallsGet_pointsAtHangupCodesNotVoiceDiagnose(t *testing.T) {
 	resetSIPFlags(t)
 	sipServer(t, http.StatusOK, realSIPTrunkCDR)
 
-	err, stdout, _ := execCmd(t, "sip", "calls", "get", "f3f74402", "-o", "table")
+	err, stdout, _ := execCmd(t, "sip", "calls", "get", "f3f74402-59af-40b3-909c-80c50a4b063f", "-o", "table")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -449,7 +449,7 @@ func TestDiagnose_eachCommandRefusesTheOtherCallType(t *testing.T) {
 		resetSIPFlags(t)
 		paths := diagnoseRouter(t, false, true)
 
-		err, _, _ := execCmd(t, "sip", "calls", "diagnose", "8f3c1a2e")
+		err, _, _ := execCmd(t, "sip", "calls", "diagnose", placeholderUUID)
 		if err == nil {
 			t.Fatal("expected a refusal")
 		}
@@ -470,7 +470,7 @@ func TestDiagnose_eachCommandRefusesTheOtherCallType(t *testing.T) {
 		resetSIPFlags(t)
 		paths := diagnoseRouter(t, true, false)
 
-		if err, _, _ := execCmd(t, "sip", "calls", "diagnose", "8f3c1a2e"); err != nil {
+		if err, _, _ := execCmd(t, "sip", "calls", "diagnose", placeholderUUID); err != nil {
 			t.Fatalf("a genuine trunk call must reach the assistant: %v", err)
 		}
 		if !hitChat(paths()) {

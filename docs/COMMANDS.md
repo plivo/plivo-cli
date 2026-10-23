@@ -3011,9 +3011,12 @@ Create an IP access control list
 Create an IP access control list.
 
 --ip is repeatable and takes one IPv4 address or CIDR range each (no IPv6). A
-comma-separated list is refused rather than split. A range that allows the
-whole internet is reported but not blocked: it is occasionally deliberate, and
-refusing it outright would push people to the console instead.
+comma-separated list is refused rather than split, and so is a private,
+loopback, link-local, carrier-grade NAT, multicast, benchmarking, reserved or
+0.0.0.0 address, or a range inside one of those blocks: Plivo never sees a
+call come from one. A range that allows the whole internet is reported but
+not blocked: it is occasionally deliberate, and refusing it outright would
+push people to the console instead.
 
 --platform vapi fills --ip with the addresses Plivo's Vapi guide allows. The
 other platforms authenticate with a credential, so they have none to fill.
@@ -3338,10 +3341,15 @@ Create an origination URI
 Create an origination URI.
 
 --uri accepts host, host:port, host;transport=udp|tcp|tls, sip:user@host or
-sips:host. The host is a name or an IPv4 address: Plivo does not take IPv6.
-It is checked before sending: a space, a bad port, an unknown transport or a
-malformed host is refused. A missing port is fine: the platform decides the
-default. --transport adds ;transport= to --uri.
+sips:host. The API refuses a scheme, so sip: is dropped and sips: becomes
+;transport=tls, on port 5061 unless one is given, or with --platform on the
+guide's TLS port where it gives one; with another transport it is refused.
+stderr names the URI sent. The host is a name or a public IPv4 address:
+Plivo does not take IPv6, and can never reach a private, loopback,
+link-local, carrier-grade NAT, multicast, benchmarking, reserved or 0.0.0.0
+one. It is checked before sending: a space, a bad port, an unknown transport
+or a malformed host is refused. A missing port is fine: the platform decides
+the default. --transport adds ;transport= to --uri.
 
 --platform livekit|elevenlabs|retell|vapi fills in what Plivo's guide for that
 platform gives: host, port and transport, so you add only your own details,
@@ -3379,9 +3387,12 @@ Flags:
 
 Delete an origination URI (requires --yes)
 
-Names any trunk using it as a primary or fallback URI first. Deleting a URI
-also deletes those trunks, so an in-use URI needs --force on top of --yes. If
-the check fails, the delete is refused.
+Names any trunk using it as a primary or fallback URI first, and refuses an
+in-use URI unless --force is added to --yes: the API deletes a trunk whose
+primary URI it is. After the delete each of those trunks is read back, and
+the result says which were deleted, which kept and which could not be read
+(-o json: trunks_deleted, trunks_kept, trunks_unchecked). If the check fails,
+the delete is refused.
 
 ```
 plivo sip uris delete <uri_uuid> [flags]
@@ -3429,7 +3440,8 @@ Update an origination URI
 
 --authentication-needed takes a value so it reverses: --authentication-needed=false turns it off.
 
---uri is checked before sending, as on create.
+--uri is checked before sending, and a sip: or sips: scheme rewritten, as on
+create.
 
 ```
 plivo sip uris update <uri_uuid> [flags]

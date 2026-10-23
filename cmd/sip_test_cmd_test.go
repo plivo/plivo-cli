@@ -427,7 +427,6 @@ func TestSIPTest_transportAndPortDefaults(t *testing.T) {
 		{"sip.example.com;transport=tcp", "tcp", 5060, false},
 		{"sip.example.com;transport=tls", "tls", 5061, false},
 		{"sips:sip.example.com", "tls", 5061, false},
-		{"sips:sip.example.com;transport=tcp", "tls", 5061, false},
 		{"sip.example.com:5080;transport=tls", "tls", 5080, false},
 	} {
 		u, err := parseSIPURI(tc.uri)

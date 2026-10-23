@@ -227,7 +227,7 @@ func TestNumbersUpdate_complianceCheckScope(t *testing.T) {
 		args            []string
 		checked, posted bool
 	}{
-		{"routing to a trunk", []string{indiaNumber, "--trunk-id", "T1"}, true, false},
+		{"routing to a trunk", []string{indiaNumber, "--trunk-id", "101"}, true, false},
 		{"--force skips it", []string{indiaNumber, "--app-id", "A1", "--force"}, false, true},
 		{"not a routing change", []string{indiaNumber, "--alias", "x"}, false, true},
 		{"not an India number", []string{"+14155551234", "--app-id", "A1"}, false, true},
@@ -277,7 +277,7 @@ func TestUnreachable_isANetworkErrorNotKYCOrNotFound(t *testing.T) {
 	clientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
 	t.Cleanup(func() { clientForTest = nil })
 
-	for _, args := range [][]string{{"numbers", "update", indiaNumber, "--app-id", "A1"}, {"sip", "calls", "diagnose", "abc"}} {
+	for _, args := range [][]string{{"numbers", "update", indiaNumber, "--app-id", "A1"}, {"sip", "calls", "diagnose", placeholderUUID}} {
 		err, _, _ := execCmd(t, args...)
 		var ce *clierr.Error
 		if !errors.As(err, &ce) || ce.Code != clierr.CodeNetworkError || strings.Contains(ce.Hint, "KYC") {

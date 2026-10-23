@@ -57,11 +57,11 @@ func TestSIPURIsCreate_platformFillsThePublishedValues(t *testing.T) {
 		{"retell", "sip.retellai.com;transport=tcp", []string{"--platform", "retell"}},
 		{"vapi us", "sip.vapi.ai;transport=udp", []string{"--platform", "vapi"}},
 		{"vapi eu", "sip.eu.vapi.ai;transport=udp", []string{"--platform", "vapi", "--uri", "sip.eu.vapi.ai"}},
-		{"typed values win", "sip:+14155551234@sip.rtc.elevenlabs.io:5080;transport=tcp", []string{"--platform", "elevenlabs", "--uri", "sip:+14155551234@sip.rtc.elevenlabs.io:5080;transport=tcp"}},
+		{"typed values win", "+14155551234@sip.rtc.elevenlabs.io:5080;transport=tcp", []string{"--platform", "elevenlabs", "--uri", "sip:+14155551234@sip.rtc.elevenlabs.io:5080;transport=tcp"}},
 		{"transport without a platform", "sip.example.com;transport=tls", []string{"--uri", "sip.example.com", "--transport", "tls"}},
-		{"elevenlabs sips", "sips:sip.rtc.elevenlabs.io:5061", []string{"--platform", "elevenlabs", "--uri", "sips:sip.rtc.elevenlabs.io"}},
-		{"livekit sips", "sips:abc123.sip.livekit.cloud", []string{"--platform", "livekit", "--uri", "sips:abc123.sip.livekit.cloud"}},
-		{"retell sips", "sips:sip.retellai.com", []string{"--platform", "retell", "--uri", "sips:sip.retellai.com"}},
+		{"elevenlabs sips", "sip.rtc.elevenlabs.io:5061;transport=tls", []string{"--platform", "elevenlabs", "--uri", "sips:sip.rtc.elevenlabs.io"}},
+		{"livekit sips", "abc123.sip.livekit.cloud;transport=tls", []string{"--platform", "livekit", "--uri", "sips:abc123.sip.livekit.cloud"}},
+		{"retell sips", "sip.retellai.com;transport=tls", []string{"--platform", "retell", "--uri", "sips:sip.retellai.com"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setFakeCreds(t)
@@ -91,7 +91,7 @@ func TestSIPURIsCreate_platformWarnsOnValuesTheGuideDoesNotList(t *testing.T) {
 		{"foreign host", "sip.example.com;transport=udp", "not a Vapi SIP host", []string{"--platform", "vapi", "--uri", "sip.example.com"}},
 		{"unlisted transport", "sip.rtc.elevenlabs.io;transport=udp", "does not list transport=udp", []string{"--platform", "elevenlabs", "--transport", "udp"}},
 		{"bare livekit domain", "sip.livekit.cloud;transport=tcp", "not a LiveKit SIP host", []string{"--platform", "livekit", "--uri", "sip.livekit.cloud"}},
-		{"vapi sips", "sips:sip.vapi.ai", "does not list transport=tls", []string{"--platform", "vapi", "--uri", "sips:sip.vapi.ai"}},
+		{"vapi sips", "sip.vapi.ai;transport=tls", "does not list transport=tls", []string{"--platform", "vapi", "--uri", "sips:sip.vapi.ai"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setFakeCreds(t)
