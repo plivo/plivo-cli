@@ -205,6 +205,38 @@ func Save(c *Config) error {
 	return os.Rename(tmpName, p)
 }
 
+// Update loads the config, lets change edit it and saves the result, holding
+// an exclusive lock on ~/.plivo/config.lock throughout. Two commands that each
+// loaded and saved it at once used to lose one change. A change that returns
+// an error saves nothing.
+func Update(change func(*Config) error) error {
+	p, err := Path()
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(p)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	lock, err := os.OpenFile(filepath.Join(dir, "config.lock"), os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	if err := lockFile(lock); err != nil {
+		return fmt.Errorf("locking %s: %w", lock.Name(), err)
+	}
+	defer func() { _ = unlockFile(lock) }()
+	c, err := Load()
+	if err != nil {
+		return err
+	}
+	if err := change(c); err != nil {
+		return err
+	}
+	return Save(c)
+}
+
 // Resolve returns the credentials to use.
 // Order: explicit --profile → active profile. Both read a profile written by
 // `plivo login`; there is deliberately no env-var or flag route for a raw

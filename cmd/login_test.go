@@ -46,9 +46,11 @@ func TestLogout_noArg_noActive_errors(t *testing.T) {
 
 func TestLogout_nonExistentProfile_errors(t *testing.T) {
 	setFakeCreds(t)
-	err, _, _ := execCmd(t, "logout", "ghost")
-	if err == nil || !strings.Contains(err.Error(), "not found") {
-		t.Errorf("expected 'not found' error, got: %v", err)
+	for _, name := range []string{"ghost", ""} { // an empty name is no profile, not the active one
+		err, _, _ := execCmd(t, "logout", name)
+		if err == nil || !strings.Contains(err.Error(), "not found") {
+			t.Errorf("logout %q: expected 'not found' error, got: %v", name, err)
+		}
 	}
 }
 
@@ -97,7 +99,7 @@ func TestPersistProfile_derivesNameFromOrg(t *testing.T) {
 	setFakeCreds(t)
 	cfg := &config.Config{Profiles: map[string]config.Profile{}}
 
-	err := persistProfile(cfg, "default", false, loginBundle{
+	_, _, err := persistProfile(cfg, "default", false, loginBundle{
 		AuthID:    "MA_ACME",
 		AuthToken: "tok-1",
 		OrgName:   "Acme, Inc.",
@@ -119,7 +121,7 @@ func TestPersistProfile_missingOrgName_fallsBackToDefault(t *testing.T) {
 
 	// OrgName intentionally empty — simulates an auth server that hasn't
 	// shipped org_name yet (or an org with no name).
-	err := persistProfile(cfg, "default", false, loginBundle{
+	_, _, err := persistProfile(cfg, "default", false, loginBundle{
 		AuthID:    "MA_NOORG",
 		AuthToken: "tok-1",
 	})
@@ -135,7 +137,7 @@ func TestPersistProfile_explicitName_overridesOrgDerivedName(t *testing.T) {
 	setFakeCreds(t)
 	cfg := &config.Config{Profiles: map[string]config.Profile{}}
 
-	err := persistProfile(cfg, "staging", true, loginBundle{
+	_, _, err := persistProfile(cfg, "staging", true, loginBundle{
 		AuthID:    "MA_ACME",
 		AuthToken: "tok-1",
 		OrgName:   "Acme Inc",
@@ -164,7 +166,7 @@ func TestPersistProfile_sameOrg_updatesInPlace(t *testing.T) {
 
 	// Re-login to the same org (same auth_id, same org name → same derived
 	// slug "acme") — the normal token-refresh path.
-	err := persistProfile(cfg, "default", false, loginBundle{
+	_, _, err := persistProfile(cfg, "default", false, loginBundle{
 		AuthID:    "MA_ACME",
 		AuthToken: "tok-refreshed",
 		Region:    "ap-south-1",
@@ -197,7 +199,7 @@ func TestPersistProfile_differentOrg_explicitName_refuses(t *testing.T) {
 		},
 	}
 
-	err := persistProfile(cfg, "staging", true, loginBundle{
+	_, _, err := persistProfile(cfg, "staging", true, loginBundle{
 		AuthID:    "MA_OTHERCO",
 		AuthToken: "tok-otherco",
 		OrgName:   "OtherCo",
@@ -235,7 +237,7 @@ func TestPersistProfile_differentOrg_derivedName_suffixes(t *testing.T) {
 	// A second, different org (different auth_id) whose name normalizes to
 	// the same "acme" slug despite looking different on screen, and no -n
 	// was given — the CLI picked the name, so it can pick a free one too.
-	err := persistProfile(cfg, "default", false, loginBundle{
+	_, _, err := persistProfile(cfg, "default", false, loginBundle{
 		AuthID:    "MA_ACME_TWO",
 		AuthToken: "tok-2",
 		OrgName:   "ACME!!!",
@@ -271,7 +273,7 @@ func TestPersistProfile_reLoginAfterSuffix_reusesSameSuffixedSlot(t *testing.T) 
 		},
 	}
 
-	err := persistProfile(cfg, "default", false, loginBundle{
+	_, _, err := persistProfile(cfg, "default", false, loginBundle{
 		AuthID:    "MA_ACME_TWO",
 		AuthToken: "tok-refreshed-2",
 		OrgName:   "ACME!!!",
@@ -295,14 +297,14 @@ func TestPersistProfile_secondLogin_doesNotStealActive(t *testing.T) {
 	setFakeCreds(t)
 	cfg := &config.Config{Profiles: map[string]config.Profile{}}
 
-	if err := persistProfile(cfg, "default", false, loginBundle{AuthID: "MA_ONE", AuthToken: "tok"}); err != nil {
+	if _, _, err := persistProfile(cfg, "default", false, loginBundle{AuthID: "MA_ONE", AuthToken: "tok"}); err != nil {
 		t.Fatalf("persistProfile (first): %v", err)
 	}
 	if cfg.Active != "default" {
 		t.Fatalf("cfg.Active = %q, want %q", cfg.Active, "default")
 	}
 
-	if err := persistProfile(cfg, "default", false, loginBundle{AuthID: "MA_TWO", AuthToken: "tok2", OrgName: "Second Org"}); err != nil {
+	if _, _, err := persistProfile(cfg, "default", false, loginBundle{AuthID: "MA_TWO", AuthToken: "tok2", OrgName: "Second Org"}); err != nil {
 		t.Fatalf("persistProfile (second): %v", err)
 	}
 	if cfg.Active != "default" {

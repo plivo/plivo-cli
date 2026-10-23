@@ -148,11 +148,7 @@ func redeemAndPersist(client *api.Client, state, code, verifier, requestedName s
 
 	// Shared persistence — same code path as the manual + email flows so
 	// storage layer changes don't drift between methods.
-	cfg, err := config.Load()
-	if err != nil {
-		return err
-	}
-	return persistProfile(cfg, requestedName, nameExplicit, loginBundle{
+	b := loginBundle{
 		AuthID:    resp.Data.PlivoAuthID,
 		AuthToken: resp.Data.PlivoAuthToken,
 		Email:     resp.Data.Email,
@@ -161,7 +157,17 @@ func redeemAndPersist(client *api.Client, state, code, verifier, requestedName s
 		Region:    resp.Data.Region,
 		OrgName:   resp.Data.OrgName,
 		OrgUUID:   resp.Data.OrgUUID,
-	})
+	}
+	var name string
+	var inKeychain bool
+	if err := config.Update(func(cfg *config.Config) (err error) {
+		name, inKeychain, err = persistProfile(cfg, requestedName, nameExplicit, b)
+		return err
+	}); err != nil {
+		return err
+	}
+	printProfileSaved(name, inKeychain, b)
+	return nil
 }
 
 // pkcePair generates a PKCE (RFC 7636) verifier + S256 challenge pair.

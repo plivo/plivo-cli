@@ -1,9 +1,12 @@
 package config
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/zalando/go-keyring"
@@ -151,6 +154,29 @@ func TestSave_writeMode0600(t *testing.T) {
 	}
 	if mode := info.Mode().Perm(); mode != 0600 {
 		t.Logf("note: config.toml perms = %o (expected 0600; may be umasked)", mode)
+	}
+}
+
+// Changes made at once, as by `config set` and `auth use` run in parallel,
+// are all kept; a change that fails saves nothing.
+func TestUpdate_keepsEveryConcurrentChange(t *testing.T) {
+	withHomeDir(t)
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Go(func() {
+			if err := Update(func(c *Config) error { c.Profiles[fmt.Sprint(i)] = Profile{AuthID: "MA"}; return nil }); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	failed := Update(func(c *Config) error { c.Active = "0"; return errors.New("no") })
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Profiles) != 8 || c.Active != "" || failed == nil {
+		t.Errorf("kept %d of 8 changes, active %q, failed change err %v", len(c.Profiles), c.Active, failed)
 	}
 }
 
