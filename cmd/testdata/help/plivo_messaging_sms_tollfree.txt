@@ -8,9 +8,9 @@ Aliases:
   tollfree, tfv
 
 Available Commands:
-  get         Get a toll-free verification profile by uuid
-  list        List toll-free verification profiles
-  submit      Submit a new toll-free verification profile
+  get         Get a toll-free verification request by its uuid
+  list        List toll-free verification requests
+  submit      Submit a toll-free number for verification
 
 Flags:
   -h, --help   help for tollfree

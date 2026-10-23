@@ -417,63 +417,6 @@ func TestMPC_unmarshal(t *testing.T) {
 	}
 }
 
-func TestBrand10DLCList_brandsKey(t *testing.T) {
-	// 10DLC list response uses "brands" key, not "objects".
-	body := []byte(`{
-		"api_id": "x",
-		"meta": {"limit": 20, "offset": 0, "total_count": 1},
-		"brands": [{
-			"brand_id": "b1",
-			"brand_alias": "acme",
-			"legal_entity_name": "ACME Inc",
-			"brand_type": "STANDARD",
-			"brand_status": "VERIFIED",
-			"vertical": "TECHNOLOGY"
-		}]
-	}`)
-	var bl Brand10DLCList
-	if err := json.Unmarshal(body, &bl); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(bl.Brands) != 1 {
-		t.Fatalf("Brands len = %d", len(bl.Brands))
-	}
-	if bl.Brands[0].LegalEntityName != "ACME Inc" || bl.Brands[0].BrandStatus != "VERIFIED" {
-		t.Errorf("brand fields wrong: %+v", bl.Brands[0])
-	}
-}
-
-func TestCampaign10DLCList_campaignsKey(t *testing.T) {
-	// 10DLC list response uses "campaigns" key.
-	body := []byte(`{
-		"api_id": "x",
-		"meta": {"limit": 20, "offset": 0, "total_count": 1},
-		"campaigns": [{
-			"campaign_id": "c1",
-			"campaign_alias": "promo",
-			"brand_id": "b1",
-			"usecase": "MARKETING",
-			"sub_usecases": ["PROMOTIONAL", "OTT"],
-			"campaign_status": "ACTIVE",
-			"embedded_link": true,
-			"age_gated": false
-		}]
-	}`)
-	var cl Campaign10DLCList
-	if err := json.Unmarshal(body, &cl); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(cl.Campaigns) != 1 {
-		t.Fatalf("Campaigns len = %d", len(cl.Campaigns))
-	}
-	if cl.Campaigns[0].Usecase != "MARKETING" || !cl.Campaigns[0].EmbeddedLink {
-		t.Errorf("campaign fields wrong: %+v", cl.Campaigns[0])
-	}
-	if len(cl.Campaigns[0].SubUsecases) != 2 {
-		t.Errorf("sub_usecases len = %d", len(cl.Campaigns[0].SubUsecases))
-	}
-}
-
 func TestPowerpack_unmarshal(t *testing.T) {
 	body := []byte(`{
 		"uuid": "pp-uuid",

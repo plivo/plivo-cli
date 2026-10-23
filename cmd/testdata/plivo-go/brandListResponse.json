@@ -1,0 +1,41 @@
+{
+    "api_id": "83befbd8-08e7-11ed-9bfc-0242ac110004",
+    "brands": [
+        {
+            "address": {
+                "city": "",
+                "country": "",
+                "postal_code": "",
+                "state": "",
+                "street": ""
+            },
+            "authorized_contact": {},
+            "brand_alias": "John Doe",
+            "brand_id": "BPL3KN9",
+            "brand_type": "STARTER",
+            "ein_issuing_country": "US",
+            "registration_status": "COMPLETED",
+            "created_at": "2023-02-28T11:06:00.360401Z"
+        },
+        {
+            "address": {
+                "city": "",
+                "country": "",
+                "postal_code": "",
+                "state": "",
+                "street": ""
+            },
+            "authorized_contact": {},
+            "brand_alias": "abc-brand",
+            "brand_id": "BLTKJ18",
+            "brand_type": "STANDARD",
+            "company_name": "ABC Inc.123",
+            "ein": "123121231",
+            "ein_issuing_country": "US",
+            "profile_uuid": "709a4b1c-bbde-40e6-be36-164b1dc8f718",
+            "registration_status": "COMPLETED",
+            "vertical": "ENTERTAINMENT",
+            "created_at": "2023-02-28T11:06:00.360401Z"
+        }
+    ]
+}

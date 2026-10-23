@@ -1,14 +1,14 @@
-List number→campaign links
+List the numbers linked to a campaign, with each link's status
 
 Usage:
   plivo messaging sms 10dlc links list [flags]
 
 Flags:
       --all                  fetch every page (stops after 100 pages)
-      --campaign-id string   filter by campaign_id
+      --campaign-id string   the campaign whose numbers to list (required)
   -h, --help                 help for list
       --limit int            results per page (1-20) (default 20)
-      --number string        filter by number
+      --number string        only this number's link (no --limit, --offset or --all)
       --offset int           pagination offset
 
 Global Flags:
