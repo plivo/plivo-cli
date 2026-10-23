@@ -4106,11 +4106,10 @@ Flags:
 
 ```
       --audio-track string              inbound|outbound|both (default "inbound")
-      --bidirectional                   let the WebSocket send audio back into the call
+      --bidirectional                   let the WebSocket send audio back into the call (needs --audio-track inbound)
       --callback-url string             alias for --stream-status-callback
       --content-type string             audio codec content-type (default "audio/x-l16;rate=16000")
       --extra-headers string            comma-separated extra WebSocket headers (k1=v1,k2=v2)
-      --service-type string             Plivo service type override
       --stream-status-callback string   URL hit when stream starts/ends
       --url string                      WebSocket URL to receive audio (wss://...) (required)
 ```
