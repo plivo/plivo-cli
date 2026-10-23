@@ -249,6 +249,8 @@ plivo numbers update <number> --app-id <app_id> --dry-run
 
 Run it again without `--dry-run`. Check: `application` in `plivo numbers get <number> -o json` ends with `/Application/<app_id>/`. The rollback is the `application` you recorded in step 4.
 
+On an Indian number, `numbers update` first checks its KYC application and refuses the link, `--dry-run` included, when the application is not `accepted` or cannot be read, and from v1.3.0 also when none is attached (`This number has no KYC`, exit 1). Attach an accepted one with `plivo numbers compliance link` (see "KYC from the CLI"), then preview again. Never add `--force` to get past a KYC refusal.
+
 ### Step 9: make a test call
 
 Check the credit first. Then place the call the way the user chose in step 3. They talk for 10 seconds or more: the echo test repeats them, the OpenAI voice agent answers them.
@@ -259,7 +261,7 @@ Check the credit first. Then place the call the way the user chose in step 3. Th
   2. Preview `plivo voice calls make --from <number> --to <phone> --answer-url <answer URL> --answer-method <method> --dry-run` with the app's answer URL and method (`calls make` defaults to GET).
   3. Ask "Call <masked phone> now? When it rings, answer and talk for 10 seconds. You should hear yourself repeated." (header Call) · Call me / Not now. For the OpenAI or your own voice agent, the last sentence becomes "Talk to your voice agent as you would to a person." On yes, run it with `--yes`. The `request_uuid` it returns means only that Plivo accepted the request; it is also the call's UUID (seen on every test call).
   4. A 403 `Calls to this destination region are barred` means the account's geo permissions block that country: Voice, Geo Permissions in the console. Professional accounts can allow only India and the US; other countries need Enterprise. Offer that, or the user calls in.
-  5. `calls make` sets no time limit. If the call is still up after about 2 minutes (`plivo api GET /Call/<request_uuid>/ --query status=live -o json` returns it), preview `plivo voice calls hangup <request_uuid> --yes --dry-run`, ask, then run it without `--dry-run`.
+  5. `calls make` sets no time limit. If the call is still up after about 2 minutes (`plivo voice calls get <request_uuid> --live -o json` returns it; before v1.2.1, `plivo api GET /Call/<request_uuid>/ --query status=live -o json`), preview `plivo voice calls hangup <request_uuid> --yes --dry-run`, ask, then run it without `--dry-run`.
 
 Find the call record. A Plivo call: its UUID is the `request_uuid`. A call in: before it, note the UUIDs in `plivo voice calls list --to <number> --direction inbound --limit 5 -o json`; after it, list again and take the new UUID. If more than one is new, take the one whose `from_number` is the user's phone. The list shows completed calls only, so retry after a few seconds if a call is not there yet. Then:
 
