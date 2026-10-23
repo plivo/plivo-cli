@@ -155,6 +155,8 @@ func TestSIPWrites_refuseBadValuesWithoutARequest(t *testing.T) {
 		{"uris create sips with tcp", "uri", []string{"sip", "uris", "create", "--name", "n", "--uri", "sips:sip.example.com;transport=tcp"}},
 		{"uris create private host", "uri", []string{"sip", "uris", "create", "--name", "n", "--uri", "192.168.1.10:5060"}},
 		{"uris update loopback host", "uri", []string{"sip", "uris", "update", uriU1, "--uri", "sip:127.0.0.1"}},
+		{"uris create user part", "uri", []string{"sip", "uris", "create", "--name", "n", "--uri", "sip:alice@sip.example.com"}},
+		{"uris update user part", "uri", []string{"sip", "uris", "update", uriU1, "--uri", "+14155551234@sip.example.com"}},
 		{"ip-acl create ipv6", "ip", []string{"sip", "ip-acl", "create", "--name", "a", "--ip", "2001:db8::1"}},
 		{"ip-acl update ipv6 range", "ip", []string{"sip", "ip-acl", "update", aclA1, "--ip", "::/0"}},
 		{"credentials create short username", "username", []string{"sip", "credentials", "create", "--name", "c", "--username", "ab", "--password-stdin"}},

@@ -285,7 +285,6 @@ func TestSIPURIs_sendEveryDocumentedURIShapeHostFirst(t *testing.T) {
 		"sip.example.com":                   "sip.example.com",
 		"sip.example.com:5060":              "sip.example.com:5060",
 		"sip.example.com;transport=tcp":     "sip.example.com;transport=tcp",
-		"sip:user@sip.example.com":          "user@sip.example.com",
 		"sip:sip.example.com;transport=tls": "sip.example.com;transport=tls",
 		"sips:sip.example.com":              "sip.example.com:5061;transport=tls",
 		"SIPS:sip.example.com":              "sip.example.com:5061;transport=tls",
