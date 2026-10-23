@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -241,6 +242,10 @@ func getClient() (*api.Client, string, error) {
 	if clientForTest != nil {
 		return clientForTest, "test", nil
 	}
+	base, err := apiBaseURL()
+	if err != nil {
+		return nil, "", err
+	}
 	p, name, err := config.Resolve(profileFlag)
 	if err != nil {
 		return nil, "", err
@@ -248,6 +253,7 @@ func getClient() (*api.Client, string, error) {
 	credSource = name
 	credAuthID = p.AuthID
 	c := api.New(p.AuthID, p.AuthToken, timeoutFlag)
+	c.BaseURL = base
 	c.AdminBaseURL = adminServer
 	c.Email = p.Email
 	c.Region = p.Region
@@ -265,6 +271,26 @@ func getClient() (*api.Client, string, error) {
 		}
 	}
 	return c, name, nil
+}
+
+// apiBaseURL is api.DefaultBaseURL, or PLIVO_API_URL when set, to point the CLI
+// at a local capture server. The requests carry the account's credentials, so
+// only an http or https URL on this machine is taken; anything else is refused,
+// never ignored.
+func apiBaseURL() (string, error) {
+	u := os.Getenv("PLIVO_API_URL")
+	if u == "" {
+		return api.DefaultBaseURL, nil
+	}
+	if p, err := url.Parse(u); err == nil && (p.Scheme == "http" || p.Scheme == "https") {
+		switch p.Hostname() {
+		case "127.0.0.1", "::1", "localhost":
+			return strings.TrimRight(u, "/"), nil
+		}
+	}
+	e := clierr.BadInput(fmt.Sprintf("PLIVO_API_URL is %q: it must be an http or https URL on this machine", u))
+	e.Hint = "Use host 127.0.0.1, [::1] or localhost with any port, e.g. http://127.0.0.1:18555/v1/cli/api, or unset it to reach the Plivo API."
+	return "", e
 }
 
 // effectiveFormat returns the resolved output format for stdout.

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -193,6 +194,26 @@ func TestNoAnswer_isATimeoutNotAUsageError(t *testing.T) {
 	err, _, _ := execCmd(t, "voice", "calls", "get", "abc")
 	if e, ok := err.(*clierr.Error); !ok || e.Code != clierr.CodeUpstreamTimeout || !e.Retryable || e.ExitCode() != 3 {
 		t.Errorf("got %#v, want a retryable UPSTREAM_TIMEOUT, exit 3", err)
+	}
+}
+
+// PLIVO_API_URL sends the requests to a server on this machine, and naming
+// anything else is refused before any request.
+func TestAPIURLOverride_isLoopbackOnly(t *testing.T) {
+	setFakeCreds(t)
+	srv, hits := startCapturingHTTPServer(t, 200, `{}`)
+	t.Setenv("PLIVO_API_URL", srv.URL+"/v1/cli/api/")
+	if err, _, _ := execCmd(t, "voice", "calls", "get", "abc"); err != nil {
+		t.Fatalf("loopback override: %v", err)
+	}
+	for _, u := range []string{"https://example.com/v1/cli/api", "http://127.0.0.1.example.com", "ftp://127.0.0.1", "localhost:18555"} {
+		t.Setenv("PLIVO_API_URL", u)
+		if err, _, _ := execCmd(t, "voice", "calls", "get", "abc"); !strings.Contains(fmt.Sprint(err), "BAD_INPUT") {
+			t.Errorf("%q: got %v, want BAD_INPUT", u, err)
+		}
+	}
+	if got := hits(); len(got) != 1 || got[0] != "GET /v1/cli/api/v1/Account/CIFAKEPLACEHOLDER001/Call/abc/" {
+		t.Errorf("sent %q, want the one GET to the loopback server", got)
 	}
 }
 

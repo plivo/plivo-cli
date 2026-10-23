@@ -232,6 +232,8 @@ UUID) so Plivo can attribute usage per account. These headers never
 carry flag values, argument values, or free-text bodies — those only
 travel in the actual Plivo API request you asked the CLI to make.
 
+To see exactly what the CLI sends, point it at a capture server on this machine with `PLIVO_API_URL=http://127.0.0.1:18555/v1/cli/api` (any port; host 127.0.0.1, ::1 or localhost, http or https only; anything else is refused).
+
 Turn the identity headers off entirely:
 
 ```bash
