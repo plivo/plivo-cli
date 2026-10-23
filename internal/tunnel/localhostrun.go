@@ -5,10 +5,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -218,4 +220,27 @@ func Describe(provider string) string {
 	default:
 		return provider
 	}
+}
+
+// Domains where tunnel providers hand out public URLs. A URL on a throwaway
+// one lives only as long as its tunnel process. ngrok also gives fixed
+// domains, so an ngrok URL may be an app's real answer URL.
+var (
+	throwawayDomains = []string{"lhr.life", "localhost.run", "trycloudflare.com"}
+	ngrokDomains     = []string{"ngrok.io", "ngrok.app", "ngrok.dev", "ngrok-free.app", "ngrok-free.dev", "ngrok.pizza"}
+)
+
+// IsTunnelURL reports whether rawURL is on a tunnel provider's domain, and
+// whether that domain is a throwaway one: never an app's real answer URL.
+func IsTunnelURL(rawURL string) (tunnel, throwaway bool) {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return false, false
+	}
+	host := strings.ToLower(u.Hostname())
+	on := func(domains []string) bool {
+		return slices.ContainsFunc(domains, func(d string) bool { return host == d || strings.HasSuffix(host, "."+d) })
+	}
+	throwaway = on(throwawayDomains)
+	return throwaway || on(ngrokDomains), throwaway
 }

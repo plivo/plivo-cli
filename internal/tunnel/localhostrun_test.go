@@ -140,3 +140,19 @@ func TestLocalhostRun_E2E_carriesTraffic(t *testing.T) {
 	}
 	t.Fatalf("tunnel never carried traffic; last body: %q", body)
 }
+
+func TestIsTunnelURL(t *testing.T) {
+	for u, want := range map[string][2]bool{ // tunnel, throwaway
+		"https://abc123.lhr.life/answer":        {true, true},
+		"https://quick-fox.trycloudflare.com/a": {true, true},
+		"https://ab-12.ngrok-free.app/answer":   {true, false},
+		"https://x.NGROK.io":                    {true, false},
+		"https://notngrok.io/answer":            {false, false},
+		"https://example.com/x.lhr.life":        {false, false},
+		"":                                      {false, false},
+	} {
+		if tn, throwaway := IsTunnelURL(u); tn != want[0] || throwaway != want[1] {
+			t.Errorf("IsTunnelURL(%q) = %v, %v, want %v", u, tn, throwaway, want)
+		}
+	}
+}

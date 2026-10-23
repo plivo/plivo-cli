@@ -26,5 +26,5 @@ Global Flags:
   -q, --quiet              suppress non-data output
       --refresh            bypass the cache and re-fetch
       --schema             describe the command (arguments, flags, output fields) instead of running it
-      --timeout int        request timeout in seconds (default 30)
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts

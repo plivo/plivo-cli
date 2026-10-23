@@ -287,7 +287,7 @@ Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
-      --timeout int        request timeout in seconds (default 30)
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts
 ```
 
@@ -1388,10 +1388,10 @@ Equivalent to:
 With -o json, prints one JSON result when the analysis ends: call_uuid
 (message_uuid for a message), what_happened, likely_cause, timeline[]
 ({at, event, source}), next_steps[], hangup_cause_code and hangup_source (from
-the call record; null for a message), confidence (high, medium or low) and
-answer (the prose). -o yaml, -o csv and --query work on that result; -o jsonl
-streams the assistant's raw events instead. An analysis that fails, escalates
-or stops early exits 3.
+the call record; null for a message), confidence (high, medium or low; null
+when the assistant gives none) and answer (the prose). -o yaml, -o csv and
+--query work on that result; -o jsonl streams the assistant's raw events
+instead. An analysis that fails, escalates or stops early exits 3.
 
 ```
 plivo messaging mms diagnose <message_uuid>
@@ -1767,10 +1767,10 @@ Equivalent to:
 With -o json, prints one JSON result when the analysis ends: call_uuid
 (message_uuid for a message), what_happened, likely_cause, timeline[]
 ({at, event, source}), next_steps[], hangup_cause_code and hangup_source (from
-the call record; null for a message), confidence (high, medium or low) and
-answer (the prose). -o yaml, -o csv and --query work on that result; -o jsonl
-streams the assistant's raw events instead. An analysis that fails, escalates
-or stops early exits 3.
+the call record; null for a message), confidence (high, medium or low; null
+when the assistant gives none) and answer (the prose). -o yaml, -o csv and
+--query work on that result; -o jsonl streams the assistant's raw events
+instead. An analysis that fails, escalates or stops early exits 3.
 
 ```
 plivo messaging sms diagnose <message_uuid>
@@ -2092,10 +2092,10 @@ Equivalent to:
 With -o json, prints one JSON result when the analysis ends: call_uuid
 (message_uuid for a message), what_happened, likely_cause, timeline[]
 ({at, event, source}), next_steps[], hangup_cause_code and hangup_source (from
-the call record; null for a message), confidence (high, medium or low) and
-answer (the prose). -o yaml, -o csv and --query work on that result; -o jsonl
-streams the assistant's raw events instead. An analysis that fails, escalates
-or stops early exits 3.
+the call record; null for a message), confidence (high, medium or low; null
+when the assistant gives none) and answer (the prose). -o yaml, -o csv and
+--query work on that result; -o jsonl streams the assistant's raw events
+instead. An analysis that fails, escalates or stops early exits 3.
 
 ```
 plivo messaging whatsapp diagnose <message_uuid>
@@ -2710,10 +2710,10 @@ the two read different stores, so neither can answer for the other.
 With -o json, prints one JSON result when the analysis ends: call_uuid
 (message_uuid for a message), what_happened, likely_cause, timeline[]
 ({at, event, source}), next_steps[], hangup_cause_code and hangup_source (from
-the call record; null for a message), confidence (high, medium or low) and
-answer (the prose). -o yaml, -o csv and --query work on that result; -o jsonl
-streams the assistant's raw events instead. An analysis that fails, escalates
-or stops early exits 3.
+the call record; null for a message), confidence (high, medium or low; null
+when the assistant gives none) and answer (the prose). -o yaml, -o csv and
+--query work on that result; -o jsonl streams the assistant's raw events
+instead. An analysis that fails, escalates or stops early exits 3.
 
 ```
 plivo sip calls diagnose <call_uuid>
@@ -3801,10 +3801,10 @@ full investigation since the debugger does live log lookups.
 With -o json, prints one JSON result when the analysis ends: call_uuid
 (message_uuid for a message), what_happened, likely_cause, timeline[]
 ({at, event, source}), next_steps[], hangup_cause_code and hangup_source (from
-the call record; null for a message), confidence (high, medium or low) and
-answer (the prose). -o yaml, -o csv and --query work on that result; -o jsonl
-streams the assistant's raw events instead. An analysis that fails, escalates
-or stops early exits 3.
+the call record; null for a message), confidence (high, medium or low; null
+when the assistant gives none) and answer (the prose). -o yaml, -o csv and
+--query work on that result; -o jsonl streams the assistant's raw events
+instead. An analysis that fails, escalates or stops early exits 3.
 
 ```
 plivo voice calls diagnose <call_uuid>
@@ -3923,7 +3923,7 @@ Flags:
       --hangup-url string          URL hit when call ends
       --machine-detection string   none|true|hangup
       --ring-url string            URL hit when call starts ringing
-      --to string                  destination number (E.164) (required)
+      --to string                  destination: an E.164 number or a sip: URI, or several joined with < (required)
 ```
 
 ---
@@ -4701,6 +4701,10 @@ Saves the app's current answer_url, starts a tunnel + a local
 HTTP/WebSocket server, points the app at the tunnel, and forwards
 incoming call audio to your local WebSocket handler. Restores the
 original answer_url on Ctrl+C, or when the tunnel stops (then exits 3).
+The original is saved in ~/.plivo first, so after a killed run the next
+one restores it, and a second forward on the app is refused while one runs.
+A localhost.run or trycloudflare.com answer_url is never taken as the
+original. An ngrok one is, with a warning: ngrok also gives fixed domains.
 
 No setup required: defaults to localhost.run over ssh, which needs no
 install and no account. Uses ngrok instead when it is already on PATH

@@ -29,5 +29,5 @@ Global Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
-      --timeout int        request timeout in seconds (default 30)
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts

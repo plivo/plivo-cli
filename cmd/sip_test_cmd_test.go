@@ -348,6 +348,21 @@ func TestSIPTest_dryRunOnlyPrintsThePlan(t *testing.T) {
 	}
 }
 
+// --timeout takes whole seconds, as it always did, or a duration.
+func TestSIPTest_timeoutTakesSecondsOrADuration(t *testing.T) {
+	for _, v := range []string{"90", "90s", "1m30s"} {
+		setEmptyHome(t)
+		stubLookup(t, nil)
+		err, _, stderr := execCmd(t, "sip", "test", "--uri", "sip.example.com", "--timeout", v, "--dry-run")
+		if err != nil || !strings.Contains(stderr, "within 1m30s") {
+			t.Errorf("--timeout %s: %v, plan:\n%s", v, err, stderr)
+		}
+	}
+	if err, _, _ := execCmd(t, "sip", "test", "--uri", "sip.example.com", "--timeout", "9999999999999", "--dry-run"); err == nil {
+		t.Error("--timeout 9999999999999 overflows a duration and must be refused")
+	}
+}
+
 // A host with no port and a SIP SRV record gets a warning naming the target,
 // while the failing check still decides the error. No lookup with a port, for
 // an IP or under --dry-run, and a failed lookup warns nothing.

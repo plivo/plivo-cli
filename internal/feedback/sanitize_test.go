@@ -211,6 +211,15 @@ func TestSanitize_redactsMoreShapes(t *testing.T) {
 		"SAABCDEFGHIJKLMNOPQR":           "[REDACTED-AUTH-ID]",
 		"sip:bob:secret@pbx.example.com": "[REDACTED-SIP-URI]",
 		"2026-10-16 10:58:00":            "2026-10-16 10:58:00",
+		"bearer ab.c-1_2~3+4/5=":         "Bearer [REDACTED-TOKEN]",
+		"the bearer of it":               "the bearer of it",
+		"bearer authentication":          "bearer authentication",
+		"AAAAA0000A":                     "[REDACTED-PAN]",
+		"AAAPA0000A":                     "[REDACTED-PAN]",
+		"ABCDE1234F":                     "ABCDE1234F", // D is no PAN holder type
+		"2000 0000 0000":                 "[REDACTED-AADHAAR]",
+		"2000.0000.0000":                 "2000.0000.0000",
+		"200000000000":                   "[REDACTED-AADHAAR]",
 		// A UUID goes whole, even glued to a word, not half as a card or a phone.
 		"d1e2f3a4-0000-4000-8000-000000000001":      "[REDACTED-TOKEN]",
 		"d1e2f3a4-b5c6-4d7e-a8b9-000000000001":      "[REDACTED-TOKEN]",

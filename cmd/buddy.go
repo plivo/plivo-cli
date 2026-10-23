@@ -248,10 +248,10 @@ func askStreamLimit(cmd *cobra.Command) (time.Duration, error) {
 	if !cmd.Flags().Changed("timeout") {
 		return 0, nil
 	}
-	if timeoutSec < 1 {
+	if timeoutFlag < time.Second {
 		return 0, clierr.BadFlag("timeout", "must be at least 1 second")
 	}
-	return time.Duration(timeoutSec) * time.Second, nil
+	return timeoutFlag, nil
 }
 
 // askStreamContext bounds a stream by limit; 0 leaves it unbounded.
@@ -266,7 +266,7 @@ func askStreamContext(limit time.Duration) (context.Context, context.CancelFunc)
 func askTimedOut(limit time.Duration) *clierr.Error {
 	return &clierr.Error{
 		Code:      clierr.CodeUpstreamTimeout,
-		Message:   fmt.Sprintf("the assistant had not finished after --timeout %d seconds", int(limit.Seconds())),
+		Message:   fmt.Sprintf("the assistant had not finished after --timeout %s", limit),
 		Hint:      "Raise --timeout, or leave it out: without it the stream has no time limit.",
 		Retryable: true,
 	}

@@ -4,6 +4,10 @@ Saves the app's current answer_url, starts a tunnel + a local
 HTTP/WebSocket server, points the app at the tunnel, and forwards
 incoming call audio to your local WebSocket handler. Restores the
 original answer_url on Ctrl+C, or when the tunnel stops (then exits 3).
+The original is saved in ~/.plivo first, so after a killed run the next
+one restores it, and a second forward on the app is refused while one runs.
+A localhost.run or trycloudflare.com answer_url is never taken as the
+original. An ngrok one is, with a warning: ngrok also gives fixed domains.
 
 No setup required: defaults to localhost.run over ssh, which needs no
 install and no account. Uses ngrok instead when it is already on PATH
@@ -48,4 +52,4 @@ Global Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
-      --timeout int        request timeout in seconds (default 30)
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)

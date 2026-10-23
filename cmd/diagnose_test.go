@@ -625,10 +625,43 @@ func TestNewDiagnoseResult_findsTheLastBlock(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if res.WhatHappened != "w" || res.Confidence != "medium" || res.Timeline == nil || res.NextSteps == nil {
+			if res.WhatHappened != "w" || res.Confidence == nil || *res.Confidence != "medium" || res.Timeline == nil || res.NextSteps == nil {
 				t.Errorf("result = %+v", res)
 			}
 		})
+	}
+}
+
+// Loose JSON still reads: comments and trailing commas outside strings, a
+// numeric or synonym confidence, and none at all. Each used to exit 3.
+func TestNewDiagnoseResult_readsLooseJSON(t *testing.T) {
+	const what = `{"what_happened": "see https://x.test/a, // not a comment", `
+	for block, want := range map[string]string{
+		what + "// note\n" + `"timeline": [{"event": "e",},], /* c */ "confidence": "high",}`: "high",
+		what + `"confidence": 0.8}`:         "high",
+		what + `"confidence": 55}`:          "medium",
+		what + `"confidence": 0.2}`:         "low",
+		what + `"confidence": "Moderate"}`:  "medium",
+		what + `"confidence": "85%"}`:       "high",
+		what + `"confidence": "1%"}`:        "low",
+		what + `"confidence": "50"}`:        "medium",
+		what + `"confidence": "very high"}`: "high",
+		what + `"confidence": "Very low"}`:  "low",
+		what + `"confidence": null}`:        "",
+		what + `"next_steps": []}`:          "",
+	} {
+		res, err := newDiagnoseResult("```json\n"+block+"\n```", diagnoseTarget{label: "message", uuid: placeholderUUID, getCmd: "messaging get"})
+		if err != nil {
+			t.Errorf("%s: %v", block, err)
+			continue
+		}
+		got := ""
+		if res.Confidence != nil {
+			got = *res.Confidence
+		}
+		if got != want || res.WhatHappened != "see https://x.test/a, // not a comment" {
+			t.Errorf("%s: confidence %q, what_happened %q; want %q", block, got, res.WhatHappened, want)
+		}
 	}
 }
 
