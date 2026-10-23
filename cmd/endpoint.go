@@ -111,7 +111,7 @@ func runEndpointList(cmd *cobra.Command, args []string) error {
 	}
 	rows := [][]string{{"ENDPOINT_ID", "USERNAME", "ALIAS", "SIP_URI", "APP_ID"}}
 	for _, e := range resp.Objects {
-		rows = append(rows, []string{e.EndpointID, e.Username, e.Alias, e.SipURI, e.AppID})
+		rows = append(rows, []string{e.EndpointID, e.Username, e.Alias, e.SipURI, e.ResolvedAppID()})
 	}
 	return output.Table(os.Stdout, rows)
 }
@@ -141,7 +141,7 @@ func runEndpointGet(cmd *cobra.Command, args []string) error {
 		{"username", e.Username},
 		{"alias", e.Alias},
 		{"sip_uri", e.SipURI},
-		{"app_id", e.AppID},
+		{"app_id", e.ResolvedAppID()},
 		{"sub_account", e.Subaccount},
 	})
 }
