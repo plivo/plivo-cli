@@ -34,7 +34,7 @@ var outputTypes = map[string]reflect.Type{
 	"plivo messaging sms 10dlc brands list":       reflect.TypeFor[api.Brand10DLCList](),
 	"plivo messaging sms 10dlc campaigns get":     reflect.TypeFor[api.Campaign10DLCResponse](),
 	"plivo messaging sms 10dlc campaigns list":    reflect.TypeFor[api.Campaign10DLCList](),
-	"plivo messaging sms 10dlc links list":        reflect.TypeFor[api.NumberLink10DLCList](),
+	"plivo messaging sms 10dlc links list":        reflect.TypeFor[api.CampaignNumbers10DLC](),
 	"plivo messaging sms list":                    reflect.TypeFor[api.MessageList](),
 	"plivo messaging sms powerpacks get":          reflect.TypeFor[api.Powerpack](),
 	"plivo messaging sms powerpacks list":         reflect.TypeFor[api.PowerpackList](),

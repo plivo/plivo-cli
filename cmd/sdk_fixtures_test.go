@@ -22,6 +22,7 @@ const (
 		"optin_message optin_keywords optout_message optout_keywords terms_and_conditions_link privacy_policy_link" // CampaignUpdateParams
 	sdkCampaignCreate = sdkCampaignUpdate + " brand_id campaign_alias vertical usecase sub_usecases embedded_link embedded_phone " +
 		"age_gated direct_lending affiliate_marketing subscriber_optin subscriber_optout subscriber_help url method" // CampaignCreationParams
+	sdkNumberLink = "numbers url method" // CampaignNumberLinkParams
 )
 
 // serveFixture answers every request with a response from the Go SDK's
@@ -80,6 +81,11 @@ func TestRegistrationCommands_matchTheSDK(t *testing.T) {
 				"optin_keywords": "START", "optout_message": "o", "subscriber_help": true, "sub_usecases": []any{"2FA", "MARKETING"}}, []string{"C1"}},
 		{"10dlc campaigns update CY5NVUA --sample-message-1 s1", "campaignUpdateResponse.json", "POST 10dlc/Campaign/CY5NVUA/",
 			sdkCampaignUpdate, map[string]any{"sample1": "s1"}, []string{"FAILED"}},
+		{"10dlc links list --campaign-id CY5NVUA", "campaignNumbersGetResponse.json", "GET 10dlc/Campaign/CY5NVUA/Number/", "", nil, []string{"14155550101", "COMPLETED"}},
+		{"10dlc links list --campaign-id CY5NVUA --number 14155550100", "campaignNumbersGetResponse.json", "GET 10dlc/Campaign/CY5NVUA/Number/14155550100/", "", nil, nil},
+		{"10dlc links create --campaign-id C1 --number 14155550100", `{"api_id":"x","message":"ok"}`, "POST 10dlc/Campaign/C1/Number/",
+			sdkNumberLink, map[string]any{"numbers": []any{"14155550100"}}, nil},
+		{"10dlc links delete C1 14155550100 --yes", `{"api_id":"x","message":"ok"}`, "DELETE 10dlc/Campaign/C1/Number/14155550100/", "", nil, nil},
 	} {
 		t.Run(tc.args, func(t *testing.T) {
 			setFakeCreds(t)

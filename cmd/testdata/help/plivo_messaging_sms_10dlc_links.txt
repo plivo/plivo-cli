@@ -9,8 +9,8 @@ Aliases:
 
 Available Commands:
   create      Link a number to a campaign
-  delete      Unlink a number (requires --yes)
-  list        List number→campaign links
+  delete      Unlink a number from a campaign (requires --yes)
+  list        List the numbers linked to a campaign, with each link's status
 
 Flags:
   -h, --help   help for links

@@ -671,21 +671,20 @@ type Campaign10DLCList struct {
 	Campaigns []Campaign10DLC `json:"campaigns"`
 }
 
-// NumberLink10DLC — /Account/{id}/10dlc/NumberLinking/
-type NumberLink10DLC struct {
-	APIID      string `json:"api_id,omitempty"`
-	LinkID     string `json:"link_id,omitempty"`
-	Number     string `json:"number,omitempty"`
-	CampaignID string `json:"campaign_id,omitempty"`
-	Status     string `json:"status,omitempty"`
-	CreatedAt  string `json:"created_at,omitempty"`
+// CampaignNumbers10DLC is GET /10dlc/Campaign/{campaign_id}/Number/[{number}/]:
+// the numbers linked to a campaign, each with its link's status.
+type CampaignNumbers10DLC struct {
+	RawBody
+	APIID         string                `json:"api_id,omitempty"`
+	CampaignID    string                `json:"campaign_id"`
+	CampaignAlias string                `json:"campaign_alias,omitempty"`
+	Usecase       string                `json:"usecase,omitempty"`
+	PhoneNumbers  []CampaignNumber10DLC `json:"phone_numbers"`
 }
 
-type NumberLink10DLCList struct {
-	RawBody
-	APIID   string            `json:"api_id"`
-	Meta    ListMeta          `json:"meta"`
-	Objects []NumberLink10DLC `json:"objects"`
+type CampaignNumber10DLC struct {
+	Number string `json:"number"`
+	Status string `json:"status"`
 }
 
 // TollFreeVerification — /Account/{id}/TollfreeVerification/

@@ -225,7 +225,7 @@ func destructiveVerbCases() []struct {
 		{"voice calls streams stop", []string{"voice", "calls", "streams", "stop", "CALL-UUID"}},
 		{"messaging sms powerpacks delete", []string{"messaging", "sms", "powerpacks", "delete", "PP-UUID"}},
 		{"messaging sms powerpacks numbers remove", []string{"messaging", "sms", "powerpacks", "numbers", "remove", "PP-UUID", "+14155551234"}},
-		{"messaging sms 10dlc links delete", []string{"messaging", "sms", "10dlc", "links", "delete", "LINK-ID"}},
+		{"messaging sms 10dlc links delete", []string{"messaging", "sms", "10dlc", "links", "delete", "CAMPAIGN-ID", "+14155551234"}},
 		{"agents delete", []string{"agents", "delete", "AGENT-ID"}},
 		// `plivo api` escape hatch: mutating methods share the spend-verb gate
 		// so an agent can't accidentally POST/PUT/PATCH/DELETE without --yes.
