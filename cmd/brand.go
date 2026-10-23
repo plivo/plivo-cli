@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"net/url"
 	"os"
 	"strconv"
@@ -40,61 +39,57 @@ var brandGetCmd = &cobra.Command{
 }
 
 var (
-	brandCreateAlias       string
-	brandCreateLegalName   string
-	brandCreateEIN         string
-	brandCreateEINCountry  string
-	brandCreateVertical    string
-	brandCreateWebsite     string
-	brandCreateEmail       string
-	brandCreatePhone       string
-	brandCreateType        string
-	brandCreateEntityType  string
-	brandCreateStockSymbol string
-	brandCreateStockExch   string
+	brandCreateProfile string
+	brandCreateAlias   string
+	brandCreateType    string
+	brandCreateVetting bool
 )
+
+var brandTypes = []string{"STARTER", "STANDARD"}
 
 var brandCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Register a new brand (spends money — TCR registration fee, requires --yes)",
-	Args:  cobra.NoArgs,
-	RunE:  runBrandCreate,
+	Long: `Register a 10DLC brand from a profile, which holds the company's details:
+legal name, EIN, address, website and authorized contact. A profile registers
+one brand. List your profiles with plivo api GET /Profile/, and create one in
+the Plivo console or with plivo api POST /Profile/ (fields: plivo docs show
+messaging/api/10dlc/profile).
+
+STARTER is the default. STANDARD needs a profile with an EIN, and also sends
+the brand for secondary vetting, a separate one-time fee, unless
+--secondary-vetting=false.`,
+	Args: cobra.NoArgs,
+	RunE: runBrandCreate,
 }
 
-var (
-	brandUpdateEmail   string
-	brandUpdatePhone   string
-	brandUpdateWebsite string
-)
-
+// Neither the Go SDK nor the API reference has a brand update. The command
+// stays, hidden, so a script that calls it learns why and where to go.
 var brandUpdateCmd = &cobra.Command{
-	Use:   "update <brand_id>",
-	Short: "Update mutable brand fields",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runBrandUpdate,
+	Use:    "update <brand_id>",
+	Short:  "Not available: the API has no brand update",
+	Hidden: true,
+	Args:   cobra.ArbitraryArgs,
+	// The old --email, --phone and --website reach the message too.
+	FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true},
+	RunE: func(*cobra.Command, []string) error {
+		e := clierr.BadInput("brands update: the 10DLC API has no endpoint that updates a brand")
+		e.Hint = "A brand takes its company details from its profile, which can be updated: " +
+			"plivo api POST /Profile/<profile_uuid>/ --body @changes.json --yes " +
+			"(fields: plivo docs show messaging/api/10dlc/profile)."
+		return e
+	},
 }
 
 func init() {
 	registerListFlags(brandListCmd, &brandListLimit, &brandListOffset)
 
+	brandCreateCmd.Flags().StringVar(&brandCreateProfile, "profile-uuid", "", "the 10DLC profile holding the company's details (required)")
+	_ = brandCreateCmd.MarkFlagRequired("profile-uuid")
 	brandCreateCmd.Flags().StringVar(&brandCreateAlias, "alias", "", "human-friendly alias (required)")
 	_ = brandCreateCmd.MarkFlagRequired("alias")
-	brandCreateCmd.Flags().StringVar(&brandCreateLegalName, "legal-name", "", "legal entity name (required)")
-	_ = brandCreateCmd.MarkFlagRequired("legal-name")
-	brandCreateCmd.Flags().StringVar(&brandCreateEIN, "ein", "", "tax ID / EIN")
-	brandCreateCmd.Flags().StringVar(&brandCreateEINCountry, "ein-issuing-country", "US", "ISO-2 country issuing the EIN")
-	brandCreateCmd.Flags().StringVar(&brandCreateVertical, "vertical", "", "industry vertical (e.g. TECHNOLOGY, RETAIL)")
-	brandCreateCmd.Flags().StringVar(&brandCreateWebsite, "website", "", "primary website URL")
-	brandCreateCmd.Flags().StringVar(&brandCreateEmail, "email", "", "support email")
-	brandCreateCmd.Flags().StringVar(&brandCreatePhone, "phone", "", "support phone E.164")
-	brandCreateCmd.Flags().StringVar(&brandCreateType, "brand-type", "STANDARD", "STANDARD|LOW_VOLUME_STANDARD|SOLE_PROPRIETOR")
-	brandCreateCmd.Flags().StringVar(&brandCreateEntityType, "entity-type", "PRIVATE_PROFIT", "PRIVATE_PROFIT|PUBLIC_PROFIT|NON_PROFIT|GOVERNMENT|SOLE_PROPRIETOR")
-	brandCreateCmd.Flags().StringVar(&brandCreateStockSymbol, "stock-symbol", "", "ticker (PUBLIC_PROFIT only)")
-	brandCreateCmd.Flags().StringVar(&brandCreateStockExch, "stock-exchange", "", "exchange code (PUBLIC_PROFIT only)")
-
-	brandUpdateCmd.Flags().StringVar(&brandUpdateEmail, "email", "", "support email")
-	brandUpdateCmd.Flags().StringVar(&brandUpdatePhone, "phone", "", "support phone")
-	brandUpdateCmd.Flags().StringVar(&brandUpdateWebsite, "website", "", "website URL")
+	brandCreateCmd.Flags().StringVar(&brandCreateType, "brand-type", "STARTER", oneOf(brandTypes))
+	brandCreateCmd.Flags().BoolVar(&brandCreateVetting, "secondary-vetting", true, "STANDARD only: send the brand for secondary vetting, a separate fee")
 
 	brandCmd.AddCommand(brandListCmd, brandGetCmd, brandCreateCmd, brandUpdateCmd)
 	sms10dlcCmd.AddCommand(brandCmd)
@@ -164,29 +159,21 @@ func runBrandGet(cmd *cobra.Command, args []string) error {
 }
 
 func runBrandCreate(cmd *cobra.Command, args []string) error {
+	if err := validateEnum("brand-type", &brandCreateType, brandTypes...); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
 	}
 	body := map[string]any{
-		"brand_alias":         brandCreateAlias,
-		"legal_entity_name":   brandCreateLegalName,
-		"ein_issuing_country": brandCreateEINCountry,
-		"brand_type":          brandCreateType,
-		"entity_type":         brandCreateEntityType,
+		"brand_alias":  brandCreateAlias,
+		"profile_uuid": brandCreateProfile,
+		"brand_type":   brandCreateType,
 	}
-	addIfSet := func(k, v string) {
-		if v != "" {
-			body[k] = v
-		}
+	if cmd.Flags().Changed("secondary-vetting") {
+		body["secondary_vetting"] = brandCreateVetting
 	}
-	addIfSet("ein", brandCreateEIN)
-	addIfSet("vertical", brandCreateVertical)
-	addIfSet("website", brandCreateWebsite)
-	addIfSet("email", brandCreateEmail)
-	addIfSet("phone", brandCreatePhone)
-	addIfSet("stock_symbol", brandCreateStockSymbol)
-	addIfSet("stock_exchange", brandCreateStockExch)
 
 	proceed, dryRun, gerr := guardSpend("register 10DLC brand " + brandCreateAlias)
 	if !proceed {
@@ -217,37 +204,4 @@ func runBrandCreate(cmd *cobra.Command, args []string) error {
 		{"brand_id", resp.BrandID},
 		{"message", resp.Message},
 	})
-}
-
-func runBrandUpdate(cmd *cobra.Command, args []string) error {
-	id := args[0]
-	body := map[string]any{}
-	if brandUpdateEmail != "" {
-		body["email"] = brandUpdateEmail
-	}
-	if brandUpdatePhone != "" {
-		body["phone"] = brandUpdatePhone
-	}
-	if brandUpdateWebsite != "" {
-		body["website"] = brandUpdateWebsite
-	}
-	if len(body) == 0 {
-		return clierr.BadInput("at least one of --email, --phone, --website required")
-	}
-	client, _, err := getClient()
-	if err != nil {
-		return err
-	}
-	var resp api.GenericResponse
-	apiErr, err := client.Do("POST", client.AccountURL("10dlc", "Brand", id), body, nil, &resp)
-	if err != nil {
-		return err
-	}
-	if apiErr != nil {
-		return apiErr
-	}
-	if dryRunFlag {
-		return nil
-	}
-	return emitResponse(fmt.Sprintf("Updated brand %s: %s", id, resp.Message), resp.Raw())
 }

@@ -207,7 +207,7 @@ func TestRequiredFlags(t *testing.T) {
 		{[]string{"verify", "sessions", "create"}, []string{"recipient", "app-uuid"}},
 		{[]string{"verify", "sessions", "validate"}, []string{"otp"}},
 		{[]string{"numbers", "masking", "sessions", "create"}, []string{"first-party", "second-party"}},
-		{[]string{"messaging", "sms", "10dlc", "brands", "create"}, []string{"alias", "legal-name"}},
+		{[]string{"messaging", "sms", "10dlc", "brands", "create"}, []string{"alias", "profile-uuid"}},
 		{[]string{"messaging", "sms", "10dlc", "campaigns", "create"}, []string{"alias", "brand-id", "usecase", "description", "message-flow", "sample-message-1"}},
 		{[]string{"messaging", "sms", "10dlc", "links", "create"}, []string{"number", "campaign-id"}},
 		{[]string{"messaging", "sms", "tollfree", "submit"}, []string{"business-name", "use-case"}},

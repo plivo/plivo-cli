@@ -15,6 +15,11 @@ import (
 	"github.com/plivo/plivo-cli/internal/api"
 )
 
+// The json names of the Go SDK's request params: all a command may send.
+const (
+	sdkBrandCreate = "brand_alias brand_type profile_uuid secondary_vetting url method" // BrandCreationParams
+)
+
 // serveFixture answers every request with a response from the Go SDK's
 // fixtures in testdata/plivo-go, or with fixture itself when it is not a file
 // name, and returns the requests sent: "METHOD /path" and the JSON body.
@@ -62,6 +67,8 @@ func TestRegistrationCommands_matchTheSDK(t *testing.T) {
 		{"10dlc brands list", "brandListResponse.json", "GET 10dlc/Brand/", "", nil, []string{"ABC Inc.123", "COMPLETED"}},
 		{"10dlc campaigns get CY5NVUA", "campaignGetResponse.json", "GET 10dlc/Campaign/CY5NVUA/", "", nil, []string{"BOZ5T2X", "2FA,MARKETING", "ACTIVE"}},
 		{"10dlc campaigns list", "campaignListResponse.json", "GET 10dlc/Campaign/", "", nil, []string{"CUSDYQ0", "FAILED"}},
+		{"10dlc brands create --profile-uuid P1 --alias A1 --yes", `{"api_id":"x","brand_id":"B1","message":"ok"}`, "POST 10dlc/Brand/",
+			sdkBrandCreate, map[string]any{"profile_uuid": "P1", "brand_alias": "A1", "brand_type": "STARTER"}, []string{"B1"}},
 	} {
 		t.Run(tc.args, func(t *testing.T) {
 			setFakeCreds(t)
@@ -90,5 +97,16 @@ func TestRegistrationCommands_matchTheSDK(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Neither the SDK nor the API reference has a brand update: the command says so
+// and sends nothing.
+func TestBrandsUpdate_sendsNothing(t *testing.T) {
+	setFakeCreds(t)
+	sent := serveFixture(t, `{}`)
+	err, _, _ := execCmd(t, "messaging", "sms", "10dlc", "brands", "update", "B1", "--email", "a@example.com")
+	if calls, _ := sent(); err == nil || !strings.Contains(err.Error(), "no endpoint") || len(calls) != 0 {
+		t.Errorf("got %v after %d requests, want a refusal and none", err, len(calls))
 	}
 }

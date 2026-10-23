@@ -323,7 +323,7 @@ func spendVerbCases() []struct {
 		{"numbers buy", []string{"numbers", "buy", "+14155551234"}},
 		{"numbers buy --compliance-application-id", []string{"numbers", "buy", "+14155551234", "--compliance-application-id", "00000000-0000-0000-0000-000000000000"}},
 		{"numbers masking sessions create", []string{"numbers", "masking", "sessions", "create", "--first-party", "+1", "--second-party", "+2"}},
-		{"messaging sms 10dlc brands create", []string{"messaging", "sms", "10dlc", "brands", "create", "--alias", "ci", "--legal-name", "ACME Inc"}},
+		{"messaging sms 10dlc brands create", []string{"messaging", "sms", "10dlc", "brands", "create", "--alias", "ci", "--profile-uuid", "p1"}},
 		{"messaging sms 10dlc campaigns create", []string{
 			"messaging", "sms", "10dlc", "campaigns", "create",
 			"--alias", "ci",
