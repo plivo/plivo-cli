@@ -48,9 +48,10 @@ func (r *RawBody) SetRaw(b []byte) {
 
 func (r *RawBody) Raw() json.RawMessage { return r.raw }
 
-// RawBodyWithSecrets is RawBody keeping credential values, for the response
-// whose credential is the point of the command: subaccounts create hands over
-// the new subaccount's auth token.
+// RawBodyWithSecrets is RawBody keeping credential values, for a response that
+// must come out as sent: subaccounts create hands over the new subaccount's
+// auth token, and an agent flow from agents get goes back through agents
+// update, where the server restores its own masks but would store [REDACTED].
 type RawBodyWithSecrets struct {
 	raw json.RawMessage
 }

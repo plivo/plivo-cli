@@ -439,7 +439,10 @@ func renderAPIResponse(resp *http.Response, body []byte) error {
 	if resp.StatusCode >= 300 { // a redirect too, as none is followed
 		return apiErrorFromUpstream(resp.StatusCode, resp.Header.Get("X-Request-ID"), body, isJSON)
 	}
-	body = api.Visible(body)
+	// An agent flow comes back as sent, as agents get does: see api.RawBodyWithSecrets.
+	if !strings.Contains(resp.Request.URL.Path, "/AgentFlow") {
+		body = api.Visible(body)
+	}
 
 	// Success — pretty-print JSON if upstream sent it; otherwise raw passthrough.
 	if format == output.FormatJSON {
