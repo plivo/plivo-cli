@@ -19,7 +19,7 @@ const placeholderComplianceID = "00000000-0000-0000-0000-000000000000"
 func TestLookup_notesTheCharge(t *testing.T) {
 	setFakeCreds(t)
 	sipServer(t, http.StatusOK, `{"phone_number":"+14155552671"}`)
-	if err, _, stderr := execCmd(t, "lookup", "+14155552671"); err != nil || strings.Count(stderr, "USD 0.004") != 1 {
+	if err, _, stderr := execCmd(t, "lookup", "+14155552671"); err != nil || strings.Count(stderr, "USD 0.004 per request") != 1 {
 		t.Errorf("%v, stderr %q: want one note of the charge", err, stderr)
 	}
 }
