@@ -555,6 +555,30 @@ func TestSkillInstall_agentCodexInstallsIntoAgentsSkills(t *testing.T) {
 	}
 }
 
+// list --agent shows the folder that agent reads, as install --agent fills
+// it; without --agent it is still ~/.claude/skills.
+func TestSkillList_agentShowsThatAgentsFolder(t *testing.T) {
+	_, home := fakeRepo(t, false)
+	if err, _, stderr := execCmd(t, "skill", "install", "all", "--agent", "codex"); err != nil {
+		t.Fatalf("install all --agent codex: %v\n%s", err, stderr)
+	}
+	outputFormat = "json"
+	t.Cleanup(func() { outputFormat, skillAgent = "", "" })
+	for agent, dir := range map[string]string{"": ".claude", "codex": ".agents"} {
+		skillAgent = agent
+		for _, r := range skillListRows(t) {
+			want := filepath.Join(home, dir, "skills", r.InstallsTo, skillFileName)
+			if r.Path != want || (r.State == skillStateCurrent) != (agent == "codex") {
+				t.Errorf("--agent %q: %+v, want %s, installed only in ~/.agents/skills", agent, r, want)
+			}
+		}
+	}
+	// The flag itself, refused with --project as install refuses it.
+	if err, _, _ := execCmd(t, "skill", "list", "--agent", "codex", "--project"); err == nil || !strings.Contains(err.Error(), "combined with --project,") {
+		t.Errorf("--agent with --project: %v, want it refused, naming --project alone", err)
+	}
+}
+
 func TestSkillInstall_projectAndDirConflict(t *testing.T) {
 	root, _ := fakeRepo(t, false)
 	other := filepath.Join(t.TempDir(), "plivo-cli")
@@ -736,7 +760,13 @@ func shipVersion(t *testing.T, dir, content string) {
 
 func writeSkillFile(t *testing.T, root, dir, content string) string {
 	t.Helper()
-	p := filepath.Join(root, ".claude", "skills", dir, skillFileName)
+	return writeSkillIn(t, filepath.Join(root, ".claude", "skills"), dir, content)
+}
+
+// writeSkillIn writes the SKILL.md of the skill in dir under the skills folder.
+func writeSkillIn(t *testing.T, skills, dir, content string) string {
+	t.Helper()
+	p := filepath.Join(skills, dir, skillFileName)
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -833,23 +863,48 @@ func TestSkillUpdate_dryRunWritesNothing(t *testing.T) {
 	}
 }
 
-func TestSkillUpdate_coversTheProjectInsideARepo(t *testing.T) {
+// Every agent's skills folder is updated, at home and in the repository, and
+// an edited copy in any of them is kept.
+func TestSkillUpdate_coversEveryAgentsFolderAtHomeAndInTheRepo(t *testing.T) {
 	root, home := fakeRepo(t, false)
 	const older = "---\nname: plivo-voice-xml\n---\nolder\n"
 	shipVersion(t, "plivo-voice-xml", older)
-	paths := []string{
-		writeSkillFile(t, home, "plivo-voice-xml", older),
-		writeSkillFile(t, root, "plivo-voice-xml", older),
+	var paths []string
+	for _, base := range []string{home, root} {
+		for _, dir := range agentSkillsDirs {
+			paths = append(paths, writeSkillIn(t, filepath.Join(base, dir), "plivo-voice-xml", older))
+		}
 	}
+	edited := writeSkillIn(t, filepath.Join(home, ".agents", "skills"), "plivo-cli", "my own notes\n")
 
-	rows := skillUpdateRows(t)
-	if len(rows) != 2 {
-		t.Fatalf("rows = %+v, want the home and the project copy", rows)
+	if rows := skillUpdateRows(t); len(rows) != len(paths)+1 {
+		t.Fatalf("rows = %+v, want a copy in each agent's folder at home and in the project, and the kept one", rows)
 	}
 	for _, p := range paths {
 		if !fileIs(t, p, voicexmlskill.SkillMD) {
 			t.Errorf("%s was not updated", p)
 		}
+	}
+	if !fileIs(t, edited, "my own notes\n") {
+		t.Error("an edited copy in ~/.agents/skills was overwritten without --force")
+	}
+}
+
+// npx skills links ~/.claude/skills/<skill> to the copy in ~/.agents/skills:
+// that copy is one row, updated once.
+func TestSkillUpdate_aLinkedCopyIsOneRow(t *testing.T) {
+	home := skillUpdateHome(t)
+	shipVersion(t, "plivo-cli", olderCLISkill)
+	copyDir := filepath.Dir(writeSkillIn(t, filepath.Join(home, ".agents", "skills"), "plivo-cli", olderCLISkill))
+	link := filepath.Join(home, ".claude", "skills", "plivo-cli")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(copyDir, link); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+	if rows := skillUpdateRows(t); len(rows) != 1 || rows[0].Result != "updated" {
+		t.Errorf("rows = %+v, want one updated row", rows)
 	}
 }
 

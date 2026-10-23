@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -50,5 +51,24 @@ func TestCallMake_refusesWhatItCannotDial(t *testing.T) {
 	_, count := sipServer(t, http.StatusCreated, `{"request_uuid":"r1"}`)
 	if err, _, _ := execCmd(t, "voice", "calls", "make", "--from", "14155550100", "--to", "+14155550101<sip:alice@example.com", "--yes"); err != nil || count() != 1 {
 		t.Errorf("a number and a sip: URI: %v, %d requests", err, count())
+	}
+}
+
+// list --live reads the calls in progress (?status=live), which come back as
+// UUIDs alone, and refuses the list flags it cannot send.
+func TestCallList_liveListsTheCallsInProgress(t *testing.T) {
+	setFakeCreds(t)
+	urls, count := sipServer(t, http.StatusOK, `{"api_id":"x","calls":["c1","c2"]}`)
+	err, stdout, _ := execCmd(t, "voice", "calls", "list", "--live", "-o", "table")
+	if err != nil || !slices.Equal(strings.Fields(stdout), []string{"UUID", "c1", "c2"}) || !strings.HasSuffix(urls()[0], "/Call/?status=live") {
+		t.Fatalf("%v, %v: got\n%s", err, urls(), stdout)
+	}
+	err, _, _ = execCmd(t, "voice", "calls", "list", "--live", "--direction", "inbound", "--since", "2026-10-01")
+	if e, ok := err.(*clierr.Error); !ok || e.Code != clierr.CodeBadFlag || !strings.Contains(e.Message, "--direction, --since") || count() != 1 {
+		t.Errorf("--live with filters: %v after %d requests, want BAD_FLAG naming them and no request", err, count())
+	}
+	sipServer(t, http.StatusOK, `{"api_id":"x"}`)
+	if err, stdout, _ := execCmd(t, "voice", "calls", "list", "--live", "-o", "json"); err != nil || !strings.Contains(stdout, `"calls": []`) {
+		t.Errorf("no calls in progress: %v, want calls: [] in\n%s", err, stdout)
 	}
 }

@@ -72,13 +72,14 @@ func offer(t *testing.T, answer string, stray ...string) (stdout, stderr string)
 	return string(out), string(printed)
 }
 
+// offeredTo lists the agents asked or given the command.
 func offeredTo(t *testing.T) []string {
 	t.Helper()
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	return cfg.Skills.Offered
+	return append(cfg.Skills.Offered, cfg.Skills.Hinted...)
 }
 
 // The question goes to stderr, so it is asked only when stderr is a terminal.
@@ -142,26 +143,48 @@ func TestOfferSkills_aKeptCopyWarnsWithForce(t *testing.T) {
 	}
 }
 
-// Each agent is offered once, and the command printed for Codex installs where
-// it reads skills; current copies there then skip its offer.
-func TestOfferSkills_oncePerAgent(t *testing.T) {
+// A printed command is not the machine's one question: an agent with no
+// terminal is given the command, once, and a later one on a terminal is still
+// asked. Then each other agent is given its own command, once, which installs
+// where it reads skills; current copies there skip it. A record v1.3.0 wrote,
+// for a question or a command, counts as asked.
+func TestOfferSkills_oncePerMachine(t *testing.T) {
 	home := offerEnv(t, false)
-	offer(t, "")
-	if _, stderr := offer(t, ""); stderr != "" {
-		t.Errorf("asked again: %q", stderr)
+	as := func(env string) { // the login runs in this agent alone
+		for _, a := range codingAgents {
+			name, _, _ := strings.Cut(a.env, "=")
+			t.Setenv(name, "")
+		}
+		t.Setenv(env, "1")
 	}
-	t.Setenv("CLAUDECODE", "")
-	t.Setenv("CODEX_THREAD_ID", "thread-1")
-	_, stderr := offer(t, "")
+	for _, want := range []string{"Install the Plivo skills for Claude Code with: plivo skill install all\n", ""} {
+		if _, stderr := offer(t, "y"); stderr != want {
+			t.Fatalf("no terminal: %q, want %q", stderr, want)
+		}
+	}
+	askable = func() bool { return true }
+	as("CURSOR_AGENT")
+	if _, stderr := offer(t, "n"); stderr != "Install the Plivo skills for Cursor? (Y/n) " {
+		t.Fatalf("a later agent on a terminal: %q, want the question", stderr)
+	}
+	as("CODEX_THREAD_ID")
+	_, stderr := offer(t, "y")
 	args, ok := strings.CutPrefix(stderr, "Install the Plivo skills for Codex with: plivo ")
 	if !ok {
-		t.Fatalf("Codex not offered after the first agent: %q", stderr)
+		t.Fatalf("Codex was asked, or not given the command: %q", stderr)
+	}
+	if _, again := offer(t, "y"); again != "" {
+		t.Errorf("Codex given the command again: %q", again)
 	}
 	if err, _, _ := execCmd(t, strings.Fields(args)...); err != nil || !skillsCurrentIn(filepath.Join(home, ".agents", "skills")) {
 		t.Errorf("plivo %s did not install into ~/.agents/skills: %v", strings.TrimSpace(args), err)
 	}
-	writeProfile(t, home, "") // forget the offers
+	writeProfile(t, home, "[skills]\noffered = [\"Cursor\"]\n")
 	if _, stderr := offer(t, ""); stderr != "" {
 		t.Errorf("Codex offered with current copies in ~/.agents/skills: %q", stderr)
+	}
+	as("CLAUDECODE")
+	if _, stderr := offer(t, "y"); !strings.HasPrefix(stderr, "Install the Plivo skills for Claude Code with: ") {
+		t.Errorf("under a v1.3.0 record: %q, want the command, not the question", stderr)
 	}
 }

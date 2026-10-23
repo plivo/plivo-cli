@@ -68,6 +68,8 @@ type commandDetail struct {
 const (
 	outputFieldsNote = "Paths under data, so --query 'data.<path>'. The fields this CLI maps, a subset of the raw API response " +
 		"that -o json passes through whole: the response can hold more, and a listed field can be missing."
+	resultFieldsNote = "Paths under data, so --query 'data.<path>'. The result this CLI builds, so -o json has these fields " +
+		"and no others; a field with no value is null or left out."
 	noOutputFieldsNote = "Not described for this command. Run it with -o json to see its output."
 )
 
@@ -184,6 +186,11 @@ func printSchema(c *cobra.Command) error {
 	d := commandDetail{commandSchema: describe(c), GlobalFlags: globalFlags(), OutputFieldsNote: noOutputFieldsNote}
 	if t, ok := outputTypes[d.Path]; ok {
 		d.OutputFields, d.OutputFieldsNote = outputFields(t), outputFieldsNote
+	} else if t, ok := resultTypes[d.Path]; ok {
+		d.OutputFields, d.OutputFieldsNote = outputFields(t), resultFieldsNote
+	}
+	if note := outputNotes[d.Path]; note != "" {
+		d.OutputFieldsNote += " " + note
 	}
 	if effectiveFormat() == output.FormatJSON {
 		return output.JSONSuccess(os.Stdout, d, nil)

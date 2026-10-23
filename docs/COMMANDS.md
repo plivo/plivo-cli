@@ -555,9 +555,10 @@ spend questions with this, never by adding up call or message records.
 --since and --until are UTC dates, YYYY-MM-DD, sent as given. --until is
 exclusive: the window ends as that day starts, so --until 2026-11-01 ends with
 October 31. Without --since the window is the 7 days before --until; without
---until it runs through today. Plivo caps the window by --granularity (hour 7
-days, day 92 days, month 24 months, year no cap) and answers a longer one with
-a 400 naming the granularity to use.
+--until it ends as today starts. A window with no day in it is refused before
+any request. Plivo caps the window by --granularity (hour 7 days, day 92 days,
+month 24 months, year no cap) and answers a longer one with a 400 naming the
+granularity to use.
 
 Other charges are left out with --subaccount, or when --product leaves out
 other, and total_spend then covers only the usage rows that match.
@@ -1258,11 +1259,12 @@ Headless / CI use:
   scripts and CI need a profile that was logged in on that machine already.
 
 Inside a coding agent:
-  Run inside Claude Code, Cursor or Codex, a login offers once per
-  machine to install the Plivo skills where that agent reads them, unless
-  current copies are there already. Without a terminal to ask on, it
-  prints the install command instead. --yes installs them without
-  asking, and --quiet skips the offer.
+  Run inside Claude Code, Cursor or Codex, a login asks once per machine
+  whether to install the Plivo skills where that agent reads them, unless
+  current copies are there already. Without a terminal to ask on, and in
+  each other agent once it has asked, it prints that agent's install
+  command instead, once. --yes installs them without asking, and --quiet
+  skips the offer.
 
 By default the CLI validates credentials with GET /Account/ before
 saving. Pass --no-verify to skip (offline / mock use only).
@@ -3545,14 +3547,16 @@ plivo skill list [flags]
 Examples:
 
 ```
-  plivo skill list              # in ~/.claude/skills
-  plivo skill list --project    # in <repo>/.claude/skills
+  plivo skill list                # in ~/.claude/skills
+  plivo skill list --agent codex  # in ~/.agents/skills
+  plivo skill list --project      # in <repo>/.claude/skills
 ```
 
 Flags:
 
 ```
-      --project   show the skills installed in the current git repository's .claude/skills
+      --agent string   coding agent whose skills to show: claude (~/.claude/skills) or codex (~/.agents/skills) (default: claude)
+      --project        show the skills installed in the current git repository's .claude/skills
 ```
 
 ---
@@ -3563,13 +3567,13 @@ Update installed skills to the versions bundled in this binary
 
 Update every installed Plivo skill to the version bundled in this binary.
 
-It looks in ~/.claude/skills and, inside a git repository, in
-<repo>/.claude/skills. A copy is replaced only when it matches a version a
+It looks in each agent's skills folder, ~/.claude/skills (Claude Code and
+Cursor) and ~/.agents/skills (Codex), and inside a git repository in the same
+two folders under <repo>. A copy is replaced only when it matches a version a
 release shipped; anything else is treated as your own edit and kept, and
 --force replaces it too. Skills that are not installed stay that way: add them
-with `plivo skill install`. A retired skill still installed next to the one
-that replaced it is reported with the command that retires it; update itself
-deletes nothing.
+with `plivo skill install`. A retired skill still in a .claude/skills folder
+is reported with the command that retires it; update itself deletes nothing.
 
 ```
 plivo skill update [flags]
@@ -3889,6 +3893,11 @@ in UTC, and a bare --until date includes that day. --until needs --since. Plivo
 searches only the last 90 days, at most 31 days per request; a range past
 either is refused before any request, and the error says what to run instead.
 
+--live lists the calls in progress instead, which have no record until they
+end. Plivo returns their UUIDs alone, with no filter or page, so --live takes
+no other list flag; -o json has api_id and calls[], the UUIDs.
+`plivo voice calls get <call_uuid> --live` reads one.
+
 ```
 plivo voice calls list [flags]
 ```
@@ -3898,6 +3907,7 @@ Examples:
 ```
   plivo voice calls list --since 2026-10-01
   plivo voice calls list --from-date 2026-09-15 --to-date 2026-10-14 -o json
+  plivo voice calls list --live
 ```
 
 Flags:
@@ -3908,6 +3918,7 @@ Flags:
       --from string        filter by from_number
       --from-date string   same as --since
       --limit int          results per page (1-20) (default 20)
+      --live               list the UUIDs of the calls in progress, not call records (takes no other list flag)
       --offset int         pagination offset
       --since string       calls ending at or after this UTC time (YYYY-MM-DD[ HH:MM[:SS]]), within the last 90 days, at most 31 days per request
       --to string          filter by to_number

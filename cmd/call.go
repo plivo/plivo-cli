@@ -11,6 +11,7 @@ import (
 	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var callCmd = &cobra.Command{
@@ -28,6 +29,7 @@ var (
 	callListTo        string
 	callListDirection string
 	callListRange     listTimeRange
+	callListLive      bool
 )
 
 var callListCmd = &cobra.Command{
@@ -38,9 +40,15 @@ var callListCmd = &cobra.Command{
 --since and --until (or --from-date and --to-date) filter on when a call ended,
 in UTC, and a bare --until date includes that day. --until needs --since. Plivo
 searches only the last 90 days, at most 31 days per request; a range past
-either is refused before any request, and the error says what to run instead.`,
+either is refused before any request, and the error says what to run instead.
+
+--live lists the calls in progress instead, which have no record until they
+end. Plivo returns their UUIDs alone, with no filter or page, so --live takes
+no other list flag; -o json has api_id and calls[], the UUIDs.
+` + "`plivo voice calls get <call_uuid> --live`" + ` reads one.`,
 	Example: `  plivo voice calls list --since 2026-10-01
-  plivo voice calls list --from-date 2026-09-15 --to-date 2026-10-14 -o json`,
+  plivo voice calls list --from-date 2026-09-15 --to-date 2026-10-14 -o json
+  plivo voice calls list --live`,
 	Args: cobra.NoArgs,
 	RunE: runCallList,
 }
@@ -77,6 +85,7 @@ func init() {
 	callListCmd.Flags().StringVar(&callListTo, "to", "", "filter by to_number")
 	callListCmd.Flags().StringVar(&callListDirection, "direction", "", oneOf(directionValues))
 	registerTimeRangeFlags(callListCmd, &callListRange, "calls ending", rangeLimits{retainDays: listRetainDays, spanDays: listSpanDays})
+	callListCmd.Flags().BoolVar(&callListLive, "live", false, "list the UUIDs of the calls in progress, not call records (takes no other list flag)")
 	callGetCmd.Flags().BoolVar(&callGetLive, "live", false, "get a call in progress, not its record (written once the call ends)")
 
 	callMakeCmd.Flags().StringVar(&callMakeFrom, "from", "", "source number (E.164) — must be on your account (required)")
@@ -517,6 +526,9 @@ func validateCallParties(from, to string) error {
 }
 
 func runCallList(cmd *cobra.Command, args []string) error {
+	if callListLive {
+		return runCallListLive(cmd)
+	}
 	if err := validateEnum("direction", &callListDirection, directionValues...); err != nil {
 		return err
 	}
@@ -555,6 +567,46 @@ func runCallList(cmd *cobra.Command, args []string) error {
 	rows := [][]string{{"UUID", "FROM", "TO", "DIR", "DUR", "TIME", "AMOUNT"}}
 	for _, c := range resp.Objects {
 		rows = append(rows, []string{c.CallUUID, c.From, c.To, c.Direction, strconv.Itoa(c.BillDuration), c.InitTime, c.TotalAmount})
+	}
+	return output.Table(os.Stdout, rows)
+}
+
+// runCallListLive lists the calls in progress: the Call API with status=live,
+// which takes no filter or page and answers with UUIDs alone. A list flag
+// given with it is refused, not left unsent.
+func runCallListLive(cmd *cobra.Command) error {
+	var given []string
+	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
+		if f.Changed && f.Name != "live" {
+			given = append(given, "--"+f.Name)
+		}
+	})
+	if len(given) > 0 {
+		e := clierr.BadFlag("live", "can't be combined with "+strings.Join(given, ", "))
+		e.Hint = "Plivo lists the calls in progress without filters or pages. Drop --live to filter the call records."
+		return e
+	}
+	client, _, err := getClient()
+	if err != nil {
+		return err
+	}
+	var resp api.LiveCallList
+	apiErr, err := client.Do("GET", client.AccountURL("Call"), nil, url.Values{"status": {"live"}}, &resp)
+	if err != nil {
+		return err
+	}
+	if apiErr != nil {
+		return apiErr
+	}
+	if dryRunFlag {
+		return nil
+	}
+	if effectiveFormat() == output.FormatJSON {
+		return listJSON(os.Stdout, resp.Raw(), "calls")
+	}
+	rows := [][]string{{"UUID"}}
+	for _, uuid := range resp.Calls {
+		rows = append(rows, []string{uuid})
 	}
 	return output.Table(os.Stdout, rows)
 }

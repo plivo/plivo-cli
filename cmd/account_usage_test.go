@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
@@ -184,12 +185,19 @@ func TestAccountUsage_table(t *testing.T) {
 	}
 }
 
-// Dates go to the API as given, so one it cannot read is refused first.
+// Dates go to the API as given, so one it cannot read is refused first, and
+// so is a window with no day in it: --until is exclusive, and left out it is
+// today in UTC (here the 17th, while UTC+5:30 has the 18th).
 func TestAccountUsage_badDatesRefusedBeforeAnyRequest(t *testing.T) {
+	listTimeNow = func() time.Time { return time.Date(2026, 10, 18, 1, 0, 0, 0, time.FixedZone("UTC+5:30", 19800)) }
+	t.Cleanup(func() { listTimeNow = time.Now })
 	for want, flags := range map[string][]string{
-		`could not read "2026/10/01"`:       {"--since", "2026/10/01"},
-		`could not read "2026-10-17 00:00"`: {"--to-date", "2026-10-17 00:00"},
-		"same filter":                       {"--until", "2026-10-17", "--to-date", "2026-10-17"},
+		`could not read "2026/10/01"`:                             {"--since", "2026/10/01"},
+		`could not read "2026-10-17 00:00"`:                       {"--to-date", "2026-10-17 00:00"},
+		"same filter":                                             {"--until", "2026-10-17", "--to-date", "2026-10-17"},
+		"--until (2026-10-17) must be after --since (2026-10-17)": {"--since", "2026-10-17", "--until", "2026-10-17"},
+		"--until (2026-10-01) must be after --since (2026-10-17)": {"--from-date", "2026-10-17", "--to-date", "2026-10-01"},
+		"must be before today (2026-10-17, UTC)":                  {"--since", "2026-10-17"},
 	} {
 		t.Run(want, func(t *testing.T) {
 			requireRefusedBeforeAnyRequest(t, append([]string{"account", "usage"}, flags...), want)

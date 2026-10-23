@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -147,8 +148,9 @@ skill that an install replaces keeps its file, renamed SKILL.md.retired.`,
 var skillListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "Show bundled skills and whether each is installed",
-	Example: `  plivo skill list              # in ~/.claude/skills
-  plivo skill list --project    # in <repo>/.claude/skills`,
+	Example: `  plivo skill list                # in ~/.claude/skills
+  plivo skill list --agent codex  # in ~/.agents/skills
+  plivo skill list --project      # in <repo>/.claude/skills`,
 	Args: cobra.NoArgs,
 	RunE: runSkillList,
 }
@@ -161,13 +163,13 @@ var skillUpdateCmd = &cobra.Command{
 	Short: "Update installed skills to the versions bundled in this binary",
 	Long: `Update every installed Plivo skill to the version bundled in this binary.
 
-It looks in ~/.claude/skills and, inside a git repository, in
-<repo>/.claude/skills. A copy is replaced only when it matches a version a
+It looks in each agent's skills folder, ~/.claude/skills (Claude Code and
+Cursor) and ~/.agents/skills (Codex), and inside a git repository in the same
+two folders under <repo>. A copy is replaced only when it matches a version a
 release shipped; anything else is treated as your own edit and kept, and
 --force replaces it too. Skills that are not installed stay that way: add them
-with ` + "`plivo skill install`" + `. A retired skill still installed next to the one
-that replaced it is reported with the command that retires it; update itself
-deletes nothing.`,
+with ` + "`plivo skill install`" + `. A retired skill still in a .claude/skills folder
+is reported with the command that retires it; update itself deletes nothing.`,
 	Example: `  plivo skill update              # update what is installed
   plivo skill update --dry-run    # show what would change, write nothing
   plivo skill update --force      # also replace copies you edited`,
@@ -183,8 +185,28 @@ func init() {
 	skillInstallCmd.Flags().BoolVar(&skillForce, "force", false, "also overwrite a copy that matches no released version (its edits are lost)")
 	skillInstallCmd.Flags().StringVar(&skillAgent, "agent", "", "coding agent to install for: claude (~/.claude/skills) or codex (~/.agents/skills) (default: claude)")
 	skillListCmd.Flags().BoolVar(&skillProject, "project", false, "show the skills installed in the current git repository's .claude/skills")
+	skillListCmd.Flags().StringVar(&skillAgent, "agent", "", "coding agent whose skills to show: claude (~/.claude/skills) or codex (~/.agents/skills) (default: claude)")
 	skillCmd.AddCommand(skillInstallCmd, skillListCmd, skillUpdateCmd)
 	rootCmd.AddCommand(skillCmd)
+}
+
+// checkSkillAgent refuses an --agent the CLI does not know, and one given
+// with --dir or --project, which names the folder itself.
+func checkSkillAgent() error {
+	if skillAgent == "" {
+		return nil
+	}
+	if _, ok := agentSkillsDirs[skillAgent]; !ok {
+		return clierr.BadFlag("agent", fmt.Sprintf("unknown agent %q; use claude or codex", skillAgent))
+	}
+	if skillDir != "" || skillProject {
+		flag := "--project"
+		if skillDir != "" {
+			flag = "--dir"
+		}
+		return clierr.BadFlag("agent", "can't be combined with "+flag+", which names the folder itself")
+	}
+	return nil
 }
 
 func runSkillInstall(cmd *cobra.Command, args []string) error {
@@ -195,13 +217,8 @@ func runSkillInstall(cmd *cobra.Command, args []string) error {
 	if skillProject && skillDir != "" {
 		return clierr.BadFlag("project", "can't be combined with --dir; --project installs into the repository's .claude/skills")
 	}
-	if skillAgent != "" {
-		if _, ok := agentSkillsDirs[skillAgent]; !ok {
-			return clierr.BadFlag("agent", fmt.Sprintf("unknown agent %q; use claude or codex", skillAgent))
-		}
-		if skillDir != "" || skillProject {
-			return clierr.BadFlag("agent", "can't be combined with --dir or --project, which name the destination themselves")
-		}
+	if err := checkSkillAgent(); err != nil {
+		return err
 	}
 
 	// "all" fans out; --dir and --print each name a single destination, so they
@@ -338,11 +355,17 @@ type skillListEntry struct {
 }
 
 func runSkillList(cmd *cobra.Command, _ []string) error {
+	if err := checkSkillAgent(); err != nil {
+		return err
+	}
 	root, rootErr := resolveSkillDir("", "") // ~/.claude/skills
-	if skillProject {
+	switch {
+	case skillProject:
 		if root, rootErr = projectSkillsRoot(); rootErr != nil {
 			return rootErr
 		}
+	case skillAgent != "":
+		root, rootErr = agentSkillsRoot(skillAgent)
 	}
 	rows := make([]skillListEntry, 0, len(bundledSkills))
 	for _, sk := range bundledSkills {
@@ -376,6 +399,9 @@ func runSkillList(cmd *cobra.Command, _ []string) error {
 	install := "plivo skill install <selector>"
 	if skillProject {
 		install += " --project"
+	}
+	if skillAgent != "" {
+		install += " --agent " + skillAgent
 	}
 	fmt.Fprintf(os.Stderr, "\nInstall one with: %s  (or \"all\")\n", install)
 	return nil
@@ -451,17 +477,26 @@ type skillUpdateRow struct {
 }
 
 func runSkillUpdate(cmd *cobra.Command, _ []string) error {
-	var roots []string
-	homeRoot := ""
-	if home, err := os.UserHomeDir(); err == nil {
-		homeRoot = filepath.Join(home, ".claude", "skills")
-		roots = append(roots, homeRoot)
+	// Each agent's skills folder, in the home directory and in the git
+	// repository the working directory is in.
+	var bases, roots []string
+	home, _ := os.UserHomeDir()
+	if home != "" {
+		bases = append(bases, home)
 	}
-	if p, err := projectSkillsRoot(); err == nil && !slices.Contains(roots, p) {
-		roots = append(roots, p)
+	if wd, err := os.Getwd(); err == nil {
+		if repo, ok := findGitRoot(wd); ok && !slices.Contains(bases, repo) {
+			bases = append(bases, repo)
+		}
+	}
+	for _, base := range bases {
+		for _, agent := range slices.Sorted(maps.Keys(agentSkillsDirs)) {
+			roots = append(roots, filepath.Join(base, agentSkillsDirs[agent]))
+		}
 	}
 
 	rows := []skillUpdateRow{}
+	seen := map[string]bool{} // a copy reached twice, through a link npx skills made, is one row
 	for _, root := range roots {
 		for _, s := range bundledSkills {
 			path := filepath.Join(root, s.dirName, skillFileName)
@@ -471,6 +506,12 @@ func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 			}
 			if err != nil {
 				return clierr.Wrap(fmt.Errorf("read %s: %w", path, err))
+			}
+			if resolved, err := filepath.EvalSymlinks(path); err == nil {
+				if seen[resolved] {
+					continue
+				}
+				seen[resolved] = true
 			}
 			row := skillUpdateRow{Selector: s.selector, Path: path, OldLines: lineCount(b), NewLines: lineCount([]byte(s.content))}
 			have := skillDigest(b)
@@ -490,9 +531,10 @@ func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 			rows = append(rows, row)
 		}
 	}
-	for _, root := range roots {
+	// The retired skill predates --agent, so only a .claude/skills can hold it.
+	for _, base := range bases {
 		for _, s := range bundledSkills {
-			rows = append(rows, retiredSkillRows(s, root, root == homeRoot)...)
+			rows = append(rows, retiredSkillRows(s, filepath.Join(base, agentSkillsDirs["claude"]), base == home)...)
 		}
 	}
 
@@ -500,7 +542,7 @@ func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 		return output.JSONSuccess(os.Stdout, rows, nil)
 	}
 	if len(rows) == 0 {
-		fmt.Fprintf(os.Stderr, "No Plivo skills installed in %s. Install one with: plivo skill install\n", strings.Join(roots, " or "))
+		fmt.Fprintf(os.Stderr, "No Plivo skills installed in %s. Install one with: plivo skill install\n", strings.Join(roots, ", "))
 		return nil
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
