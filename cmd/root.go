@@ -16,6 +16,7 @@ import (
 	"github.com/plivo/plivo-cli/internal/redact"
 	"github.com/plivo/plivo-cli/internal/version"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"golang.org/x/term"
 	"regexp"
 )
@@ -154,7 +155,10 @@ func init() {
 	// directly see the same gate humans do.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		api.CLICommand = commandPath(cmd)
-		return configureOutput(cmd)
+		if err := configureOutput(cmd); err != nil {
+			return err
+		}
+		return refuseBlankRequired(cmd)
 	}
 	// Set here, not in the literal: runRoot walks rootCmd itself.
 	rootCmd.RunE = runRoot
@@ -183,6 +187,25 @@ func init() {
 	// call sites in api.go, application.go, auth.go, call.go, message.go,
 	// number.go, verify.go.
 }
+
+// refuseBlankRequired refuses a flag marked required that was given an empty
+// or all-space value: cobra checks only that it is there, so an empty --dst
+// built a request. Flags a command checks by hand keep their own messages.
+func refuseBlankRequired(cmd *cobra.Command) (err error) {
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if err != nil || !f.Changed || len(f.Annotations[cobra.BashCompOneRequiredFlag]) == 0 || strings.TrimSpace(f.Value.String()) != "" {
+			return
+		}
+		if with := f.Annotations[emptyWith]; len(with) > 0 && cmd.Flags().Changed(with[0]) {
+			return
+		}
+		err = clierr.BadFlag(f.Name, "is required and can't be empty")
+	})
+	return err
+}
+
+// emptyWith lets a required flag be empty once the flag it names is given.
+const emptyWith = "plivo_empty_with"
 
 // secondsOrDuration is --timeout's value: a bare integer is seconds, the form
 // the flag always took, and anything else a Go duration such as 90s or 2m.
