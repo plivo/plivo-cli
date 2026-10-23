@@ -9,10 +9,10 @@ Equivalent to:
 With -o json, prints one JSON result when the analysis ends: call_uuid
 (message_uuid for a message), what_happened, likely_cause, timeline[]
 ({at, event, source}), next_steps[], hangup_cause_code and hangup_source (from
-the call record; null for a message), confidence (high, medium or low) and
-answer (the prose). -o yaml, -o csv and --query work on that result; -o jsonl
-streams the assistant's raw events instead. An analysis that fails, escalates
-or stops early exits 3.
+the call record; null for a message), confidence (high, medium or low; null
+when the assistant gives none) and answer (the prose). -o yaml, -o csv and
+--query work on that result; -o jsonl streams the assistant's raw events
+instead. An analysis that fails, escalates or stops early exits 3.
 
 Usage:
   plivo messaging sms diagnose <message_uuid> [flags]
@@ -37,5 +37,5 @@ Global Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
-      --timeout int        request timeout in seconds (default 30)
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts

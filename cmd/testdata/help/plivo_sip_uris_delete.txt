@@ -1,6 +1,9 @@
-Names any trunk using it as a primary or fallback URI first. Deleting a URI
-also deletes those trunks, so an in-use URI needs --force on top of --yes. If
-the check fails, the delete is refused.
+Names any trunk using it as a primary or fallback URI first, and refuses an
+in-use URI unless --force is added to --yes: the API deletes a trunk whose
+primary URI it is. After the delete each of those trunks is read back, and
+the result says which were deleted, which kept and which could not be read
+(-o json: trunks_deleted, trunks_kept, trunks_unchecked). If the check fails,
+the delete is refused.
 
 Usage:
   plivo sip uris delete <uri_uuid> [flags]
@@ -18,5 +21,5 @@ Global Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
-      --timeout int        request timeout in seconds (default 30)
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts

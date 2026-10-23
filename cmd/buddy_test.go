@@ -400,8 +400,8 @@ func TestAsk_timeoutEndsTheStream(t *testing.T) {
 		t.Errorf("stdout = %q, want the partial answer, its line closed", stdout)
 	}
 	var stderr string
-	stdinTokenFn(t, "", func() { _, _, stderr = execCmd(t, "ask", "-i", "--timeout", "1", "why?") })
-	if !strings.Contains(stderr, "buddy error: the assistant had not finished after --timeout 1 seconds") {
+	stdinTokenFn(t, "", func() { _, _, stderr = execCmd(t, "ask", "-i", "--timeout", "1500ms", "why?") })
+	if !strings.Contains(stderr, "buddy error: the assistant had not finished after --timeout 1.5s") {
 		t.Errorf("-i stderr = %q, want the turn's timeout", stderr)
 	}
 }

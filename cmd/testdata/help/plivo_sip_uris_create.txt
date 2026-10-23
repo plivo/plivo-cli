@@ -1,10 +1,15 @@
 Create an origination URI.
 
 --uri accepts host, host:port, host;transport=udp|tcp|tls, sip:user@host or
-sips:host. The host is a name or an IPv4 address: Plivo does not take IPv6.
-It is checked before sending: a space, a bad port, an unknown transport or a
-malformed host is refused. A missing port is fine: the platform decides the
-default. --transport adds ;transport= to --uri.
+sips:host. The API refuses a scheme, so sip: is dropped and sips: becomes
+;transport=tls, on port 5061 unless one is given, or with --platform on the
+guide's TLS port where it gives one; with another transport it is refused.
+stderr names the URI sent. The host is a name or a public IPv4 address:
+Plivo does not take IPv6, and can never reach a private, loopback,
+link-local, carrier-grade NAT, multicast, benchmarking, reserved or 0.0.0.0
+one. It is checked before sending: a space, a bad port, an unknown transport
+or a malformed host is refused. A missing port is fine: the platform decides
+the default. --transport adds ;transport= to --uri.
 
 --platform livekit|elevenlabs|retell|vapi fills in what Plivo's guide for that
 platform gives: host, port and transport, so you add only your own details,
@@ -39,5 +44,5 @@ Global Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
-      --timeout int        request timeout in seconds (default 30)
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts

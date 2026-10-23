@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -426,6 +427,8 @@ func TestNumbersAffectedWarning_fetchFailureDegrades(t *testing.T) {
 	}
 }
 
+const forwardOriginal = "https://old.example.com/answer"
+
 // runForwardTeardown runs `voice streams forward` against a fake app and a
 // fake tunnel with the context already cancelled, so it goes straight from
 // setup to teardown; with tunnelDies the tunnel has exited instead. restoreStatus
@@ -434,20 +437,34 @@ func TestNumbersAffectedWarning_fetchFailureDegrades(t *testing.T) {
 func runForwardTeardown(t *testing.T, restoreStatus int, tunnelDies bool, args ...string) (error, string, map[string]any) {
 	t.Helper()
 	setFakeCreds(t)
-	const original = "https://old.example.com/answer"
+	err, stdout, _, body, _ := runForward(t, forwardOriginal, restoreStatus, tunnelDies, args...)
+	return err, stdout, body
+}
+
+// runForward is runForwardTeardown in the caller's HOME, for an app whose
+// answer URL is current; any POST but the one to the tunnel is the restore.
+// It also returns the state on disk when the app was repointed.
+func runForward(t *testing.T, current string, restoreStatus int, tunnelDies bool, args ...string) (error, string, string, map[string]any, *forwardState) {
+	t.Helper()
+	const tunnelURL = "https://fake-tunnel.test"
+	statePath, _ := forwardStatePath("APP123")
 	var (
 		mu          sync.Mutex // the handler runs on the server's goroutine
 		restoreBody map[string]any
+		atRepoint   *forwardState
 	)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method == http.MethodGet {
-			fmt.Fprintf(w, `{"app_id":"APP123","app_name":"my-test-app","answer_url":%q,"answer_method":"GET"}`, original)
+			fmt.Fprintf(w, `{"app_id":"APP123","app_name":"my-test-app","answer_url":%q,"answer_method":"GET"}`, current)
 			return
 		}
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		if body["answer_url"] != original {
+		if body["answer_url"] == tunnelURL+"/answer" {
+			mu.Lock()
+			atRepoint = readForwardState(statePath)
+			mu.Unlock()
 			fmt.Fprint(w, `{"message":"changed"}`) // pointing the app at the tunnel
 			return
 		}
@@ -465,7 +482,7 @@ func runForwardTeardown(t *testing.T, restoreStatus int, tunnelDies bool, args .
 	t.Cleanup(srv.Close)
 
 	streamsFwdClientForTest = &api.Client{BaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", HTTP: &http.Client{}}
-	tn := &tunnel.Tunnel{PublicURL: "https://fake-tunnel.test"}
+	tn := &tunnel.Tunnel{PublicURL: tunnelURL}
 	startTunnel = func(context.Context, int, string) (*tunnel.Tunnel, error) { return tn, nil }
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) // a forward that misses the stop fails, not hangs
 	if tunnelDies {
@@ -485,10 +502,10 @@ func runForwardTeardown(t *testing.T, restoreStatus int, tunnelDies bool, args .
 	})
 
 	base := []string{"voice", "streams", "forward", "--number", "+14155550142", "--app", "APP123", "--to", "ws://localhost:7860/ws", "--yes"}
-	err, stdout, _ := execCmd(t, append(base, args...)...)
+	err, stdout, stderr := execCmd(t, append(base, args...)...)
 	mu.Lock()
 	defer mu.Unlock()
-	return err, stdout, restoreBody
+	return err, stdout, stderr, restoreBody, atRepoint
 }
 
 const wantRestoreCmd = "plivo account applications update APP123 --answer-url https://old.example.com/answer --answer-method GET"
@@ -524,7 +541,68 @@ func TestVoiceStreamsForward_failedRestoreIsAnError(t *testing.T) {
 			if body["answer_method"] != "GET" {
 				t.Errorf("restore sent answer_method %v, want the original GET", body["answer_method"])
 			}
+			if path, _ := forwardStatePath("APP123"); readForwardState(path) == nil {
+				t.Error("a failed restore must leave the saved answer URL for the next run")
+			}
 		})
+	}
+}
+
+// The app may be on a tunnel URL a killed run left. That run's state wins
+// while the app is still on its tunnel. Otherwise a throwaway tunnel URL is
+// never restored to, and an ngrok one is, since ngrok also gives fixed
+// domains. Each case warns, and this run's state is on disk before the repoint.
+func TestVoiceStreamsForward_appLeftOnATunnel(t *testing.T) {
+	const dead, ngrok = "https://abc123.lhr.life/answer", "https://myapp.ngrok-free.app/answer"
+	left := &forwardState{AnswerURL: forwardOriginal, AnswerMethod: "GET", TunnelAnswerURL: dead}
+	for _, tc := range []struct {
+		name, current     string
+		saved             *forwardState
+		restored, warning string
+	}{
+		{"saved", dead, left, forwardOriginal, "earlier forward"},
+		{"nothing saved", dead, nil, "", "not restored"},
+		{"ngrok", ngrok, nil, ngrok, "killed run"},
+		{"stale state", ngrok, left, ngrok, "killed run"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setFakeCreds(t)
+			path, _ := forwardStatePath("APP123")
+			if tc.saved != nil {
+				if err := writeForwardState(path, *tc.saved); err != nil {
+					t.Fatal(err)
+				}
+			}
+			err, stdout, stderr, body, atRepoint := runForward(t, tc.current, http.StatusOK, false, "-o", "json")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			data, _ := decodeOne(t, stdout)["data"].(map[string]any)
+			got, _ := body["answer_url"].(string)
+			if got != tc.restored || data["restored"] != (tc.restored != "") || readForwardState(path) != nil || !strings.Contains(stderr, tc.warning) {
+				t.Errorf("restored %q (%v), state left %v, stderr %q; want %q and a %q warning",
+					got, data["restored"], readForwardState(path), stderr, tc.restored, tc.warning)
+			}
+			if (atRepoint == nil) != (tc.restored == "") || atRepoint != nil && (atRepoint.AnswerURL != tc.restored || atRepoint.PID != os.Getpid()) {
+				t.Errorf("state when the app was repointed = %+v, want %q saved by this run", atRepoint, tc.restored)
+			}
+		})
+	}
+}
+
+// A forward still running on the app holds its state: a second one refuses
+// and leaves the app and that state alone.
+func TestVoiceStreamsForward_refusesWhileAnotherRuns(t *testing.T) {
+	setFakeCreds(t)
+	path, _ := forwardStatePath("APP123")
+	running := forwardState{AnswerURL: forwardOriginal, AnswerMethod: "GET", TunnelAnswerURL: "https://abc123.lhr.life/answer", PID: os.Getppid()}
+	if err := writeForwardState(path, running); err != nil {
+		t.Fatal(err)
+	}
+	err, _, _, body, atRepoint := runForward(t, running.TunnelAnswerURL, http.StatusOK, false)
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeResourceConflict || body != nil || atRepoint != nil || readForwardState(path) == nil {
+		t.Errorf("err %v, restore %v, repointed %v: want RESOURCE_CONFLICT and nothing touched", err, body, atRepoint != nil)
 	}
 }
 

@@ -34,6 +34,26 @@ func TestCallGet_liveReadsTheCallInProgress(t *testing.T) {
 	}
 }
 
+// make refuses what it cannot dial before the spend guard: --yes sends nothing.
+func TestCallMake_refusesWhatItCannotDial(t *testing.T) {
+	setFakeCreds(t)
+	for _, tc := range []struct{ flag, from, to string }{
+		{"to", "+14155550100", "hello"},
+		{"to", "+14155550100", "14155550101<sip:"},
+		{"from", "sip:alice@example.com", "14155550101"},
+	} {
+		_, count := sipServer(t, http.StatusCreated, `{}`)
+		err, _, _ := execCmd(t, "voice", "calls", "make", "--from", tc.from, "--to", tc.to, "--yes")
+		if e, ok := err.(*clierr.Error); !ok || e.Code != clierr.CodeBadFlag || e.Context["flag"] != tc.flag || count() != 0 {
+			t.Errorf("--from %s --to %s: %v, %d requests; want BAD_FLAG on --%s, nothing sent", tc.from, tc.to, err, count(), tc.flag)
+		}
+	}
+	_, count := sipServer(t, http.StatusCreated, `{"request_uuid":"r1"}`)
+	if err, _, _ := execCmd(t, "voice", "calls", "make", "--from", "14155550100", "--to", "+14155550101<sip:alice@example.com", "--yes"); err != nil || count() != 1 {
+		t.Errorf("a number and a sip: URI: %v, %d requests", err, count())
+	}
+}
+
 // list --live reads the calls in progress (?status=live), which come back as
 // UUIDs alone, and refuses the list flags it cannot send.
 func TestCallList_liveListsTheCallsInProgress(t *testing.T) {

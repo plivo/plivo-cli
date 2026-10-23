@@ -12,7 +12,7 @@ Flags:
   -h, --help                       help for make
       --machine-detection string   none|true|hangup
       --ring-url string            URL hit when call starts ringing
-      --to string                  destination number (E.164) (required)
+      --to string                  destination: an E.164 number or a sip: URI, or several joined with < (required)
 
 Global Flags:
       --dry-run            print the HTTP request without sending
@@ -23,5 +23,5 @@ Global Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
-      --timeout int        request timeout in seconds (default 30)
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts

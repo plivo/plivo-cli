@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -106,10 +107,10 @@ const diagnoseOutputHelp = `
 With -o json, prints one JSON result when the analysis ends: call_uuid
 (message_uuid for a message), what_happened, likely_cause, timeline[]
 ({at, event, source}), next_steps[], hangup_cause_code and hangup_source (from
-the call record; null for a message), confidence (high, medium or low) and
-answer (the prose). -o yaml, -o csv and --query work on that result; -o jsonl
-streams the assistant's raw events instead. An analysis that fails, escalates
-or stops early exits 3.`
+the call record; null for a message), confidence (high, medium or low; null
+when the assistant gives none) and answer (the prose). -o yaml, -o csv and
+--query work on that result; -o jsonl streams the assistant's raw events
+instead. An analysis that fails, escalates or stops early exits 3.`
 
 func init() {
 	callCmd.AddCommand(voiceCallsDiagnoseCmd)
@@ -285,7 +286,7 @@ type diagnoseResult struct {
 	NextSteps       []string        `json:"next_steps"`
 	HangupCauseCode *int            `json:"hangup_cause_code"`
 	HangupSource    *string         `json:"hangup_source"`
-	Confidence      string          `json:"confidence"`
+	Confidence      *string         `json:"confidence"` // null when the assistant gave none
 	Answer          string          `json:"answer"`
 }
 
@@ -304,7 +305,8 @@ var resultBlockRE = regexp.MustCompile("(?s)```[^\\n`]*\\n(.*?)```")
 // the call record. The result block is the last JSON object with
 // what_happened: a command or an unrelated JSON block after it is not the
 // result. A missing or unreadable block is an error, and so is an empty
-// what_happened; likely_cause, timeline and next_steps may be empty or null.
+// what_happened; likely_cause, timeline, next_steps and confidence may be
+// empty or null. Comments and trailing commas are dropped before decoding.
 func newDiagnoseResult(answer string, t diagnoseTarget) (*diagnoseResult, error) {
 	fail := func(reason string) error {
 		return &clierr.Error{
@@ -319,10 +321,12 @@ func newDiagnoseResult(answer string, t diagnoseTarget) (*diagnoseResult, error)
 	}
 	blocks := resultBlockRE.FindAllStringSubmatchIndex(answer, -1)
 	var last []int
+	var block []byte
 	for i := len(blocks) - 1; i >= 0 && last == nil; i-- {
 		var keys map[string]json.RawMessage
-		if json.Unmarshal([]byte(answer[blocks[i][2]:blocks[i][3]]), &keys) == nil && keys["what_happened"] != nil {
-			last = blocks[i]
+		relaxed := relaxJSON(answer[blocks[i][2]:blocks[i][3]])
+		if json.Unmarshal(relaxed, &keys) == nil && keys["what_happened"] != nil {
+			last, block = blocks[i], relaxed
 		}
 	}
 	if last == nil {
@@ -335,24 +339,25 @@ func newDiagnoseResult(answer string, t diagnoseTarget) (*diagnoseResult, error)
 			At    *string `json:"at"`
 			Event string  `json:"event"`
 		} `json:"timeline"`
-		NextSteps  []string `json:"next_steps"`
-		Confidence string   `json:"confidence"`
+		NextSteps  []string        `json:"next_steps"`
+		Confidence json.RawMessage `json:"confidence"`
 	}
-	if err := json.Unmarshal([]byte(answer[last[2]:last[3]]), &b); err != nil {
+	if err := json.Unmarshal(block, &b); err != nil {
 		return nil, fail("has a result block that cannot be read: " + err.Error())
 	}
+	confidence, ok := confidenceLevel(b.Confidence)
 	res := &diagnoseResult{
 		WhatHappened: strings.TrimSpace(b.WhatHappened),
 		LikelyCause:  strings.TrimSpace(b.LikelyCause),
-		Confidence:   confidenceLevel(b.Confidence),
+		Confidence:   confidence,
 		NextSteps:    []string{},
 		Answer:       strings.TrimSpace(answer[:last[0]] + answer[last[1]:]),
 	}
 	switch {
 	case res.WhatHappened == "":
 		return nil, fail("has a result block without what_happened")
-	case res.Confidence == "":
-		return nil, fail(fmt.Sprintf("has a result block with confidence %q, not high, medium or low", b.Confidence))
+	case !ok:
+		return nil, fail(fmt.Sprintf("has a result block with confidence %s, not high, medium or low", b.Confidence))
 	}
 	for _, step := range b.NextSteps {
 		if step = strings.TrimSpace(step); step != "" {
@@ -390,16 +395,104 @@ func newDiagnoseResult(answer string, t diagnoseTarget) (*diagnoseResult, error)
 	return res, nil
 }
 
-// confidenceLevel reads the assistant's confidence by how it starts, so
-// "High (90%)" is high. "" when it starts with none of high, medium or low.
-func confidenceLevel(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	for _, level := range []string{"high", "medium", "low"} {
-		if strings.HasPrefix(s, level) {
-			return level
+// confidenceLevel reads the assistant's confidence. A word counts by how it
+// starts, past a "very ", so "High (90%)" and "very high" are high, and
+// moderate is medium. A number, or a string holding one, is a fraction, or
+// above 1 a percent; "85%" is a percent. 0.75 and up is high, 0.4 and up
+// medium, below that low. Null or missing is nil; ok is false otherwise.
+func confidenceLevel(raw json.RawMessage) (level *string, ok bool) {
+	var v any
+	if json.Unmarshal(raw, &v) != nil || v == nil { // missing, or null
+		return nil, true
+	}
+	pick := func(l string) (*string, bool) { return &l, true }
+	byFraction := func(f float64) (*string, bool) {
+		switch {
+		case f >= 0.75:
+			return pick("high")
+		case f >= 0.4:
+			return pick("medium")
+		}
+		return pick("low")
+	}
+	byNumber := func(n float64) (*string, bool) {
+		if n > 1 {
+			n /= 100
+		}
+		return byFraction(n)
+	}
+	switch v := v.(type) {
+	case float64:
+		return byNumber(v)
+	case string:
+		s := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(v)), "very ")
+		if pct, found := strings.CutSuffix(s, "%"); found {
+			if f, err := strconv.ParseFloat(strings.TrimSpace(pct), 64); err == nil {
+				return byFraction(f / 100)
+			}
+		}
+		if n, err := strconv.ParseFloat(s, 64); err == nil {
+			return byNumber(n)
+		}
+		if strings.HasPrefix(s, "moderate") {
+			s = "medium"
+		}
+		for _, level := range []string{"high", "medium", "low"} {
+			if strings.HasPrefix(s, level) {
+				return pick(level)
+			}
 		}
 	}
-	return ""
+	return nil, false
+}
+
+// relaxJSON drops what encoding/json refuses in a model's JSON: // and /* */
+// comments, and a comma before a closing bracket. Strings, and so the URLs in
+// them, are copied as they are.
+func relaxJSON(s string) []byte {
+	out := make([]byte, 0, len(s))
+	comma := false // held back until the next token shows it is not trailing
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; {
+		case strings.HasPrefix(s[i:], "//"):
+			for i+1 < len(s) && s[i+1] != '\n' { // up to the newline, which is kept
+				i++
+			}
+			out = append(out, ' ')
+		case strings.HasPrefix(s[i:], "/*"):
+			j := strings.Index(s[i+2:], "*/")
+			if j < 0 {
+				j = len(s) // never closed: runs to the end
+			}
+			i += j + 3
+			out = append(out, ' ')
+		case c == ' ' || c == '\t' || c == '\n' || c == '\r':
+			out = append(out, c)
+		case c == ',' && !comma:
+			comma = true
+		default:
+			if comma && c != '}' && c != ']' {
+				out = append(out, ',')
+			}
+			comma = false
+			if c != '"' {
+				out = append(out, c)
+				continue
+			}
+			j := i + 1 // to the string's closing quote, past any escaped one
+			for ; j < len(s) && s[j] != '"'; j++ {
+				if s[j] == '\\' {
+					j++
+				}
+			}
+			out = append(out, s[i:min(j+1, len(s))]...)
+			i = j
+		}
+	}
+	if comma {
+		out = append(out, ',')
+	}
+	return out
 }
 
 // callRecord is what -o json takes from the call's own record. Voice and SIP
