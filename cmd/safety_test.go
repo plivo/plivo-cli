@@ -488,3 +488,22 @@ func TestNew_clientPicksAuthMode(t *testing.T) {
 		t.Error("DESTRUCTIVE_REFUSED code constant unexpectedly empty")
 	}
 }
+
+// --cascade=false must reach the API, whose default deletes the app's endpoints.
+func TestAppDelete_sendsCascadeWhenGiven(t *testing.T) {
+	setFakeCreds(t)
+	del := []string{"account", "applications", "delete", "31000000000000001", "--yes", "--dry-run"}
+	for args, query := range map[string]string{"": "", "--cascade=false": "?cascade=false",
+		"--cascade=false --new-endpoint-application 31000000000000002": "?cascade=false&new_endpoint_application=31000000000000002"} {
+		if err, _, stderr := execCmd(t, append(del, strings.Fields(args)...)...); err != nil || !strings.HasSuffix(stderr, "/Application/31000000000000001/"+query+"\n") {
+			t.Errorf("%q: %v, %q; want query %q", args, err, stderr, query)
+		}
+	}
+	err, _, _ := execCmd(t, append(del, "--new-endpoint-application", "31000000000000002")...)
+	if e, ok := err.(*clierr.Error); !ok || e.Code != clierr.CodeBadFlag {
+		t.Errorf("--new-endpoint-application without --cascade=false: %v, want BAD_FLAG", err)
+	}
+	if err, _, _ := execCmd(t, "account", "applications", "delete", "31000000000000001"); err == nil || !strings.Contains(err.Error(), "and its endpoints") {
+		t.Errorf("the refusal should say the endpoints go too: %v", err)
+	}
+}

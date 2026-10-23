@@ -361,6 +361,12 @@ Flags:
 
 Delete an application (requires --yes)
 
+Delete an application (requires --yes).
+
+Plivo deletes the app's endpoints with it. --cascade=false keeps them,
+detached from any app, or attached to the app --new-endpoint-application
+names.
+
 ```
 plivo account applications delete <app_id> [flags]
 ```
@@ -368,7 +374,8 @@ plivo account applications delete <app_id> [flags]
 Flags:
 
 ```
-      --cascade   also detach numbers/endpoints
+      --cascade                           delete the app's endpoints too; --cascade=false keeps them (default true)
+      --new-endpoint-application string   with --cascade=false, the app_id the endpoints move to
 ```
 
 ---

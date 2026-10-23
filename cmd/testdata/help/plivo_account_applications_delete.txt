@@ -1,11 +1,16 @@
-Delete an application (requires --yes)
+Delete an application (requires --yes).
+
+Plivo deletes the app's endpoints with it. --cascade=false keeps them,
+detached from any app, or attached to the app --new-endpoint-application
+names.
 
 Usage:
   plivo account applications delete <app_id> [flags]
 
 Flags:
-      --cascade   also detach numbers/endpoints
-  -h, --help      help for delete
+      --cascade                           delete the app's endpoints too; --cascade=false keeps them (default true)
+  -h, --help                              help for delete
+      --new-endpoint-application string   with --cascade=false, the app_id the endpoints move to
 
 Global Flags:
       --dry-run            print the HTTP request without sending
