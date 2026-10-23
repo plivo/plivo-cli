@@ -933,6 +933,25 @@ func TestSkillUpdate_aLinkedCopyIsOneRow(t *testing.T) {
 	}
 }
 
+// In a repository, a copy reached through a link that leads out of it is
+// refused, even with --force: a clone brings its links along.
+func TestSkillUpdate_refusesALinkOutOfTheRepo(t *testing.T) {
+	root, _ := fakeRepo(t, false)
+	target := writeSkillIn(t, t.TempDir(), "plivo-cli", "not a skill\n")
+	link := filepath.Join(root, ".claude", "skills", "plivo-cli")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Dir(target), link); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+	err, _, _ := execCmd(t, "skill", "update", "--force")
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeBadInput || !fileIs(t, target, "not a skill\n") {
+		t.Errorf("err = %v; want BAD_INPUT and the file the link leads to untouched", err)
+	}
+}
+
 // update refreshes what is installed; it never installs.
 func TestSkillUpdate_installsNothing(t *testing.T) {
 	home := skillUpdateHome(t)

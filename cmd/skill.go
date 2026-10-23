@@ -473,14 +473,14 @@ func installSkill(s bundledSkill, root string) (kept string, err error) {
 	return "", nil
 }
 
-// projectLinkErr refuses a project install that would write through a link: a
-// skills folder that resolves outside the repository, or a skill folder or
-// SKILL.md that is a link. A clone brings its links along, so one could aim
-// the install at any file the user can write. Home installs follow links, as
-// npx skills makes them there.
+// projectLinkErr refuses to write a skill in a repository through a link: a
+// skills folder or copy that resolves outside the repository, or, for an
+// install, a skill folder or SKILL.md that is a link. A clone brings its links
+// along, so one could aim the write at any file the user can write. Home
+// copies follow links, as npx skills makes them there.
 func projectLinkErr(why string) error {
-	e := clierr.BadInput(why + ", so --project won't install through it")
-	e.Hint = "A link in a repository can point anywhere. Replace it with a folder, or install for yourself without --project."
+	e := clierr.BadInput(why + ", so plivo won't write a skill through it")
+	e.Hint = "A link in a repository can point anywhere. Replace it with a folder, or keep the skill in your home directory."
 	return e
 }
 
@@ -526,14 +526,19 @@ func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 	if home != "" {
 		bases = append(bases, home)
 	}
+	repo := ""
 	if wd, err := os.Getwd(); err == nil {
-		if repo, ok := findGitRoot(wd); ok && !slices.Contains(bases, repo) {
+		if r, ok := findGitRoot(wd); ok && !slices.Contains(bases, r) {
+			repo = r
 			bases = append(bases, repo)
 		}
 	}
+	inRepo := map[string]bool{}
 	for _, base := range bases {
 		for _, agent := range slices.Sorted(maps.Keys(agentSkillsDirs)) {
-			roots = append(roots, filepath.Join(base, agentSkillsDirs[agent]))
+			root := filepath.Join(base, agentSkillsDirs[agent])
+			roots = append(roots, root)
+			inRepo[root] = base == repo
 		}
 	}
 
@@ -554,6 +559,9 @@ func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 					continue
 				}
 				seen[resolved] = true
+			}
+			if inRepo[root] && !resolvesInside(repo, path) {
+				return projectLinkErr(path + " resolves outside the repository " + repo)
 			}
 			row := skillUpdateRow{Selector: s.selector, Path: path, OldLines: lineCount(b), NewLines: lineCount([]byte(s.content))}
 			have := skillDigest(b)
