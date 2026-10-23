@@ -1,13 +1,16 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -422,5 +425,29 @@ func TestRetryAfter_httpDate(t *testing.T) {
 	}
 	if got := retryAfter(now.Add(-time.Minute).Format(http.TimeFormat), now); got != 0 {
 		t.Errorf("past date: got %v, want 0", got)
+	}
+}
+
+// A redirect is never followed: it took the credentials to another port of the
+// same host, and a 307's body anywhere. Do and StreamSSE report it instead.
+func TestRedirect_isNotFollowed(t *testing.T) {
+	var landed atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { landed.Add(1) }))
+	defer target.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/landed", http.StatusTemporaryRedirect)
+	}))
+	defer srv.Close()
+	c := New("MA1", "tok", time.Second)
+	apiErr, err := c.Do("POST", srv.URL+"/x", map[string]string{"k": "v"}, nil, nil)
+	if err != nil || apiErr == nil || apiErr.StatusCode != 307 || apiErr.Code != clierr.CodeUpstreamError || apiErr.Message == "" {
+		t.Errorf("Do: got %v / %v, want an UPSTREAM_ERROR naming the 307", apiErr, err)
+	}
+	var httpErr *SSEHTTPError
+	if err := c.StreamSSE(context.Background(), "POST", srv.URL+"/x", nil, func(SSEEvent) bool { return true }); !errors.As(err, &httpErr) || httpErr.StatusCode != 307 {
+		t.Errorf("StreamSSE: got %v, want the 307", err)
+	}
+	if n := landed.Load(); n != 0 {
+		t.Errorf("followed the redirect %d times", n)
 	}
 }

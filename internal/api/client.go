@@ -181,9 +181,14 @@ func New(authID, authToken string, timeout time.Duration) *Client {
 		AuthID:           authID,
 		AuthToken:        authToken,
 		TelemetryEnabled: true,
-		HTTP:             &http.Client{Timeout: timeout},
+		HTTP:             &http.Client{Timeout: timeout, CheckRedirect: noRedirect},
 	}
 }
+
+// noRedirect stops at a 3xx and returns it, which Do reports as an error.
+// Following one re-sent the Authorization header to another port of the same
+// host, and a 307's body to any host.
+func noRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 // AccountURL returns BaseURL + "/v1/Account/{auth_id}/" + parts + "/", each
 // part path-escaped, so an ID holding '/', '?', '#' or a newline stays one
@@ -233,7 +238,7 @@ func (c *Client) BuddyURL(path string) string {
 // If body is non-nil it is marshalled to JSON.
 // queryParams (if non-nil and non-empty) are appended to the URL.
 // On success (2xx), response is unmarshalled into out (if non-nil).
-// On API error (>=400), returns an *APIError with no Go error.
+// On API error (>=400) or a redirect, returns an *APIError with no Go error.
 // On transport errors (no answer, or a cut-off one), returns a nil *APIError
 // and, as the Go error, a NETWORK_ERROR or UPSTREAM_TIMEOUT *clierr.Error.
 func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, out any) (*APIError, error) {
@@ -314,7 +319,7 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 		return nil, transportError(method, req.URL.Host, fmt.Errorf("read response: %w", err))
 	}
 
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= 300 { // a redirect too, as none is followed
 		return parseError(resp.StatusCode, resp.Header, respBytes), nil
 	}
 	if method != http.MethodGet {
@@ -418,7 +423,7 @@ func (c *Client) DoMultipart(method, fullURL string, dataJSON []byte, files map[
 	if err != nil {
 		return nil, transportError(method, req.URL.Host, fmt.Errorf("read response: %w", err))
 	}
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= 300 { // a redirect too, as none is followed
 		return parseError(resp.StatusCode, resp.Header, respBytes), nil
 	}
 	if method != http.MethodGet {

@@ -432,7 +432,7 @@ func renderAPIResponse(resp *http.Response, body []byte) error {
 	isJSON := strings.Contains(strings.ToLower(contentType), "application/json")
 	format := effectiveFormat()
 
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= 300 { // a redirect too, as none is followed
 		return apiErrorFromUpstream(resp.StatusCode, resp.Header.Get("X-Request-ID"), body, isJSON)
 	}
 

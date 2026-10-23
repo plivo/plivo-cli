@@ -476,6 +476,19 @@ func TestAPICmd_5xxEmitsRetryableEnvelope(t *testing.T) {
 	}
 }
 
+// The client follows no redirect, so a 3xx is the answer, and an error.
+func TestAPICmd_redirectIsAnError(t *testing.T) {
+	setFakeCreds(t)
+	srv, hits := startAPIServer(t, http.StatusTemporaryRedirect, "", "")
+	apiClientForTest = api.New("MAFAKEFORTEST", "fake-token", 0)
+	apiClientForTest.BaseURL = srv.URL
+	t.Cleanup(func() { apiClientForTest = nil })
+	err, _, _ := execCmd(t, "api", "GET", "/Account/")
+	if e, ok := err.(*clierr.Error); !ok || e.StatusCode != http.StatusTemporaryRedirect || len(hits()) != 1 {
+		t.Errorf("got %v after %d requests, want the 307 as an error after 1", err, len(hits()))
+	}
+}
+
 func TestAPICmd_QueryParamsForwarded(t *testing.T) {
 	setFakeCreds(t)
 	srv, hits := startAPIServer(t, 200, "application/json", `{}`)
