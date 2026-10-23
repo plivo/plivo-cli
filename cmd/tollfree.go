@@ -27,8 +27,13 @@ var (
 var tfvListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List toll-free verification requests",
-	Long: `List toll-free verification requests. The API returns only those created
-in the last 7 days; read an older one with tollfree get <uuid>.`,
+	Long: `List toll-free verification requests. Without a date filter the API returns
+only those created in the last 7 days. For a wider window give both ends, at
+most 2 years apart:
+
+  plivo api GET /TollfreeVerification/ --query created__gte=2026-01-01 --query created__lte=2026-06-30
+
+tollfree get <uuid> reads a request of any age.`,
 	Args: cobra.NoArgs,
 	RunE: runTfvList,
 }
