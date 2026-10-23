@@ -186,6 +186,7 @@ func init() {
 
 // secondsOrDuration is --timeout's value: a bare integer is seconds, the form
 // the flag always took, and anything else a Go duration such as 90s or 2m.
+// Zero or less is refused: the request client read it as its 30s default.
 type secondsOrDuration struct{ *time.Duration }
 
 func (d secondsOrDuration) Set(s string) error {
@@ -195,6 +196,9 @@ func (d secondsOrDuration) Set(s string) error {
 	v, err := time.ParseDuration(s)
 	if err != nil {
 		return errors.New("want seconds, such as 30, or a duration, such as 90s or 2m")
+	}
+	if v <= 0 {
+		return errors.New("must be more than 0")
 	}
 	*d.Duration = v
 	return nil

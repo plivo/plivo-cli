@@ -361,6 +361,12 @@ func TestSIPTest_timeoutTakesSecondsOrADuration(t *testing.T) {
 	if err, _, _ := execCmd(t, "sip", "test", "--uri", "sip.example.com", "--timeout", "9999999999999", "--dry-run"); err == nil {
 		t.Error("--timeout 9999999999999 overflows a duration and must be refused")
 	}
+	// Zero or less went to the request client, which read it as 30s.
+	for _, v := range []string{"0", "0s", "-5", "-1m"} {
+		if err := (secondsOrDuration{new(time.Duration)}).Set(v); err == nil {
+			t.Errorf("--timeout %s was accepted", v)
+		}
+	}
 }
 
 // A host with no port and a SIP SRV record gets a warning naming the target,
@@ -400,7 +406,7 @@ func TestSIPTest_badInputIsRefusedBeforeAnyNetwork(t *testing.T) {
 		{"uri", []string{"sip", "test"}},
 		{"uri", []string{"sip", "test", "--uri", "sip.example.com:0"}},
 		{"uri", []string{"sip", "test", "--uri", "sips:sip.example.com;transport=udp"}},
-		{"timeout", []string{"sip", "test", "--uri", "sip.example.com", "--timeout", "0"}},
+		{"timeout", []string{"sip", "test", "--uri", "sip.example.com", "--timeout", "500ms"}},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			setEmptyHome(t)
