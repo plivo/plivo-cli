@@ -80,7 +80,11 @@ func docsFetcher() *docs.Fetcher {
 	if docsFetcherForTest != nil {
 		return docsFetcherForTest
 	}
-	return docs.New()
+	f := docs.New()
+	if quietFlag {
+		f.Warn = nil
+	}
+	return f
 }
 
 func runDocsSearch(cmd *cobra.Command, args []string) error {
