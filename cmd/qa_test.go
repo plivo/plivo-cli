@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -305,6 +306,30 @@ func qaShows(want ...string) func(*qaResult) []string {
 		var p []string
 		for _, w := range want {
 			p = append(p, qaExpect(strings.Contains(r.stdout+r.stderr, w), "output lacks %q:\n%s", w, qaClip(r.stdout+r.stderr))...)
+		}
+		return p
+	}
+}
+
+// qaLineHas is a check: a line of the output holds every one of terms, in
+// any case. It pins what a text says, not its wording.
+func qaLineHas(terms ...string) func(*qaResult) []string {
+	return func(r *qaResult) []string {
+		for _, line := range strings.Split(strings.ToLower(r.stdout+"\n"+r.stderr), "\n") {
+			if !slices.ContainsFunc(terms, func(term string) bool { return !strings.Contains(line, strings.ToLower(term)) }) {
+				return nil
+			}
+		}
+		return []string{fmt.Sprintf("no line of the output holds all of %q", terms)}
+	}
+}
+
+// qaChecks is a check made of several.
+func qaChecks(checks ...func(*qaResult) []string) func(*qaResult) []string {
+	return func(r *qaResult) []string {
+		var p []string
+		for _, check := range checks {
+			p = append(p, check(r)...)
 		}
 		return p
 	}

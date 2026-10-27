@@ -66,7 +66,7 @@ func r3Cases() []qaCase {
 			id: "r3/L6", title: "endpoints create took --alias as optional; the API requires it",
 			args:   qaArgs("voice endpoints create --username qauser01 --password QaPass1!"),
 			exit:   ExitUserError,
-			stderr: []string{"alias"},
+			stderr: []string{`required flag(s) \"alias\" not set`},
 		},
 		{
 			id: "r3/L7", title: "numbers search dropped the reason a 200 body gave in error, so it read as no numbers",

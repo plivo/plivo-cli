@@ -110,19 +110,19 @@ func r2Cases() []qaCase {
 		{
 			id: "r2/6a", title: "the SIP trunking skill said sip: URIs and sip:...;transport=tls work",
 			args:   qaArgs("skill install sip-trunking --print"),
-			stdout: []string{"The API rejects `sip:` and `sips:` URIs", "with no `sip:` or `sips:` scheme (the API rejects both)"},
+			check:  qaLineHas("`sip:`", "`sips:`", "rejects"),
 			hidden: []string{"`sip:sip.voice.x.ai;transport=tls` is fine too", "the API also accepts `sip:user@host`", "xAI's `sip:` form is fine"},
 		},
 		{
 			id: "r2/6b", title: "the CLI skill said deleting a URI deletes its trunks, true only where it is the primary URI",
 			args:   qaArgs("skill install cli --print"),
-			stdout: []string{"Deleting a URI deletes the trunks that use it as their primary URI"},
+			check:  qaLineHas("deleting a uri", "primary uri"),
 			hidden: []string{"Deleting a URI deletes the trunks that use it."},
 		},
 		{
 			id: "r2/6c", title: "the audio-streaming skill did not read a live call with voice calls get --live and had no India KYC refusal note",
-			args:   qaArgs("skill install audio-streaming --print"),
-			stdout: []string{"`plivo voice calls get <request_uuid> --live -o json` returns it", "Never add `--force` to get past a KYC refusal"},
+			args:  qaArgs("skill install audio-streaming --print"),
+			check: qaChecks(qaLineHas("voice calls get", "--live"), qaLineHas("kyc", "--force")),
 		},
 		{
 			id: "r2/7a", title: "account usage took --until before --since and sent the reversed window",

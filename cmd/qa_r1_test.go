@@ -155,13 +155,8 @@ func r1Cases() []qaCase {
 			args:  qaArgs("sip credentials create --schema -o json"),
 			check: r1Required("username", "password-stdin"),
 		},
-		{
-			id: "r1/H17", title: "upgrade told a binary install.sh put in /opt/homebrew/bin to run brew upgrade",
-			// The test binary cannot sit in /opt/homebrew, so the decision is checked on the two paths.
-			args:   qaArgs("upgrade --help"),
-			stdout: []string{"plivo upgrade"},
-			check:  r1BrewOnlyInCellar,
-		},
+		// r1/H17, upgrade sending install.sh's binary in /opt/homebrew/bin to
+		// brew, is TestHomebrewInstallHint's install.sh-in-brew-bin row.
 		{
 			id: "r1/M-a", title: `uris create without --name sent "name": "", which the API refuses`,
 			args:   qaArgs("sip uris create --uri sip.example.com -o json"),
@@ -521,13 +516,6 @@ func r1Required(flags ...string) func(*qaResult) []string {
 		}
 		return p
 	}
-}
-
-// r1BrewOnlyInCellar is a check: a binary is Homebrew's only when its path
-// resolves into a Cellar.
-func r1BrewOnlyInCellar(*qaResult) []string {
-	return append(qaExpect(homebrewInstallHint("/opt/homebrew/bin/plivo") == "", "a plain binary in /opt/homebrew/bin is sent to brew"),
-		qaExpect(homebrewInstallHint("/opt/homebrew/Cellar/plivo/1.2.0/bin/plivo") != "", "a binary in a Cellar is no longer sent to brew")...)
 }
 
 // r1JSONLinesDocumented is a check: every stdout line is a JSON object, and
