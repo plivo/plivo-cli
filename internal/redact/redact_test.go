@@ -73,9 +73,9 @@ func TestBodyRedactsEncodedKeys(t *testing.T) {
 // credential values; an ID, an empty or null value and a server's mask stay.
 func TestSecrets(t *testing.T) {
 	in := `{"z":1,"auth_token":"tok1", "objects":[{"New_Auth_Token":"tok2","credential_uuid":"c1"},{"password":"5f4dcc3b"}],` +
-		`"a":{"password":"***REDACTED***","sip_password":"","auth_token":null,"api_key":"k1"}}`
+		`"a":{"password":"MY_REDACTED_PW","sip_password":"","auth_token":null,"api_key":"k1","password_hint":"pet","old_password": [ "p" ] ,"pin_password":1234,"new_auth_token":{"v":"t"}}}`
 	want := `{"z":1,"auth_token":"[REDACTED]", "objects":[{"New_Auth_Token":"[REDACTED]","credential_uuid":"c1"},{"password":"[REDACTED]"}],` +
-		`"a":{"password":"***REDACTED***","sip_password":"","auth_token":null,"api_key":"k1"}}`
+		`"a":{"password":"[REDACTED]","sip_password":"","auth_token":null,"api_key":"k1","password_hint":"pet","old_password": "[REDACTED]" ,"pin_password":"[REDACTED]","new_auth_token":"[REDACTED]"}}`
 	if got := string(Secrets([]byte(in))); got != want {
 		t.Errorf("got  %s\nwant %s", got, want)
 	}

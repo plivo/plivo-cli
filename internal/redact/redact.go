@@ -112,10 +112,9 @@ func String(s string) string { return string(Body([]byte(s))) }
 // new_auth_token, and endpoint reads a password hash.
 //
 // Narrower than Body on purpose: responses name IDs after credentials
-// (credential_uuid), and agent flows come back with secrets masked by the
-// server, which restores its own mask on a write, so a value already masked,
-// and any value that is not a non-empty string, is left alone. A body that
-// is not JSON comes back unchanged.
+// (credential_uuid). A null or empty value hides nothing and is left alone;
+// any other, an object or a number too, is replaced whole. A body that is not
+// JSON comes back unchanged.
 func Secrets(body []byte) []byte {
 	dec := json.NewDecoder(bytes.NewReader(body))
 	var out []byte
@@ -149,8 +148,7 @@ func Secrets(body []byte) []byte {
 				if dec.Decode(&v) != nil {
 					return body
 				}
-				var s string
-				if json.Unmarshal(v, &s) == nil && s != "" && !strings.Contains(s, "REDACTED") {
+				if s := string(v); s != "null" && s != `""` && s != `"`+Placeholder+`"` {
 					end := int(dec.InputOffset())
 					out = append(append(out, body[done:end-len(v)]...), `"`+Placeholder+`"`...)
 					done = end
