@@ -249,11 +249,13 @@ func runSkillInstall(cmd *cobra.Command, args []string) error {
 // into the agent's skills directory under --agent. A copy that was kept fails
 // the command once the rest are installed.
 func installSkills(skills []bundledSkill) error {
-	var root string
+	var root, repo string
 	var err error
 	switch {
 	case skillProject:
-		root, err = projectSkillsRoot()
+		if root, repo, err = projectSkillsRoot(); err == nil {
+			err = projectWritesInside(repo, root, skills)
+		}
 	case skillAgent != "":
 		root, err = agentSkillsRoot(skillAgent)
 	}
@@ -301,19 +303,19 @@ func installSkillsIn(skills []bundledSkill, root string) error {
 }
 
 // projectSkillsRoot returns <repo>/.claude/skills for the git repository the
-// working directory is in.
-func projectSkillsRoot() (string, error) {
+// working directory is in, and the repository's root.
+func projectSkillsRoot() (skills, repo string, err error) {
 	wd, err := os.Getwd()
 	if err != nil {
-		return "", clierr.Wrap(fmt.Errorf("resolve working directory: %w", err))
+		return "", "", clierr.Wrap(fmt.Errorf("resolve working directory: %w", err))
 	}
-	root, ok := findGitRoot(wd)
+	repo, ok := findGitRoot(wd)
 	if !ok {
 		e := clierr.BadInput(wd + " is not inside a git repository, so --project has no repository to use")
 		e.Hint = "Run it from inside the project, or drop --project for your user's skills (~/.claude/skills)."
-		return "", e
+		return "", "", e
 	}
-	return filepath.Join(root, ".claude", "skills"), nil
+	return filepath.Join(repo, ".claude", "skills"), repo, nil
 }
 
 // findGitRoot walks up from dir to the nearest folder holding .git: a
@@ -361,7 +363,7 @@ func runSkillList(cmd *cobra.Command, _ []string) error {
 	root, rootErr := resolveSkillDir("", "") // ~/.claude/skills
 	switch {
 	case skillProject:
-		if root, rootErr = projectSkillsRoot(); rootErr != nil {
+		if root, _, rootErr = projectSkillsRoot(); rootErr != nil {
 			return rootErr
 		}
 	case skillAgent != "":
@@ -464,9 +466,61 @@ func installSkill(s bundledSkill, root string) (kept string, err error) {
 	return "", nil
 }
 
+// projectWritesInside refuses a project install that would write outside the
+// repository: through a skills folder, skill folder or SKILL.md whose links
+// lead out of it, or a link that leads nowhere. Links within it, as npx skills
+// makes them, are followed.
+func projectWritesInside(repo, root string, skills []bundledSkill) error {
+	paths := []string{root}
+	for _, s := range skills {
+		dir := filepath.Join(root, s.dirName)
+		paths = append(paths, dir, filepath.Join(dir, skillFileName))
+	}
+	for _, p := range paths {
+		if !resolvesInside(repo, p) {
+			return projectLinkErr(p + " resolves outside the repository " + repo)
+		}
+	}
+	return nil
+}
+
+// projectLinkErr refuses to write a skill in a repository through a link that
+// leads out of it. A clone brings its links along, so one could aim the write
+// at any file the user can write. Home copies follow links, as npx skills
+// makes them there.
+func projectLinkErr(why string) error {
+	e := clierr.BadInput(why + ", so plivo won't write a skill through it")
+	e.Hint = "A link in a repository can point anywhere. Replace it with a folder, or keep the skill in your home directory."
+	return e
+}
+
+// resolvesInside reports whether path, with its links resolved, lies inside
+// repo. The nearest part of path that exists decides where the rest is made,
+// and a link that leads nowhere lies nowhere.
+func resolvesInside(repo, path string) bool {
+	near := path
+	for {
+		if _, err := os.Lstat(near); err == nil || filepath.Dir(near) == near {
+			break
+		}
+		near = filepath.Dir(near)
+	}
+	realRepo, err := filepath.EvalSymlinks(repo)
+	if err != nil {
+		return false
+	}
+	realNear, err := filepath.EvalSymlinks(near)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(realRepo, realNear)
+	return err == nil && filepath.IsLocal(rel)
+}
+
 // skillUpdateRow is one installed copy `skill update` looked at, and the JSON
-// shape. Result is updated, would_update (--dry-run), up_to_date, kept or
-// retired; a retired row's Hint is the command that removes it.
+// shape. Result is updated, would_update (--dry-run), up_to_date, kept, refused
+// or retired; a retired row's Hint is the command that removes it, a refused
+// one's why it was not written.
 type skillUpdateRow struct {
 	Selector string `json:"selector"`
 	Path     string `json:"path"`
@@ -484,14 +538,19 @@ func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 	if home != "" {
 		bases = append(bases, home)
 	}
+	repo := ""
 	if wd, err := os.Getwd(); err == nil {
-		if repo, ok := findGitRoot(wd); ok && !slices.Contains(bases, repo) {
+		if r, ok := findGitRoot(wd); ok && !slices.Contains(bases, r) {
+			repo = r
 			bases = append(bases, repo)
 		}
 	}
+	inRepo := map[string]bool{}
 	for _, base := range bases {
 		for _, agent := range slices.Sorted(maps.Keys(agentSkillsDirs)) {
-			roots = append(roots, filepath.Join(base, agentSkillsDirs[agent]))
+			root := filepath.Join(base, agentSkillsDirs[agent])
+			roots = append(roots, root)
+			inRepo[root] = base == repo
 		}
 	}
 
@@ -520,6 +579,9 @@ func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 				row.Result = "up_to_date"
 			case !skillForce && skillEdited(s, b):
 				row.Result = "kept"
+			case inRepo[root] && !resolvesInside(repo, path):
+				// A clone brings its links along: one could aim the write anywhere.
+				row.Result, row.Hint = "refused", "a link leads outside the repository"
 			case dryRunFlag:
 				row.Result = "would_update"
 			default:
@@ -557,6 +619,8 @@ func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 			result = fmt.Sprintf("would update, %d -> %d lines", r.OldLines, r.NewLines)
 		case "kept":
 			result, kept = "kept: local edits", true
+		case "refused":
+			result = "refused: " + r.Hint
 		case "retired":
 			result = "retired: run " + r.Hint
 		}

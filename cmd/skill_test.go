@@ -652,6 +652,50 @@ func TestSkillInstall_projectDryRunWritesNothing(t *testing.T) {
 	}
 }
 
+// A clone brings its links along: --project refuses a linked skill folder or
+// SKILL.md, even a dangling one, and a .claude that leads out of the
+// repository, so nothing is written outside it.
+func TestSkillInstall_projectRefusesToWriteThroughALink(t *testing.T) {
+	for _, link := range []string{".claude", ".claude/skills/plivo-cli", ".claude/skills/plivo-cli/SKILL.md"} {
+		root, _ := fakeRepo(t, false)
+		outside := t.TempDir()
+		target, p := outside, filepath.Join(root, filepath.FromSlash(link))
+		if strings.HasSuffix(link, skillFileName) {
+			target = filepath.Join(outside, skillFileName) // dangling: the install would create it
+		}
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, p); err != nil {
+			t.Skipf("no symlinks here: %v", err)
+		}
+		err, _, _ := execCmd(t, "skill", "install", "--project")
+		var ce *clierr.Error
+		if entries, _ := os.ReadDir(outside); !errors.As(err, &ce) || ce.Code != clierr.CodeBadInput || len(entries) > 0 {
+			t.Errorf("%s: err = %v, wrote %d entries outside; want BAD_INPUT and none", link, err, len(entries))
+		}
+	}
+}
+
+// npx skills links .claude/skills/<skill> to its copy in .agents/skills: a link
+// that stays in the repository is installed through.
+func TestSkillInstall_projectInstallsThroughALinkInTheRepo(t *testing.T) {
+	root, _ := fakeRepo(t, false)
+	copyDir := filepath.Join(root, ".agents", "skills", "plivo-cli")
+	link := filepath.Join(root, ".claude", "skills", "plivo-cli")
+	for _, d := range []string{copyDir, filepath.Dir(link)} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(filepath.Join("..", "..", ".agents", "skills", "plivo-cli"), link); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+	if err, _, _ := execCmd(t, "skill", "install", "--project"); err != nil || !fileIs(t, filepath.Join(copyDir, skillFileName), cliskill.SkillMD) {
+		t.Errorf("install through an in-repo link: %v", err)
+	}
+}
+
 // Git for Windows checks a committed skill out with CRLF line endings by
 // default. That copy is the same skill, not an edit to keep.
 func TestSkillInstall_projectReadsCRLFAsLF(t *testing.T) {
@@ -905,6 +949,31 @@ func TestSkillUpdate_aLinkedCopyIsOneRow(t *testing.T) {
 	}
 	if rows := skillUpdateRows(t); len(rows) != 1 || rows[0].Result != "updated" {
 		t.Errorf("rows = %+v, want one updated row", rows)
+	}
+}
+
+// In a repository, a copy reached through a link that leads out of it is
+// refused, even with --force, and the other copies are still updated: a clone
+// brings its links along.
+func TestSkillUpdate_refusesALinkOutOfTheRepo(t *testing.T) {
+	root, home := fakeRepo(t, false)
+	shipVersion(t, "plivo-cli", olderCLISkill)
+	homeCopy := writeSkillIn(t, filepath.Join(home, ".claude", "skills"), "plivo-cli", olderCLISkill)
+	target := writeSkillIn(t, t.TempDir(), "plivo-cli", "not a skill\n")
+	link := filepath.Join(root, ".claude", "skills", "plivo-cli")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Dir(target), link); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+	for _, args := range [][]string{{"--force", "--dry-run"}, {"--force"}} {
+		if rows := skillUpdateRows(t, args...); len(rows) != 2 || rows[1].Result != "refused" {
+			t.Errorf("%v: rows = %+v, want the copy through the link refused", args, rows)
+		}
+	}
+	if !fileIs(t, target, "not a skill\n") || !fileIs(t, homeCopy, cliskill.SkillMD) {
+		t.Error("want the file the link leads to untouched, and the home copy updated")
 	}
 }
 

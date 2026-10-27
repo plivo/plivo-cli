@@ -94,7 +94,7 @@ func runLoginBrowser(nameExplicit bool) error {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "If the browser didn't open, copy-paste that URL above.")
 	fmt.Fprintln(os.Stderr)
-	if err := openBrowser(authURL); err != nil {
+	if err := browserOpener(authURL); err != nil {
 		// Non-fatal — the URL is printed above so the user can paste it.
 		fmt.Fprintf(os.Stderr, "(could not auto-open the browser: %v)\n", err)
 	}
@@ -150,11 +150,7 @@ func redeemAndPersist(client *api.Client, state, code, verifier, requestedName s
 
 	// Shared persistence — same code path as the manual + email flows so
 	// storage layer changes don't drift between methods.
-	cfg, err := config.Load()
-	if err != nil {
-		return err
-	}
-	return persistProfile(cfg, requestedName, nameExplicit, loginBundle{
+	b := loginBundle{
 		AuthID:    resp.Data.PlivoAuthID,
 		AuthToken: resp.Data.PlivoAuthToken,
 		Email:     resp.Data.Email,
@@ -163,7 +159,17 @@ func redeemAndPersist(client *api.Client, state, code, verifier, requestedName s
 		Region:    resp.Data.Region,
 		OrgName:   resp.Data.OrgName,
 		OrgUUID:   resp.Data.OrgUUID,
-	})
+	}
+	var name string
+	var inKeychain bool
+	if err := config.Update(func(cfg *config.Config) (err error) {
+		name, inKeychain, err = persistProfile(cfg, requestedName, nameExplicit, b)
+		return err
+	}); err != nil {
+		return err
+	}
+	printProfileSaved(name, inKeychain, b)
+	return nil
 }
 
 // pkcePair generates a PKCE (RFC 7636) verifier + S256 challenge pair.

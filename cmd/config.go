@@ -53,6 +53,20 @@ func init() {
 	rootCmd.AddCommand(configCmd)
 }
 
+// updateConfig applies change to ~/.plivo/config.toml. Under --dry-run it
+// applies it to a copy it drops, so the same checks refuse and nothing is
+// saved; the caller then says what would have changed.
+func updateConfig(change func(*config.Config) error) error {
+	if !dryRunFlag {
+		return config.Update(change)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	return change(cfg)
+}
+
 func runConfigTelemetry(_ *cobra.Command, args []string) error {
 	switch args[0] {
 	case "status":
@@ -70,17 +84,19 @@ func runConfigTelemetry(_ *cobra.Command, args []string) error {
 // confirmation, including a heads-up when PLIVO_CLI_TELEMETRY=0 in this
 // shell would otherwise mask a `telemetry on`.
 func setTelemetryEnabled(on bool) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return err
-	}
-	cfg.Telemetry.Enabled = &on
-	if err := config.Save(cfg); err != nil {
+	if err := updateConfig(func(cfg *config.Config) error {
+		cfg.Telemetry.Enabled = &on
+		return nil
+	}); err != nil {
 		return err
 	}
 	state := "off"
 	if on {
 		state = "on"
+	}
+	if dryRunFlag {
+		fmt.Fprintf(os.Stderr, "[dry-run] Would turn telemetry %s\n", state)
+		return nil
 	}
 	fmt.Fprintf(os.Stderr, "Telemetry: %s\n", state)
 	if on && config.EnvOff(config.TelemetryEnvVar) {
@@ -177,16 +193,20 @@ func runConfigSet(_ *cobra.Command, args []string) error {
 	if !ok {
 		return clierr.BadInput(fmt.Sprintf("unknown config key %q (supported: %s)", key, supportedConfigKeys()))
 	}
-	cfg, err := config.Load()
-	if err != nil {
+	var now string
+	if err := updateConfig(func(cfg *config.Config) error {
+		if err := entry.set(cfg, value); err != nil {
+			return err
+		}
+		now = entry.get(cfg)
+		return nil
+	}); err != nil {
 		return err
 	}
-	if err := entry.set(cfg, value); err != nil {
-		return err
+	if dryRunFlag {
+		fmt.Fprintf(os.Stderr, "[dry-run] Would set %s = %s\n", key, now)
+		return nil
 	}
-	if err := config.Save(cfg); err != nil {
-		return err
-	}
-	fmt.Fprintf(os.Stderr, "%s = %s\n", key, entry.get(cfg))
+	fmt.Fprintf(os.Stderr, "%s = %s\n", key, now)
 	return nil
 }

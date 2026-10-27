@@ -164,6 +164,8 @@ func init() {
 	registerSendFlags(messagingWhatsappSendCmd, &whatsappSendSrc, &whatsappSendDst, &whatsappSendText, &whatsappSendURL, &whatsappSendMethod)
 	registerSendFlags(messagingMmsSendCmd, &mmsSendSrc, &mmsSendDst, &mmsSendText, &mmsSendURL, &mmsSendMethod)
 	messagingMmsSendCmd.Flags().StringArrayVar(&mmsSendMediaURLs, "media-url", nil, "URL of a hosted image/media file to attach (repeatable, up to 10)")
+	// An MMS that carries media needs no text.
+	_ = messagingMmsSendCmd.Flags().SetAnnotation("text", emptyWith, []string{"media-url"})
 	registerExplainFlag(messagingSmsSendCmd)
 	registerExplainFlag(messagingWhatsappSendCmd)
 	registerExplainFlag(messagingMmsSendCmd)

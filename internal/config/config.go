@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/plivo/plivo-cli/internal/clierr"
@@ -203,6 +204,69 @@ func Save(c *Config) error {
 		return err
 	}
 	return os.Rename(tmpName, p)
+}
+
+// Update loads the config, lets change edit it and saves the result, holding
+// an exclusive lock on ~/.plivo/config.lock throughout. Two commands that each
+// loaded and saved it at once used to lose one change. A change that returns
+// an error saves nothing.
+func Update(change func(*Config) error) error {
+	p, err := Path()
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(p)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	lock, err := os.OpenFile(filepath.Join(dir, "config.lock"), os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	if err := lockWithin(lock, lockWait, tryLock); err != nil {
+		return err
+	}
+	defer func() { _ = unlockFile(lock) }()
+	c, err := Load()
+	if err != nil {
+		return err
+	}
+	if err := change(c); err != nil {
+		return err
+	}
+	return Save(c)
+}
+
+// lockWait is how long Update waits for another command to finish changing the
+// config before it gives up.
+var lockWait = 10 * time.Second
+
+// lockWithin takes the lock on f with try, trying again until wait has passed.
+// On a file system that takes no locks, such as NFS without its lock service,
+// it goes on unlocked, as on the platforms without locks.
+func lockWithin(f *os.File, wait time.Duration, try func(*os.File) (bool, error)) error {
+	for start := time.Now(); ; time.Sleep(50 * time.Millisecond) {
+		ok, err := try(f)
+		if noLocks(err) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("locking %s: %w", f.Name(), err)
+		}
+		if ok {
+			return nil
+		}
+		if time.Since(start) >= wait {
+			return &clierr.Error{
+				Code:      clierr.CodeResourceConflict,
+				Message:   fmt.Sprintf("another plivo command is updating the config, so this one gave up after %s", wait),
+				Hint:      "Run it again once the other command has finished.",
+				Retryable: true,
+				Context:   map[string]any{"lock": f.Name()},
+			}
+		}
+	}
 }
 
 // Resolve returns the credentials to use.

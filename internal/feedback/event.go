@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -166,6 +167,7 @@ func (e *Event) Submit(ctx context.Context, baseURL string, extraHeaders map[str
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("collector returned HTTP %d", resp.StatusCode)
 	}
+	saveMachineID(e.AnonMachineID)
 	return nil
 }
 
@@ -192,27 +194,40 @@ var ErrEndpointNotConfigured = fmt.Errorf("no feedback endpoint resolved (set PL
 // silent no-op by user choice. Caller swallows or surfaces as it sees fit.
 var ErrTelemetryDisabled = fmt.Errorf("feedback telemetry disabled via PLIVO_FEEDBACK_TELEMETRY=0")
 
-// machineID returns a per-machine UUID, persisted in ~/.plivo/machine-id
-// (so it survives reinstall in-place, gets regenerated on full wipe).
-// Falls through to a process-lifetime UUID if the file isn't writable.
+// machineID returns the per-machine UUID kept in ~/.plivo/machine-id (so it
+// survives reinstall in-place, gets regenerated on full wipe), or a new one,
+// which Submit keeps once feedback is sent: a --dry-run writes nothing.
 // PLIVO_FEEDBACK_MACHINE_ID overrides the lookup entirely (for tests).
 func machineID() string {
 	if forced := os.Getenv(MachineIDEnvVar); forced != "" {
 		return forced
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return uuid.NewString()
-	}
-	path := home + "/.plivo/machine-id"
-	if existing, err := os.ReadFile(path); err == nil {
+	if existing, err := os.ReadFile(machineIDPath()); err == nil {
 		if id := string(bytes.TrimSpace(existing)); id != "" {
 			return id
 		}
 	}
-	// File missing or empty — mint a new one.
-	id := uuid.NewString()
-	_ = os.MkdirAll(home+"/.plivo", 0o700)
+	return uuid.NewString()
+}
+
+// saveMachineID keeps id in ~/.plivo/machine-id unless an id is kept there
+// already. Best-effort: an unwritable home only means a new id next time.
+func saveMachineID(id string) {
+	path := machineIDPath()
+	if os.Getenv(MachineIDEnvVar) != "" || path == "" {
+		return
+	}
+	if kept, err := os.ReadFile(path); err == nil && len(bytes.TrimSpace(kept)) > 0 {
+		return
+	}
+	_ = os.MkdirAll(filepath.Dir(path), 0o700)
 	_ = os.WriteFile(path, []byte(id), 0o600)
-	return id
+}
+
+func machineIDPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".plivo", "machine-id")
 }

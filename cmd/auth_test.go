@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -73,5 +74,36 @@ func TestAuthList_showsOrgName_json(t *testing.T) {
 	}
 	if !env.Data[0].Active {
 		t.Error("active = false, want true for the active profile")
+	}
+}
+
+// --dry-run runs a local change's checks, says what it would do and changes
+// nothing: not the config, not the keychain.
+func TestLocalChanges_dryRunChangesNothing(t *testing.T) {
+	home := setEmptyHome(t)
+	writeProfile(t, home, "active = \"a\"\n\n[profiles.a]\nauth_id = \"CIFAKEA\"\n\n[profiles.b]\nauth_id = \"CIFAKEB\"\n")
+	if err := config.SetToken("a", "tok"); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := config.Load()
+	for _, args := range [][]string{
+		{"auth", "use", "b"}, {"auth", "remove", "a"}, {"logout"},
+		{"config", "set", "telemetry", "off"}, {"config", "telemetry", "off"},
+	} {
+		if err, _, stderr := execCmd(t, append(args, "--dry-run")...); err != nil || !strings.HasPrefix(stderr, "[dry-run] Would ") {
+			t.Errorf("%v --dry-run: %v, stderr %q", args, err, stderr)
+		}
+	}
+	after, _ := config.Load()
+	if tok, _ := config.GetToken("a"); !reflect.DeepEqual(after, before) || tok != "tok" {
+		t.Errorf("--dry-run changed the config (%+v) or the keychain (token %q)", after, tok)
+	}
+	if err, _, _ := execCmd(t, "auth", "use", "ghost", "--dry-run"); err == nil {
+		t.Error("auth use ghost --dry-run: want the unknown profile refused")
+	}
+	// Only a token in the keychain is named: b keeps none there.
+	_, _, withToken := execCmd(t, "logout", "a", "--dry-run")
+	if _, _, without := execCmd(t, "auth", "remove", "b", "--dry-run"); !strings.Contains(withToken, "keychain") || strings.Contains(without, "keychain") {
+		t.Errorf("dry runs say %q for a and %q for b; want the keychain named for a alone", withToken, without)
 	}
 }

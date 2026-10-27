@@ -15,7 +15,6 @@ import (
 	"github.com/plivo/plivo-cli/internal/release"
 	"github.com/plivo/plivo-cli/internal/version"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 // upgrade flags
@@ -24,6 +23,10 @@ var (
 	upgradeForce   bool
 	upgradeVersion string
 )
+
+// releaseAPIBase is where releases are looked up; "" is GitHub. Tests serve
+// their own.
+var releaseAPIBase string
 
 // upgradeCmd downloads the matching release binary for the host OS/arch and
 // atomically replaces the running binary. The download URL pattern follows
@@ -83,9 +86,9 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	// Resolve the target release. Empty --version means latest.
 	var rel *release.Release
 	if upgradeVersion != "" {
-		rel, err = release.FetchByTag(ctx, "", upgradeVersion)
+		rel, err = release.FetchByTag(ctx, releaseAPIBase, upgradeVersion)
 	} else {
-		rel, err = release.FetchLatest(ctx, "")
+		rel, err = release.FetchLatest(ctx, releaseAPIBase)
 	}
 	if err != nil {
 		// "No releases yet" is informational for both the default and
@@ -139,6 +142,14 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	asset, err := rel.AssetFor(runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		return err
+	}
+	if dryRunFlag {
+		fmt.Fprintf(os.Stderr, "[dry-run] Would upgrade plivo %s -> %s: download %s (%s) and replace %s\n",
+			current, target, asset.Name, humanSize(asset.Size), exePath)
+		if jsonOut {
+			return output.JSONSuccess(os.Stdout, upgradeResult{CurrentVersion: current, LatestVersion: target, SignatureVerified: "n/a"}, nil)
+		}
+		return nil
 	}
 
 	fmt.Fprintf(os.Stderr, "→ Downloading %s (%s, %s)…\n", asset.Name, humanSize(asset.Size), target)
@@ -411,7 +422,8 @@ func humanSize(b int64) string {
 // refreshes the cache synchronously (1.5s budget) when it's stale.
 //
 // Called from Execute() after a successful command. No-op when:
-//   - user invoked `plivo upgrade` (would be redundant)
+//   - user invoked `plivo upgrade` (would be redundant), or --dry-run (the
+//     check writes its cache)
 //   - stderr is not a TTY (so scripts/CI don't get noise on stderr)
 //   - PLIVO_NO_UPDATE_CHECK is set (CI escape hatch)
 //
@@ -419,13 +431,13 @@ func humanSize(b int64) string {
 // at most once a day per machine. Offline / GitHub-down errors are
 // swallowed — the nudge is a nice-to-have, not a feature.
 func maybePrintUpdateHint(invokedFirstWord string) {
-	if invokedFirstWord == "upgrade" {
+	if invokedFirstWord == "upgrade" || dryRunFlag {
 		return
 	}
 	if os.Getenv("PLIVO_NO_UPDATE_CHECK") != "" {
 		return
 	}
-	if !term.IsTerminal(int(os.Stderr.Fd())) {
+	if !isTerminal(int(os.Stderr.Fd())) {
 		return
 	}
 
@@ -433,7 +445,7 @@ func maybePrintUpdateHint(invokedFirstWord string) {
 	if !cache.IsFresh() {
 		ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 		defer cancel()
-		r, err := release.FetchLatest(ctx, "")
+		r, err := release.FetchLatest(ctx, releaseAPIBase)
 		if err != nil {
 			return // offline / API hiccup — stay quiet
 		}

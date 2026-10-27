@@ -1,11 +1,17 @@
 package config
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"syscall"
 	"testing"
+	"time"
 
+	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/zalando/go-keyring"
 )
 
@@ -151,6 +157,74 @@ func TestSave_writeMode0600(t *testing.T) {
 	}
 	if mode := info.Mode().Perm(); mode != 0600 {
 		t.Logf("note: config.toml perms = %o (expected 0600; may be umasked)", mode)
+	}
+}
+
+// Changes made at once, as by `config set` and `auth use` run in parallel,
+// are all kept; a change that fails saves nothing.
+func TestUpdate_keepsEveryConcurrentChange(t *testing.T) {
+	withHomeDir(t)
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Go(func() {
+			if err := Update(func(c *Config) error { c.Profiles[fmt.Sprint(i)] = Profile{AuthID: "MA"}; return nil }); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	failed := Update(func(c *Config) error { c.Active = "0"; return errors.New("no") })
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Profiles) != 8 || c.Active != "" || failed == nil {
+		t.Errorf("kept %d of 8 changes, active %q, failed change err %v", len(c.Profiles), c.Active, failed)
+	}
+}
+
+// A change that finds the config locked by another command waits for it, then
+// gives up with an error that says so, instead of hanging.
+func TestUpdate_givesUpOnALockAnotherCommandHolds(t *testing.T) {
+	home := withHomeDir(t)
+	if err := Update(func(*Config) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	held, err := os.Open(filepath.Join(home, ".plivo", "config.lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	if ok, err := tryLock(held); !ok {
+		t.Fatalf("taking the lock: %v", err)
+	}
+	defer func(w time.Duration) { lockWait = w }(lockWait)
+	lockWait = 100 * time.Millisecond
+	done := make(chan error, 1)
+	go func() { done <- Update(func(c *Config) error { c.Active = "x"; return nil }) }()
+	select {
+	case err := <-done:
+		var ce *clierr.Error
+		if !errors.As(err, &ce) || ce.Code != clierr.CodeResourceConflict || !strings.Contains(ce.Message, "another plivo command") {
+			t.Errorf("err = %v, want RESOURCE_CONFLICT naming another plivo command", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Update is still waiting on the lock another command holds")
+	}
+}
+
+// A file system that takes no locks, such as NFS without its lock service,
+// answers ENOLCK, ENOTSUP or ENOSYS: the change goes on unlocked.
+func TestLockWithin_goesOnWhereTheFileSystemTakesNoLocks(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "lock")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	for _, errno := range []error{syscall.ENOTSUP, syscall.ENOSYS} {
+		if err := lockWithin(f, time.Second, func(*os.File) (bool, error) { return false, errno }); err != nil {
+			t.Errorf("%v: %v, want the change to go on unlocked", errno, err)
+		}
 	}
 }
 
