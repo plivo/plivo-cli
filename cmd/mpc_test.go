@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -67,5 +68,16 @@ func TestMPCCreate_pointsToParticipantAdd(t *testing.T) {
 				t.Errorf("hint should point at `%s`, got %q", addPath, ce.Hint)
 			}
 		})
+	}
+}
+
+// A blank call ID is refused, not sent as the call named "name_".
+func TestMPCEnd_refusesABlankID(t *testing.T) {
+	setFakeCreds(t)
+	srv, hits := startCapturingHTTPServer(t, 200, `{}`)
+	clientForTest = &api.Client{BaseURL: srv.URL, AuthID: "MAFAKEFORTEST", AuthToken: "tok", HTTP: srv.Client()}
+	t.Cleanup(func() { clientForTest = nil })
+	if err, _, _ := execCmd(t, "voice", "multiparty", "end", " ", "--yes"); !strings.Contains(fmt.Sprint(err), "BAD_INPUT") || len(hits()) != 0 {
+		t.Errorf("got %v after %q, want BAD_INPUT before any request", err, hits())
 	}
 }
