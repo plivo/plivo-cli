@@ -888,8 +888,9 @@ the CLI). Use --dry-run to preview without sending. GET and HEAD pass through.
 Here --query adds URL query parameters (key=value). It is not the JMESPath
 --query filter other commands take; -o jsonl, yaml and csv still apply.
 
-Auth tokens and passwords in a response read [REDACTED], as on every other
-command; pass --show-secrets to see them.
+Auth tokens and passwords in a response read [REDACTED], as on other
+commands; pass --show-secrets to see them. Agent flows (/AgentFlow paths)
+come back as sent, as agents get prints them: the server masks their secrets.
 
 Examples:
 
