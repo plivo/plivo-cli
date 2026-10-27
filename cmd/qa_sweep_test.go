@@ -191,12 +191,9 @@ func qaStraySegment(path string) bool {
 // ─── --dry-run ───────────────────────────────────────────────────────────────
 
 // qaDryRunOwners are the local commands whose --dry-run a pending finding
-// fixes. The sweep skips them, without running them, until it is in.
-var qaDryRunOwners = map[string]string{
-	"ask": "r3/O1", "auth remove": "r3/O1", "auth use": "r3/O1", "config set": "r3/O1", "config telemetry": "r3/O1",
-	"docs list": "r3/O1", "docs search": "r3/O1", "docs show": "r3/O1", "login": "r3/O1", "logout": "r3/O1",
-	"voice streams test": "r3/O1",
-}
+// fixes, by that finding. The sweep skips them, without running them, until
+// it is in: a command that ignores --dry-run may act, or wait on a browser.
+var qaDryRunOwners = map[string]string{}
 
 // TestQA_sweepDryRun runs every command with --dry-run. It may honour it
 // (exit 0) or refuse it (BAD_FLAG naming --dry-run, exit 1); either way it

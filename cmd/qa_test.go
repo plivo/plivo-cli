@@ -41,13 +41,8 @@ import (
 // as is a sweep failure a pending finding owns, and one that passes fails, so
 // the PR that fixes a finding must delete its entry (and its qaKnownGaps).
 var qaPending = map[string]string{
-	"r2/5e":  "sip test probes the host it was given, never the target of its SRV record (no fix yet)",
-	"r3/O1":  "auth use/remove, logout and config set/telemetry act under --dry-run (#174)",
-	"r3/O2":  "config changes are not locked (#174)",
-	"r3/O4":  "skill install --project writes through links (#174)",
-	"r3/O5":  "a --query result has no size limit (#174)",
-	"r3/O8a": "required flags take blank values (#174)",
-	"r3/F4":  "plivo api reports every API error as UPSTREAM_ERROR, exit 3, though its help promises the exit codes of the rest of the CLI (no fix yet)",
+	"r2/5e": "sip test probes the host it was given, never the target of its SRV record (no fix yet)",
+	"r3/F4": "plivo api reports every API error as UPSTREAM_ERROR, exit 3, though its help promises the exit codes of the rest of the CLI (no fix yet)",
 
 	// Found by the SDK oracle; not yet checked against the live API.
 	"sdk/fields":     "--schema lists fields the API never sends: api_id in list rows, total_count on lists without one, a message's text, a conference's resource_uri",
