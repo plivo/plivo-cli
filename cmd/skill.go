@@ -518,8 +518,9 @@ func resolvesInside(repo, path string) bool {
 }
 
 // skillUpdateRow is one installed copy `skill update` looked at, and the JSON
-// shape. Result is updated, would_update (--dry-run), up_to_date, kept or
-// retired; a retired row's Hint is the command that removes it.
+// shape. Result is updated, would_update (--dry-run), up_to_date, kept, refused
+// or retired; a retired row's Hint is the command that removes it, a refused
+// one's why it was not written.
 type skillUpdateRow struct {
 	Selector string `json:"selector"`
 	Path     string `json:"path"`
@@ -571,9 +572,6 @@ func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 				}
 				seen[resolved] = true
 			}
-			if inRepo[root] && !resolvesInside(repo, path) {
-				return projectLinkErr(path + " resolves outside the repository " + repo)
-			}
 			row := skillUpdateRow{Selector: s.selector, Path: path, OldLines: lineCount(b), NewLines: lineCount([]byte(s.content))}
 			have := skillDigest(b)
 			switch {
@@ -581,6 +579,9 @@ func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 				row.Result = "up_to_date"
 			case !skillForce && skillEdited(s, b):
 				row.Result = "kept"
+			case inRepo[root] && !resolvesInside(repo, path):
+				// A clone brings its links along: one could aim the write anywhere.
+				row.Result, row.Hint = "refused", "a link leads outside the repository"
 			case dryRunFlag:
 				row.Result = "would_update"
 			default:
@@ -618,6 +619,8 @@ func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 			result = fmt.Sprintf("would update, %d -> %d lines", r.OldLines, r.NewLines)
 		case "kept":
 			result, kept = "kept: local edits", true
+		case "refused":
+			result = "refused: " + r.Hint
 		case "retired":
 			result = "retired: run " + r.Hint
 		}

@@ -953,9 +953,12 @@ func TestSkillUpdate_aLinkedCopyIsOneRow(t *testing.T) {
 }
 
 // In a repository, a copy reached through a link that leads out of it is
-// refused, even with --force: a clone brings its links along.
+// refused, even with --force, and the other copies are still updated: a clone
+// brings its links along.
 func TestSkillUpdate_refusesALinkOutOfTheRepo(t *testing.T) {
-	root, _ := fakeRepo(t, false)
+	root, home := fakeRepo(t, false)
+	shipVersion(t, "plivo-cli", olderCLISkill)
+	homeCopy := writeSkillIn(t, filepath.Join(home, ".claude", "skills"), "plivo-cli", olderCLISkill)
 	target := writeSkillIn(t, t.TempDir(), "plivo-cli", "not a skill\n")
 	link := filepath.Join(root, ".claude", "skills", "plivo-cli")
 	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
@@ -964,10 +967,13 @@ func TestSkillUpdate_refusesALinkOutOfTheRepo(t *testing.T) {
 	if err := os.Symlink(filepath.Dir(target), link); err != nil {
 		t.Skipf("no symlinks here: %v", err)
 	}
-	err, _, _ := execCmd(t, "skill", "update", "--force")
-	var ce *clierr.Error
-	if !errors.As(err, &ce) || ce.Code != clierr.CodeBadInput || !fileIs(t, target, "not a skill\n") {
-		t.Errorf("err = %v; want BAD_INPUT and the file the link leads to untouched", err)
+	for _, args := range [][]string{{"--force", "--dry-run"}, {"--force"}} {
+		if rows := skillUpdateRows(t, args...); len(rows) != 2 || rows[1].Result != "refused" {
+			t.Errorf("%v: rows = %+v, want the copy through the link refused", args, rows)
+		}
+	}
+	if !fileIs(t, target, "not a skill\n") || !fileIs(t, homeCopy, cliskill.SkillMD) {
+		t.Error("want the file the link leads to untouched, and the home copy updated")
 	}
 }
 
