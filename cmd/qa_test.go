@@ -30,6 +30,8 @@ import (
 //     confirmed works and must keep working (qa_keep_test.go).
 //   - TestQA_sweep* look for the same kinds of bug in every command
 //     (qa_sweep_test.go, with the invocations in qa_samples_test.go).
+//   - TestQA_sdk* hold decoding, --schema paths and request keys to the Plivo
+//     Go SDK and the API docs (qa_sdk_test.go, testdata/sdk).
 //
 // Every run also checks its exit code is the one its error's code maps to.
 
@@ -78,6 +80,15 @@ var pending = map[string]string{
 	"r3/F2":    "--timeout takes 0 and negative values (PR #172)",
 	"r3/F4":    "plivo api reports every API error as UPSTREAM_ERROR, exit 3: fix the codes or the help (open)",
 	"r3/links": "links call /10dlc/NumberLinking/ (PR #171)",
+
+	// Found by the SDK oracle; not yet checked against the live API.
+	"sdk/fields":     "--schema lists fields the API never sends: api_id in list rows, total_count on lists without one, a message's text, a conference's resource_uri",
+	"sdk/masking":    "masking sessions are read flat, as created_on, expires_on and mode, and create sends mode; the API nests a session under response, with created_time and expiry_time",
+	"sdk/multiparty": "multiparty calls and participants are read under names the API does not send (billing_type, created_at, end_at; from, to, muted, direction), and participants list pages with limit and offset",
+	"sdk/numbers":    "numbers get and list read app_id, country and type; the API sends application and number_type",
+	"sdk/record":     "calls record sends both_legs and transcribe, conferences record sends transcribe; the API takes record_channel_type and transcription_type",
+	"sdk/streams":    "streams list reads stream_url and resource_uri; the API sends service_url",
+	"sdk/verify":     "verify sessions list reads objects, the API sends sessions under other names; validate posts to .../Validation/, the API to the session itself",
 }
 
 var qaRunPending = flag.Bool("qa-pending", false, "also run the QA cases listed in pending, failing those that pass")
@@ -179,8 +190,8 @@ func TestQA_regressions(t *testing.T) {
 		})
 	}
 	for id := range pending {
-		if !seen[id] {
-			t.Errorf("pending names %s, which has no case", id)
+		if _, oracle := qaKnownGaps[id]; !seen[id] && !oracle {
+			t.Errorf("pending names %s, which has no case and no known gaps in the SDK oracle", id)
 		}
 	}
 }
