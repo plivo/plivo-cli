@@ -46,17 +46,19 @@ var qaSamples = map[string]string{
 	"messaging mms list": "",
 	"messaging mms send": "--src {number} --dst {number2} --text hi --media-url https://example.com/a.png",
 
-	"messaging sms 10dlc brands create":    "--alias qa --legal-name QA",
-	"messaging sms 10dlc brands get":       "{brand}",
-	"messaging sms 10dlc brands list":      "",
-	"messaging sms 10dlc brands update":    "{brand} --email qa@example.com",
-	"messaging sms 10dlc campaigns create": "--alias qa --brand-id {brand} --usecase MARKETING --description qa --message-flow qa --sample-message-1 qa",
+	"messaging sms 10dlc brands create": "--profile-uuid {uuid} --alias qa",
+	"messaging sms 10dlc brands get":    "{brand}",
+	"messaging sms 10dlc brands list":   "",
+	"messaging sms 10dlc brands update": "{brand} --email qa@example.com",
+	"messaging sms 10dlc campaigns create": "--alias qa --brand-id {brand} --vertical TECHNOLOGY --usecase MARKETING " +
+		"--description qa --message-flow qa --sample-message-1 qa --sample-message-2 qa --help-message qa --opt-out-message qa " +
+		"--subscriber-optin --subscriber-optout --subscriber-help",
 	"messaging sms 10dlc campaigns get":    "{campaign}",
 	"messaging sms 10dlc campaigns list":   "",
 	"messaging sms 10dlc campaigns update": "{campaign} --description qa",
 	"messaging sms 10dlc links create":     "--campaign-id {campaign} --number {number}",
-	"messaging sms 10dlc links delete":     "{uuid}",
-	"messaging sms 10dlc links list":       "",
+	"messaging sms 10dlc links delete":     "{campaign} {number}",
+	"messaging sms 10dlc links list":       "--campaign-id {campaign}",
 
 	"messaging sms diagnose":                  "{uuid}",
 	"messaging sms list":                      "",
@@ -71,11 +73,13 @@ var qaSamples = map[string]string{
 	"messaging sms send":                      "--src {number} --dst {number2} --text hi",
 	"messaging sms tollfree get":              "{uuid}",
 	"messaging sms tollfree list":             "",
-	"messaging sms tollfree submit":           "--business-name qa --use-case qa",
-	"messaging mms diagnose":                  "{uuid}",
-	"messaging whatsapp diagnose":             "{uuid}",
-	"messaging whatsapp list":                 "",
-	"messaging whatsapp send":                 "--src {number} --dst {number2} --text hi",
+	"messaging sms tollfree submit": "--profile-uuid {uuid} --number {number} --use-case MARKETING --use-case-summary qa " +
+		"--production-message-content qa --opt-in-type VERBAL --opt-in-image-url https://example.com/optin.png --message-volume 1000 " +
+		"--terms-and-conditions-link https://example.com/terms --privacy-policy-link https://example.com/privacy",
+	"messaging mms diagnose":      "{uuid}",
+	"messaging whatsapp diagnose": "{uuid}",
+	"messaging whatsapp list":     "",
+	"messaging whatsapp send":     "--src {number} --dst {number2} --text hi",
 
 	"numbers buy":                     "{number}",
 	"numbers cnam":                    "{number}",
@@ -152,7 +156,7 @@ var qaSamples = map[string]string{
 	"voice conferences member deaf":       "{room} {member}",
 	"voice conferences member kick":       "{room} {member}",
 	"voice conferences member mute":       "{room} {member}",
-	"voice conferences member play":       "{room} {member} --urls https://example.com/a.mp3",
+	"voice conferences member play":       "{room} {member} --url https://example.com/a.mp3",
 	"voice conferences member speak":      "{room} {member} --text hi",
 	"voice conferences member stop-play":  "{room} {member}",
 	"voice conferences member stop-speak": "{room} {member}",
@@ -183,19 +187,11 @@ var qaSamples = map[string]string{
 // qaAfterFix holds the samples a pending fix changes, under the finding it
 // fixes. While that finding is pending the sample in qaSamples runs (and is
 // skipped if it stops running); once its entry leaves qaPending this one runs
-// instead, or none for a command the fix retires (qaRetired).
+// instead, or none for a command the fix retires (qaRetired), which must then
+// send nothing. A fix that lands moves its sample into qaSamples; a retired
+// command stays here.
 var qaAfterFix = map[string]struct{ owner, sample string }{
-	"messaging sms 10dlc brands create": {"r3/D1", "--profile-uuid {uuid} --alias qa"},
-	"messaging sms 10dlc brands update": {"r3/D1", qaRetired},
-	"messaging sms 10dlc campaigns create": {"r3/D2", "--alias qa --brand-id {brand} --vertical TECHNOLOGY --usecase MARKETING " +
-		"--description qa --message-flow qa --sample-message-1 qa --sample-message-2 qa --help-message qa --opt-out-message qa " +
-		"--subscriber-optin --subscriber-optout --subscriber-help"},
-	"messaging sms 10dlc links delete": {"r3/links", "{campaign} {number}"},
-	"messaging sms 10dlc links list":   {"r3/links", "--campaign-id {campaign}"},
-	"messaging sms tollfree submit": {"r3/D3", "--profile-uuid {uuid} --number {number} --use-case MARKETING --use-case-summary qa " +
-		"--production-message-content qa --opt-in-type VERBAL --opt-in-image-url https://example.com/optin.png --message-volume 1000 " +
-		"--terms-and-conditions-link https://example.com/terms --privacy-policy-link https://example.com/privacy"},
-	"voice conferences member play": {"r3/D6", "{room} {member} --url https://example.com/a.mp3"},
+	"messaging sms 10dlc brands update": {"r3/D1", qaRetired}, // the 10DLC API has no brand update
 }
 
 // qaRetired marks a command a fix retires: removes it, or leaves it sending
