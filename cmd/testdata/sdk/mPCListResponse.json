@@ -1,0 +1,48 @@
+{
+  "api_id": "4073975d-a4b7-11ea-86b1-0242ac110007",
+  "meta": {
+    "count": 23,
+    "limit": 20,
+    "next": "/v1/Account/CIFAKEPLACEHOLDER001/MultiPartyCall/?limit=20&offset=20",
+    "offset": 0,
+    "previous": null
+  },
+  "objects": [
+    {
+      "billed_amount": "0.05000",
+      "billed_duration": 600,
+      "creation_time": "2020-06-02 04:56:35+00:00",
+      "duration": 217,
+      "end_time": "2020-06-02 05:00:12+00:00",
+      "friendly_name": "mpc 1000",
+      "mpc_uuid": "dfc70b4a-e2d0-4e77-a718-e7b57edd5a1a",
+      "participants": "/v1/Account/CIFAKEPLACEHOLDER001/MultiPartyCall/uuid_dfc70b4a-e2d0-4e77-a718-e7b57edd5a1a/Participant/",
+      "recording": null,
+      "resource_uri": "/v1/Account/CIFAKEPLACEHOLDER001/MultiPartyCall/uuid_dfc70b4a-e2d0-4e77-a718-e7b57edd5a1a/",
+      "start_time": "2020-06-02 04:56:35+00:00",
+      "status": "ended",
+      "stay_alone": false,
+      "sub_account": null,
+      "termination_cause": "No Active Participants",
+      "termination_cause_code": 1000
+    },
+    {
+      "billed_amount": "0.44000",
+      "billed_duration": 5280,
+      "creation_time": "2020-05-29 12:22:54+00:00",
+      "duration": 2632,
+      "end_time": "2020-05-29 13:06:46+00:00",
+      "friendly_name": "mpc 1000",
+      "mpc_uuid": "7e43c116-15cb-42dd-a8b6-ffece71eeb08",
+      "participants": "/v1/Account/CIFAKEPLACEHOLDER001/MultiPartyCall/uuid_7e43c116-15cb-42dd-a8b6-ffece71eeb08/Participant/",
+      "recording": null,
+      "resource_uri": "/v1/Account/CIFAKEPLACEHOLDER001/MultiPartyCall/uuid_7e43c116-15cb-42dd-a8b6-ffece71eeb08/",
+      "start_time": "2020-05-29 12:22:54+00:00",
+      "status": "ended",
+      "stay_alone": false,
+      "sub_account": null,
+      "termination_cause": "No Active Participants",
+      "termination_cause_code": 1000
+    }
+  ]
+}

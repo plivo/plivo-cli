@@ -1,0 +1,13 @@
+{
+  "alias": "callme",
+  "application": "/v1/Account/CIFAKEPLACEHOLDER001/Application/33406267401237901/",
+  "endpoint_id": "32866729519064",
+  "resource_uri": "/v1/Account/CIFAKEPLACEHOLDER001/Endpoint/32866729519064/",
+  "sip_contact": "sip:callme140703093224@203.0.113.10:57563;ob",
+  "sip_expires": "2014-07-21 19:26:08",
+  "sip_registered": "true",
+  "sip_uri": "sip:someone@example.com",
+  "sip_user_agent": "Telephone 1.1.4",
+  "sub_account": null,
+  "username": "callme140703093944"
+}

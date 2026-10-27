@@ -1,0 +1,12 @@
+{
+  "account": "/v1/Account/CIFAKEPLACEHOLDER001/",
+  "api_id": "98b2d7ca-3f08-11e7-b886-067c5485c240",
+  "auth_id": "SAFAKESUBACCOUNT0001",
+  "auth_token": "fixture-value-not-a-secret",
+  "created": "2017-05-22",
+  "enabled": false,
+  "modified": null,
+  "name": "0.7542345556290114",
+  "new_auth_token": "fixture-value-not-a-secret",
+  "resource_uri": "/v1/Account/CIFAKEPLACEHOLDER001/Subaccount/SAFAKESUBACCOUNT0001/"
+}
