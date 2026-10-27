@@ -475,7 +475,7 @@ func runInteractiveAsk(client *api.Client, url, firstMsg string, limit time.Dura
 		return clierr.BadInput("interactive mode (-i) can't be combined with -o " + f)
 	}
 	if dryRunFlag {
-		return clierr.BadInput("--dry-run isn't supported in interactive mode (-i)")
+		return clierr.BadFlag("dry-run", "isn't supported in interactive mode (-i)")
 	}
 
 	sess := &buddySession{

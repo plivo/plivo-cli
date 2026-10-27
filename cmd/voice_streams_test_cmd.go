@@ -113,6 +113,15 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	if dryRunFlag {
+		signed := "unsigned"
+		if profile != "" {
+			signed = "signed for profile " + profile
+		}
+		fmt.Fprintf(os.Stderr, "[dry-run] Would connect to %s (%s) and stream %ds of %s audio at %d Hz\n",
+			streamsTestTo, signed, streamsTestDuration, streamsTestCodec, streamsTestRate)
+		return nil
+	}
 
 	mediaFormat := wsproxy.MediaFormat{
 		Encoding:   wsproxy.Encoding(streamsTestCodec),

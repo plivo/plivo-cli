@@ -92,7 +92,7 @@ func runLoginBrowser(nameExplicit bool) error {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "If the browser didn't open, copy-paste that URL above.")
 	fmt.Fprintln(os.Stderr)
-	if err := openBrowser(authURL); err != nil {
+	if err := browserOpener(authURL); err != nil {
 		// Non-fatal — the URL is printed above so the user can paste it.
 		fmt.Fprintf(os.Stderr, "(could not auto-open the browser: %v)\n", err)
 	}

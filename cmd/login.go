@@ -95,6 +95,15 @@ func init() {
 }
 
 func runLogin(cmd *cobra.Command, args []string) error {
+	if dryRunFlag {
+		path, _ := config.Path()
+		profile := "a profile named after the organization"
+		if cmd.Flags().Changed("name") {
+			profile = fmt.Sprintf("profile %q", loginName)
+		}
+		fmt.Fprintf(os.Stderr, "[dry-run] Would open the browser to log in, then save %s in %s\n", profile, path)
+		return nil
+	}
 	if err := runLoginBrowser(cmd.Flags().Changed("name")); err != nil {
 		return err
 	}
