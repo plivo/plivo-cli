@@ -125,13 +125,16 @@ func (c *Client) SSE(ctx context.Context, path string, body any, onEvent func(SS
 	}
 	c.applyHeaders(req, body != nil, true)
 
-	streamClient := &http.Client{Timeout: 0}
+	// No timeout, for a long stream. A copy of the client, so it keeps the
+	// rest, such as the refusal to follow a redirect.
+	streamClient := *c.HTTP
+	streamClient.Timeout = 0
 	resp, err := streamClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("SSE http: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= 300 { // a redirect too, as none is followed
 		b, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("SSE HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
 	}
