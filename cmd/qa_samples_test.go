@@ -40,6 +40,7 @@ var qaSamples = map[string]string{
 	"agents runs list":   "{uuid}",
 	"agents update":      "{uuid} --name qa",
 	"api":                "GET /Subaccount/",
+	"auth whoami":        "", // GETs the account to check the profile
 	"lookup":             "{number}",
 	"messaging get":      "{uuid}",
 	"messaging mms list": "",
@@ -224,7 +225,6 @@ var qaLocalOnly = map[string]string{
 	"auth list":               "reads the local profiles",
 	"auth remove":             "edits the local profiles and keychain",
 	"auth use":                "edits the local profiles",
-	"auth whoami":             "reads the local profile",
 	"config get":              "reads the local config",
 	"config set":              "edits the local config",
 	"config telemetry":        "edits the local config",
@@ -251,8 +251,10 @@ var qaLocalOnly = map[string]string{
 // release from GitHub first, which the suite cannot reach.
 var qaLocalSamples = map[string]string{
 	"ask":                "-i",
+	"auth list":          "",
 	"auth remove":        "test",
 	"auth use":           "other",
+	"config get":         "telemetry",
 	"config set":         "telemetry false",
 	"config telemetry":   "off",
 	"docs list":          "",

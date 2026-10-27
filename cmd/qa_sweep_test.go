@@ -219,7 +219,7 @@ func TestQA_sweepDryRun(t *testing.T) {
 				qaSkip(t, fmt.Sprintf("pending %s: %s", owner, qaPending[owner]), owner)
 			}
 			writeProfile(t, home, "active = \"test\"\n\n[profiles.test]\nauth_id = \"CIFAKEPLACEHOLDER001\"\n\n[profiles.other]\nauth_id = \"CIFAKEPLACEHOLDER002\"\n")
-			if err := config.SetToken("test", "qa-keychain-value"); err != nil {
+			if err := config.SetToken("test", qaProfileToken); err != nil { // qaShowsToken spots it
 				t.Fatal(err)
 			}
 			before, opens := qaSnapshot(t, home, work), opened
@@ -238,7 +238,7 @@ func TestQA_sweepDryRun(t *testing.T) {
 				p = append(p, "prints the account's auth token")
 			}
 			p = append(p, qaSnapshotDiff(before, qaSnapshot(t, home, work))...)
-			if tok, err := config.GetToken("test"); err != nil || tok != "qa-keychain-value" {
+			if tok, err := config.GetToken("test"); err != nil || tok != qaProfileToken {
 				p = append(p, "removed the keychain token")
 			}
 			if opened != opens {
