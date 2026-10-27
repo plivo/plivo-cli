@@ -303,7 +303,7 @@ func runLogout(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if dryRunFlag {
-		fmt.Fprintf(os.Stderr, "[dry-run] Would log out profile %q and delete its keychain token\n", name)
+		fmt.Fprintf(os.Stderr, "[dry-run] Would log out profile %q%s\n", name, alsoKeychain(name))
 		return nil
 	}
 

@@ -106,6 +106,15 @@ func runAuthUse(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// alsoKeychain names, for a dry run, the keychain token removing profile name
+// deletes too: only when the keychain holds one, not a token kept in the config.
+func alsoKeychain(name string) string {
+	if tok, err := config.GetToken(name); err != nil || tok == "" {
+		return ""
+	}
+	return " and delete its keychain token"
+}
+
 func runAuthRemove(cmd *cobra.Command, args []string) error {
 	name := args[0]
 	if err := updateConfig(func(cfg *config.Config) error {
@@ -121,7 +130,7 @@ func runAuthRemove(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if dryRunFlag {
-		fmt.Fprintf(os.Stderr, "[dry-run] Would remove profile %q and its keychain token\n", name)
+		fmt.Fprintf(os.Stderr, "[dry-run] Would remove profile %q%s\n", name, alsoKeychain(name))
 		return nil
 	}
 	// Best-effort removal from the OS keychain (no-op if the token lived in

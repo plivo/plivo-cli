@@ -101,4 +101,9 @@ func TestLocalChanges_dryRunChangesNothing(t *testing.T) {
 	if err, _, _ := execCmd(t, "auth", "use", "ghost", "--dry-run"); err == nil {
 		t.Error("auth use ghost --dry-run: want the unknown profile refused")
 	}
+	// Only a token in the keychain is named: b keeps none there.
+	_, _, withToken := execCmd(t, "logout", "a", "--dry-run")
+	if _, _, without := execCmd(t, "auth", "remove", "b", "--dry-run"); !strings.Contains(withToken, "keychain") || strings.Contains(without, "keychain") {
+		t.Errorf("dry runs say %q for a and %q for b; want the keychain named for a alone", withToken, without)
+	}
 }
