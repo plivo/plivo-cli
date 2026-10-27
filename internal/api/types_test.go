@@ -499,7 +499,6 @@ func TestRoundTrip_Message(t *testing.T) {
 		MessageUUID: "abc",
 		From:        "+1",
 		To:          "+2",
-		Text:        "hi",
 		Type:        "sms",
 		State:       "delivered",
 		Units:       1,

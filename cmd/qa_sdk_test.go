@@ -62,7 +62,7 @@ var qaFixtures = map[string]string{
 
 // qaOracleOwners names the open finding about a command, for what the
 // oracle finds in it: its response for a get or list, its requests for the
-// rest. sdk/fields, about every list type, applies to all of them.
+// rest.
 var qaOracleOwners = map[string]string{
 	"numbers get":                       "sdk/numbers",
 	"numbers list":                      "sdk/numbers",
@@ -86,7 +86,6 @@ var qaOracleOwners = map[string]string{
 // finding's commands. A gap counts only while its finding is pending, and
 // each must still turn up: the fix that clears one deletes it.
 var qaKnownGaps = map[string][]string{
-	"sdk/fields":     {"api_id", "resource_uri", "text", "total_count"},
 	"sdk/masking":    {"*"},
 	"sdk/multiparty": {"billing_type", "caller_name", "created_at", "direction", "end_at", "from", "limit", "muted", "offset", "to"},
 	"sdk/numbers":    {"app_id", "country", "type"},
@@ -231,7 +230,7 @@ func qaSDKSchemaPaths(t *testing.T) int {
 				if have[f.Path] || qaIsConfirmed(cmd, names) {
 					continue
 				}
-				o := qaGapOwner(names[len(names)-1], owner, "sdk/fields")
+				o := qaGapOwner(names[len(names)-1], owner)
 				missing[o] = append(missing[o], f.Path)
 			}
 			problems := map[string][]string{}

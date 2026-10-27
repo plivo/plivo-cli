@@ -5,13 +5,30 @@ import (
 	"strings"
 )
 
-// ListMeta is the pagination envelope present on every Plivo list response.
+// ListMeta is the pagination envelope of most Plivo list responses.
 type ListMeta struct {
 	Limit      int    `json:"limit"`
 	Offset     int    `json:"offset"`
 	TotalCount int    `json:"total_count"`
 	Next       string `json:"next,omitempty"`
 	Previous   string `json:"previous,omitempty"`
+}
+
+// PageMeta is the envelope of the lists that send no total: messages and
+// Verify sessions.
+type PageMeta struct {
+	Limit    int    `json:"limit"`
+	Offset   int    `json:"offset"`
+	Next     string `json:"next,omitempty"`
+	Previous string `json:"previous,omitempty"`
+}
+
+// CountMeta is the envelope of the lists that send their total as count:
+// multiparty calls and their participants, audio streams and toll-free
+// verifications.
+type CountMeta struct {
+	Count int `json:"count"`
+	PageMeta
 }
 
 type Account struct {
@@ -113,7 +130,6 @@ type Message struct {
 	MessageUUID string `json:"message_uuid"`
 	From        string `json:"from_number"`
 	To          string `json:"to_number"`
-	Text        string `json:"text,omitempty"`
 	Type        string `json:"message_type"`
 	Direction   string `json:"message_direction,omitempty"`
 	State       string `json:"message_state,omitempty"`
@@ -128,7 +144,7 @@ type Message struct {
 type MessageList struct {
 	RawBody
 	APIID   string    `json:"api_id"`
-	Meta    ListMeta  `json:"meta"`
+	Meta    PageMeta  `json:"meta"`
 	Objects []Message `json:"objects"`
 }
 
@@ -253,7 +269,7 @@ type VerifySession struct {
 type VerifySessionList struct {
 	RawBody
 	APIID   string          `json:"api_id"`
-	Meta    ListMeta        `json:"meta"`
+	Meta    PageMeta        `json:"meta"`
 	Objects []VerifySession `json:"objects"`
 }
 
@@ -492,7 +508,6 @@ type Conference struct {
 	ConferenceRunTime     string             `json:"conference_run_time,omitempty"`
 	ConferenceMemberCount string             `json:"conference_member_count,omitempty"`
 	Members               []ConferenceMember `json:"members,omitempty"`
-	ResourceURI           string             `json:"resource_uri,omitempty"`
 }
 
 // ConferenceList — list returns a flat array of names, not full Conference objects.
@@ -517,9 +532,9 @@ type MPC struct {
 
 type MPCList struct {
 	RawBody
-	APIID   string   `json:"api_id"`
-	Meta    ListMeta `json:"meta"`
-	Objects []MPC    `json:"objects"`
+	APIID   string    `json:"api_id"`
+	Meta    CountMeta `json:"meta"`
+	Objects []MPC     `json:"objects"`
 }
 
 type MPCParticipant struct {
@@ -538,7 +553,7 @@ type MPCParticipant struct {
 type MPCParticipantList struct {
 	RawBody
 	APIID   string           `json:"api_id"`
-	Meta    ListMeta         `json:"meta"`
+	Meta    CountMeta        `json:"meta"`
 	Objects []MPCParticipant `json:"objects"`
 }
 
@@ -559,7 +574,7 @@ type AudioStream struct {
 type AudioStreamList struct {
 	RawBody
 	APIID   string        `json:"api_id,omitempty"`
-	Meta    ListMeta      `json:"meta"`
+	Meta    CountMeta     `json:"meta"`
 	Objects []AudioStream `json:"objects,omitempty"`
 }
 
@@ -727,7 +742,7 @@ type TollFreeVerification struct {
 type TollFreeVerificationList struct {
 	RawBody
 	APIID   string                 `json:"api_id"`
-	Meta    ListMeta               `json:"meta"`
+	Meta    CountMeta              `json:"meta"`
 	Objects []TollFreeVerification `json:"objects"`
 }
 
