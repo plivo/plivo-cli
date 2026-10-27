@@ -42,9 +42,9 @@ func r3Cases() []qaCase {
 		{
 			id: "r3/L3", title: "subaccounts list -o json printed every subaccount's live auth_token",
 			args:    args("account subaccounts list -o json"),
-			replies: map[string]string{"GET Subaccount/*": `{"api_id": "qa", "meta": {"limit": 20, "offset": 0, "total_count": 1, "next": null, "previous": null}, "objects": [{"auth_id": "SAFAKESUBACCOUNT0001", "auth_token": "qa-leak-auth-token", "new_auth_token": "qa-leak-new-auth-token", "name": "qa"}]}`},
+			replies: map[string]string{"GET Subaccount/*": `{"api_id": "qa", "meta": {"limit": 20, "offset": 0, "total_count": 1, "next": null, "previous": null}, "objects": [{"auth_id": "SAQASUBACCOUNT1", "auth_token": "qa-leak-auth-token", "new_auth_token": "qa-leak-new-auth-token", "name": "qa"}]}`},
 			sent:    []string{"GET Subaccount/?limit=20&offset=0"},
-			stdout:  []string{"SAFAKESUBACCOUNT0001"},
+			stdout:  []string{"SAQASUBACCOUNT1"},
 			hidden:  []string{"qa-leak-auth-token", "qa-leak-new-auth-token"},
 		},
 		{
@@ -334,9 +334,9 @@ func r3Cases() []qaCase {
 		},
 		{
 			id: "r3/F4", title: "plivo api reported a 404 as UPSTREAM_ERROR, exit 3; its help promises the exit codes of the rest of the CLI",
-			args:    args("api GET /Subaccount/SAFAKESUBACCOUNT0001/"),
+			args:    args("api GET /Subaccount/SAQASUBACCOUNT1/"),
 			replies: map[string]string{"GET Subaccount/{}/": `404 {"api_id": "qa", "error": "not found"}`},
-			sent:    []string{"GET Subaccount/SAFAKESUBACCOUNT0001/"},
+			sent:    []string{"GET Subaccount/SAQASUBACCOUNT1/"},
 			exit:    ExitUserError,
 			stderr:  []string{"RESOURCE_NOT_FOUND"},
 		},

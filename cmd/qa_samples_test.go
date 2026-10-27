@@ -273,7 +273,7 @@ var qaSampleIDs = strings.NewReplacer(
 	"{number}", "+14155550100",
 	"{number2}", "+14155550101",
 	"{app}", "31000000000000001",
-	"{sub}", "SAFAKESUBACCOUNT0001",
+	"{sub}", "SAQASUBACCOUNT1",
 	"{trunk}", "21000000000001",
 	"{endpoint}", "12345678",
 	"{room}", "qa-room",

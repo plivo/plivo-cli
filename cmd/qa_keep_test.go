@@ -142,8 +142,8 @@ func keepCases() []qaCase {
 		},
 		{
 			id: "keep/update-subaccount", title: "a subaccount update sends only the field it changes",
-			args:   args("account subaccounts update SAFAKESUBACCOUNT0001 --enabled=false"),
-			sent:   []string{"POST Subaccount/SAFAKESUBACCOUNT0001/"},
+			args:   args("account subaccounts update SAQASUBACCOUNT1 --enabled=false"),
+			sent:   []string{"POST Subaccount/SAQASUBACCOUNT1/"},
 			stdout: []string{`"data"`},
 			check:  func(r *qaResult) []string { return qaBodyIs(r, `{"enabled": false}`) },
 		},
