@@ -92,6 +92,10 @@ func TestSend_refusesABlankRequiredFlag(t *testing.T) {
 		t.Errorf("err = %v, body %v; want BAD_FLAG and no request", err, getBody())
 	}
 	if err, _, _ := execCmd(t, "messaging", "mms", "send", "--src", "+14155550100", "--dst", "+14155550101",
+		"--text", "", "--media-url", " ", "--yes"); !errors.As(err, &ce) || ce.Code != clierr.CodeBadFlag || getBody() != nil {
+		t.Errorf("an MMS with a blank --media-url and no text: %v, want BAD_FLAG", err)
+	}
+	if err, _, _ := execCmd(t, "messaging", "mms", "send", "--src", "+14155550100", "--dst", "+14155550101",
 		"--text", "", "--media-url", "https://example.com/a.jpg", "--yes"); err != nil || getBody() == nil {
 		t.Errorf("an MMS with media and no text: %v, want it sent", err)
 	}

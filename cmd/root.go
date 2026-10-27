@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -196,7 +197,7 @@ func refuseBlankRequired(cmd *cobra.Command) (err error) {
 		if err != nil || !f.Changed || len(f.Annotations[cobra.BashCompOneRequiredFlag]) == 0 || strings.TrimSpace(f.Value.String()) != "" {
 			return
 		}
-		if with := f.Annotations[emptyWith]; len(with) > 0 && cmd.Flags().Changed(with[0]) {
+		if with := f.Annotations[emptyWith]; len(with) > 0 && filled(cmd.Flags().Lookup(with[0])) {
 			return
 		}
 		err = clierr.BadFlag(f.Name, "is required and can't be empty")
@@ -204,8 +205,18 @@ func refuseBlankRequired(cmd *cobra.Command) (err error) {
 	return err
 }
 
-// emptyWith lets a required flag be empty once the flag it names is given.
+// emptyWith lets a required flag be empty once the flag it names is filled.
 const emptyWith = "plivo_empty_with"
+
+// filled reports whether f was given a value that is not blank, or for a list
+// flag, at least one.
+func filled(f *pflag.Flag) bool {
+	vals := []string{f.Value.String()}
+	if list, ok := f.Value.(pflag.SliceValue); ok {
+		vals = list.GetSlice()
+	}
+	return f.Changed && slices.ContainsFunc(vals, func(v string) bool { return strings.TrimSpace(v) != "" })
+}
 
 // secondsOrDuration is --timeout's value: a bare integer is seconds, the form
 // the flag always took, and anything else a Go duration such as 90s or 2m.
