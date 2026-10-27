@@ -67,9 +67,6 @@ var qaOracleOwners = map[string]string{
 	"numbers masking sessions create":   "sdk/masking",
 	"numbers masking sessions get":      "sdk/masking",
 	"numbers masking sessions list":     "sdk/masking",
-	"verify sessions get":               "sdk/verify",
-	"verify sessions list":              "sdk/verify",
-	"verify sessions validate":          "sdk/verify",
 	"voice calls record":                "sdk/record",
 	"voice calls streams list":          "sdk/streams",
 	"voice conferences record":          "sdk/record",
@@ -88,7 +85,6 @@ var qaKnownGaps = map[string][]string{
 	"sdk/multiparty": {"billing_type", "caller_name", "created_at", "direction", "end_at", "from", "limit", "muted", "offset", "to"},
 	"sdk/record":     {"both_legs", "transcribe"},
 	"sdk/streams":    {"resource_uri", "stream_url"},
-	"sdk/verify":     {"*"},
 }
 
 // qaGapOwner is the first pending finding of owners whose known gaps hold
@@ -156,6 +152,7 @@ var qaConfirmed = map[string][]string{
 		"message_flow", "help_message", "help_keywords", "optin_message", "optin_keywords", "optout_message",
 		"optout_keywords", "terms_and_conditions_link", "privacy_policy_link", "campaign_attributes", "error_reason"},
 	"messaging sms tollfree": {"terms_and_conditions_link", "privacy_policy_link", "optin_message", "help_message"},
+	"verify sessions":        {"locale", "requestor_ip", "destination_country_iso2"}, // docs: a session, in a list too
 }
 
 // qaIsConfirmed reports whether a field of cmd's output, by its names, is in

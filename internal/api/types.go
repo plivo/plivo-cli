@@ -237,32 +237,36 @@ type RecordingList struct {
 	Objects []Recording `json:"objects"`
 }
 
-// VerifySession — /Account/{id}/Verify/Session/
+// VerifySession — /Account/{id}/Verify/Session/: a get returns one, a list
+// carries them under "sessions".
 type VerifySession struct {
 	RawBody
-	APIID                    string `json:"api_id,omitempty"`
-	SessionUUID              string `json:"session_uuid"`
-	AppUUID                  string `json:"app_uuid,omitempty"`
-	AlphaSender              string `json:"alpha_sender,omitempty"`
-	Recipient                string `json:"recipient"`
-	Channel                  string `json:"channel,omitempty"`
-	Status                   string `json:"status,omitempty"`
-	CountOfAttempts          int    `json:"count_of_attempts,omitempty"`
-	RequestorIP              string `json:"requestor_ip,omitempty"`
-	LocaleUsed               string `json:"locale_used,omitempty"`
-	DestinationCountryISO2   string `json:"destination_country_iso2,omitempty"`
-	DestinationCountryPrefix string `json:"destination_country_prefix,omitempty"`
-	ChargeAmount             string `json:"charge_amount,omitempty"`
-	ChargeAmountCurrency     string `json:"charge_amount_currency,omitempty"`
-	CreationTime             string `json:"creation_time,omitempty"`
-	ResourceURI              string `json:"resource_uri,omitempty"`
+	APIID                  string        `json:"api_id,omitempty"`
+	SessionUUID            string        `json:"session_uuid"`
+	AppUUID                string        `json:"app_uuid,omitempty"`
+	Recipient              string        `json:"recipient"`
+	Channel                string        `json:"channel,omitempty"`
+	Status                 string        `json:"status,omitempty"`
+	Count                  int           `json:"count,omitempty"` // OTP attempts
+	RequestorIP            string        `json:"requestor_ip,omitempty"`
+	Locale                 string        `json:"locale,omitempty"`
+	DestinationCountryISO2 string        `json:"destination_country_iso2,omitempty"`
+	Charges                VerifyCharges `json:"charges"`
+	CreatedAt              string        `json:"created_at,omitempty"`
+	UpdatedAt              string        `json:"updated_at,omitempty"`
+}
+
+// VerifyCharges is what a Verify session cost.
+type VerifyCharges struct {
+	TotalCharge      string `json:"total_charge,omitempty"`
+	ValidationCharge string `json:"validation_charge,omitempty"`
 }
 
 type VerifySessionList struct {
 	RawBody
-	APIID   string          `json:"api_id"`
-	Meta    PageMeta        `json:"meta"`
-	Objects []VerifySession `json:"objects"`
+	APIID    string          `json:"api_id"`
+	Meta     PageMeta        `json:"meta"`
+	Sessions []VerifySession `json:"sessions"`
 }
 
 // LookupNumber — https://lookup.plivo.com/v1/Number/{number}?type=carrier

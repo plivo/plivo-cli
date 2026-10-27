@@ -1019,6 +1019,7 @@ func TestListAll_mergesUnderEachListsKey(t *testing.T) {
 		{"brands", []string{"messaging", "sms", "10dlc", "brands", "list"}},
 		{"campaigns", []string{"messaging", "sms", "10dlc", "campaigns", "list"}},
 		{"compliances", []string{"numbers", "compliance", "list"}},
+		{"sessions", []string{"verify", "sessions", "list"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.key, func(t *testing.T) {

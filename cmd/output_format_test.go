@@ -110,7 +110,7 @@ func TestOutputFormats_listCommandsHonourEveryFormat(t *testing.T) {
 	setFakeCreds(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body := listPageBody // rows under "objects", or under the list's own key
-		for suffix, key := range map[string]string{"/Brand/": "brands", "/Campaign/": "campaigns", "/Compliance/": "compliances"} {
+		for suffix, key := range map[string]string{"/Brand/": "brands", "/Campaign/": "campaigns", "/Compliance/": "compliances", "/Verify/Session/": "sessions"} {
 			if strings.HasSuffix(r.URL.Path, suffix) {
 				body = strings.Replace(body, `"objects"`, `"`+key+`"`, 1)
 			}

@@ -257,11 +257,10 @@ func TestVerifySession_unmarshal(t *testing.T) {
 		"recipient": "+14155551234",
 		"channel": "sms",
 		"status": "verified",
-		"count_of_attempts": 1,
-		"locale_used": "en-US",
+		"count": 1,
 		"destination_country_iso2": "US",
-		"charge_amount": "0.05",
-		"charge_amount_currency": "USD"
+		"charges": {"total_charge": "0.05", "validation_charge": "0.0000", "attempt_charges": null},
+		"created_at": "2023-06-30T12:12:03.187679+05:30"
 	}`)
 	var v VerifySession
 	if err := json.Unmarshal(body, &v); err != nil {
@@ -270,8 +269,8 @@ func TestVerifySession_unmarshal(t *testing.T) {
 	if v.SessionUUID != "sess-uuid" || v.Recipient != "+14155551234" || v.Status != "verified" {
 		t.Errorf("fields wrong: %+v", v)
 	}
-	if v.CountOfAttempts != 1 {
-		t.Errorf("CountOfAttempts = %d", v.CountOfAttempts)
+	if v.Count != 1 || v.Charges.TotalCharge != "0.05" {
+		t.Errorf("Count = %d, Charges = %+v", v.Count, v.Charges)
 	}
 }
 
