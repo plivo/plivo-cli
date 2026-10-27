@@ -444,7 +444,7 @@ func TestAPICmd_POST_withYes_callsUpstream(t *testing.T) {
 	}
 }
 
-func TestAPICmd_4xxEmitsUpstreamErrorEnvelope(t *testing.T) {
+func TestAPICmd_4xxEmitsTypedErrorEnvelope(t *testing.T) {
 	setFakeCreds(t)
 	srv, _ := startAPIServer(t, 422, "application/json", `{"error":"validation failed","field":"src"}`)
 	pointAPIAtTestServer(t, srv)
@@ -454,9 +454,10 @@ func TestAPICmd_4xxEmitsUpstreamErrorEnvelope(t *testing.T) {
 		t.Fatal("expected error on 422, got nil")
 	}
 	// The renderer prints the structured envelope to stderr; the err itself
-	// carries the code so we can assert on both.
-	if !strings.Contains(err.Error(), "UPSTREAM_ERROR") {
-		t.Errorf("expected UPSTREAM_ERROR code in err: %v", err)
+	// carries the code so we can assert on both. A 422 is VALIDATION_ERROR,
+	// as on typed commands.
+	if !strings.Contains(err.Error(), "VALIDATION_ERROR") {
+		t.Errorf("expected VALIDATION_ERROR code in err: %v", err)
 	}
 	// Default JSON output for non-TTY → error envelope should contain
 	// "upstream" context including the body. Stderr (JSON envelope) is what
@@ -473,8 +474,8 @@ func TestAPICmd_5xxEmitsRetryableEnvelope(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error on 503, got nil")
 	}
-	if !strings.Contains(err.Error(), "UPSTREAM_ERROR") {
-		t.Errorf("expected UPSTREAM_ERROR code, got: %v", err)
+	if !strings.Contains(err.Error(), "UPSTREAM_UNAVAILABLE") {
+		t.Errorf("expected UPSTREAM_UNAVAILABLE code, got: %v", err)
 	}
 }
 
@@ -645,8 +646,8 @@ func TestAPICmd_UpstreamErrorBodyPreservedInEnvelope(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected *clierr.Error, got %T", gotErr)
 	}
-	if cerr.Code != clierr.CodeUpstreamError {
-		t.Errorf("code = %s, want UPSTREAM_ERROR", cerr.Code)
+	if cerr.Code != clierr.CodeValidation {
+		t.Errorf("code = %s, want VALIDATION_ERROR", cerr.Code)
 	}
 	if cerr.StatusCode != 400 {
 		t.Errorf("status_code = %d, want 400", cerr.StatusCode)
