@@ -29,12 +29,12 @@ func r2Cases() []qaCase {
 			stdout:  []string{r2URI},
 			check: func(r *qaResult) []string {
 				got := r2Body(r, 0, "uri")
-				return expect(got == "sip.rtc.elevenlabs.io:5061;transport=tls", "sent uri %v, want it host first", got)
+				return qaExpect(got == "sip.rtc.elevenlabs.io:5061;transport=tls", "sent uri %v, want it host first", got)
 			},
 		},
 		{
 			id: "r2/2", title: "a force-killed voice streams forward left the app on its dead tunnel URL, and the next run took that URL as the original",
-			args:    args("voice streams forward --number +14155550142 --app " + r2App + " --to ws://localhost:7860/ws --yes -o json"),
+			args:    qaArgs("voice streams forward --number +14155550142 --app " + r2App + " --to ws://localhost:7860/ws --yes -o json"),
 			replies: map[string]string{"GET Application/" + r2App + "/": r2AppOnDeadTunnel},
 			setup:   r2KilledForward,
 			// The app read, pointed at this run's tunnel, then restored.
@@ -43,12 +43,12 @@ func r2Cases() []qaCase {
 			stderr: []string{"An earlier forward left this app on its stopped tunnel"},
 			check: func(r *qaResult) []string {
 				answerURL, method := r2Body(r, 2, "answer_url"), r2Body(r, 2, "answer_method")
-				return expect(answerURL == r2OwnAnswerURL && method == "GET", "restored %v %v, want the app's own %s GET", answerURL, method, r2OwnAnswerURL)
+				return qaExpect(answerURL == r2OwnAnswerURL && method == "GET", "restored %v %v, want the app's own %s GET", answerURL, method, r2OwnAnswerURL)
 			},
 		},
 		{
 			id: "r2/3", title: "deleting the URI a trunk used also deleted the trunk (--yes --force), but the result said only that the URI was deleted",
-			args: args("sip uris delete " + uriU1 + " --yes --force -o json"),
+			args: qaArgs("sip uris delete " + uriU1 + " --yes --force -o json"),
 			replies: map[string]string{
 				"GET Zentrunk/Trunk/*":    `{"api_id": "qa", "meta": {"next": null}, "objects": [{"trunk_id": "101", "primary_uri_uuid": "` + uriU1 + `"}]}`,
 				"GET Zentrunk/Trunk/101/": `404 {"api_id": "qa", "error": "not found"}`,
@@ -63,13 +63,13 @@ func r2Cases() []qaCase {
 		},
 		{
 			id: "r2/4", title: "Codex's skills went stale: skill update never looked in ~/.agents/skills",
-			args:   args("skill update -o json"),
+			args:   qaArgs("skill update -o json"),
 			setup:  r2StaleCodexSkill,
 			stdout: []string{filepath.Join(".agents", "skills", "plivo-cli", skillFileName), `"updated"`},
 			check: func(*qaResult) []string {
 				home, _ := os.UserHomeDir()
 				b, _ := os.ReadFile(filepath.Join(home, ".agents", "skills", "plivo-cli", skillFileName))
-				return expect(string(b) == cliskill.SkillMD, "the Codex copy is still the older release")
+				return qaExpect(string(b) == cliskill.SkillMD, "the Codex copy is still the older release")
 			},
 		},
 		{
@@ -87,16 +87,16 @@ func r2Cases() []qaCase {
 			id: "r2/5b", title: "the feedback scrubber let a Bearer token, a PAN and an Aadhaar number through",
 			args:   []string{"feedback", "--rating", "2", "--message", "Bearer not-a-real-token-1 failed; PAN ABCPE1234F, Aadhaar 2345 6789 0123", "--dry-run"},
 			hidden: []string{"not-a-real-token-1", "ABCPE1234F", "2345 6789 0123"},
-			check:  r2Shows(`"comment": "Bearer [REDACTED-TOKEN] failed; PAN [REDACTED-PAN], Aadhaar [REDACTED-AADHAAR]"`),
+			check:  qaShows(`"comment": "Bearer [REDACTED-TOKEN] failed; PAN [REDACTED-PAN], Aadhaar [REDACTED-AADHAAR]"`),
 		},
 		{
 			id: "r2/5c", title: "--schema described no output for diagnose, though -o json prints a fixed result",
-			args:   args("voice calls diagnose --schema -o json"),
+			args:   qaArgs("voice calls diagnose --schema -o json"),
 			stdout: []string{`"path": "what_happened"`, `"path": "confidence"`, "and no others"},
 		},
 		{
 			id: "r2/5d", title: "no command listed the calls in progress",
-			args:    args("voice calls list --live -o json"),
+			args:    qaArgs("voice calls list --live -o json"),
 			replies: map[string]string{"GET Call/?status=live": `{"api_id": "qa", "calls": ["` + placeholderUUID + `", "` + r2LiveCall + `"]}`},
 			sent:    []string{"GET Call/?status=live"},
 			stdout:  []string{placeholderUUID, r2LiveCall},
@@ -109,36 +109,36 @@ func r2Cases() []qaCase {
 		},
 		{
 			id: "r2/6a", title: "the SIP trunking skill said sip: URIs and sip:...;transport=tls work",
-			args:   args("skill install sip-trunking --print"),
+			args:   qaArgs("skill install sip-trunking --print"),
 			stdout: []string{"The API rejects `sip:` and `sips:` URIs", "with no `sip:` or `sips:` scheme (the API rejects both)"},
 			hidden: []string{"`sip:sip.voice.x.ai;transport=tls` is fine too", "the API also accepts `sip:user@host`", "xAI's `sip:` form is fine"},
 		},
 		{
 			id: "r2/6b", title: "the CLI skill said deleting a URI deletes its trunks, true only where it is the primary URI",
-			args:   args("skill install cli --print"),
+			args:   qaArgs("skill install cli --print"),
 			stdout: []string{"Deleting a URI deletes the trunks that use it as their primary URI"},
 			hidden: []string{"Deleting a URI deletes the trunks that use it."},
 		},
 		{
 			id: "r2/6c", title: "the audio-streaming skill did not read a live call with voice calls get --live and had no India KYC refusal note",
-			args:   args("skill install audio-streaming --print"),
+			args:   qaArgs("skill install audio-streaming --print"),
 			stdout: []string{"`plivo voice calls get <request_uuid> --live -o json` returns it", "Never add `--force` to get past a KYC refusal"},
 		},
 		{
 			id: "r2/7a", title: "account usage took --until before --since and sent the reversed window",
-			args:   args("account usage --since 2026-10-17 --until 2026-10-01"),
+			args:   qaArgs("account usage --since 2026-10-17 --until 2026-10-01"),
 			exit:   1,
 			stderr: []string{`"code": "BAD_INPUT"`, "--until (2026-10-01) must be after --since (2026-10-17)"},
 		},
 		{
 			id: "r2/7b", title: `trunks update --direction alone said "nothing to update, pass at least one flag", though a flag was passed`,
-			args:   args("sip trunks update 101 --direction inbound"),
+			args:   qaArgs("sip trunks update 101 --direction inbound"),
 			exit:   1,
 			stderr: []string{`"code": "BAD_INPUT"`, "--direction alone sends no change"},
 		},
 		{
 			id: "r2/7c", title: "the skills offer after login was asked once per agent: a login in Codex asked again after one in Cursor had been asked",
-			args:    args("login"),
+			args:    qaArgs("login"),
 			replies: map[string]string{"POST /v1/accounts/cli/token": r2TokenBundle},
 			setup:   r2LoginInCodexAfterCursor,
 			sent:    []string{"POST /v1/accounts/cli/token"},
@@ -147,27 +147,15 @@ func r2Cases() []qaCase {
 		},
 		{
 			id: "r2/7d", title: "calls make sent --to hello to the API: only the spend guard stood in the way",
-			args:   args("voice calls make --from +14155550100 --to hello --yes"),
+			args:   qaArgs("voice calls make --from +14155550100 --to hello --yes"),
 			exit:   1,
 			stderr: []string{`"code": "BAD_FLAG"`, "is not an E.164 number or a sip: URI"},
 		},
 		{
 			id: "r2/7e", title: "--timeout took only plain seconds, so 90s was refused",
-			args:   args("sip test --uri sip.example.com --timeout 90s --dry-run"),
+			args:   qaArgs("sip test --uri sip.example.com --timeout 90s --dry-run"),
 			stderr: []string{"within 1m30s"},
 		},
-	}
-}
-
-// r2Shows checks that each of want is in the output, for text a command prints
-// through cobra's OutOrStderr: stderr in use, stdout under the harness.
-func r2Shows(want ...string) func(*qaResult) []string {
-	return func(r *qaResult) []string {
-		var p []string
-		for _, w := range want {
-			p = append(p, expect(strings.Contains(r.stdout+r.stderr, w), "output lacks %q:\n%s", w, clip(r.stdout+r.stderr))...)
-		}
-		return p
 	}
 }
 

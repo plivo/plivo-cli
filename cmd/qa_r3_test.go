@@ -29,7 +29,7 @@ func r3Cases() []qaCase {
 	return []qaCase{
 		{
 			id: "r3/L1", title: "applications delete --cascade=false sent no cascade, so the API's default deleted the app's endpoints",
-			args:   args("account applications delete 31000000000000001 --cascade=false --yes"),
+			args:   qaArgs("account applications delete 31000000000000001 --cascade=false --yes"),
 			sent:   []string{"DELETE Application/31000000000000001/?cascade=false"},
 			stdout: []string{`"data"`},
 		},
@@ -41,7 +41,7 @@ func r3Cases() []qaCase {
 		},
 		{
 			id: "r3/L3", title: "subaccounts list -o json printed every subaccount's live auth_token",
-			args:    args("account subaccounts list -o json"),
+			args:    qaArgs("account subaccounts list -o json"),
 			replies: map[string]string{"GET Subaccount/*": `{"api_id": "qa", "meta": {"limit": 20, "offset": 0, "total_count": 1, "next": null, "previous": null}, "objects": [{"auth_id": "SAQASUBACCOUNT1", "auth_token": "qa-leak-auth-token", "new_auth_token": "qa-leak-new-auth-token", "name": "qa"}]}`},
 			sent:    []string{"GET Subaccount/?limit=20&offset=0"},
 			stdout:  []string{"SAQASUBACCOUNT1"},
@@ -49,14 +49,14 @@ func r3Cases() []qaCase {
 		},
 		{
 			id: "r3/L4", title: "10DLC brands get showed every field blank: the API nests the brand and names its fields differently",
-			args:    args("messaging sms 10dlc brands get BQAFAKE1 -o table"),
+			args:    qaArgs("messaging sms 10dlc brands get BQAFAKE1 -o table"),
 			replies: map[string]string{"GET 10dlc/Brand/BQAFAKE1/": `{"api_id": "qa", "brand": {"brand_id": "BQAFAKE1", "brand_type": "STARTER", "company_name": "QA Widgets", "registration_status": "COMPLETED"}}`},
 			sent:    []string{"GET 10dlc/Brand/BQAFAKE1/"},
 			stdout:  []string{"QA Widgets", "COMPLETED"},
 		},
 		{
 			id: "r3/L5", title: "endpoints get -o json printed the endpoint's password hash",
-			args:    args("voice endpoints get 12345678 -o json"),
+			args:    qaArgs("voice endpoints get 12345678 -o json"),
 			replies: map[string]string{"GET Endpoint/12345678/": `{"api_id": "qa", "endpoint_id": "12345678", "username": "qauser01", "alias": "qa", "password": "qa-leak-endpoint-password"}`},
 			sent:    []string{"GET Endpoint/12345678/"},
 			stdout:  []string{"qauser01"},
@@ -64,49 +64,49 @@ func r3Cases() []qaCase {
 		},
 		{
 			id: "r3/L6", title: "endpoints create took --alias as optional; the API requires it",
-			args:   args("voice endpoints create --username qauser01 --password QaPass1!"),
+			args:   qaArgs("voice endpoints create --username qauser01 --password QaPass1!"),
 			exit:   ExitUserError,
 			stderr: []string{"alias"},
 		},
 		{
 			id: "r3/L7", title: "numbers search dropped the reason a 200 body gave in error, so it read as no numbers",
-			args:    args("numbers search --country US"),
+			args:    qaArgs("numbers search --country US"),
 			replies: map[string]string{"GET PhoneNumber/*": `{"api_id": "qa", "error": "We are currently unable to offer your requested numbers", "meta": {"limit": 20, "offset": 0, "total_count": 0, "next": null, "previous": null}, "objects": []}`},
 			sent:    []string{"GET PhoneNumber/?country_iso=US&limit=20&offset=0"},
 			stderr:  []string{"We are currently unable to offer your requested numbers"},
 		},
 		{
 			id: "r3/L8", title: "compliance list refused --number-type national, which the API takes",
-			args:   args("numbers compliance list --number-type national"),
+			args:   qaArgs("numbers compliance list --number-type national"),
 			sent:   []string{"GET PhoneNumber/Compliance/?limit=20&number_type=national&offset=0"},
 			stdout: []string{`"data"`},
 		},
 		{
 			id: "r3/L9", title: "endpoints list read app_id, which the API never sends (it sends application, a URI)",
-			args:    args("voice endpoints list -o table"),
+			args:    qaArgs("voice endpoints list -o table"),
 			replies: map[string]string{"GET Endpoint/*": `{"api_id": "qa", "meta": {"limit": 20, "offset": 0, "total_count": 1, "next": null, "previous": null}, "objects": [{"endpoint_id": "12345678", "username": "qauser01", "alias": "qa", "application": "/v1/Account/CIFAKEPLACEHOLDER001/Application/31000000000000001/"}]}`},
 			sent:    []string{"GET Endpoint/?limit=20&offset=0"},
 			stdout:  []string{"31000000000000001"},
 		},
 		{
 			id: "r3/O1", title: "auth use --dry-run switched the profile (auth remove --dry-run deleted one)",
-			args:   args("auth use other --dry-run"),
+			args:   qaArgs("auth use other --dry-run"),
 			setup:  qaTwoProfiles,
 			stderr: []string{"[dry-run]"},
 			check: func(r *qaResult) []string {
 				cfg, err := config.Load()
-				return expect(err == nil && cfg.Active == "test", "the active profile is %q after --dry-run (err %v)", cfg.Active, err)
+				return qaExpect(err == nil && cfg.Active == "test", "the active profile is %q after --dry-run (err %v)", cfg.Active, err)
 			},
 		},
 		{
 			id: "r3/O2", title: "config set and auth use run at once lost one of the two changes",
-			args:  args("config set telemetry false"),
+			args:  qaArgs("config set telemetry false"),
 			setup: qaTwoProfiles,
 			check: func(r *qaResult) []string { return qaRaceConfig(8) },
 		},
 		{
 			id: "r3/O3", title: "docs --refresh with the network down showed the old cache as if fresh",
-			args:    args("docs list --refresh"),
+			args:    qaArgs("docs list --refresh"),
 			offline: true,
 			setup: func(t *testing.T) {
 				home, _ := os.UserHomeDir()
@@ -117,7 +117,7 @@ func r3Cases() []qaCase {
 		},
 		{
 			id: "r3/O4", title: "skill install --project followed a SKILL.md link out of the repository and created that file",
-			args: args("skill install cli --project"),
+			args: qaArgs("skill install cli --project"),
 			setup: func(t *testing.T) {
 				repo := t.TempDir()
 				outside = filepath.Join(t.TempDir(), "elsewhere.md")
@@ -137,7 +137,7 @@ func r3Cases() []qaCase {
 			stderr: []string{"BAD_INPUT", "link"},
 			check: func(r *qaResult) []string {
 				_, err := os.Lstat(outside)
-				return expect(os.IsNotExist(err), "created %s, outside the repository", outside)
+				return qaExpect(os.IsNotExist(err), "created %s, outside the repository", outside)
 			},
 		},
 		{
@@ -148,13 +148,13 @@ func r3Cases() []qaCase {
 		},
 		{
 			id: "r3/O6", title: "lookup is billed per request (USD 0.004) but said nothing about it",
-			args:   args("lookup +14155550100"),
+			args:   qaArgs("lookup +14155550100"),
 			sent:   []string{"GET /v1/Lookup/Number/+14155550100?type=carrier"},
 			stderr: []string{"USD 0.004"},
 		},
 		{
 			id: "r3/O7", title: "PLIVO_BUDDY_URL took any plain-http host, so ask sent the account's credentials there",
-			args:   args("ask hello"),
+			args:   qaArgs("ask hello"),
 			setup:  func(t *testing.T) { t.Setenv("PLIVO_BUDDY_URL", "http://example.com") },
 			exit:   ExitUserError,
 			stderr: []string{"BAD_INPUT", "PLIVO_BUDDY_URL"},
@@ -181,7 +181,7 @@ func r3Cases() []qaCase {
 						return []string{"the preview shows the forged line " + line}
 					}
 				}
-				return expect(strings.Contains(r.stderr, "Call/abc%0A"), "the preview lacks the escaped ID:\n%s", r.stderr)
+				return qaExpect(strings.Contains(r.stderr, "Call/abc%0A"), "the preview lacks the escaped ID:\n%s", r.stderr)
 			},
 		},
 		{
@@ -204,7 +204,7 @@ func r3Cases() []qaCase {
 		},
 		{
 			id: "r3/W4", title: "a 307 to another port of the same host was followed, and that port got the credentials",
-			args:  args("account get"),
+			args:  qaArgs("account get"),
 			setup: func(t *testing.T) { elsewhere = qaListenElsewhere(t) },
 			handler: func(w http.ResponseWriter, r *http.Request) bool {
 				http.Redirect(w, r, elsewhere.URL+r.URL.Path, http.StatusTemporaryRedirect)
@@ -215,12 +215,12 @@ func r3Cases() []qaCase {
 			stderr: []string{"UPSTREAM_ERROR", "307"},
 			check: func(*qaResult) []string {
 				n := elsewhere.hits.Load()
-				return expect(n == 0, "the other port got %d request(s), with the credentials", n)
+				return qaExpect(n == 0, "the other port got %d request(s), with the credentials", n)
 			},
 		},
 		{
 			id: "r3/W5", title: "a 307 to another host was followed, and that host got the new SIP password",
-			args:  args("sip credentials create --name qa --username qauser01 --password-stdin"),
+			args:  qaArgs("sip credentials create --name qa --username qauser01 --password-stdin"),
 			stdin: "QaPass1!\n",
 			setup: func(t *testing.T) { elsewhere = qaListenElsewhere(t) },
 			handler: func(w http.ResponseWriter, r *http.Request) bool {
@@ -233,12 +233,12 @@ func r3Cases() []qaCase {
 			stderr: []string{"UPSTREAM_ERROR", "307"},
 			check: func(*qaResult) []string {
 				n := elsewhere.hits.Load()
-				return expect(n == 0, "the other host got %d request(s), with the password", n)
+				return qaExpect(n == 0, "the other host got %d request(s), with the password", n)
 			},
 		},
 		{
 			id: "r3/D1", title: "10DLC brands create never sent the profile_uuid the API requires",
-			args: args("messaging sms 10dlc brands create --profile-uuid " + call + " --alias qa --yes"),
+			args: qaArgs("messaging sms 10dlc brands create --profile-uuid " + call + " --alias qa --yes"),
 			sent: []string{"POST 10dlc/Brand/"},
 			check: func(r *qaResult) []string {
 				return qaBodyHas(r, "profile_uuid", call)
@@ -246,7 +246,7 @@ func r3Cases() []qaCase {
 		},
 		{
 			id: "r3/D2", title: "10DLC campaigns create sent sample_message_1 and opt_in_* keys and no vertical; the API takes sample1, optin_*",
-			args: args("messaging sms 10dlc campaigns create --alias qa --brand-id BQAFAKE1 --vertical TECHNOLOGY --usecase MARKETING " +
+			args: qaArgs("messaging sms 10dlc campaigns create --alias qa --brand-id BQAFAKE1 --vertical TECHNOLOGY --usecase MARKETING " +
 				"--description qa --message-flow qa --sample-message-1 one --sample-message-2 two --help-message help " +
 				"--opt-out-message stop --subscriber-optin --subscriber-optout --subscriber-help --yes"),
 			sent: []string{"POST 10dlc/Campaign/"},
@@ -258,7 +258,7 @@ func r3Cases() []qaCase {
 		},
 		{
 			id: "r3/D3", title: "tollfree submit sent business_name, use_case and numbers_list; the API takes profile_uuid, number, usecase and volume",
-			args: args("messaging sms tollfree submit --profile-uuid " + call + " --number +18005550100 --use-case MARKETING " +
+			args: qaArgs("messaging sms tollfree submit --profile-uuid " + call + " --number +18005550100 --use-case MARKETING " +
 				"--use-case-summary qa --production-message-content qa --opt-in-type VERBAL --opt-in-image-url https://example.com/optin.png " +
 				"--message-volume 1000 --terms-and-conditions-link https://example.com/terms --privacy-policy-link https://example.com/privacy -o table"),
 			replies: map[string]string{"POST TollfreeVerification/": `{"api_id": "qa", "message": "created", "uuid": "d1e2f3a4-0000-4000-8000-0000000000f1"}`},
@@ -272,20 +272,20 @@ func r3Cases() []qaCase {
 		},
 		{
 			id: "r3/D4", title: "multiparty mute posted to /Participant/{id}/Mute/; the API sets mute on the participant",
-			args:   args("voice multiparty participant mute " + call + " 11"),
+			args:   qaArgs("voice multiparty participant mute " + call + " 11"),
 			sent:   []string{"POST MultiPartyCall/uuid_" + call + "/Participant/11/"},
 			stdout: []string{`"data"`},
 			check:  func(r *qaResult) []string { return qaBodyHas(r, "mute", true) },
 		},
 		{
 			id: "r3/D5", title: "conference member kick hung the member up (DELETE /Member/{id}/) instead of kicking",
-			args:   args("voice conferences member kick room 11 --yes"),
+			args:   qaArgs("voice conferences member kick room 11 --yes"),
 			sent:   []string{"POST Conference/room/Member/11/Kick/"},
 			stdout: []string{`"data"`},
 		},
 		{
 			id: "r3/D6", title: "conference member play sent urls, loop and mix; the API takes one url",
-			args:   args("voice conferences member play room 11 --url https://example.com/a.mp3"),
+			args:   qaArgs("voice conferences member play room 11 --url https://example.com/a.mp3"),
 			sent:   []string{"POST Conference/room/Member/11/Play/"},
 			stdout: []string{`"data"`},
 			check: func(r *qaResult) []string {
@@ -294,7 +294,7 @@ func r3Cases() []qaCase {
 		},
 		{
 			id: "r3/D7a", title: "streams start sent stream_status_callback_url; the API reads status_callback_url",
-			args: args("voice calls streams start " + call + " --url wss://example.com/s --stream-status-callback https://example.com/cb"),
+			args: qaArgs("voice calls streams start " + call + " --url wss://example.com/s --stream-status-callback https://example.com/cb"),
 			sent: []string{"POST Call/" + call + "/Stream/"},
 			check: func(r *qaResult) []string {
 				return append(qaBodyHas(r, "status_callback_url", "https://example.com/cb"), qaBodyLacks(r, "stream_status_callback_url")...)
@@ -302,13 +302,13 @@ func r3Cases() []qaCase {
 		},
 		{
 			id: "r3/D7b", title: "streams start took --bidirectional with --audio-track both; the API allows inbound only",
-			args:   args("voice calls streams start " + call + " --url wss://example.com/s --bidirectional --audio-track both"),
+			args:   qaArgs("voice calls streams start " + call + " --url wss://example.com/s --bidirectional --audio-track both"),
 			exit:   ExitUserError,
 			stderr: []string{"BAD_FLAG", "audio-track"},
 		},
 		{
 			id: "r3/D8a", title: "calls make sent answer_method GET with any answer URL; the API's default is POST",
-			args: args("voice calls make --from +14155550100 --to +14155550101 --answer-url https://example.com/answer --yes"),
+			args: qaArgs("voice calls make --from +14155550100 --to +14155550101 --answer-url https://example.com/answer --yes"),
 			sent: []string{"POST Call/"},
 			check: func(r *qaResult) []string {
 				return append(qaBodyHas(r, "answer_url", "https://example.com/answer"), qaBodyLacks(r, "answer_method")...)
@@ -316,25 +316,25 @@ func r3Cases() []qaCase {
 		},
 		{
 			id: "r3/D8b", title: "calls make took --machine-detection none; the API takes only true or hangup",
-			args:   args("voice calls make --from +14155550100 --to +14155550101 --machine-detection none --yes"),
+			args:   qaArgs("voice calls make --from +14155550100 --to +14155550101 --machine-detection none --yes"),
 			exit:   ExitUserError,
 			stderr: []string{"BAD_FLAG", "machine-detection"},
 		},
 		{
 			id: "r3/F1", title: "sip uris create took a user part (sip:user@host), which the API refuses",
-			args:   args("sip uris create --name qa --uri sip:qauser@sip.example.com"),
+			args:   qaArgs("sip uris create --name qa --uri sip:qauser@sip.example.com"),
 			exit:   ExitUserError,
 			stderr: []string{"BAD_FLAG"},
 		},
 		{
 			id: "r3/F2", title: "--timeout 0 silently became 30s",
-			args:   args("voice calls get " + call + " --timeout 0"),
+			args:   qaArgs("voice calls get " + call + " --timeout 0"),
 			exit:   ExitUserError,
 			stderr: []string{"timeout"},
 		},
 		{
 			id: "r3/F4", title: "plivo api reported a 404 as UPSTREAM_ERROR, exit 3; its help promises the exit codes of the rest of the CLI",
-			args:    args("api GET /Subaccount/SAQASUBACCOUNT1/"),
+			args:    qaArgs("api GET /Subaccount/SAQASUBACCOUNT1/"),
 			replies: map[string]string{"GET Subaccount/{}/": `404 {"api_id": "qa", "error": "not found"}`},
 			sent:    []string{"GET Subaccount/SAQASUBACCOUNT1/"},
 			exit:    ExitUserError,
@@ -342,7 +342,7 @@ func r3Cases() []qaCase {
 		},
 		{
 			id: "r3/links", title: "10DLC links called /10dlc/NumberLinking/; links live under /10dlc/Campaign/{id}/Number/",
-			args:   args("messaging sms 10dlc links create --campaign-id CQAFAKE1 --number +14155550100"),
+			args:   qaArgs("messaging sms 10dlc links create --campaign-id CQAFAKE1 --number +14155550100"),
 			sent:   []string{"POST 10dlc/Campaign/CQAFAKE1/Number/"},
 			stdout: []string{`"data"`},
 			check: func(r *qaResult) []string {
@@ -396,7 +396,7 @@ func qaBodyHas(r *qaResult, key string, want any) []string {
 	got, ok := r.reqs[len(r.reqs)-1].Body[key]
 	w, _ := json.Marshal(want)
 	g, _ := json.Marshal(got)
-	return expect(ok && string(g) == string(w), "body has %s = %s, want %s: %s", key, g, w, r.reqs[len(r.reqs)-1].Raw)
+	return qaExpect(ok && string(g) == string(w), "body has %s = %s, want %s: %s", key, g, w, r.reqs[len(r.reqs)-1].Raw)
 }
 
 // qaBodyLacks checks the last request's JSON body has none of keys.

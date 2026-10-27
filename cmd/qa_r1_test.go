@@ -45,7 +45,7 @@ func r1Cases() []qaCase {
 		},
 		{
 			id: "r1/C3", title: "trunks update --name dropped the trunk's fallback URI: the API clears one an update leaves out",
-			args:    args("sip trunks update " + r1TrunkIn + " --name renamed -o json"),
+			args:    qaArgs("sip trunks update " + r1TrunkIn + " --name renamed -o json"),
 			replies: map[string]string{"GET Zentrunk/Trunk/{}/": r1Trunk(r1TrunkIn, "enabled")},
 			sent:    []string{"GET Zentrunk/Trunk/" + r1TrunkIn + "/", "POST Zentrunk/Trunk/" + r1TrunkIn + "/"},
 			stdout:  []string{`"updated": true`},
@@ -66,7 +66,7 @@ func r1Cases() []qaCase {
 		},
 		{
 			id: "r1/C5", title: "skill install overwrote a SKILL.md that held local edits",
-			args:   args("skill install cli"),
+			args:   qaArgs("skill install cli"),
 			setup:  r1EditedSkill,
 			exit:   5,
 			stderr: []string{`"code": "DESTRUCTIVE_REFUSED"`, "matches no released version", "--force overwrites it"},
@@ -87,7 +87,7 @@ func r1Cases() []qaCase {
 		},
 		{
 			id: "r1/H7", title: "messaging sms list --from sent a filter the Message API does not have, so every number's messages came back",
-			args:   args("messaging sms list --from +14155550100 -o json"),
+			args:   qaArgs("messaging sms list --from +14155550100 -o json"),
 			exit:   1,
 			stderr: []string{`"code": "BAD_FLAG"`, "cannot filter by number", "--query"},
 		},
@@ -109,21 +109,21 @@ func r1Cases() []qaCase {
 		},
 		{
 			id: "r1/H10", title: "sip calls list --since alone searched only the 30 days after the start",
-			args:   args("sip calls list --since 2026-09-01 -o json"),
+			args:   qaArgs("sip calls list --since 2026-09-01 -o json"),
 			setup:  r1Clock,
 			sent:   []string{"GET Zentrunk/Call/?end_time__gte=2026-09-01+00%3A00%3A00&end_time__lte=2026-10-16+03%3A00%3A00&limit=20&offset=0"},
 			stdout: []string{`"objects"`},
 		},
 		{
 			id: "r1/H11", title: "streams test said ready after the endpoint hung up on the start frame, and its frames were not Plivo's",
-			args:   args("voice streams test --to ws://" + r1Endpoint + "/ws --duration 1 -o json"),
+			args:   qaArgs("voice streams test --to ws://" + r1Endpoint + "/ws --duration 1 -o json"),
 			setup:  r1StreamEndpoint,
 			exit:   3,
 			stderr: []string{`"code": "NETWORK_ERROR"`, `code 1011, reason \"bot crashed\"`},
 		},
 		{
 			id: "r1/H12", title: "ask hung on a stream that went silent: --timeout did nothing",
-			args:    args("ask hello --timeout 1 -o json"),
+			args:    qaArgs("ask hello --timeout 1 -o json"),
 			handler: r1SilentStream,
 			exit:    3,
 			sent:    []string{"GET ", r1Chat},
@@ -140,7 +140,7 @@ func r1Cases() []qaCase {
 		{
 			id: "r1/H14", title: "feedback --bug left phone numbers, a card, an IP and SIP credentials in the report",
 			args:   []string{"feedback", "--bug", "--message", r1PII, "--dry-run"},
-			check:  r1Shows("Bug report, as it will be sent:", "Dry run: nothing sent."),
+			check:  qaShows("Bug report, as it will be sent:", "Dry run: nothing sent."),
 			hidden: []string{"4155550123", "7946 0958", "4111 1111 1111 1111", "203.0.113.77", "qauser01", "s3cret"},
 		},
 		{
@@ -152,19 +152,19 @@ func r1Cases() []qaCase {
 		},
 		{
 			id: "r1/H16", title: "--schema showed hand-checked required flags as optional",
-			args:  args("sip credentials create --schema -o json"),
+			args:  qaArgs("sip credentials create --schema -o json"),
 			check: r1Required("username", "password-stdin"),
 		},
 		{
 			id: "r1/H17", title: "upgrade told a binary install.sh put in /opt/homebrew/bin to run brew upgrade",
 			// The test binary cannot sit in /opt/homebrew, so the decision is checked on the two paths.
-			args:   args("upgrade --help"),
+			args:   qaArgs("upgrade --help"),
 			stdout: []string{"plivo upgrade"},
 			check:  r1BrewOnlyInCellar,
 		},
 		{
 			id: "r1/M-a", title: `uris create without --name sent "name": "", which the API refuses`,
-			args:   args("sip uris create --uri sip.example.com -o json"),
+			args:   qaArgs("sip uris create --uri sip.example.com -o json"),
 			exit:   1,
 			stderr: []string{`required flag(s) \"name\" not set`},
 		},
@@ -179,7 +179,7 @@ func r1Cases() []qaCase {
 		},
 		{
 			id: "r1/M-c", title: "trunks update --credential on an inbound trunk said Updated and changed nothing",
-			args:    args("sip trunks update " + r1TrunkIn + " --credential " + r1CredUUID),
+			args:    qaArgs("sip trunks update " + r1TrunkIn + " --credential " + r1CredUUID),
 			replies: map[string]string{"GET Zentrunk/Trunk/{}/": r1Trunk(r1TrunkIn, "enabled")},
 			exit:    1,
 			sent:    []string{"GET Zentrunk/Trunk/" + r1TrunkIn + "/"},
@@ -187,27 +187,27 @@ func r1Cases() []qaCase {
 		},
 		{
 			id: "r1/M-d", title: "--platform elevenlabs turned a sips: URI into port 5060 over TCP",
-			args:   args("sip uris create --name qa --platform elevenlabs --uri sips:sip.rtc.elevenlabs.io -o json"),
+			args:   qaArgs("sip uris create --name qa --platform elevenlabs --uri sips:sip.rtc.elevenlabs.io -o json"),
 			sent:   []string{"POST Zentrunk/URI/"},
 			stdout: []string{`"data"`},
 			check:  r1Carried("POST Zentrunk/URI/", `"uri":"sip.rtc.elevenlabs.io:5061;transport=tls"`),
 		},
 		{
 			id: "r1/M-e", title: "numbers update --trunk-id routed a number to a disabled trunk without a word",
-			args:    args("numbers update 14155550100 --trunk-id " + r1TrunkOff),
+			args:    qaArgs("numbers update 14155550100 --trunk-id " + r1TrunkOff),
 			replies: map[string]string{"GET Zentrunk/Trunk/{}/": r1Trunk(r1TrunkOff, "disabled")},
 			sent:    []string{"GET Zentrunk/Trunk/" + r1TrunkOff + "/", "POST Number/14155550100/"},
 			stderr:  []string{"Warning: trunk " + r1TrunkOff + " is disabled"},
 		},
 		{
 			id: "r1/M-f", title: "ip-acl create sent an IPv6 address the API refuses",
-			args:   args("sip ip-acl create --name qa --ip 2606:4700:4700::1111"),
+			args:   qaArgs("sip ip-acl create --name qa --ip 2606:4700:4700::1111"),
 			exit:   1,
 			stderr: []string{`"code": "BAD_FLAG"`, "is IPv6, which Plivo does not accept"},
 		},
 		{
 			id: "r1/M-g", title: "credentials create sent a password the API refuses (5 to 20 characters, with a symbol)",
-			args:   args("sip credentials create --name qa --username qauser01 --password-stdin"),
+			args:   qaArgs("sip credentials create --name qa --username qauser01 --password-stdin"),
 			stdin:  "abc\n",
 			exit:   1,
 			stderr: []string{`"code": "BAD_INPUT"`, "must be 5 to 20 letters"},
@@ -221,21 +221,21 @@ func r1Cases() []qaCase {
 		},
 		{
 			id: "r1/M-i", title: "numbers compliance list -o jsonl wrote the whole page as one line",
-			args:    args("numbers compliance list -o jsonl"),
+			args:    qaArgs("numbers compliance list -o jsonl"),
 			replies: map[string]string{"GET PhoneNumber/Compliance/*": r1Compliances},
 			sent:    []string{"GET PhoneNumber/Compliance/?limit=20&offset=0"},
 			check:   r1Lines(`"compliance_id":"qa-comp-0"`, `"compliance_id":"qa-comp-1"`),
 		},
 		{
 			id: "r1/M-j", title: "powerpacks list failed on a number_priority sent as an array",
-			args:    args("messaging sms powerpacks list -o json"),
+			args:    qaArgs("messaging sms powerpacks list -o json"),
 			replies: map[string]string{"GET Powerpack/*": r1Page(r1Powerpack)},
 			sent:    []string{"GET Powerpack/?limit=20&offset=0"},
 			stdout:  []string{`"number_priority"`, `"priority1": "shortcode"`},
 		},
 		{
 			id: "r1/M-k", title: "-o csv let a spreadsheet run =/@/+ cells as formulas, and --query sorted the columns",
-			args: args("numbers list -o csv --query data.objects"),
+			args: qaArgs("numbers list -o csv --query data.objects"),
 			replies: map[string]string{"GET Number/*": r1Page(
 				`{"number": "14155550100", "alias": "=1+2", "type": "local"}`,
 				`{"number": "14155550101", "alias": "+14155550199", "type": "local"}`)},
@@ -251,7 +251,7 @@ func r1Cases() []qaCase {
 		},
 		{
 			id: "r1/M-m", title: "ask -o json is JSON Lines, one object per event, not one document: by design, and the help must say so",
-			args:    args("ask hello -o json"),
+			args:    qaArgs("ask hello -o json"),
 			replies: map[string]string{r1Chat: sseTurn("start", `{}`, "token", `{"text": "Hi."}`, "final", `{"answer": "Hi.", "latency_ms": 1}`, "done", `{}`)},
 			sent:    []string{"GET ", r1Chat},
 			check:   r1JSONLinesDocumented,
@@ -268,7 +268,7 @@ func r1Cases() []qaCase {
 		{
 			id: "r1/M-o", title: "the rating pop-up waited for Enter under `plivo ... | jq`, and PLIVO_FEEDBACK_PROMPT=off did not turn it off",
 			// Execute asks after a command that succeeded; the check asks as it does.
-			args:  args("numbers list -o json"),
+			args:  qaArgs("numbers list -o json"),
 			setup: r1PromptDue,
 			sent:  []string{"GET Number/?limit=20&offset=0"},
 			check: r1PromptGates,
@@ -323,22 +323,10 @@ func r1Carried(req, part string) func(*qaResult) []string {
 	return func(r *qaResult) []string {
 		for i := len(r.reqs) - 1; i >= 0; i-- {
 			if q := r.reqs[i]; q.String() == req {
-				return expect(strings.Contains(q.Raw, part), "%s sent %s, want %s in it", req, q.Raw, part)
+				return qaExpect(strings.Contains(q.Raw, part), "%s sent %s, want %s in it", req, q.Raw, part)
 			}
 		}
 		return []string{req + " was not sent"}
-	}
-}
-
-// r1Shows is a check: stdout or stderr holds each of want. cobra's
-// OutOrStderr is stdout under execCmd, stderr in a real run.
-func r1Shows(want ...string) func(*qaResult) []string {
-	return func(r *qaResult) []string {
-		var p []string
-		for _, w := range want {
-			p = append(p, expect(strings.Contains(r.stdout+r.stderr, w), "output lacks %q:\n%s%s", w, clip(r.stdout), clip(r.stderr))...)
-		}
-		return p
 	}
 }
 
@@ -347,11 +335,11 @@ func r1Lines(want ...string) func(*qaResult) []string {
 	return func(r *qaResult) []string {
 		lines := strings.Split(strings.TrimSpace(r.stdout), "\n")
 		if len(lines) != len(want) {
-			return []string{fmt.Sprintf("%d line(s), want %d:\n%s", len(lines), len(want), clip(r.stdout))}
+			return []string{fmt.Sprintf("%d line(s), want %d:\n%s", len(lines), len(want), qaClip(r.stdout))}
 		}
 		var p []string
 		for i, w := range want {
-			p = append(p, expect(strings.Contains(lines[i], w), "line %d lacks %s: %s", i+1, w, lines[i])...)
+			p = append(p, qaExpect(strings.Contains(lines[i], w), "line %d lacks %s: %s", i+1, w, lines[i])...)
 		}
 		return p
 	}
@@ -401,7 +389,7 @@ func r1EditedSkill(t *testing.T) {
 func r1SkillKept(*qaResult) []string {
 	dir, _ := resolveSkillDir("", "plivo-cli") // where install writes the CLI skill
 	got, err := os.ReadFile(filepath.Join(dir, skillFileName))
-	return expect(err == nil && string(got) == "my own notes\n", "the edited SKILL.md now holds %.40q (%v)", got, err)
+	return qaExpect(err == nil && string(got) == "my own notes\n", "the edited SKILL.md now holds %.40q (%v)", got, err)
 }
 
 // r1DeadTunnel stands in a tunnel whose process has exited. A forward that
@@ -521,7 +509,7 @@ func r1Required(flags ...string) func(*qaResult) []string {
 			} `json:"data"`
 		}
 		if err := json.Unmarshal([]byte(r.stdout), &doc); err != nil {
-			return []string{fmt.Sprintf("--schema is not JSON (%v):\n%s", err, clip(r.stdout))}
+			return []string{fmt.Sprintf("--schema is not JSON (%v):\n%s", err, qaClip(r.stdout))}
 		}
 		required := map[string]bool{}
 		for _, f := range doc.Data.Flags {
@@ -529,7 +517,7 @@ func r1Required(flags ...string) func(*qaResult) []string {
 		}
 		var p []string
 		for _, name := range flags {
-			p = append(p, expect(required[name], "--%s is missing or shows required: false", name)...)
+			p = append(p, qaExpect(required[name], "--%s is missing or shows required: false", name)...)
 		}
 		return p
 	}
@@ -538,19 +526,19 @@ func r1Required(flags ...string) func(*qaResult) []string {
 // r1BrewOnlyInCellar is a check: a binary is Homebrew's only when its path
 // resolves into a Cellar.
 func r1BrewOnlyInCellar(*qaResult) []string {
-	return append(expect(homebrewInstallHint("/opt/homebrew/bin/plivo") == "", "a plain binary in /opt/homebrew/bin is sent to brew"),
-		expect(homebrewInstallHint("/opt/homebrew/Cellar/plivo/1.2.0/bin/plivo") != "", "a binary in a Cellar is no longer sent to brew")...)
+	return append(qaExpect(homebrewInstallHint("/opt/homebrew/bin/plivo") == "", "a plain binary in /opt/homebrew/bin is sent to brew"),
+		qaExpect(homebrewInstallHint("/opt/homebrew/Cellar/plivo/1.2.0/bin/plivo") != "", "a binary in a Cellar is no longer sent to brew")...)
 }
 
 // r1JSONLinesDocumented is a check: every stdout line is a JSON object, and
 // ask's help says -o json prints JSON Lines.
 func r1JSONLinesDocumented(r *qaResult) []string {
 	lines := strings.Split(strings.TrimSpace(r.stdout), "\n")
-	p := expect(len(lines) > 1, "want a JSON line per event, got:\n%s", clip(r.stdout))
+	p := qaExpect(len(lines) > 1, "want a JSON line per event, got:\n%s", qaClip(r.stdout))
 	for _, l := range lines {
-		p = append(p, expect(json.Valid([]byte(l)), "not a JSON line: %s", l)...)
+		p = append(p, qaExpect(json.Valid([]byte(l)), "not a JSON line: %s", l)...)
 	}
-	return append(p, expect(strings.Contains(askCmd.Long, "JSON Lines"), "ask --help no longer says -o json prints JSON Lines")...)
+	return append(p, qaExpect(strings.Contains(askCmd.Long, "JSON Lines"), "ask --help no longer says -o json prints JSON Lines")...)
 }
 
 // r1StdoutTTY is what the stubbed isTerminal says of stdout.
@@ -569,9 +557,9 @@ func r1PromptDue(t *testing.T) {
 // r1PromptGates is a check: the prompt asks on a terminal, and never with
 // stdout piped or with PLIVO_FEEDBACK_PROMPT=off.
 func r1PromptGates(*qaResult) []string {
-	p := expect(r1Prompted(true, ""), "not asked on a terminal: the stand-in terminal does not work")
-	p = append(p, expect(!r1Prompted(false, ""), "asked with stdout piped, where it waits for an Enter that never comes")...)
-	return append(p, expect(!r1Prompted(true, "off"), "asked with PLIVO_FEEDBACK_PROMPT=off")...)
+	p := qaExpect(r1Prompted(true, ""), "not asked on a terminal: the stand-in terminal does not work")
+	p = append(p, qaExpect(!r1Prompted(false, ""), "asked with stdout piped, where it waits for an Enter that never comes")...)
+	return append(p, qaExpect(!r1Prompted(true, "off"), "asked with PLIVO_FEEDBACK_PROMPT=off")...)
 }
 
 // r1Prompted runs the prompt, due, as Execute does after `numbers list`,

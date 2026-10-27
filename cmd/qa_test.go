@@ -36,12 +36,12 @@ import (
 // Every run also checks its exit code is the one its error's code maps to.
 // `make qa` runs only these. CONTRIBUTING.md says how to add a case.
 
-// pending holds the findings whose fix is not on main yet, each with what is
+// qaPending holds the findings whose fix is not on main yet, each with what is
 // still wrong. Their regression cases are skipped, and so is a sweep failure
 // one of them owns. The PR that fixes a finding deletes its entry here;
 // `go test ./cmd -run TestQA -qa-pending` runs the pending cases and fails
 // every one that passes, so an entry cannot outlive its fix.
-var pending = map[string]string{
+var qaPending = map[string]string{
 	"r2/5e":    "sip test probes the host it was given, never the target of its SRV record (open)",
 	"r3/L1":    "applications delete leaves out cascade=false (PR #172)",
 	"r3/L2":    "IDs go into request paths unescaped (request-safety PR)",
@@ -92,7 +92,7 @@ var pending = map[string]string{
 	"sdk/verify":     "verify sessions list reads objects, the API sends sessions under other names; validate posts to .../Validation/, the API to the session itself",
 }
 
-var qaRunPending = flag.Bool("qa-pending", false, "also run the QA cases listed in pending, failing those that pass")
+var qaRunPending = flag.Bool("qa-pending", false, "also run the QA cases listed in qaPending, failing those that pass")
 
 // qaAuthID is the account every request goes to and qaToken its auth token;
 // qaProfileToken is the one setFakeCreds saves in the profile. Not
@@ -161,7 +161,7 @@ func (r qaReq) String() string {
 	return s
 }
 
-// TestQA_regressions replays every finding. A case whose id is in pending is
+// TestQA_regressions replays every finding. A case whose id is in qaPending is
 // skipped (with -qa-pending it runs, and fails if it passes).
 func TestQA_regressions(t *testing.T) {
 	var cases []qaCase
@@ -175,14 +175,14 @@ func TestQA_regressions(t *testing.T) {
 		}
 		seen[c.id] = true
 		t.Run(c.id, func(t *testing.T) {
-			reason, isPending := pending[c.id]
+			reason, isPending := qaPending[c.id]
 			if isPending && !*qaRunPending {
 				t.Skipf("pending: %s", reason)
 			}
 			problems := c.run(t)
 			switch {
 			case isPending && len(problems) == 0:
-				t.Errorf("%s passes now: delete it from pending", c.id)
+				t.Errorf("%s passes now: delete it from qaPending", c.id)
 			case isPending:
 				t.Skipf("pending: %s\n%s", reason, strings.Join(problems, "\n"))
 			case len(problems) > 0:
@@ -190,9 +190,9 @@ func TestQA_regressions(t *testing.T) {
 			}
 		})
 	}
-	for id := range pending {
+	for id := range qaPending {
 		if _, oracle := qaKnownGaps[id]; !seen[id] && !oracle {
-			t.Errorf("pending names %s, which has no case and no known gaps in the SDK oracle", id)
+			t.Errorf("qaPending names %s, which has no case and no known gaps in the SDK oracle", id)
 		}
 	}
 }
@@ -221,15 +221,15 @@ func (c qaCase) run(t *testing.T) []string {
 	if r.exit != c.exit {
 		p = append(p, fmt.Sprintf("exit %d, want %d (%v)", r.exit, c.exit, r.err))
 	}
-	p = append(p, sentProblems(r.reqs, c.sent)...)
+	p = append(p, qaSentProblems(r.reqs, c.sent)...)
 	for _, s := range c.stdout {
 		if !strings.Contains(r.stdout, s) {
-			p = append(p, fmt.Sprintf("stdout lacks %q:\n%s", s, clip(r.stdout)))
+			p = append(p, fmt.Sprintf("stdout lacks %q:\n%s", s, qaClip(r.stdout)))
 		}
 	}
 	for _, s := range c.stderr {
 		if !strings.Contains(r.stderr, s) {
-			p = append(p, fmt.Sprintf("stderr lacks %q:\n%s", s, clip(r.stderr)))
+			p = append(p, fmt.Sprintf("stderr lacks %q:\n%s", s, qaClip(r.stderr)))
 		}
 	}
 	for _, s := range c.hidden {
@@ -243,8 +243,8 @@ func (c qaCase) run(t *testing.T) []string {
 	return p
 }
 
-// sentProblems compares the requests with want, in order.
-func sentProblems(got []qaReq, want []string) []string {
+// qaSentProblems compares the requests with want, in order.
+func qaSentProblems(got []qaReq, want []string) []string {
 	match := func(r qaReq, w string) bool {
 		if pre, ok := strings.CutSuffix(w, "*"); ok {
 			return strings.HasPrefix(r.String(), pre)
@@ -265,24 +265,36 @@ func sentProblems(got []qaReq, want []string) []string {
 	return []string{fmt.Sprintf("sent %d request(s), want %q:\n%s", len(got), want, strings.Join(lines, "\n"))}
 }
 
-// expect returns the problem when cond is false, for check funcs.
-func expect(cond bool, format string, args ...any) []string {
+// qaExpect returns the problem when cond is false, for check funcs.
+func qaExpect(cond bool, format string, args ...any) []string {
 	if cond {
 		return nil
 	}
 	return []string{fmt.Sprintf(format, args...)}
 }
 
-func clip(s string) string {
+// qaShows is a check: stdout or stderr holds each of want. cobra's
+// OutOrStderr is stdout under execCmd, stderr in a real run.
+func qaShows(want ...string) func(*qaResult) []string {
+	return func(r *qaResult) []string {
+		var p []string
+		for _, w := range want {
+			p = append(p, qaExpect(strings.Contains(r.stdout+r.stderr, w), "output lacks %q:\n%s", w, qaClip(r.stdout+r.stderr))...)
+		}
+		return p
+	}
+}
+
+func qaClip(s string) string {
 	if len(s) > 1500 {
 		return s[:1500] + "…"
 	}
 	return s
 }
 
-// args splits a command line on spaces; write a []string literal for an
+// qaArgs splits a command line on spaces; write a []string literal for an
 // argument that holds a space or is empty.
-func args(line string) []string { return strings.Fields(line) }
+func qaArgs(line string) []string { return strings.Fields(line) }
 
 // qaServer stands in for every Plivo API: it records each request and
 // answers from its replies.

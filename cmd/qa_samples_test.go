@@ -181,7 +181,7 @@ var qaSamples = map[string]string{
 
 // qaAfterFix holds the samples a pending fix changes, under the finding it
 // fixes. While that finding is pending the sample in qaSamples runs (and is
-// skipped if it stops running); once its entry leaves pending this one runs
+// skipped if it stops running); once its entry leaves qaPending this one runs
 // instead, or none for a command the fix retires (qaRetired).
 var qaAfterFix = map[string]struct{ owner, sample string }{
 	"messaging sms 10dlc brands create": {"r3/D1", "--profile-uuid {uuid} --alias qa"},
@@ -204,12 +204,12 @@ const qaRetired = "(retired)"
 // qaRetiredNow reports whether the fix that retires the command is in.
 func qaRetiredNow(key string) bool {
 	fix, ok := qaAfterFix[key]
-	return ok && fix.sample == qaRetired && pending[fix.owner] == ""
+	return ok && fix.sample == qaRetired && qaPending[fix.owner] == ""
 }
 
 // qaSampleFor is the sample to run for a command, and whether it has one.
 func qaSampleFor(key string) (string, bool) {
-	if fix, ok := qaAfterFix[key]; ok && pending[fix.owner] == "" {
+	if fix, ok := qaAfterFix[key]; ok && qaPending[fix.owner] == "" {
 		return fix.sample, fix.sample != qaRetired
 	}
 	sample, ok := qaSamples[key]
@@ -385,8 +385,8 @@ func TestQA_samplesCoverEveryCommand(t *testing.T) {
 				continue
 			}
 			switch fix, ok := qaAfterFix[key]; {
-			case ok && pending[fix.owner] != "":
-				t.Errorf("%s is not a command: if its fix is in, delete %s from pending", key, fix.owner)
+			case ok && qaPending[fix.owner] != "":
+				t.Errorf("%s is not a command: if its fix is in, delete %s from qaPending", key, fix.owner)
 			case !ok || fix.sample != qaRetired:
 				t.Errorf("%s is not a command", key)
 			}

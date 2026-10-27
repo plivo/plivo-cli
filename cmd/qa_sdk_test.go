@@ -108,7 +108,7 @@ var qaOracleOwners = map[string]string{
 // qaKnownGaps are what the oracle finds today, by the finding that reports
 // it: the name of a field --schema lists that the response lacks, or of a
 // parameter the references do not take; "*" covers anything in that
-// finding's commands. Once a finding leaves pending its gaps stop counting,
+// finding's commands. Once a finding leaves qaPending its gaps stop counting,
 // so what the oracle still finds fails, unless sdk/fields covers it.
 var qaKnownGaps = map[string][]string{
 	"r3/D1":          {"*"},
@@ -133,7 +133,7 @@ var qaKnownGaps = map[string][]string{
 // name ("" for a whole request or response), or "" when none does.
 func qaGapOwner(name string, owners ...string) string {
 	for _, owner := range owners {
-		if pending[owner] == "" {
+		if qaPending[owner] == "" {
 			continue
 		}
 		for _, gap := range qaKnownGaps[owner] {
@@ -285,7 +285,7 @@ func TestQA_sdkDecoding(t *testing.T) {
 					continue
 				}
 				if format == "table" && !qaShowsRecord(r.stdout, doc) {
-					p = append(p, "-o table shows none of the record's values:\n"+clip(r.stdout))
+					p = append(p, "-o table shows none of the record's values:\n"+qaClip(r.stdout))
 				}
 			}
 			if len(p) > 0 {

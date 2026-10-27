@@ -47,7 +47,7 @@ func qaVerdict(t *testing.T, problems map[string][]string) {
 	sort.Strings(owners)
 	for _, owner := range owners {
 		text := strings.Join(problems[owner], "\n")
-		if reason, ok := pending[owner]; ok {
+		if reason, ok := qaPending[owner]; ok {
 			skipped = append(skipped, fmt.Sprintf("pending %s (%s):\n%s", owner, reason, text))
 			continue
 		}
@@ -72,8 +72,8 @@ func qaControl(t *testing.T, s qaSample, r qaResult) {
 		return
 	}
 	msg := fmt.Sprintf("the sample does not run: exit %d (%v), tried to reach %v", r.exit, r.err, r.blocked)
-	if owner := qaAfterFix[s.path].owner; pending[owner] != "" {
-		t.Skipf("pending %s (%s): %s", owner, pending[owner], msg)
+	if owner := qaAfterFix[s.path].owner; qaPending[owner] != "" {
+		t.Skipf("pending %s (%s): %s", owner, qaPending[owner], msg)
 	}
 	t.Fatal(msg)
 }
@@ -219,8 +219,8 @@ func TestQA_sweepDryRun(t *testing.T) {
 	browserOpener = func(string) error { opened++; return nil }
 	for _, s := range append(qaAPISamples(), qaCollect(qaLocalSamples)...) {
 		t.Run(s.path, func(t *testing.T) {
-			if owner := qaDryRunOwners[s.path]; pending[owner] != "" {
-				t.Skipf("pending %s: %s", owner, pending[owner])
+			if owner := qaDryRunOwners[s.path]; qaPending[owner] != "" {
+				t.Skipf("pending %s: %s", owner, qaPending[owner])
 			}
 			writeProfile(t, home, "active = \"test\"\n\n[profiles.test]\nauth_id = \"CIFAKEPLACEHOLDER001\"\n\n[profiles.other]\nauth_id = \"CIFAKEPLACEHOLDER002\"\n")
 			if err := config.SetToken("test", "qa-keychain-value"); err != nil {
