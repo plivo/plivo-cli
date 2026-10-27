@@ -1436,7 +1436,8 @@ func init() {
 	sipCmd.AddCommand(sipURIsCmd, sipCredsCmd)
 }
 
-// mustJSON re-marshals a decoded body for the raw JSON path. The create
+// mustJSON re-marshals a decoded body for the raw JSON path, credential values
+// hidden as in every other -o json body (see api.Visible). The create
 // responses are small and already parsed, so a failure here is not possible in
 // practice; an empty object is still valid JSON if it ever were.
 func mustJSON(v map[string]any) json.RawMessage {
@@ -1444,7 +1445,7 @@ func mustJSON(v map[string]any) json.RawMessage {
 	if err != nil {
 		return json.RawMessage("{}")
 	}
-	return b
+	return api.Visible(b)
 }
 
 // readAllStdin exists so tests can drive the password path without a terminal.

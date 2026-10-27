@@ -727,9 +727,10 @@ func TestSIPTrunksCreate_jsonCarriesTrunkDomain(t *testing.T) {
 
 // mustJSON builds the -o json body of the SIP writes, so it must not
 // HTML-escape: a URI's & and an alias's <, > come out as the API sent them.
-func TestMustJSON_keepsHTMLCharactersLiteral(t *testing.T) {
-	got := string(mustJSON(map[string]any{"alias": "<desk>", "uri": "sip:bob@example.com?subject=a&b"}))
-	want := `{"alias":"<desk>","uri":"sip:bob@example.com?subject=a&b"}`
+// And it hides a password, as every -o json body does.
+func TestMustJSON_keepsHTMLCharactersLiteralAndHidesAPassword(t *testing.T) {
+	got := string(mustJSON(map[string]any{"alias": "<desk>", "password": "pw", "uri": "sip:bob@example.com?subject=a&b"}))
+	want := `{"alias":"<desk>","password":"[REDACTED]","uri":"sip:bob@example.com?subject=a&b"}`
 	if got != want {
 		t.Errorf("mustJSON = %s, want %s", got, want)
 	}
