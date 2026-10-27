@@ -26,7 +26,7 @@ import (
 // what each sends, its exit code and its output:
 //
 //   - TestQA_regressions replays one case per QA finding, named round/item as
-//     QA filed it (qa_r1_test.go).
+//     QA filed it (qa_r1_test.go, qa_r2_test.go).
 //
 // Every run also checks its exit code is the one its error's code maps to.
 
@@ -35,7 +35,9 @@ import (
 // one of them owns. The PR that fixes a finding deletes its entry here;
 // `go test ./cmd -run TestQA -qa-pending` runs the pending cases and fails
 // every one that passes, so an entry cannot outlive its fix.
-var pending = map[string]string{}
+var pending = map[string]string{
+	"r2/5e": "sip test probes the host it was given, never the target of its SRV record (open)",
+}
 
 var qaRunPending = flag.Bool("qa-pending", false, "also run the QA cases listed in pending, failing those that pass")
 
@@ -110,7 +112,7 @@ func (r qaReq) String() string {
 // skipped (with -qa-pending it runs, and fails if it passes).
 func TestQA_regressions(t *testing.T) {
 	var cases []qaCase
-	for _, round := range [][]qaCase{r1Cases()} {
+	for _, round := range [][]qaCase{r1Cases(), r2Cases()} {
 		cases = append(cases, round...)
 	}
 	seen := map[string]bool{}
