@@ -47,9 +47,9 @@ make docs
 `make qa` runs the QA suite (`cmd/qa_*_test.go`), and CI runs it on every pull request as `qa-suite`. It runs every command in-process against a local server, with nothing set from your `PLIVO_*` variables and no network, and checks what each command sends, its exit code and its output.
 
 - **Add a case** for each finding to the round's table, `cmd/qa_r<N>_test.go`, named `r<N>/<QA's id>`: the command QA ran, the API's answer if it matters, and what must happen now (the requests sent, the exit code, text that must or must not be printed). Check that it fails without the fix.
-- **Not fixed yet?** Add the id to `qaPending` in `cmd/qa_test.go`, with what is still wrong and where the fix is. Pending cases are skipped. The pull request with the fix deletes the entry; `go test ./cmd/ -run TestQA -qa-pending` lists the pending cases that pass now.
+- **Not fixed yet?** Add the id to `qaPending` in `cmd/qa_test.go`, with what is still wrong and the pull request with its fix. A pending case still runs: it is skipped while it fails and fails the suite once it passes, so the pull request with the fix deletes the entry.
 - **A new command** needs a sample invocation in `cmd/qa_samples_test.go` (or a reason in `qaLocalOnly`), so the sweeps run it: odd IDs, `--dry-run`, `--yes` on deletes and spends, secrets in every output format, tokens in debug output, API errors and exit codes. A fix that changes a sample's flags puts the new sample in `qaAfterFix`.
-- **What the CLI sends and reads** is held to the Plivo Go SDK in `cmd/testdata/sdk` (`make sdk-params SDK=<checkout>` regenerates `requests.json`). What it finds today is listed in `qaKnownGaps`, under a pending finding.
+- **What the CLI sends and reads** is held to the Plivo Go SDK in `cmd/testdata/sdk` (`make sdk-params SDK=<checkout>` regenerates `requests.json`). What it finds today is listed in `qaKnownGaps`, under a pending finding; each gap must still turn up, so a fix deletes its gaps along with its `qaPending` entry.
 - **What works and must keep working** goes in `cmd/qa_keep_test.go`.
 
 ### Command grammar

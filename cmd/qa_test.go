@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -30,17 +29,16 @@ import (
 //     confirmed works and must keep working (qa_keep_test.go).
 //   - TestQA_sweep* look for the same kinds of bug in every command
 //     (qa_sweep_test.go, with the invocations in qa_samples_test.go).
-//   - TestQA_sdk* hold decoding, --schema paths and request keys to the Plivo
+//   - TestQA_sdk holds decoding, --schema paths and request keys to the Plivo
 //     Go SDK and the API docs (qa_sdk_test.go, testdata/sdk).
 //
 // Every run also checks its exit code is the one its error's code maps to.
 // `make qa` runs only these. CONTRIBUTING.md says how to add a case.
 
 // qaPending holds the findings whose fix is not on main yet, each with what is
-// still wrong. Their regression cases are skipped, and so is a sweep failure
-// one of them owns. The PR that fixes a finding deletes its entry here;
-// `go test ./cmd -run TestQA -qa-pending` runs the pending cases and fails
-// every one that passes, so an entry cannot outlive its fix.
+// still wrong. Their regression cases still run: one that fails is skipped,
+// as is a sweep failure a pending finding owns, and one that passes fails, so
+// the PR that fixes a finding must delete its entry (and its qaKnownGaps).
 var qaPending = map[string]string{
 	"r2/5e":    "sip test probes the host it was given, never the target of its SRV record (open)",
 	"r3/L1":    "applications delete leaves out cascade=false (PR #172)",
@@ -91,8 +89,6 @@ var qaPending = map[string]string{
 	"sdk/streams":    "streams list reads stream_url and resource_uri; the API sends service_url",
 	"sdk/verify":     "verify sessions list reads objects, the API sends sessions under other names; validate posts to .../Validation/, the API to the session itself",
 }
-
-var qaRunPending = flag.Bool("qa-pending", false, "also run the QA cases listed in qaPending, failing those that pass")
 
 // qaAuthID is the account every request goes to and qaToken its auth token;
 // qaProfileToken is the one setFakeCreds saves in the profile. Not
@@ -161,8 +157,8 @@ func (r qaReq) String() string {
 	return s
 }
 
-// TestQA_regressions replays every finding. A case whose id is in qaPending is
-// skipped (with -qa-pending it runs, and fails if it passes).
+// TestQA_regressions replays every finding. A case whose id is in qaPending
+// is skipped while it fails, and fails once it passes.
 func TestQA_regressions(t *testing.T) {
 	var cases []qaCase
 	for _, round := range [][]qaCase{r1Cases(), r2Cases(), r3Cases(), keepCases()} {
@@ -175,11 +171,8 @@ func TestQA_regressions(t *testing.T) {
 		}
 		seen[c.id] = true
 		t.Run(c.id, func(t *testing.T) {
-			reason, isPending := qaPending[c.id]
-			if isPending && !*qaRunPending {
-				t.Skipf("pending: %s", reason)
-			}
 			problems := c.run(t)
+			reason, isPending := qaPending[c.id]
 			switch {
 			case isPending && len(problems) == 0:
 				t.Errorf("%s passes now: delete it from qaPending", c.id)
@@ -212,9 +205,9 @@ func (c qaCase) run(t *testing.T) []string {
 	if c.setup != nil {
 		c.setup(t)
 	}
-	r := srv.run(t, c.stdin, c.args...)
+	r := srv.exec(t, c.stdin, c.args...)
 
-	var p []string
+	p := qaExitProblems(r)
 	if len(r.blocked) > 0 && !c.offline {
 		p = append(p, fmt.Sprintf("tried to reach %v", r.blocked))
 	}
@@ -437,8 +430,19 @@ func (s *qaServer) guardNetwork(t *testing.T) {
 }
 
 // run runs one command line against the server with stdin as its input (not
-// a terminal) and returns what happened.
+// a terminal) and returns what happened. It fails t when the exit code is not
+// the one the error maps to (qaExitProblems).
 func (s *qaServer) run(t *testing.T, stdin string, argv ...string) qaResult {
+	t.Helper()
+	r := s.exec(t, stdin, argv...)
+	if p := qaExitProblems(r); len(p) > 0 {
+		t.Errorf("plivo %s: %s", strings.Join(argv, " "), strings.Join(p, "; "))
+	}
+	return r
+}
+
+// exec is run without the exit code check, for a case to count as its own.
+func (s *qaServer) exec(t *testing.T, stdin string, argv ...string) qaResult {
 	t.Helper()
 	s.mu.Lock()
 	s.reqs, s.blocked = nil, nil
@@ -485,9 +489,6 @@ func (s *qaServer) run(t *testing.T, stdin string, argv ...string) qaResult {
 		envelope, exit := qaReport(t, runErr)
 		r.stderr += envelope
 		r.exit = exit
-	}
-	if p := qaExitProblems(r); len(p) > 0 {
-		t.Errorf("plivo %s: %s", strings.Join(argv, " "), strings.Join(p, "; "))
 	}
 	s.mu.Lock()
 	r.reqs = append(r.reqs, s.reqs...)

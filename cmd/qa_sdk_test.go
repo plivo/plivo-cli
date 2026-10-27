@@ -18,7 +18,7 @@ import (
 // each of its requests sends (make sdk-params SDK=<checkout> rewrites it).
 // What the SDK lacks, qaDocsRequests and qaConfirmed take from the API docs.
 // What it finds today is listed in qaKnownGaps, under a pending finding;
-// anything else fails.
+// anything else fails, and so does a known gap it no longer finds.
 
 // qaFixtures maps each get and list command to the SDK fixture of its
 // response.
@@ -108,8 +108,8 @@ var qaOracleOwners = map[string]string{
 // qaKnownGaps are what the oracle finds today, by the finding that reports
 // it: the name of a field --schema lists that the response lacks, or of a
 // parameter the references do not take; "*" covers anything in that
-// finding's commands. Once a finding leaves qaPending its gaps stop counting,
-// so what the oracle still finds fails, unless sdk/fields covers it.
+// finding's commands. A gap counts only while its finding is pending, and
+// each must still turn up: the fix that clears one deletes it.
 var qaKnownGaps = map[string][]string{
 	"r3/D1":          {"*"},
 	"r3/D2":          {"*"},
@@ -130,7 +130,8 @@ var qaKnownGaps = map[string][]string{
 }
 
 // qaGapOwner is the first pending finding of owners whose known gaps hold
-// name ("" for a whole request or response), or "" when none does.
+// name ("" for a whole request or response), or "" when none does. It marks
+// the gap found, in qaGapsFound.
 func qaGapOwner(name string, owners ...string) string {
 	for _, owner := range owners {
 		if qaPending[owner] == "" {
@@ -138,11 +139,40 @@ func qaGapOwner(name string, owners ...string) string {
 		}
 		for _, gap := range qaKnownGaps[owner] {
 			if gap == name || gap == "*" {
+				qaGapsFound[[2]string{owner, gap}] = true
 				return owner
 			}
 		}
 	}
 	return ""
+}
+
+// qaGapsFound are the known gaps, as {owner, gap}, that TestQA_sdk found.
+var qaGapsFound = map[[2]string]bool{}
+
+// TestQA_sdk holds the CLI to the SDK: --schema paths, decoding and request
+// keys. When all of them have run, every gap in qaKnownGaps must have turned
+// up under a pending finding.
+func TestQA_sdk(t *testing.T) {
+	clear(qaGapsFound)
+	ran := 0
+	t.Run("schema", func(t *testing.T) { ran += qaSDKSchemaPaths(t) })
+	t.Run("decoding", func(t *testing.T) { ran += qaSDKDecoding(t) })
+	t.Run("requests", func(t *testing.T) { ran += qaSDKRequestKeys(t) })
+	if ran < 2*len(qaFixtures)+len(qaAPISamples()) {
+		return // -run left some out, so a gap may not have been looked for
+	}
+	for _, owner := range qaSorted(qaKnownGaps) {
+		if qaPending[owner] == "" {
+			t.Errorf("qaKnownGaps lists %s, which is not pending: delete its entry", owner)
+			continue
+		}
+		for _, gap := range qaKnownGaps[owner] {
+			if !qaGapsFound[[2]string{owner, gap}] {
+				t.Errorf("qaKnownGaps lists %q under %s, which the oracle no longer finds: delete it", gap, owner)
+			}
+		}
+	}
 }
 
 // qaConfirmed are response fields an SDK fixture lacks that another source
@@ -218,11 +248,14 @@ func qaJSONPaths(v any, prefix string, out map[string]bool) {
 	}
 }
 
-// TestQA_sdkSchemaPaths checks that every output field --schema lists for a
-// command is in the SDK's fixture of its response.
-func TestQA_sdkSchemaPaths(t *testing.T) {
+// qaSDKSchemaPaths checks that every output field --schema lists for a
+// command is in the SDK's fixture of its response. It returns how many
+// commands it checked.
+func qaSDKSchemaPaths(t *testing.T) int {
+	n := 0
 	for _, cmd := range qaSorted(qaFixtures) {
 		t.Run(cmd, func(t *testing.T) {
+			n++
 			owner := qaOracleOwners[cmd]
 			doc, ok := qaFixture(qaFixtures[cmd])
 			if !ok {
@@ -247,11 +280,13 @@ func TestQA_sdkSchemaPaths(t *testing.T) {
 			qaVerdict(t, problems)
 		})
 	}
+	return n
 }
 
-// TestQA_sdkDecoding answers each get and list command with its SDK fixture:
-// it must succeed in every format, and its table must show the record.
-func TestQA_sdkDecoding(t *testing.T) {
+// qaSDKDecoding answers each get and list command with its SDK fixture: it
+// must succeed in every format, and its table must show the record. It
+// returns how many commands it checked.
+func qaSDKDecoding(t *testing.T) int {
 	setFakeCreds(t)
 	srv := newQAServer(t, qaSweepReplies)
 	t.Cleanup(func() { srv.handler = nil })
@@ -259,13 +294,14 @@ func TestQA_sdkDecoding(t *testing.T) {
 	for _, s := range qaAPISamples() {
 		samples[s.path] = s
 	}
+	n := 0
 	for _, cmd := range qaSorted(qaFixtures) {
 		t.Run(cmd, func(t *testing.T) {
-			owner := qaGapOwner("", qaOracleOwners[cmd])
+			n++
 			doc, ok := qaFixture(qaFixtures[cmd])
 			s, sampled := samples[cmd]
 			if !ok || !sampled {
-				qaVerdict(t, map[string][]string{owner: {"no fixture or no sample"}})
+				qaVerdict(t, map[string][]string{qaGapOwner("", qaOracleOwners[cmd]): {"no fixture or no sample"}})
 				return
 			}
 			body, _ := json.Marshal(doc)
@@ -289,10 +325,11 @@ func TestQA_sdkDecoding(t *testing.T) {
 				}
 			}
 			if len(p) > 0 {
-				qaVerdict(t, map[string][]string{owner: p})
+				qaVerdict(t, map[string][]string{qaGapOwner("", qaOracleOwners[cmd]): p})
 			}
 		})
 	}
+	return n
 }
 
 // qaShowsRecord reports whether table holds one of the text values of the
@@ -336,11 +373,12 @@ type qaSDKRequest struct {
 	Keys   []string `json:"keys"`
 }
 
-// TestQA_sdkRequestKeys runs every command and holds each request it sends to
-// the SDK's request with that method and path (or the docs', in
-// qaDocsRequests): it may send only parameters they take. A query filter
-// such as end_time__gte counts as its field, end_time.
-func TestQA_sdkRequestKeys(t *testing.T) {
+// qaSDKRequestKeys runs every command and holds each request it sends to the
+// SDK's request with that method and path (or the docs', in qaDocsRequests):
+// it may send only parameters they take. A query filter such as
+// end_time__gte counts as its field, end_time. It returns how many commands
+// it checked.
+func qaSDKRequestKeys(t *testing.T) int {
 	raw, err := os.ReadFile(filepath.Join("testdata", "sdk", "requests.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -352,8 +390,10 @@ func TestQA_sdkRequestKeys(t *testing.T) {
 	reference := qaMergeRequests(append(sdk.Requests, qaDocsRequests...))
 	setFakeCreds(t)
 	srv := newQAServer(t, qaSweepReplies)
+	n := 0
 	for _, s := range qaAPISamples() {
 		t.Run(s.path, func(t *testing.T) {
+			n++
 			r := srv.run(t, qaStdin, append(s.argv, "--yes")...)
 			qaControl(t, s, r)
 			problems := map[string][]string{}
@@ -369,6 +409,7 @@ func TestQA_sdkRequestKeys(t *testing.T) {
 			qaVerdict(t, problems)
 		})
 	}
+	return n
 }
 
 // qaKeyProblem is a parameter the reference does not take (name), or a
