@@ -41,7 +41,7 @@ import (
 // as is a sweep failure a pending finding owns, and one that passes fails, so
 // the PR that fixes a finding must delete its entry (and its qaKnownGaps).
 var qaPending = map[string]string{
-	"r2/5e": "sip test probes the host it was given, never the target of its SRV record (no fix yet)",
+	"r2/5e": "sip test probes the host it was given, never the target of its SRV record (open decision: it warns about SRV until it is known whether Plivo follows SRV)",
 	"r3/F4": "plivo api reports every API error as UPSTREAM_ERROR, exit 3, though its help promises the exit codes of the rest of the CLI (no fix yet)",
 
 	// Found by the SDK oracle; not yet checked against the live API.
