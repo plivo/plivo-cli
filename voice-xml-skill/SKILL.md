@@ -123,7 +123,7 @@ Check the credit, then ask (header Test call) "How do you want to test it?" · I
 plivo voice calls make --from <number> --to <phone> --answer-url https://YOUR-HOST/plivo/answer --answer-method POST --dry-run
 ```
 
-`--answer-method` defaults to `GET`. Set `POST` explicitly, or Plivo fetches a route your handler may not serve. For a call in, find its UUID with `plivo voice calls list --to <number> --direction inbound --limit 5 -o json` (completed calls only: retry after a few seconds). After the call ends, read `plivo voice calls get <call_uuid> -o json` for `call_duration`, `hangup_cause_code`, `hangup_cause_name` and `hangup_source`. The record is written at hangup, so a call still up reads as not found; from v1.2.1, `--live` reads it in progress.
+Set `--answer-method POST` explicitly: before v1.3.1 it defaults to `GET`, a route your handler may not serve (from v1.3.1, to POST, except for the demo answer URL). For a call in, find its UUID with `plivo voice calls list --to <number> --direction inbound --limit 5 -o json` (completed calls only: retry after a few seconds). After the call ends, read `plivo voice calls get <call_uuid> -o json` for `call_duration`, `hangup_cause_code`, `hangup_cause_name` and `hangup_source`. The record is written at hangup, so a call still up reads as not found; from v1.2.1, `--live` reads it in progress.
 
 Then ask (header Result) "Did the call do what you expected?" · Yes, all of it · Partly: "Something was skipped or wrong." · No: "Silence, or it hung up." · The call didn't come.
 
