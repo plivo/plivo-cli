@@ -31,7 +31,7 @@ import (
 //   - TestQA_sweep* look for the same kinds of bug in every command
 //     (qa_sweep_test.go, with the invocations in qa_samples_test.go).
 //   - TestQA_sdk holds decoding, --schema paths and request keys to the Plivo
-//     Go SDK and the API docs (qa_sdk_test.go, testdata/sdk).
+//     Go SDK and the API docs (qa_sdk_test.go, testdata/plivo-go).
 //
 // Every run also checks its exit code is the one its error's code maps to.
 // `make qa` runs only these. CONTRIBUTING.md says how to add a case.

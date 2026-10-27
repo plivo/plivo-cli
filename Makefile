@@ -62,7 +62,7 @@ test: ## go test
 qa: ## Run the QA suite (cmd/qa_*_test.go; CONTRIBUTING.md says how to add a case)
 	cd cmd && go test -race -count=1 -run '^TestQA'
 
-sdk-params: ## Rewrite cmd/testdata/sdk/requests.json from a plivo-go checkout: make sdk-params SDK=<path>
+sdk-params: ## Rewrite cmd/testdata/plivo-go/requests.json from a plivo-go checkout: make sdk-params SDK=<path>
 	@test -n "$(SDK)" || { echo "usage: make sdk-params SDK=<path to a github.com/plivo/plivo-go checkout>"; exit 2; }
 	go run ./tools/sdkparams -sdk "$(SDK)"
 

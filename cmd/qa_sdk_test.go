@@ -13,7 +13,7 @@ import (
 	"testing"
 )
 
-// The SDK oracle holds the CLI to the Plivo Go SDK, kept in testdata/sdk:
+// The SDK oracle holds the CLI to the Plivo Go SDK, kept in testdata/plivo-go:
 // its fixtures are real responses, and requests.json lists the parameters
 // each of its requests sends (make sdk-params SDK=<checkout> rewrites it).
 // What the SDK lacks, qaDocsRequests and qaConfirmed take from the API docs.
@@ -178,22 +178,17 @@ func qaFieldNames(path string) []string {
 	return strings.FieldsFunc(path, func(r rune) bool { return r == '.' || r == '[' || r == ']' })
 }
 
-// qaFixture reads an SDK fixture: from testdata/sdk, or testdata/plivo-go,
-// where the 10DLC and toll-free commands keep theirs once #171 is in. The
-// two overlap: after #171 merges, testdata/sdk moves into testdata/plivo-go,
-// under one LICENSE.
+// qaFixture reads an SDK fixture from testdata/plivo-go.
 func qaFixture(name string) (map[string]any, bool) {
-	for _, dir := range []string{"sdk", "plivo-go"} {
-		b, err := os.ReadFile(filepath.Join("testdata", dir, name+".json"))
-		if err != nil {
-			continue
-		}
-		var doc map[string]any
-		if json.Unmarshal(b, &doc) == nil {
-			return doc, true
-		}
+	b, err := os.ReadFile(filepath.Join("testdata", "plivo-go", name+".json"))
+	if err != nil {
+		return nil, false
 	}
-	return nil, false
+	var doc map[string]any
+	if json.Unmarshal(b, &doc) != nil {
+		return nil, false
+	}
+	return doc, true
 }
 
 // qaJSONPaths lists every path in doc the way outputFields names them:
@@ -345,7 +340,7 @@ type qaSDKRequest struct {
 // end_time__gte counts as its field, end_time. It returns how many commands
 // it checked.
 func qaSDKRequestKeys(t *testing.T) int {
-	raw, err := os.ReadFile(filepath.Join("testdata", "sdk", "requests.json"))
+	raw, err := os.ReadFile(filepath.Join("testdata", "plivo-go", "requests.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

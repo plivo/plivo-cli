@@ -1,4 +1,4 @@
-// Command sdkparams writes cmd/testdata/sdk/requests.json: every request
+// Command sdkparams writes cmd/testdata/plivo-go/requests.json: every request
 // the Plivo Go SDK builds, as its method, its path below the account and the
 // names of the parameters it can send. The QA suite holds the CLI's requests
 // to it (TestQA_sdkRequestKeys).
@@ -41,7 +41,7 @@ type output struct {
 
 func main() {
 	sdk := flag.String("sdk", "", "path to a github.com/plivo/plivo-go checkout")
-	out := flag.String("o", "cmd/testdata/sdk/requests.json", "output file")
+	out := flag.String("o", "cmd/testdata/plivo-go/requests.json", "output file")
 	flag.Parse()
 	if *sdk == "" {
 		fail(fmt.Errorf("-sdk is required"))
