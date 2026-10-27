@@ -99,7 +99,7 @@ func TestListFilters_unknownValueFailsBeforeAnyRequest(t *testing.T) {
 		{"status", []string{"verify", "sessions", "list", "--status", "pending"}},
 		{"state", []string{"agents", "list", "--state", "draft"}},
 		{"status", []string{"numbers", "compliance", "list", "--status", "approved"}},
-		{"number-type", []string{"numbers", "compliance", "list", "--number-type", "national"}},
+		{"number-type", []string{"numbers", "compliance", "list", "--number-type", "toll-free"}},
 		{"user-type", []string{"numbers", "compliance", "list", "--user-type", "company"}},
 		{"granularity", []string{"account", "usage", "--granularity", "Day"}},
 		{"product", []string{"account", "usage", "--product", "voice", "--product", "sms"}},
@@ -176,8 +176,8 @@ func TestListFilters_documentedValuesReachTheQuery(t *testing.T) {
 		{[]string{"messaging", "sms", "tollfree", "list", "--status", "UPDATE_REQUIRED"}, []string{"status=UPDATE_REQUIRED"}},
 		{[]string{"verify", "sessions", "list", "--status", "in-progress"}, []string{"status=in-progress"}},
 		{[]string{"agents", "list", "--state", "PAUSED"}, []string{"state=PAUSED"}},
-		{[]string{"numbers", "compliance", "list", "--status", "accepted", "--number-type", "mobile", "--user-type", "individual"},
-			[]string{"status=accepted", "number_type=mobile", "user_type=individual"}},
+		{[]string{"numbers", "compliance", "list", "--status", "accepted", "--number-type", "national", "--user-type", "individual"},
+			[]string{"status=accepted", "number_type=national", "user_type=individual"}},
 	}
 	for _, tc := range cases {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {

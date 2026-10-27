@@ -34,6 +34,25 @@ func TestCallGet_liveReadsTheCallInProgress(t *testing.T) {
 	}
 }
 
+// streams start sends status_callback_url, the API's name for it, and refuses
+// a two-way stream on the outbound or both track, as the API would.
+func TestStreamStart_sendsTheAPIsFieldNamesAndTracks(t *testing.T) {
+	setFakeCreds(t)
+	start := []string{"voice", "calls", "streams", "start", "c1", "--url", "wss://example.com/ws", "--dry-run"}
+	if err, _, stderr := execCmd(t, append(start, "--stream-status-callback", "https://example.com/cb")...); err != nil || !strings.Contains(stderr, `"status_callback_url": "https://example.com/cb"`) {
+		t.Errorf("%v, %q; want status_callback_url", err, stderr)
+	}
+	if err, _, stderr := execCmd(t, append(start, "--bidirectional", "--audio-track", "")...); err != nil || !strings.Contains(stderr, `"audio_track": "inbound"`) {
+		t.Errorf(`--audio-track "": %v, %q; want the inbound track`, err, stderr)
+	}
+	for _, track := range []string{"outbound", "both"} {
+		err, _, stderr := execCmd(t, append(start, "--bidirectional", "--audio-track", track)...)
+		if e, ok := err.(*clierr.Error); !ok || e.Code != clierr.CodeBadFlag || strings.Contains(stderr, "[dry-run]") {
+			t.Errorf("--bidirectional --audio-track %s: %v, %q; want BAD_FLAG and nothing sent", track, err, stderr)
+		}
+	}
+}
+
 // make refuses what it cannot dial before the spend guard: --yes sends nothing.
 func TestCallMake_refusesWhatItCannotDial(t *testing.T) {
 	setFakeCreds(t)
@@ -70,5 +89,25 @@ func TestCallList_liveListsTheCallsInProgress(t *testing.T) {
 	sipServer(t, http.StatusOK, `{"api_id":"x"}`)
 	if err, stdout, _ := execCmd(t, "voice", "calls", "list", "--live", "-o", "json"); err != nil || !strings.Contains(stdout, `"calls": []`) {
 		t.Errorf("no calls in progress: %v, want calls: [] in\n%s", err, stdout)
+	}
+}
+
+// GET is for the static demo XML; another answer URL gets Plivo's default POST.
+func TestCallMake_answerMethodGETOnlyForTheDemoURL(t *testing.T) {
+	setFakeCreds(t)
+	for args, get := range map[string]bool{"": true, "--answer-url https://example.com/a": false, "--answer-url https://example.com/a --answer-method GET": true} {
+		err, _, stderr := execCmd(t, append([]string{"voice", "calls", "make", "--from", "+14155550100", "--to", "+14155550101", "--dry-run"}, strings.Fields(args)...)...)
+		if err != nil || strings.Contains(stderr, `"answer_method": "GET"`) != get || strings.Contains(stderr, "answer_method") != get {
+			t.Errorf("%q: %v, want answer_method GET sent = %v:\n%s", args, err, get, stderr)
+		}
+	}
+}
+
+// machine_detection is true or hangup: none, which help offered, is refused here.
+func TestCallMake_refusesMachineDetectionNone(t *testing.T) {
+	setFakeCreds(t)
+	err, _, _ := execCmd(t, "voice", "calls", "make", "--from", "+14155550100", "--to", "+14155550101", "--machine-detection", "none", "--dry-run")
+	if e, ok := err.(*clierr.Error); !ok || e.Code != clierr.CodeBadFlag || e.Context["flag"] != "machine-detection" {
+		t.Errorf("got %v, want BAD_FLAG on --machine-detection", err)
 	}
 }

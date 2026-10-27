@@ -145,7 +145,7 @@ func TestApplication_unmarshal(t *testing.T) {
 		"answer_method": "POST",
 		"hangup_url": "https://example.com/hangup",
 		"message_url": "https://example.com/sms",
-		"default_number_app": true,
+		"default_app": true,
 		"public_uri": false,
 		"enabled": true,
 		"sip_uri": "sip:my-app@phone.plivo.com"
@@ -154,7 +154,7 @@ func TestApplication_unmarshal(t *testing.T) {
 	if err := json.Unmarshal(body, &a); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if a.AppID != "12345" || a.AppName != "my-app" || !a.DefaultNumberApp || !a.Enabled {
+	if a.AppID != "12345" || a.AppName != "my-app" || !a.DefaultApp || !a.Enabled {
 		t.Errorf("app fields wrong: %+v", a)
 	}
 }
@@ -330,14 +330,15 @@ func TestSubaccount_unmarshal(t *testing.T) {
 		"name": "test-sub",
 		"auth_token": "secret-token",
 		"enabled": true,
-		"created_on": "2026-01-01T00:00:00Z",
+		"created": "2017-05-22",
+		"modified": null,
 		"account": "/v1/Account/MAabc/"
 	}`)
 	var s Subaccount
 	if err := json.Unmarshal(body, &s); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if s.AuthID != "SAxxxxxxxxxxxxxxxxxxx" || s.Name != "test-sub" || !s.Enabled {
+	if s.AuthID != "SAxxxxxxxxxxxxxxxxxxx" || s.Name != "test-sub" || !s.Enabled || s.Created != "2017-05-22" {
 		t.Errorf("subaccount fields wrong: %+v", s)
 	}
 }
@@ -348,13 +349,13 @@ func TestEndpoint_unmarshal(t *testing.T) {
 		"username": "alice",
 		"alias": "alice-desk",
 		"sip_uri": "sip:alice@phone.plivo.com",
-		"app_id": "app-67890"
+		"application": "/v1/Account/MAabc/Application/67890/"
 	}`)
 	var e Endpoint
 	if err := json.Unmarshal(body, &e); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if e.EndpointID != "12345" || e.Username != "alice" || e.AppID != "app-67890" {
+	if e.EndpointID != "12345" || e.Username != "alice" || e.ResolvedAppID() != "67890" {
 		t.Errorf("endpoint fields wrong: %+v", e)
 	}
 }
@@ -414,63 +415,6 @@ func TestMPC_unmarshal(t *testing.T) {
 	}
 	if m.MPCUUID != "mpc-uuid" || m.FriendlyName != "sales-call" || m.Status != "active" {
 		t.Errorf("mpc fields wrong: %+v", m)
-	}
-}
-
-func TestBrand10DLCList_brandsKey(t *testing.T) {
-	// 10DLC list response uses "brands" key, not "objects".
-	body := []byte(`{
-		"api_id": "x",
-		"meta": {"limit": 20, "offset": 0, "total_count": 1},
-		"brands": [{
-			"brand_id": "b1",
-			"brand_alias": "acme",
-			"legal_entity_name": "ACME Inc",
-			"brand_type": "STANDARD",
-			"brand_status": "VERIFIED",
-			"vertical": "TECHNOLOGY"
-		}]
-	}`)
-	var bl Brand10DLCList
-	if err := json.Unmarshal(body, &bl); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(bl.Brands) != 1 {
-		t.Fatalf("Brands len = %d", len(bl.Brands))
-	}
-	if bl.Brands[0].LegalEntityName != "ACME Inc" || bl.Brands[0].BrandStatus != "VERIFIED" {
-		t.Errorf("brand fields wrong: %+v", bl.Brands[0])
-	}
-}
-
-func TestCampaign10DLCList_campaignsKey(t *testing.T) {
-	// 10DLC list response uses "campaigns" key.
-	body := []byte(`{
-		"api_id": "x",
-		"meta": {"limit": 20, "offset": 0, "total_count": 1},
-		"campaigns": [{
-			"campaign_id": "c1",
-			"campaign_alias": "promo",
-			"brand_id": "b1",
-			"usecase": "MARKETING",
-			"sub_usecases": ["PROMOTIONAL", "OTT"],
-			"campaign_status": "ACTIVE",
-			"embedded_link": true,
-			"age_gated": false
-		}]
-	}`)
-	var cl Campaign10DLCList
-	if err := json.Unmarshal(body, &cl); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(cl.Campaigns) != 1 {
-		t.Fatalf("Campaigns len = %d", len(cl.Campaigns))
-	}
-	if cl.Campaigns[0].Usecase != "MARKETING" || !cl.Campaigns[0].EmbeddedLink {
-		t.Errorf("campaign fields wrong: %+v", cl.Campaigns[0])
-	}
-	if len(cl.Campaigns[0].SubUsecases) != 2 {
-		t.Errorf("sub_usecases len = %d", len(cl.Campaigns[0].SubUsecases))
 	}
 }
 

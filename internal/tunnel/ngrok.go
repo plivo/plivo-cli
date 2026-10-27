@@ -22,6 +22,10 @@ import (
 // plus a Close that tears the subprocess down.
 type Tunnel struct {
 	PublicURL string // e.g. https://abc123.ngrok-free.dev
+	// PID and Args are the tunnel process and its command line, for a run
+	// killed before Close to leave to the next one (StopLeftover).
+	PID  int
+	Args []string
 	// Done is closed when the tunnel process exits, which takes PublicURL
 	// down with it. A nil Done never closes.
 	Done <-chan struct{}
@@ -32,7 +36,7 @@ type Tunnel struct {
 // watch reaps cmd in the background, so Done closes as soon as it exits.
 func watch(cmd *exec.Cmd) *Tunnel {
 	done := make(chan struct{})
-	t := &Tunnel{Done: done, cmd: cmd}
+	t := &Tunnel{PID: cmd.Process.Pid, Args: cmd.Args, Done: done, cmd: cmd}
 	go func() {
 		t.err = cmd.Wait()
 		close(done)

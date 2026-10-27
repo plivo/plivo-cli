@@ -4,7 +4,6 @@ import (
 	"net/url"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/output"
@@ -27,50 +26,71 @@ var (
 
 var tfvListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List toll-free verification profiles",
-	Args:  cobra.NoArgs,
-	RunE:  runTfvList,
+	Short: "List toll-free verification requests",
+	Long: `List toll-free verification requests. Without a date filter the API returns
+only those created in the last 7 days. For a wider window give both ends, at
+most 2 years apart:
+
+  plivo api GET /TollfreeVerification/ --query created__gte=2026-01-01 --query created__lte=2026-06-30
+
+tollfree get <uuid> reads a request of any age.`,
+	Args: cobra.NoArgs,
+	RunE: runTfvList,
 }
 
 var tfvGetCmd = &cobra.Command{
-	Use:   "get <profile_uuid>",
-	Short: "Get a toll-free verification profile by uuid",
+	Use:   "get <uuid>",
+	Short: "Get a toll-free verification request by its uuid",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runTfvGet,
 }
 
 var (
-	tfvSubmitBizName        string
-	tfvSubmitBizWebsite     string
+	tfvSubmitProfile        string
+	tfvSubmitNumber         string
 	tfvSubmitUseCase        string
 	tfvSubmitUseCaseSummary string
-	tfvSubmitMessageVolume  string
 	tfvSubmitMessageContent string
-	tfvSubmitOptIn          string
-	tfvSubmitNumbers        string
+	tfvSubmitOptInType      string
+	tfvSubmitOptInImageURL  string
+	tfvSubmitMessageVolume  string
+	tfvSubmitTermsLink      string
+	tfvSubmitPrivacyLink    string
 )
 
 var tfvSubmitCmd = &cobra.Command{
 	Use:   "submit",
-	Short: "Submit a new toll-free verification profile",
-	Args:  cobra.NoArgs,
-	RunE:  runTfvSubmit,
+	Short: "Submit a toll-free number for verification",
+	Long: `Submit one toll-free number for verification. The business's details come
+from a profile, the kind 10DLC brands use: list yours with
+plivo api GET /Profile/ (fields: plivo docs show messaging/api/10dlc/profile).`,
+	Args: cobra.NoArgs,
+	RunE: runTfvSubmit,
 }
 
 func init() {
 	registerListFlags(tfvListCmd, &tfvListLimit, &tfvListOffset)
 	tfvListCmd.Flags().StringVar(&tfvListStatus, "status", "", "filter by status: "+oneOf(tollfreeStatuses))
 
-	tfvSubmitCmd.Flags().StringVar(&tfvSubmitBizName, "business-name", "", "business name (required)")
-	_ = tfvSubmitCmd.MarkFlagRequired("business-name")
-	tfvSubmitCmd.Flags().StringVar(&tfvSubmitBizWebsite, "business-website", "", "business website URL")
-	tfvSubmitCmd.Flags().StringVar(&tfvSubmitUseCase, "use-case", "", "use case category (required)")
-	_ = tfvSubmitCmd.MarkFlagRequired("use-case")
-	tfvSubmitCmd.Flags().StringVar(&tfvSubmitUseCaseSummary, "use-case-summary", "", "free-text use case summary")
-	tfvSubmitCmd.Flags().StringVar(&tfvSubmitMessageVolume, "message-volume", "", "expected volume: LOW|MEDIUM|HIGH")
-	tfvSubmitCmd.Flags().StringVar(&tfvSubmitMessageContent, "production-message-content", "", "sample message content")
-	tfvSubmitCmd.Flags().StringVar(&tfvSubmitOptIn, "opt-in-workflow", "", "describe how recipients opt in")
-	tfvSubmitCmd.Flags().StringVar(&tfvSubmitNumbers, "numbers", "", "comma-separated toll-free numbers to verify")
+	for _, f := range []struct {
+		value       *string
+		name, usage string
+	}{
+		{&tfvSubmitProfile, "profile-uuid", "the profile holding the business's details"},
+		{&tfvSubmitNumber, "number", "the toll-free number: digits with the country code, e.g. 18005550100"},
+		{&tfvSubmitUseCase, "use-case", "use case, or several comma-separated, e.g. 2FA,CUSTOMER_CARE"},
+		{&tfvSubmitUseCaseSummary, "use-case-summary", "how the number's messages are used"},
+		{&tfvSubmitMessageContent, "production-message-content", "sample messages you will send"},
+		{&tfvSubmitOptInType, "opt-in-type", "how recipients opt in: VERBAL|WEB_FORM|PAPER_FORM|VIA_TEXT|MOBILE_QR_CODE"},
+		{&tfvSubmitOptInImageURL, "opt-in-image-url", "URL of an image or document that shows the opt-in"},
+		{&tfvSubmitMessageVolume, "message-volume", "messages a month: 10, 100, 1000, 10000, 100000, 250000, 500000, " +
+			"750000, 1000000, 5000000 or 10,000,000+"},
+		{&tfvSubmitTermsLink, "terms-and-conditions-link", "public URL of your terms and conditions"},
+		{&tfvSubmitPrivacyLink, "privacy-policy-link", "public URL of your privacy policy"},
+	} {
+		tfvSubmitCmd.Flags().StringVar(f.value, f.name, "", f.usage+" (required)")
+		_ = tfvSubmitCmd.MarkFlagRequired(f.name)
+	}
 
 	tollfreeCmd.AddCommand(tfvListCmd, tfvGetCmd, tfvSubmitCmd)
 	messagingSmsCmd.AddCommand(tollfreeCmd)
@@ -100,9 +120,9 @@ func runTfvList(cmd *cobra.Command, args []string) error {
 	if effectiveFormat() == output.FormatJSON {
 		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
-	rows := [][]string{{"PROFILE_UUID", "BUSINESS", "USE_CASE", "VOLUME", "STATUS", "CREATED"}}
+	rows := [][]string{{"UUID", "NUMBER", "USECASE", "VOLUME", "STATUS", "CREATED"}}
 	for _, t := range resp.Objects {
-		rows = append(rows, []string{t.ProfileUUID, t.BusinessName, t.UseCase, t.MessageVolume, t.Status, t.CreatedAt})
+		rows = append(rows, []string{t.UUID, t.Number, t.Usecase, t.Volume, t.Status, t.Created})
 	}
 	return output.Table(os.Stdout, rows)
 }
@@ -128,17 +148,19 @@ func runTfvGet(cmd *cobra.Command, args []string) error {
 		return output.JSONRaw(os.Stdout, t.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
+		{"uuid", t.UUID},
 		{"profile_uuid", t.ProfileUUID},
-		{"business_name", t.BusinessName},
-		{"business_website", t.BusinessWebsite},
-		{"use_case", t.UseCase},
-		{"use_case_summary", t.UseCaseSummary},
-		{"message_volume", t.MessageVolume},
-		{"message_content", t.ProductionMessageContent},
-		{"opt_in_workflow", t.OptInWorkflow},
-		{"numbers", strings.Join(t.NumbersList, ", ")},
+		{"number", t.Number},
+		{"usecase", t.Usecase},
+		{"usecase_summary", t.UsecaseSummary},
+		{"message_sample", t.MessageSample},
+		{"optin_type", t.OptinType},
+		{"optin_image_url", t.OptinImageURL},
+		{"volume", t.Volume},
 		{"status", t.Status},
-		{"created_at", t.CreatedAt},
+		{"error_message", t.ErrorMessage},
+		{"created", t.Created},
+		{"last_modified", t.LastModified},
 	})
 }
 
@@ -148,28 +170,22 @@ func runTfvSubmit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	body := map[string]any{
-		"business_name": tfvSubmitBizName,
-		"use_case":      tfvSubmitUseCase,
+		"profile_uuid":              tfvSubmitProfile,
+		"number":                    tfvSubmitNumber,
+		"usecase":                   tfvSubmitUseCase,
+		"usecase_summary":           tfvSubmitUseCaseSummary,
+		"message_sample":            tfvSubmitMessageContent,
+		"optin_type":                tfvSubmitOptInType,
+		"optin_image_url":           tfvSubmitOptInImageURL,
+		"volume":                    tfvSubmitMessageVolume,
+		"terms_and_conditions_link": tfvSubmitTermsLink,
+		"privacy_policy_link":       tfvSubmitPrivacyLink,
 	}
-	addIfSet := func(k, v string) {
-		if v != "" {
-			body[k] = v
-		}
-	}
-	addIfSet("business_website", tfvSubmitBizWebsite)
-	addIfSet("use_case_summary", tfvSubmitUseCaseSummary)
-	addIfSet("message_volume", tfvSubmitMessageVolume)
-	addIfSet("production_message_content", tfvSubmitMessageContent)
-	addIfSet("opt_in_workflow", tfvSubmitOptIn)
-	if tfvSubmitNumbers != "" {
-		body["numbers_list"] = strings.Split(tfvSubmitNumbers, ",")
-	}
-
 	var resp struct {
 		api.RawBody
-		APIID       string `json:"api_id"`
-		ProfileUUID string `json:"profile_uuid"`
-		Message     string `json:"message"`
+		APIID   string `json:"api_id"`
+		UUID    string `json:"uuid"`
+		Message string `json:"message"`
 	}
 	apiErr, err := client.Do("POST", client.AccountURL("TollfreeVerification"), body, nil, &resp)
 	if err != nil {
@@ -185,7 +201,7 @@ func runTfvSubmit(cmd *cobra.Command, args []string) error {
 		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
-		{"profile_uuid", resp.ProfileUUID},
+		{"uuid", resp.UUID},
 		{"message", resp.Message},
 	})
 }

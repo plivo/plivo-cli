@@ -1,4 +1,7 @@
-Carrier + format lookup for an E.164 number (lookup.plivo.com)
+Carrier + format lookup for an E.164 number (lookup.plivo.com).
+
+Each lookup is billed: USD 0.004 per request. It takes no --yes;
+--dry-run prints the request without sending it.
 
 Usage:
   plivo lookup <number> [flags]
@@ -16,5 +19,6 @@ Global Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
+      --show-secrets       show auth tokens and passwords in API responses instead of [REDACTED]
       --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts

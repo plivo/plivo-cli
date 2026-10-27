@@ -67,7 +67,8 @@ type commandDetail struct {
 
 const (
 	outputFieldsNote = "Paths under data, so --query 'data.<path>'. The fields this CLI maps, a subset of the raw API response " +
-		"that -o json passes through whole: the response can hold more, and a listed field can be missing."
+		"that -o json prints, auth tokens and passwords as [REDACTED] without --show-secrets: the response can hold more, " +
+		"and a listed field can be missing."
 	resultFieldsNote = "Paths under data, so --query 'data.<path>'. The result this CLI builds, so -o json has these fields " +
 		"and no others; a field with no value is null or left out."
 	noOutputFieldsNote = "Not described for this command. Run it with -o json to see its output."

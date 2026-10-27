@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"slices"
 	"strconv"
@@ -30,6 +31,8 @@ var (
 	logLevel     string
 	yesFlag      bool
 	dryRunFlag   bool
+	// showSecretsFlag backs --show-secrets; see api.ShowSecrets.
+	showSecretsFlag bool
 	// explainFlag backs --explain. Registered locally (not persistent) by
 	// registerExplainFlag, only on the commands that actually read it.
 	explainFlag bool
@@ -156,6 +159,7 @@ func init() {
 	// directly see the same gate humans do.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		api.CLICommand = commandPath(cmd)
+		api.ShowSecrets = showSecretsFlag
 		if err := configureOutput(cmd); err != nil {
 			return err
 		}
@@ -176,6 +180,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "warn", "log level: debug|info|warn|error|none")
 	rootCmd.PersistentFlags().BoolVarP(&yesFlag, "yes", "y", false, "skip confirmation prompts")
 	rootCmd.PersistentFlags().BoolVar(&dryRunFlag, "dry-run", false, "preview requests and local changes without sending or writing anything")
+	rootCmd.PersistentFlags().BoolVar(&showSecretsFlag, "show-secrets", false, "show auth tokens and passwords in API responses instead of [REDACTED]")
 	timeoutFlag = 30 * time.Second
 	rootCmd.PersistentFlags().Var(secondsOrDuration{&timeoutFlag}, "timeout", "request timeout: seconds, or a duration such as 90s or 2m")
 	// Additional admin-only flags are registered in build-tag-gated files;
@@ -220,6 +225,7 @@ func filled(f *pflag.Flag) bool {
 
 // secondsOrDuration is --timeout's value: a bare integer is seconds, the form
 // the flag always took, and anything else a Go duration such as 90s or 2m.
+// Zero or less is refused: the request client read it as its 30s default.
 type secondsOrDuration struct{ *time.Duration }
 
 func (d secondsOrDuration) Set(s string) error {
@@ -229,6 +235,9 @@ func (d secondsOrDuration) Set(s string) error {
 	v, err := time.ParseDuration(s)
 	if err != nil {
 		return errors.New("want seconds, such as 30, or a duration, such as 90s or 2m")
+	}
+	if v <= 0 {
+		return errors.New("must be more than 0")
 	}
 	*d.Duration = v
 	return nil
@@ -271,6 +280,10 @@ func getClient() (*api.Client, string, error) {
 	if clientForTest != nil {
 		return clientForTest, "test", nil
 	}
+	base, err := apiBaseURL()
+	if err != nil {
+		return nil, "", err
+	}
 	p, name, err := config.Resolve(profileFlag)
 	if err != nil {
 		return nil, "", err
@@ -278,6 +291,7 @@ func getClient() (*api.Client, string, error) {
 	credSource = name
 	credAuthID = p.AuthID
 	c := api.New(p.AuthID, p.AuthToken, timeoutFlag)
+	c.BaseURL = base
 	c.AdminBaseURL = adminServer
 	c.Email = p.Email
 	c.Region = p.Region
@@ -295,6 +309,25 @@ func getClient() (*api.Client, string, error) {
 		}
 	}
 	return c, name, nil
+}
+
+// apiBaseURL is api.DefaultBaseURL, or PLIVO_API_URL when set, to point the CLI
+// at a local capture server. The requests carry the account's credentials, so
+// only an http or https URL on this machine is taken, and with no user, query
+// or fragment, as the request path is appended to it. Anything else is refused,
+// never ignored, and not echoed: it may hold a password.
+func apiBaseURL() (string, error) {
+	u := os.Getenv("PLIVO_API_URL")
+	if u == "" {
+		return api.DefaultBaseURL, nil
+	}
+	if p, err := url.Parse(u); err == nil && (p.Scheme == "http" || p.Scheme == "https") && onThisMachine(p) &&
+		p.User == nil && !strings.ContainsAny(u, "?#") {
+		return strings.TrimRight(u, "/"), nil
+	}
+	e := clierr.BadInput("PLIVO_API_URL must be an http or https URL on this machine, with no user, query or fragment")
+	e.Hint = "Use host 127.0.0.1, [::1] or localhost with any port, e.g. http://127.0.0.1:18555/v1/cli/api, or unset it to reach the Plivo API."
+	return "", e
 }
 
 // effectiveFormat returns the resolved output format for stdout.

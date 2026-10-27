@@ -15,6 +15,15 @@ import (
 
 const placeholderComplianceID = "00000000-0000-0000-0000-000000000000"
 
+// A lookup is billed and takes no --yes, so each run notes the charge.
+func TestLookup_notesTheCharge(t *testing.T) {
+	setFakeCreds(t)
+	sipServer(t, http.StatusOK, `{"phone_number":"+14155552671"}`)
+	if err, _, stderr := execCmd(t, "lookup", "+14155552671"); err != nil || strings.Count(stderr, "USD 0.004 per request") != 1 {
+		t.Errorf("%v, stderr %q: want one note of the charge", err, stderr)
+	}
+}
+
 // Resellers hold one compliance application per end customer, so renting an
 // Indian number for one of them means naming that customer's application.
 func TestNumbersBuy_complianceApplicationID(t *testing.T) {
@@ -283,5 +292,15 @@ func TestUnreachable_isANetworkErrorNotKYCOrNotFound(t *testing.T) {
 		if !errors.As(err, &ce) || ce.Code != clierr.CodeNetworkError || strings.Contains(ce.Hint, "KYC") {
 			t.Errorf("%v: want a NETWORK_ERROR without the KYC steps, got: %v", args, err)
 		}
+	}
+}
+
+// A search Plivo cannot fill answers 200 with the reason in "error", which was
+// dropped: an empty table and exit 0 were all anyone saw.
+func TestNumberSearch_printsTheReasonInA2xxBody(t *testing.T) {
+	setFakeCreds(t)
+	pointCommandsAtTestServer(t, `{"api_id":"x","meta":{"total_count":0},"objects":[],"error":"We are currently unable to offer your requested numbers"}`)
+	if err, _, stderr := execCmd(t, "numbers", "search", "--country", "US"); err != nil || !strings.Contains(stderr, "unable to offer your requested numbers") {
+		t.Errorf("%v, stderr %q: want the API's reason", err, stderr)
 	}
 }
