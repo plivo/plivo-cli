@@ -8,7 +8,7 @@ Available Commands:
   deaf        Deafen a member (they can't hear)
   kick        Kick a member from the conference (requires --yes)
   mute        Mute a member
-  play        Play audio file(s) into a member's channel
+  play        Play an audio file into a member's channel
   speak       Speak TTS text to a member
   stop-play   Stop audio playback to a member
   stop-speak  Stop TTS playback to a member

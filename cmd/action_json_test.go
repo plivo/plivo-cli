@@ -20,7 +20,7 @@ func TestActions_printJSONOnStdout(t *testing.T) {
 		"voice conferences member mute room 11", "voice conferences member unmute room 11",
 		"voice conferences member deaf room 11", "voice conferences member undeaf room 11",
 		"voice conferences member kick room 11 --yes", "voice conferences member stop-play room 11",
-		"voice conferences member play room 11 --urls https://example.com/a.mp3",
+		"voice conferences member play room 11 --url https://example.com/a.mp3",
 		"voice conferences member speak room 11 --text hi", "voice conferences member stop-speak room 11",
 		"voice multiparty end room --yes", "voice multiparty participant kick room 11 --yes",
 		"voice multiparty participant add room --from +14155550100 --to +14155550101 --yes",

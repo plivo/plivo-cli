@@ -57,6 +57,8 @@ type Fetcher struct {
 	// BaseIndex and BaseFull are overridable for tests.
 	BaseIndex string
 	BaseFull  string
+	// Warn, when set, is told that a fetch failed and the cache was shown.
+	Warn io.Writer
 }
 
 // New returns a Fetcher writing to ~/.plivo/cache.
@@ -70,6 +72,7 @@ func New() *Fetcher {
 		CacheDir:  dir,
 		BaseIndex: indexURL,
 		BaseFull:  fullURL,
+		Warn:      os.Stderr,
 	}
 }
 
@@ -93,9 +96,15 @@ func (f *Fetcher) fetch(url, cacheName string, refresh bool) (string, error) {
 
 	resp, err := f.HTTP.Get(url)
 	if err != nil {
-		// A stale cache beats no docs at all when the network is down.
-		if b, rerr := os.ReadFile(path); path != "" && rerr == nil {
-			return string(b), nil
+		// A stale cache beats no docs at all when the network is down, said
+		// so that a --refresh that got nothing new does not pass for one.
+		if st, serr := os.Stat(path); path != "" && serr == nil {
+			if b, rerr := os.ReadFile(path); rerr == nil {
+				if f.Warn != nil {
+					fmt.Fprintf(f.Warn, "refresh failed (%v); showing the copy cached %s\n", err, st.ModTime().Format(time.DateTime))
+				}
+				return string(b), nil
+			}
 		}
 		return "", fmt.Errorf("fetching %s: %w", url, err)
 	}

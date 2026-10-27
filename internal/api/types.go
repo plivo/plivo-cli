@@ -64,10 +64,16 @@ func (n *Number) ResolvedAppID() string {
 	if n.AppID != "" {
 		return n.AppID
 	}
-	if n.Application == "" {
+	return lastSegment(n.Application)
+}
+
+// lastSegment returns the id at the end of a resource URI such as
+// /v1/Account/<auth_id>/Application/<app_id>/, or "" for an empty one.
+func lastSegment(uri string) string {
+	if uri == "" {
 		return ""
 	}
-	parts := strings.Split(strings.Trim(n.Application, "/"), "/")
+	parts := strings.Split(strings.Trim(uri, "/"), "/")
 	return parts[len(parts)-1]
 }
 
@@ -84,7 +90,7 @@ type Application struct {
 	FallbackMethod      string `json:"fallback_method,omitempty"`
 	MessageURL          string `json:"message_url,omitempty"`
 	MessageMethod       string `json:"message_method,omitempty"`
-	DefaultNumberApp    bool   `json:"default_number_app,omitempty"`
+	DefaultApp          bool   `json:"default_app,omitempty"`
 	DefaultEndpointApp  bool   `json:"default_endpoint_app,omitempty"`
 	SubAccount          string `json:"sub_account,omitempty"`
 	LogIncomingMessages bool   `json:"log_incoming_messages,omitempty"`
@@ -285,8 +291,8 @@ type Subaccount struct {
 	Name        string `json:"name"`
 	AuthToken   string `json:"auth_token,omitempty"`
 	Enabled     bool   `json:"enabled,omitempty"`
-	CreatedOn   string `json:"created_on,omitempty"`
-	ModifiedOn  string `json:"modified_on,omitempty"`
+	Created     string `json:"created,omitempty"`
+	Modified    string `json:"modified,omitempty"`
 	Account     string `json:"account,omitempty"`
 	ResourceURI string `json:"resource_uri,omitempty"`
 }
@@ -307,11 +313,13 @@ type Endpoint struct {
 	Alias       string `json:"alias,omitempty"`
 	SipURI      string `json:"sip_uri,omitempty"`
 	Password    string `json:"password,omitempty"`
-	Application string `json:"application,omitempty"`
-	AppID       string `json:"app_id,omitempty"`
+	Application string `json:"application,omitempty"` // the app's resource URI; there is no app_id
 	Subaccount  string `json:"sub_account,omitempty"`
 	ResourceURI string `json:"resource_uri,omitempty"`
 }
+
+// ResolvedAppID returns the id of the attached application, from its URI.
+func (e *Endpoint) ResolvedAppID() string { return lastSegment(e.Application) }
 
 type EndpointList struct {
 	RawBody

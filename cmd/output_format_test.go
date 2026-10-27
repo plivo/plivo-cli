@@ -413,3 +413,24 @@ func TestAPI_queryIsURLParamsWithAHint(t *testing.T) {
 		t.Errorf("-o csv = %q, want %q", stdout, want)
 	}
 }
+
+// Endpoint and subaccount tables put each field the API sends in its column:
+// app_id comes from the endpoint's application URI.
+func TestTables_putTheAPIsFieldsInTheirColumns(t *testing.T) {
+	setFakeCreds(t)
+	ep := `{"alias":"callme","application":"/v1/Account/CIFAKEPLACEHOLDER001/Application/33406267401237901/","endpoint_id":"32866729519064","sip_uri":"sip:callme140703093944@phone.plivo.com","sub_account":null,"username":"callme140703093944"}`
+	sub := `{"auth_id":"SAFAKESUBACCOUNT0001","created":"2017-05-22","enabled":false,"modified":"2017-05-23","name":"shop"}`
+	list := func(obj string) string { return `{"meta":{"total_count":1},"objects":[` + obj + `]}` }
+	for _, tc := range [][3]string{
+		{list(ep), "voice endpoints list", "ENDPOINT_ID USERNAME ALIAS SIP_URI APP_ID 32866729519064 callme140703093944 callme sip:callme140703093944@phone.plivo.com 33406267401237901"},
+		{ep, "voice endpoints get 32866729519064", "endpoint_id: 32866729519064 username: callme140703093944 alias: callme sip_uri: sip:callme140703093944@phone.plivo.com app_id: 33406267401237901 sub_account:"},
+		{list(sub), "account subaccounts list", "AUTH_ID NAME ENABLED CREATED SAFAKESUBACCOUNT0001 shop false 2017-05-22"},
+		{sub, "account subaccounts get SAFAKESUBACCOUNT0001", "auth_id: SAFAKESUBACCOUNT0001 name: shop enabled: false created: 2017-05-22 modified: 2017-05-23"},
+	} {
+		sipServer(t, http.StatusOK, tc[0])
+		err, stdout, _ := execCmd(t, append(strings.Fields(tc[1]), "-o", "table")...)
+		if got := strings.Join(strings.Fields(stdout), " "); err != nil || got != tc[2] {
+			t.Errorf("%s: %v\n got %s\nwant %s", tc[1], err, got, tc[2])
+		}
+	}
+}

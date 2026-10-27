@@ -306,35 +306,37 @@ func runMPCPartKick(cmd *cobra.Command, args []string) error {
 	if err := confirmDestructive("kick participant " + part + " from MPC " + id); err != nil {
 		return err
 	}
-	return mpcParticipantDelete(id, part, "")
+	return mpcParticipantKick(id, part)
 }
 
 func runMPCPartMute(cmd *cobra.Command, args []string) error {
-	return mpcParticipantPost(args[0], args[1], "Mute", "muted")
+	return mpcParticipantUpdate(args[0], args[1], "mute", true)
 }
 
 func runMPCPartUnmute(cmd *cobra.Command, args []string) error {
-	return mpcParticipantDelete(args[0], args[1], "Mute")
+	return mpcParticipantUpdate(args[0], args[1], "mute", false)
 }
 
 func runMPCPartHold(cmd *cobra.Command, args []string) error {
-	return mpcParticipantPost(args[0], args[1], "Hold", "on hold")
+	return mpcParticipantUpdate(args[0], args[1], "hold", true)
 }
 
 func runMPCPartUnhold(cmd *cobra.Command, args []string) error {
-	return mpcParticipantDelete(args[0], args[1], "Hold")
+	return mpcParticipantUpdate(args[0], args[1], "hold", false)
 }
 
 // mpcResourceURL returns the full URL for an MPC, choosing the path segment
 // (`/MultiPartyCall/uuid_<uuid>/` vs `/MultiPartyCall/name_<n>/`) based on
-// whether `id` looks like a UUID or a friendly name.
-func mpcResourceURL(c *api.Client, id string) string {
+// whether `id` looks like a UUID or a friendly name. parts follow it, escaped
+// by AccountURL as the rest is.
+func mpcResourceURL(c *api.Client, id string, parts ...string) string {
 	// Plivo accepts both. We use the `uuid_<id>/` form when the id has dashes
 	// (UUID-shaped), otherwise treat it as a friendly_name.
+	seg := "name_" + id
 	if looksLikeUUID(id) {
-		return c.AccountURL("MultiPartyCall", "uuid_"+id)
+		seg = "uuid_" + id
 	}
-	return c.AccountURL("MultiPartyCall", "name_"+id)
+	return c.AccountURL(append([]string{"MultiPartyCall", seg}, parts...)...)
 }
 
 func looksLikeUUID(s string) bool {
@@ -355,13 +357,16 @@ func looksLikeUUID(s string) bool {
 	return true
 }
 
-func mpcParticipantPost(id, part, sub, label string) error {
+// mpcParticipantUpdate sets a participant's mute or hold to on. The API has no
+// Mute or Hold resource: both are fields of POST .../Participant/{id}/, and
+// the reply has a line per field set, not a message.
+func mpcParticipantUpdate(id, part, field string, on bool) error {
 	client, _, err := getClient()
 	if err != nil {
 		return err
 	}
-	var resp api.GenericResponse
-	apiErr, err := client.Do("POST", mpcResourceURL(client, id)+"Participant/"+part+"/"+sub+"/", nil, nil, &resp)
+	var resp api.RawBody
+	apiErr, err := client.Do("POST", mpcResourceURL(client, id, "Participant", part), map[string]any{field: on}, nil, &resp)
 	if err != nil {
 		return err
 	}
@@ -371,19 +376,15 @@ func mpcParticipantPost(id, part, sub, label string) error {
 	if dryRunFlag {
 		return nil
 	}
-	return emitResponse(fmt.Sprintf("%s: %s/%s — %s", label, id, part, resp.Message), resp.Raw())
+	return emitResponse(fmt.Sprintf("Set %s=%t on participant %s in MPC %s", field, on, part, id), resp.Raw())
 }
 
-func mpcParticipantDelete(id, part, sub string) error {
+func mpcParticipantKick(id, part string) error {
 	client, _, err := getClient()
 	if err != nil {
 		return err
 	}
-	urlPath := mpcResourceURL(client, id) + "Participant/" + part + "/"
-	if sub != "" {
-		urlPath += sub + "/"
-	}
-	apiErr, err := client.Do("DELETE", urlPath, nil, nil, nil)
+	apiErr, err := client.Do("DELETE", mpcResourceURL(client, id, "Participant", part), nil, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -393,10 +394,6 @@ func mpcParticipantDelete(id, part, sub string) error {
 	if dryRunFlag {
 		return nil
 	}
-	if sub == "" {
-		return emitWrite(fmt.Sprintf("Kicked participant %s from MPC %s", part, id),
-			map[string]any{"mpc": id, "participant_id": part, "kicked": true})
-	}
-	return emitWrite(fmt.Sprintf("Cleared %s on %s/%s", sub, id, part),
-		map[string]any{"mpc": id, "participant_id": part, "resource": sub, "cleared": true})
+	return emitWrite(fmt.Sprintf("Kicked participant %s from MPC %s", part, id),
+		map[string]any{"mpc": id, "participant_id": part, "kicked": true})
 }

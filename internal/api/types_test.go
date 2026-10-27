@@ -145,7 +145,7 @@ func TestApplication_unmarshal(t *testing.T) {
 		"answer_method": "POST",
 		"hangup_url": "https://example.com/hangup",
 		"message_url": "https://example.com/sms",
-		"default_number_app": true,
+		"default_app": true,
 		"public_uri": false,
 		"enabled": true,
 		"sip_uri": "sip:my-app@phone.plivo.com"
@@ -154,7 +154,7 @@ func TestApplication_unmarshal(t *testing.T) {
 	if err := json.Unmarshal(body, &a); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if a.AppID != "12345" || a.AppName != "my-app" || !a.DefaultNumberApp || !a.Enabled {
+	if a.AppID != "12345" || a.AppName != "my-app" || !a.DefaultApp || !a.Enabled {
 		t.Errorf("app fields wrong: %+v", a)
 	}
 }
@@ -330,14 +330,15 @@ func TestSubaccount_unmarshal(t *testing.T) {
 		"name": "test-sub",
 		"auth_token": "secret-token",
 		"enabled": true,
-		"created_on": "2026-01-01T00:00:00Z",
+		"created": "2017-05-22",
+		"modified": null,
 		"account": "/v1/Account/MAabc/"
 	}`)
 	var s Subaccount
 	if err := json.Unmarshal(body, &s); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if s.AuthID != "SAxxxxxxxxxxxxxxxxxxx" || s.Name != "test-sub" || !s.Enabled {
+	if s.AuthID != "SAxxxxxxxxxxxxxxxxxxx" || s.Name != "test-sub" || !s.Enabled || s.Created != "2017-05-22" {
 		t.Errorf("subaccount fields wrong: %+v", s)
 	}
 }
@@ -348,13 +349,13 @@ func TestEndpoint_unmarshal(t *testing.T) {
 		"username": "alice",
 		"alias": "alice-desk",
 		"sip_uri": "sip:alice@phone.plivo.com",
-		"app_id": "app-67890"
+		"application": "/v1/Account/MAabc/Application/67890/"
 	}`)
 	var e Endpoint
 	if err := json.Unmarshal(body, &e); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if e.EndpointID != "12345" || e.Username != "alice" || e.AppID != "app-67890" {
+	if e.EndpointID != "12345" || e.Username != "alice" || e.ResolvedAppID() != "67890" {
 		t.Errorf("endpoint fields wrong: %+v", e)
 	}
 }

@@ -397,6 +397,14 @@ func runNumberSearch(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
+	// A 2xx can carry why nothing came back, such as "We are currently unable
+	// to offer your requested numbers", in "error" ("" on success).
+	var reason struct {
+		Error string `json:"error"`
+	}
+	if json.Unmarshal(resp.Raw(), &reason) == nil && reason.Error != "" && !quietFlag {
+		fmt.Fprintf(os.Stderr, "Plivo: %s\n", reason.Error)
+	}
 	return renderNumberList(resp)
 }
 
