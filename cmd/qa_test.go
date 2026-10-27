@@ -26,7 +26,8 @@ import (
 // what each sends, its exit code and its output:
 //
 //   - TestQA_regressions replays one case per QA finding, named round/item as
-//     QA filed it (qa_r1_test.go, qa_r2_test.go, qa_r3_test.go).
+//     QA filed it (qa_r1_test.go, qa_r2_test.go, qa_r3_test.go), and what QA
+//     confirmed works and must keep working (qa_keep_test.go).
 //
 // Every run also checks its exit code is the one its error's code maps to.
 
@@ -150,7 +151,7 @@ func (r qaReq) String() string {
 // skipped (with -qa-pending it runs, and fails if it passes).
 func TestQA_regressions(t *testing.T) {
 	var cases []qaCase
-	for _, round := range [][]qaCase{r1Cases(), r2Cases(), r3Cases()} {
+	for _, round := range [][]qaCase{r1Cases(), r2Cases(), r3Cases(), keepCases()} {
 		cases = append(cases, round...)
 	}
 	seen := map[string]bool{}
