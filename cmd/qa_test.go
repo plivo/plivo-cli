@@ -565,10 +565,14 @@ func qaExitProblems(r qaResult) []string {
 	return nil
 }
 
+// qaClierrSource is internal/clierr/clierr.go, found while the working
+// directory is still the package's: a test may change it (t.Chdir).
+var qaClierrSource, _ = filepath.Abs(filepath.Join("..", "internal", "clierr", "clierr.go"))
+
 // qaDeclaredCodes are the codes declared in internal/clierr, read from its
 // source so a new one needs no list here.
 var qaDeclaredCodes = sync.OnceValue(func() map[clierr.Code]bool {
-	src, err := os.ReadFile(filepath.Join("..", "internal", "clierr", "clierr.go"))
+	src, err := os.ReadFile(qaClierrSource)
 	if err != nil {
 		panic(err)
 	}
