@@ -6,7 +6,7 @@ Usage:
 Flags:
       --campaign-id string   10DLC campaign id (required)
   -h, --help                 help for create
-      --number string        E.164 number (required)
+      --number string        the number: digits with the country code, e.g. 14155550100 (required)
 
 Global Flags:
       --dry-run            print the HTTP request without sending

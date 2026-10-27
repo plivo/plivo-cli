@@ -11,7 +11,6 @@ Available Commands:
   create      Register a new brand (spends money — TCR registration fee, requires --yes)
   get         Get a brand by ID
   list        List registered brands
-  update      Update mutable brand fields
 
 Flags:
   -h, --help   help for brands

@@ -1,7 +1,7 @@
-Unlink a number (requires --yes)
+Unlink a number from a campaign (requires --yes)
 
 Usage:
-  plivo messaging sms 10dlc links delete <link_id> [flags]
+  plivo messaging sms 10dlc links delete <campaign_id> <number> [flags]
 
 Flags:
   -h, --help   help for delete
