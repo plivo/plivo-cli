@@ -323,19 +323,50 @@ func parseListTime(v string, endOfDay bool) (time.Time, error) {
 // listJSON writes a list response for -o json with its rows array never null.
 // A few endpoints send null, or nothing, for an empty list where the rest send
 // [], and a script reading the rows should not need a case for that. key names
-// the array: "objects" on most lists. -o jsonl and -o csv write one line per
-// row of it.
+// the array (see listPage): "objects" on most lists. -o jsonl and -o csv write
+// one line per row of it.
 func listJSON(w io.Writer, raw json.RawMessage, key string) error {
 	var env map[string]json.RawMessage
 	if json.Unmarshal(raw, &env) == nil && env != nil {
-		if rows, ok := env[key]; !ok || bytes.Equal(bytes.TrimSpace(rows), []byte("null")) {
-			env[key] = json.RawMessage("[]")
-			if b, err := output.Marshal(env); err == nil {
-				raw = b
+		page, rowsKey := listPage(env, key)
+		if rows, ok := page[rowsKey]; !ok || bytes.Equal(bytes.TrimSpace(rows), []byte("null")) {
+			page[rowsKey] = json.RawMessage("[]")
+			if putListPage(env, page, key) == nil {
+				if b, err := output.Marshal(env); err == nil {
+					raw = b
+				}
 			}
 		}
 	}
 	return output.JSONList(w, raw, key)
+}
+
+// listPage finds the object of a list response that holds its rows and meta,
+// and the rows' key in it. Most lists keep both at the top, under a key such
+// as "objects"; "response.objects" names the object a masking session list
+// nests them in.
+func listPage(env map[string]json.RawMessage, key string) (page map[string]json.RawMessage, rows string) {
+	outer, inner, nested := strings.Cut(key, ".")
+	if !nested {
+		return env, key
+	}
+	if json.Unmarshal(env[outer], &page) != nil || page == nil {
+		page = map[string]json.RawMessage{}
+	}
+	return page, inner
+}
+
+// putListPage puts a page listPage returned back where it was nested.
+func putListPage(env, page map[string]json.RawMessage, key string) error {
+	outer, _, nested := strings.Cut(key, ".")
+	if !nested {
+		return nil
+	}
+	b, err := output.Marshal(page)
+	if err == nil {
+		env[outer] = b
+	}
+	return err
 }
 
 // fetchList reads one page of a list into out or, with --all, every page: their
@@ -390,8 +421,12 @@ func mergePages(env map[string]json.RawMessage, key string, rows []json.RawMessa
 	if err != nil {
 		return err
 	}
-	env[key] = merged
-	env["meta"] = walkMeta(env["meta"], nextKey, next, truncated)
+	page, rowsKey := listPage(env, key)
+	page[rowsKey] = merged
+	page["meta"] = walkMeta(page["meta"], nextKey, next, truncated)
+	if err := putListPage(env, page, key); err != nil {
+		return err
+	}
 	body, err := output.Marshal(env)
 	if err != nil {
 		return err
@@ -486,12 +521,13 @@ func getPage(client *api.Client, endpoint string, q url.Values, key string,
 	if json.Unmarshal(raw, &env) != nil || env == nil {
 		return nil, nil, pageMeta{}, clierr.Upstream("a page of the list was not a JSON object")
 	}
-	if v := env[key]; len(v) > 0 {
+	page, rowsKey := listPage(env, key)
+	if v := page[rowsKey]; len(v) > 0 {
 		if json.Unmarshal(v, &rows) != nil {
 			return nil, nil, pageMeta{}, clierr.Upstream(fmt.Sprintf("a page of the list had no %q array", key))
 		}
 	}
-	_ = json.Unmarshal(env["meta"], &meta) // absent or odd: the short page ends the walk
+	_ = json.Unmarshal(page["meta"], &meta) // absent or odd: the short page ends the walk
 	return env, rows, meta, nil
 }
 

@@ -368,7 +368,6 @@ func runMessageGet(cmd *cobra.Command, args []string) error {
 		{"uuid", m.MessageUUID},
 		{"from", m.From},
 		{"to", m.To},
-		{"text", m.Text},
 		{"type", m.Type},
 		{"direction", m.Direction},
 		{"state", m.State},

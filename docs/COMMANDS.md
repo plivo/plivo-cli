@@ -2530,13 +2530,11 @@ plivo numbers masking sessions create [flags]
 Flags:
 
 ```
-      --call-time-limit int     max per-call duration in seconds
-      --first-party string      first party E.164 (required)
-      --mode string             voice|sms|both (default "both")
-      --record                  record calls in this session
-      --second-party string     second party E.164 (required)
-      --session-expiry int      session lifetime in seconds
-      --virtual-number string   virtual number to use (else allocates from pool)
+      --call-time-limit int   max per-call duration in seconds
+      --first-party string    first party E.164 (required)
+      --record                record calls in this session
+      --second-party string   second party E.164 (required)
+      --session-expiry int    session lifetime in seconds
 ```
 
 ---
@@ -3720,14 +3718,13 @@ plivo verify sessions create [flags]
 Flags:
 
 ```
-      --alpha-sender string   alphanumeric sender id
-      --app-uuid string       Verify application uuid (required)
-      --channel string        delivery channel: sms|voice|whatsapp (default "sms")
-      --explain               narrate in plain English before executing
-      --locale string         BCP-47 locale, e.g. en-US
-      --method string         HTTP method for callback URL
-      --recipient string      E.164 destination number (required)
-      --url string            callback URL for session status events
+      --app-uuid string    Verify application uuid (required)
+      --channel string     delivery channel: sms|voice|whatsapp (default "sms")
+      --explain            narrate in plain English before executing
+      --locale string      BCP-47 locale, e.g. en-US
+      --method string      HTTP method for callback URL
+      --recipient string   E.164 destination number (required)
+      --url string         callback URL for session status events
 ```
 
 ---
@@ -4009,12 +4006,13 @@ plivo voice calls record <call_uuid> [flags]
 Flags:
 
 ```
-      --both-legs                record both legs (default: just A-leg)
-      --callback-method string   GET|POST (default "POST")
-      --callback-url string      URL hit when recording finishes
-      --file-format string       mp3|wav (default "mp3")
-      --time-limit int           max recording length in seconds (default 60)
-      --transcribe               request transcription
+      --callback-method string       GET|POST (default "POST")
+      --callback-url string          URL hit when recording finishes
+      --file-format string           mp3|wav (default "mp3")
+      --record-channel-type string   mono|stereo (stereo puts each leg on its own channel)
+      --time-limit int               max recording length in seconds (default 60)
+      --transcription-type string    transcription type: auto|hybrid|manual (results go to --transcription-url)
+      --transcription-url string     URL the transcription is sent to
 ```
 
 ---
@@ -4351,10 +4349,11 @@ plivo voice conferences record <conference_name> [flags]
 Flags:
 
 ```
-      --callback-url string   URL hit when recording finishes
-      --file-format string    mp3|wav (default "mp3")
-      --time-limit int        max recording length in seconds (default 60)
-      --transcribe            request transcription
+      --callback-url string         URL hit when recording finishes
+      --file-format string          mp3|wav (default "mp3")
+      --time-limit int              max recording length in seconds (default 60)
+      --transcription-type string   transcription type: auto (results go to --transcription-url)
+      --transcription-url string    URL the transcription is sent to
 ```
 
 ---
@@ -4590,15 +4589,7 @@ plivo voice multiparty participant kick <mpc_uuid_or_name> <participant_id>
 List participants in an MPC
 
 ```
-plivo voice multiparty participant list <mpc_uuid_or_name> [flags]
-```
-
-Flags:
-
-```
-      --all          fetch every page (stops after 100 pages)
-      --limit int    results per page (1-20) (default 20)
-      --offset int   pagination offset
+plivo voice multiparty participant list <mpc_uuid_or_name>
 ```
 
 ---

@@ -377,19 +377,26 @@ func queryNumbers(v any) any {
 
 // records picks what jsonl and csv write one line per: the query result's
 // elements (or the result itself), otherwise the envelope's data.<key>[] (a
-// list response's rows: key is "objects" on most lists), the elements of data,
-// or data itself. A null result or a null list of rows has no records.
+// list response's rows: key is "objects" on most lists, and a dotted key such
+// as "response.objects" names rows nested in an object), the elements of
+// data, or data itself. A null result or a null list of rows has no records.
 func records(doc []byte, queried bool, key string) []json.RawMessage {
 	if !queried {
 		var env map[string]json.RawMessage
 		if json.Unmarshal(doc, &env) == nil {
 			doc = env["data"]
 		}
-		var page map[string]json.RawMessage
-		if json.Unmarshal(doc, &page) == nil {
-			if rows, ok := page[key]; ok && (isArray(rows) || string(rows) == "null") {
-				doc = rows
+		rows := doc
+		for _, name := range strings.Split(key, ".") {
+			var page map[string]json.RawMessage
+			if json.Unmarshal(rows, &page) != nil {
+				rows = nil
+				break
 			}
+			rows = page[name]
+		}
+		if rows != nil && (isArray(rows) || string(rows) == "null") {
+			doc = rows
 		}
 	}
 	if len(doc) == 0 || string(doc) == "null" {

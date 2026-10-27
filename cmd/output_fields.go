@@ -45,7 +45,7 @@ var outputTypes = map[string]reflect.Type{
 	"plivo numbers compliance list":               reflect.TypeFor[api.ComplianceApplicationList](),
 	"plivo numbers get":                           reflect.TypeFor[api.Number](),
 	"plivo numbers list":                          reflect.TypeFor[api.NumberList](),
-	"plivo numbers masking sessions get":          reflect.TypeFor[api.MaskingSession](),
+	"plivo numbers masking sessions get":          reflect.TypeFor[api.MaskingSessionResponse](),
 	"plivo numbers masking sessions list":         reflect.TypeFor[api.MaskingSessionList](),
 	"plivo sip calls get":                         reflect.TypeFor[api.SIPTrunkCall](),
 	"plivo sip calls insights":                    reflect.TypeFor[api.SIPCallInsights](),
@@ -107,7 +107,9 @@ var (
 
 // outputFields lists t's JSON fields the way encoding/json reads them: by
 // json tag, embedded structs flattened. Nested objects add "parent.child",
-// arrays "parent[]" (and "parent[].child" for arrays of objects).
+// arrays "parent[]" (and "parent[].child" for arrays of objects). An api_id
+// in an array is left out: a list row shares its type with get, but api_id
+// is the response's, never a row's.
 func outputFields(t reflect.Type) []fieldSchema {
 	fields := []fieldSchema{}
 	var walk func(t reflect.Type, prefix string, seen map[reflect.Type]bool)
@@ -133,6 +135,9 @@ func outputFields(t reflect.Type) []fieldSchema {
 			}
 			if name == "" {
 				name = f.Name
+			}
+			if name == "api_id" && strings.HasSuffix(prefix, "[].") {
+				continue
 			}
 			path := prefix + name
 			for {

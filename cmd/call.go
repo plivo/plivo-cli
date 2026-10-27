@@ -132,8 +132,11 @@ func init() {
 	callRecordCmd.Flags().StringVar(&callRecordFileFormat, "file-format", "mp3", "mp3|wav")
 	callRecordCmd.Flags().StringVar(&callRecordCallbackURL, "callback-url", "", "URL hit when recording finishes")
 	callRecordCmd.Flags().StringVar(&callRecordCallbackMethod, "callback-method", "POST", "GET|POST")
-	callRecordCmd.Flags().BoolVar(&callRecordTranscribe, "transcribe", false, "request transcription")
-	callRecordCmd.Flags().BoolVar(&callRecordBothLegs, "both-legs", false, "record both legs (default: just A-leg)")
+	callRecordCmd.Flags().StringVar(&callRecordChannelType, "record-channel-type", "", "mono|stereo (stereo puts each leg on its own channel)")
+	callRecordCmd.Flags().StringVar(&callRecordTransType, "transcription-type", "", "transcription type: auto|hybrid|manual (results go to --transcription-url)")
+	callRecordCmd.Flags().StringVar(&callRecordTransURL, "transcription-url", "", "URL the transcription is sent to")
+	ignoredFlag(callRecordCmd, "both-legs", true, "the API always records both legs; --record-channel-type stereo puts each on its own channel")
+	ignoredFlag(callRecordCmd, "transcribe", true, transcribeNote)
 
 	callCmd.AddCommand(callListCmd, callGetCmd, callMakeCmd, callHangupCmd, callTransferCmd,
 		callPlayCmd, callStopPlayCmd, callSpeakCmd, callStopSpeakCmd, callDTMFCmd,
@@ -342,9 +345,13 @@ var (
 	callRecordFileFormat     string
 	callRecordCallbackURL    string
 	callRecordCallbackMethod string
-	callRecordTranscribe     bool
-	callRecordBothLegs       bool
+	callRecordChannelType    string
+	callRecordTransType      string
+	callRecordTransURL       string
 )
+
+// transcribeNote is what --transcribe, which the Record APIs never read, says.
+const transcribeNote = "the API never read it, so nothing was transcribed; use --transcription-type auto with --transcription-url"
 
 var callRecordCmd = &cobra.Command{
 	Use:   "record <call_uuid>",
@@ -393,9 +400,9 @@ func runCallRecord(cmd *cobra.Command, args []string) error {
 	body := map[string]any{
 		"time_limit":  callRecordTimeLimit,
 		"file_format": callRecordFileFormat,
-		"transcribe":  callRecordTranscribe,
-		"both_legs":   callRecordBothLegs,
 	}
+	putSet(body, map[string]string{"record_channel_type": callRecordChannelType,
+		"transcription_type": callRecordTransType, "transcription_url": callRecordTransURL})
 	if callRecordCallbackURL != "" {
 		body["callback_url"] = callRecordCallbackURL
 		body["callback_method"] = callRecordCallbackMethod
@@ -425,6 +432,15 @@ func runCallRecord(cmd *cobra.Command, args []string) error {
 		{"url", resp.URL},
 		{"message", resp.Message},
 	})
+}
+
+// putSet adds to body each of fields that is set.
+func putSet(body map[string]any, fields map[string]string) {
+	for key, v := range fields {
+		if v != "" {
+			body[key] = v
+		}
+	}
 }
 
 func runCallStopRecord(cmd *cobra.Command, args []string) error {

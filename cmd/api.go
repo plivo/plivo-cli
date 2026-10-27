@@ -483,10 +483,11 @@ func renderAPIResponse(resp *http.Response, body []byte) error {
 	return nil
 }
 
-// apiErrorFromUpstream builds the unified UPSTREAM_ERROR envelope for a
-// non-2xx response. The upstream payload is preserved verbatim under
-// context.upstream so agents can branch on both the CLI code AND the raw
-// Plivo error shape.
+// apiErrorFromUpstream classifies a non-2xx response as typed commands do
+// (clierr.FromHTTP), so it carries their code and exit code: a 404 is
+// RESOURCE_NOT_FOUND, exit 1. The upstream payload is preserved verbatim
+// under context.upstream so agents can branch on both the CLI code AND the
+// raw Plivo error shape.
 func apiErrorFromUpstream(status int, requestID string, body []byte, isJSON bool) error {
 	upstream := map[string]any{"status": status}
 	if isJSON && len(body) > 0 {
@@ -500,13 +501,10 @@ func apiErrorFromUpstream(status int, requestID string, body []byte, isJSON bool
 		upstream["body"] = string(body)
 	}
 
-	return &clierr.Error{
-		Code:       clierr.CodeUpstreamError,
-		Message:    fmt.Sprintf("Plivo API returned %d %s", status, http.StatusText(status)),
-		Hint:       fmt.Sprintf("api.plivo.com returned %d. Inspect the upstream payload for details.", status),
-		StatusCode: status,
-		RequestID:  requestID,
-		Retryable:  status == http.StatusTooManyRequests || status >= 500,
-		Context:    map[string]any{"upstream": upstream},
+	e := clierr.FromHTTP(status, requestID, body)
+	if e.Message == "" {
+		e.Message = fmt.Sprintf("Plivo API returned %d %s", status, http.StatusText(status))
 	}
+	e.Context = map[string]any{"upstream": upstream}
+	return e
 }

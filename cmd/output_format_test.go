@@ -110,10 +110,13 @@ func TestOutputFormats_listCommandsHonourEveryFormat(t *testing.T) {
 	setFakeCreds(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body := listPageBody // rows under "objects", or under the list's own key
-		for suffix, key := range map[string]string{"/Brand/": "brands", "/Campaign/": "campaigns", "/Compliance/": "compliances"} {
+		for suffix, key := range map[string]string{"/Brand/": "brands", "/Campaign/": "campaigns", "/Compliance/": "compliances", "/Verify/Session/": "sessions"} {
 			if strings.HasSuffix(r.URL.Path, suffix) {
 				body = strings.Replace(body, `"objects"`, `"`+key+`"`, 1)
 			}
+		}
+		if strings.HasSuffix(r.URL.Path, "/Masking/Session/") { // meta and rows nested under response
+			body = strings.Replace(listPageBody, `"meta"`, `"response":{"meta"`, 1) + "}"
 		}
 		if strings.HasSuffix(r.URL.Path, "/Conference/") {
 			body = `{"api_id":"` + zeroUUID + `","conferences":["first","second"]}`
@@ -221,6 +224,9 @@ func listCommandPaths() [][]string {
 // one array), an array's elements, or the one value.
 func rowsOf(data any) []any {
 	if page, ok := data.(map[string]any); ok {
+		if nested, ok := page["response"].(map[string]any); ok {
+			page = nested
+		}
 		for _, v := range page {
 			if rows, ok := v.([]any); ok {
 				return rows

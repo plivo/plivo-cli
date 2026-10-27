@@ -62,38 +62,15 @@ var qaFixtures = map[string]string{
 
 // qaOracleOwners names the open finding about a command, for what the
 // oracle finds in it: its response for a get or list, its requests for the
-// rest. sdk/fields, about every list type, applies to all of them.
-var qaOracleOwners = map[string]string{
-	"numbers get":                       "sdk/numbers",
-	"numbers list":                      "sdk/numbers",
-	"numbers masking sessions create":   "sdk/masking",
-	"numbers masking sessions get":      "sdk/masking",
-	"numbers masking sessions list":     "sdk/masking",
-	"verify sessions get":               "sdk/verify",
-	"verify sessions list":              "sdk/verify",
-	"verify sessions validate":          "sdk/verify",
-	"voice calls record":                "sdk/record",
-	"voice calls streams list":          "sdk/streams",
-	"voice conferences record":          "sdk/record",
-	"voice multiparty get":              "sdk/multiparty",
-	"voice multiparty list":             "sdk/multiparty",
-	"voice multiparty participant list": "sdk/multiparty",
-}
+// rest.
+var qaOracleOwners = map[string]string{}
 
 // qaKnownGaps are what the oracle finds today, by the finding that reports
 // it: the name of a field --schema lists that the response lacks, or of a
 // parameter the references do not take; "*" covers anything in that
 // finding's commands. A gap counts only while its finding is pending, and
 // each must still turn up: the fix that clears one deletes it.
-var qaKnownGaps = map[string][]string{
-	"sdk/fields":     {"api_id", "resource_uri", "text", "total_count"},
-	"sdk/masking":    {"*"},
-	"sdk/multiparty": {"billing_type", "caller_name", "created_at", "direction", "end_at", "from", "limit", "muted", "offset", "to"},
-	"sdk/numbers":    {"app_id", "country", "type"},
-	"sdk/record":     {"both_legs", "transcribe"},
-	"sdk/streams":    {"resource_uri", "stream_url"},
-	"sdk/verify":     {"*"},
-}
+var qaKnownGaps = map[string][]string{}
 
 // qaGapOwner is the first pending finding of owners whose known gaps hold
 // name ("" for a whole request or response), or "" when none does. It marks
@@ -149,8 +126,8 @@ var qaConfirmed = map[string][]string{
 	"account applications": {"log_incoming_messages"},              // docs
 	"voice calls":          {"hangup_cause_name", "hangup_source"}, // docs
 	"voice calls streams":  {"audio_track", "bidirectional"},       // docs
-	"numbers get":          {"mms_enabled"},                        // docs
-	"numbers list":         {"mms_enabled"},
+	"numbers get":          {"mms_enabled", "country", "type"},     // docs; country and type QA saw live
+	"numbers list":         {"mms_enabled", "country", "type"},
 	"voice endpoints":      {"password"}, // QA saw the API return it (r3/L5)
 	"numbers compliance": {"callback_url", "callback_method", "rejection_reason", // docs; the rest with expand
 		"end_user", "documents", "linked_numbers"},
@@ -160,6 +137,19 @@ var qaConfirmed = map[string][]string{
 		"message_flow", "help_message", "help_keywords", "optin_message", "optin_keywords", "optout_message",
 		"optout_keywords", "terms_and_conditions_link", "privacy_policy_link", "campaign_attributes", "error_reason"},
 	"messaging sms tollfree": {"terms_and_conditions_link", "privacy_policy_link", "optin_message", "help_message"},
+	"verify sessions":        {"locale", "requestor_ip", "destination_country_iso2"}, // docs: a session, in a list too
+
+	"voice calls streams list":    {"total_count"}, // QA saw it live, where the fixture has count
+	"messaging sms tollfree list": {"total_count"}, // docs and the SDK's struct, where the fixture has count
+}
+
+// qaNotSent are fields an SDK fixture has that the API does not send: the
+// oracle reads the fixture without them, so --schema must not list them.
+var qaNotSent = map[string]string{
+	"voice calls list":            "meta.total_count", // QA live
+	"voice recordings list":       "meta.total_count", // QA live
+	"voice calls streams list":    "meta.count",       // QA live: total_count
+	"messaging sms tollfree list": "meta.count",       // docs and the SDK's struct: total_count (live is 403)
 }
 
 // qaIsConfirmed reports whether a field of cmd's output, by its names, is in
@@ -225,18 +215,19 @@ func qaSDKSchemaPaths(t *testing.T) int {
 			}
 			have := map[string]bool{"api_id": true} // every response has one
 			qaJSONPaths(doc, "", have)
+			delete(have, qaNotSent[cmd])
 			missing := map[string][]string{}
 			for _, f := range outputFields(outputTypes["plivo "+cmd]) {
 				names := qaFieldNames(f.Path)
 				if have[f.Path] || qaIsConfirmed(cmd, names) {
 					continue
 				}
-				o := qaGapOwner(names[len(names)-1], owner, "sdk/fields")
+				o := qaGapOwner(names[len(names)-1], owner)
 				missing[o] = append(missing[o], f.Path)
 			}
 			problems := map[string][]string{}
 			for o, paths := range missing {
-				problems[o] = []string{fmt.Sprintf("--schema lists %s, which the SDK's %s lacks", strings.Join(paths, ", "), qaFixtures[cmd])}
+				problems[o] = []string{fmt.Sprintf("--schema lists %s, which the SDK's %s lacks or qaNotSent says the API does not send", strings.Join(paths, ", "), qaFixtures[cmd])}
 			}
 			qaVerdict(t, problems)
 		})
@@ -295,7 +286,7 @@ func qaSDKDecoding(t *testing.T) int {
 
 // qaShowsRecord reports whether table holds one of the text values of the
 // fixture's record: the object itself, an object it nests the record in, or
-// the first row of its list.
+// the first row of its list, at the top or in such an object.
 func qaShowsRecord(table string, doc map[string]any) bool {
 	var texts []string
 	add := func(obj map[string]any) {
@@ -305,20 +296,23 @@ func qaShowsRecord(table string, doc map[string]any) bool {
 			}
 		}
 	}
-	add(doc)
-	for _, v := range doc {
-		switch v := v.(type) {
-		case map[string]any:
-			add(v)
-		case []any:
-			if len(v) == 0 {
-				continue
-			}
-			switch row := v[0].(type) {
+	first := func(v any) {
+		if list, ok := v.([]any); ok && len(list) > 0 {
+			switch row := list[0].(type) {
 			case map[string]any:
 				add(row)
 			case string:
 				texts = append(texts, row)
+			}
+		}
+	}
+	add(doc)
+	for _, v := range doc {
+		first(v)
+		if obj, ok := v.(map[string]any); ok {
+			add(obj)
+			for _, inner := range obj {
+				first(inner)
 			}
 		}
 	}

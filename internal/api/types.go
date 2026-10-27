@@ -5,13 +5,29 @@ import (
 	"strings"
 )
 
-// ListMeta is the pagination envelope present on every Plivo list response.
+// ListMeta is the pagination envelope of most Plivo list responses.
 type ListMeta struct {
 	Limit      int    `json:"limit"`
 	Offset     int    `json:"offset"`
 	TotalCount int    `json:"total_count"`
 	Next       string `json:"next,omitempty"`
 	Previous   string `json:"previous,omitempty"`
+}
+
+// PageMeta is the envelope of the lists that send no total: messages, calls,
+// recordings and Verify sessions.
+type PageMeta struct {
+	Limit    int    `json:"limit"`
+	Offset   int    `json:"offset"`
+	Next     string `json:"next,omitempty"`
+	Previous string `json:"previous,omitempty"`
+}
+
+// CountMeta is the envelope of the lists that send their total as count:
+// multiparty calls and their participants.
+type CountMeta struct {
+	Count int `json:"count"`
+	PageMeta
 }
 
 type Account struct {
@@ -37,8 +53,7 @@ type Number struct {
 	Region        string `json:"region,omitempty"`
 	Country       string `json:"country,omitempty"`
 	NumberType    string `json:"number_type,omitempty"`
-	Application   string `json:"application,omitempty"`
-	AppID         string `json:"app_id,omitempty"`
+	Application   string `json:"application,omitempty"` // the app's resource URI; there is no app_id
 	Subaccount    string `json:"sub_account,omitempty"`
 	Alias         string `json:"alias,omitempty"`
 	MonthlyRental string `json:"monthly_rental_rate,omitempty"`
@@ -57,15 +72,8 @@ type NumberList struct {
 	Objects []Number `json:"objects"`
 }
 
-// ResolvedAppID returns the attached application id.
-// Plivo populates AppID directly on some endpoints and embeds the id in the
-// Application resource URI on others; this method normalises both shapes.
-func (n *Number) ResolvedAppID() string {
-	if n.AppID != "" {
-		return n.AppID
-	}
-	return lastSegment(n.Application)
-}
+// ResolvedAppID returns the id of the attached application, from its URI.
+func (n *Number) ResolvedAppID() string { return lastSegment(n.Application) }
 
 // lastSegment returns the id at the end of a resource URI such as
 // /v1/Account/<auth_id>/Application/<app_id>/, or "" for an empty one.
@@ -113,7 +121,6 @@ type Message struct {
 	MessageUUID string `json:"message_uuid"`
 	From        string `json:"from_number"`
 	To          string `json:"to_number"`
-	Text        string `json:"text,omitempty"`
 	Type        string `json:"message_type"`
 	Direction   string `json:"message_direction,omitempty"`
 	State       string `json:"message_state,omitempty"`
@@ -128,7 +135,7 @@ type Message struct {
 type MessageList struct {
 	RawBody
 	APIID   string    `json:"api_id"`
-	Meta    ListMeta  `json:"meta"`
+	Meta    PageMeta  `json:"meta"`
 	Objects []Message `json:"objects"`
 }
 
@@ -174,7 +181,7 @@ type LiveCall struct {
 type CallList struct {
 	RawBody
 	APIID   string   `json:"api_id"`
-	Meta    ListMeta `json:"meta"`
+	Meta    PageMeta `json:"meta"`
 	Objects []Call   `json:"objects"`
 }
 
@@ -225,36 +232,40 @@ type Recording struct {
 type RecordingList struct {
 	RawBody
 	APIID   string      `json:"api_id"`
-	Meta    ListMeta    `json:"meta"`
+	Meta    PageMeta    `json:"meta"`
 	Objects []Recording `json:"objects"`
 }
 
-// VerifySession — /Account/{id}/Verify/Session/
+// VerifySession — /Account/{id}/Verify/Session/: a get returns one, a list
+// carries them under "sessions".
 type VerifySession struct {
 	RawBody
-	APIID                    string `json:"api_id,omitempty"`
-	SessionUUID              string `json:"session_uuid"`
-	AppUUID                  string `json:"app_uuid,omitempty"`
-	AlphaSender              string `json:"alpha_sender,omitempty"`
-	Recipient                string `json:"recipient"`
-	Channel                  string `json:"channel,omitempty"`
-	Status                   string `json:"status,omitempty"`
-	CountOfAttempts          int    `json:"count_of_attempts,omitempty"`
-	RequestorIP              string `json:"requestor_ip,omitempty"`
-	LocaleUsed               string `json:"locale_used,omitempty"`
-	DestinationCountryISO2   string `json:"destination_country_iso2,omitempty"`
-	DestinationCountryPrefix string `json:"destination_country_prefix,omitempty"`
-	ChargeAmount             string `json:"charge_amount,omitempty"`
-	ChargeAmountCurrency     string `json:"charge_amount_currency,omitempty"`
-	CreationTime             string `json:"creation_time,omitempty"`
-	ResourceURI              string `json:"resource_uri,omitempty"`
+	APIID                  string        `json:"api_id,omitempty"`
+	SessionUUID            string        `json:"session_uuid"`
+	AppUUID                string        `json:"app_uuid,omitempty"`
+	Recipient              string        `json:"recipient"`
+	Channel                string        `json:"channel,omitempty"`
+	Status                 string        `json:"status,omitempty"`
+	Count                  int           `json:"count,omitempty"` // OTP attempts
+	RequestorIP            string        `json:"requestor_ip,omitempty"`
+	Locale                 string        `json:"locale,omitempty"`
+	DestinationCountryISO2 string        `json:"destination_country_iso2,omitempty"`
+	Charges                VerifyCharges `json:"charges"`
+	CreatedAt              string        `json:"created_at,omitempty"`
+	UpdatedAt              string        `json:"updated_at,omitempty"`
+}
+
+// VerifyCharges is what a Verify session cost.
+type VerifyCharges struct {
+	TotalCharge      string `json:"total_charge,omitempty"`
+	ValidationCharge string `json:"validation_charge,omitempty"`
 }
 
 type VerifySessionList struct {
 	RawBody
-	APIID   string          `json:"api_id"`
-	Meta    ListMeta        `json:"meta"`
-	Objects []VerifySession `json:"objects"`
+	APIID    string          `json:"api_id"`
+	Meta     PageMeta        `json:"meta"`
+	Sessions []VerifySession `json:"sessions"`
 }
 
 // LookupNumber — https://lookup.plivo.com/v1/Number/{number}?type=carrier
@@ -339,29 +350,40 @@ type CnamLookup struct {
 	Charge     string `json:"charge,omitempty"`
 }
 
-// MaskingSession — /Account/{id}/MaskingSession/ (number-masking)
+// MaskingSession is a number-masking session — /Account/{id}/Masking/Session/.
+// The API nests sessions under "response": a get's is response itself, a
+// list's are response.objects, beside response.meta.
 type MaskingSession struct {
+	SessionUUID      string `json:"session_uuid"`
+	FirstParty       string `json:"first_party,omitempty"`
+	SecondParty      string `json:"second_party,omitempty"`
+	VirtualNumber    string `json:"virtual_number,omitempty"`
+	Status           string `json:"status,omitempty"`
+	Duration         int    `json:"duration,omitempty"`
+	CallTimeLimit    int    `json:"call_time_limit,omitempty"`
+	RingTimeout      int    `json:"ring_timeout,omitempty"`
+	Record           bool   `json:"record,omitempty"`
+	RecordFileFormat string `json:"record_file_format,omitempty"`
+	TotalCallCount   int    `json:"total_call_count,omitempty"`
+	CreatedTime      string `json:"created_time,omitempty"`
+	ModifiedTime     string `json:"modified_time,omitempty"`
+	ExpiryTime       string `json:"expiry_time,omitempty"`
+}
+
+// MaskingSessionResponse is GET /Masking/Session/{session_uuid}/.
+type MaskingSessionResponse struct {
 	RawBody
-	APIID         string `json:"api_id,omitempty"`
-	SessionUUID   string `json:"session_uuid"`
-	FirstParty    string `json:"first_party,omitempty"`
-	SecondParty   string `json:"second_party,omitempty"`
-	VirtualNumber string `json:"virtual_number,omitempty"`
-	Status        string `json:"status,omitempty"`
-	Mode          string `json:"mode,omitempty"`
-	SessionExpiry int    `json:"session_expiry,omitempty"`
-	CallTimeLimit int    `json:"call_time_limit,omitempty"`
-	Recording     bool   `json:"record,omitempty"`
-	CreatedOn     string `json:"created_on,omitempty"`
-	ExpiresOn     string `json:"expires_on,omitempty"`
-	ResourceURI   string `json:"resource_uri,omitempty"`
+	APIID    string         `json:"api_id,omitempty"`
+	Response MaskingSession `json:"response"`
 }
 
 type MaskingSessionList struct {
 	RawBody
-	APIID   string           `json:"api_id"`
-	Meta    ListMeta         `json:"meta"`
-	Objects []MaskingSession `json:"objects"`
+	APIID    string `json:"api_id"`
+	Response struct {
+		Meta    ListMeta         `json:"meta"`
+		Objects []MaskingSession `json:"objects"`
+	} `json:"response"`
 }
 
 // Compliance — /Account/{id}/PhoneNumber/Compliance/ (unified number-compliance API).
@@ -492,7 +514,6 @@ type Conference struct {
 	ConferenceRunTime     string             `json:"conference_run_time,omitempty"`
 	ConferenceMemberCount string             `json:"conference_member_count,omitempty"`
 	Members               []ConferenceMember `json:"members,omitempty"`
-	ResourceURI           string             `json:"resource_uri,omitempty"`
 }
 
 // ConferenceList — list returns a flat array of names, not full Conference objects.
@@ -505,55 +526,71 @@ type ConferenceList struct {
 // MPC — /Account/{id}/MultiPartyCall/
 type MPC struct {
 	RawBody
-	APIID        string `json:"api_id,omitempty"`
-	MPCUUID      string `json:"mpc_uuid,omitempty"`
-	FriendlyName string `json:"friendly_name,omitempty"`
-	Status       string `json:"status,omitempty"`
-	BillingType  string `json:"billing_type,omitempty"`
-	CreatedAt    string `json:"created_at,omitempty"`
-	EndAt        string `json:"end_at,omitempty"`
-	ResourceURI  string `json:"resource_uri,omitempty"`
+	APIID                string `json:"api_id,omitempty"`
+	MPCUUID              string `json:"mpc_uuid,omitempty"`
+	FriendlyName         string `json:"friendly_name,omitempty"`
+	Status               string `json:"status,omitempty"`
+	CreationTime         string `json:"creation_time,omitempty"`
+	StartTime            string `json:"start_time,omitempty"`
+	EndTime              string `json:"end_time,omitempty"`
+	Duration             int    `json:"duration,omitempty"`
+	BilledDuration       int    `json:"billed_duration,omitempty"`
+	BilledAmount         string `json:"billed_amount,omitempty"`
+	Recording            string `json:"recording,omitempty"`
+	StayAlone            bool   `json:"stay_alone,omitempty"`
+	TerminationCause     string `json:"termination_cause,omitempty"`
+	TerminationCauseCode int    `json:"termination_cause_code,omitempty"`
+	SubAccount           string `json:"sub_account,omitempty"`
+	Participants         string `json:"participants,omitempty"` // the URI of its participants
+	ResourceURI          string `json:"resource_uri,omitempty"`
 }
 
 type MPCList struct {
 	RawBody
-	APIID   string   `json:"api_id"`
-	Meta    ListMeta `json:"meta"`
-	Objects []MPC    `json:"objects"`
+	APIID   string    `json:"api_id"`
+	Meta    CountMeta `json:"meta"`
+	Objects []MPC     `json:"objects"`
 }
 
 type MPCParticipant struct {
-	ParticipantID string `json:"member_id,omitempty"`
-	From          string `json:"from,omitempty"`
-	To            string `json:"to,omitempty"`
-	CallerName    string `json:"caller_name,omitempty"`
-	CallUUID      string `json:"call_uuid,omitempty"`
-	Muted         bool   `json:"muted,omitempty"`
-	OnHold        bool   `json:"hold,omitempty"`
-	JoinTime      string `json:"join_time,omitempty"`
-	Direction     string `json:"direction,omitempty"`
-	Role          string `json:"role,omitempty"`
+	ParticipantID   string `json:"member_id,omitempty"`
+	MPCUUID         string `json:"mpc_uuid,omitempty"`
+	CallUUID        string `json:"call_uuid,omitempty"`
+	MemberAddress   string `json:"member_address,omitempty"`
+	Role            string `json:"role,omitempty"`
+	CoachMode       bool   `json:"coach_mode,omitempty"`
+	Muted           bool   `json:"mute,omitempty"`
+	OnHold          bool   `json:"hold,omitempty"`
+	JoinTime        string `json:"join_time,omitempty"`
+	ExitTime        string `json:"exit_time,omitempty"`
+	ExitCause       string `json:"exit_cause,omitempty"`
+	Duration        int    `json:"duration,omitempty"`
+	BilledDuration  int    `json:"billed_duration,omitempty"`
+	BilledAmount    string `json:"billed_amount,omitempty"`
+	StartMPCOnEnter bool   `json:"start_mpc_on_enter,omitempty"`
+	EndMPCOnExit    bool   `json:"end_mpc_on_exit,omitempty"`
+	ResourceURI     string `json:"resource_uri,omitempty"`
 }
 
 type MPCParticipantList struct {
 	RawBody
 	APIID   string           `json:"api_id"`
-	Meta    ListMeta         `json:"meta"`
+	Meta    CountMeta        `json:"meta"`
 	Objects []MPCParticipant `json:"objects"`
 }
 
 // AudioStream — /Account/{id}/Call/{uuid}/Stream/
 type AudioStream struct {
 	RawBody
-	StreamID      string `json:"stream_id,omitempty"`
-	CallUUID      string `json:"call_uuid,omitempty"`
-	StreamURL     string `json:"stream_url,omitempty"`
-	Status        string `json:"status,omitempty"`
-	AudioTrack    string `json:"audio_track,omitempty"`
-	BiDirectional bool   `json:"bidirectional,omitempty"`
-	StartTime     string `json:"start_time,omitempty"`
-	EndTime       string `json:"end_time,omitempty"`
-	ResourceURI   string `json:"resource_uri,omitempty"`
+	StreamID          string `json:"stream_id,omitempty"`
+	CallUUID          string `json:"call_uuid,omitempty"`
+	ServiceURL        string `json:"service_url,omitempty"` // the WebSocket the audio goes to
+	Status            string `json:"status,omitempty"`
+	AudioTrack        string `json:"audio_track,omitempty"`
+	BiDirectional     bool   `json:"bidirectional,omitempty"`
+	StatusCallbackURL string `json:"status_callback_url,omitempty"`
+	StartTime         string `json:"start_time,omitempty"`
+	EndTime           string `json:"end_time,omitempty"`
 }
 
 type AudioStreamList struct {

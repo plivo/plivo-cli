@@ -260,6 +260,20 @@ func registerAllFlag(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&allFlag, "all", false, fmt.Sprintf("fetch every page (stops after %d pages)", maxListPages))
 }
 
+// ignoredFlag keeps a flag the API never read, so scripts that pass it keep
+// running: cobra hides it from help and --schema, and on use prints "Flag
+// --<name> has been deprecated, <note>", where note says what to use instead.
+// Nothing reads its value, so none is sent. bare is for a bool, passed
+// without a value.
+func ignoredFlag(cmd *cobra.Command, name string, bare bool, note string) {
+	if bare {
+		cmd.Flags().Bool(name, false, "")
+	} else {
+		cmd.Flags().String(name, "", "")
+	}
+	_ = cmd.Flags().MarkDeprecated(name, note)
+}
+
 // credSource records which source supplied the credentials ("env" or a profile
 // name), so a rejected-credentials error can point at the right thing.
 var credSource string

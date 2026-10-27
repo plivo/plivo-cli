@@ -498,7 +498,7 @@ var qaStatuses = []struct {
 }
 
 // qaErrorOwners files an API-error failure of a command under its finding.
-var qaErrorOwners = map[string]string{"api": "r3/F4"}
+var qaErrorOwners = map[string]string{}
 
 // TestQA_sweepErrors answers every request of every command with each API
 // failure: the command must report that failure's code, and exit with the

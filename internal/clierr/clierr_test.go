@@ -227,6 +227,16 @@ func TestFromHTTP_byStatusCode(t *testing.T) {
 	}
 }
 
+// A redirect reads as one, whatever its body: never the HTML link to the new
+// address, nor a phrase the fingerprints below would match.
+func TestFromHTTP_redirectWhateverItsBody(t *testing.T) {
+	for _, body := range []string{"", `<a href="/v1/Account/X/Message/">Moved Permanently</a>.`, `{"error":"invalid credentials"}`} {
+		if e := FromHTTP(301, "", []byte(body)); e.Code != CodeUpstreamError || e.Message != "Got a redirect (HTTP 301), which the CLI does not follow" {
+			t.Errorf("body %q: %s %q", body, e.Code, e.Message)
+		}
+	}
+}
+
 // ─── FromHTTP — body-text fingerprinting (these win over status-only) ────────
 
 func TestFromHTTP_geoPermission(t *testing.T) {

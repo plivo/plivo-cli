@@ -16,12 +16,7 @@ func TestNumber_ResolvedAppID(t *testing.T) {
 		wantAppID string
 	}{
 		{
-			name:      "AppID directly populated",
-			n:         Number{AppID: "12345"},
-			wantAppID: "12345",
-		},
-		{
-			name:      "fallback to Application URI",
+			name:      "from the Application URI",
 			n:         Number{Application: "/v1/Account/MAabc/Application/67890/"},
 			wantAppID: "67890",
 		},
@@ -31,12 +26,7 @@ func TestNumber_ResolvedAppID(t *testing.T) {
 			wantAppID: "67890",
 		},
 		{
-			name:      "AppID wins over Application URI",
-			n:         Number{AppID: "win", Application: "/v1/Account/MAabc/Application/lose/"},
-			wantAppID: "win",
-		},
-		{
-			name:      "neither set returns empty",
+			name:      "no application returns empty",
 			n:         Number{},
 			wantAppID: "",
 		},
@@ -87,7 +77,7 @@ func TestNumber_unmarshal(t *testing.T) {
 		"type": "local",
 		"region": "California",
 		"country": "United States",
-		"app_id": "12345",
+		"application": "/v1/Account/MAabc/Application/12345/",
 		"sub_account": "SAxxx",
 		"alias": "support line",
 		"monthly_rental_rate": "0.80000",
@@ -108,8 +98,8 @@ func TestNumber_unmarshal(t *testing.T) {
 	if !n.VoiceEnabled || !n.SMSEnabled || n.MMSEnabled {
 		t.Errorf("enabled flags wrong: voice=%v sms=%v mms=%v", n.VoiceEnabled, n.SMSEnabled, n.MMSEnabled)
 	}
-	if n.AppID != "12345" {
-		t.Errorf("AppID = %q", n.AppID)
+	if n.ResolvedAppID() != "12345" {
+		t.Errorf("ResolvedAppID() = %q", n.ResolvedAppID())
 	}
 }
 
@@ -267,11 +257,10 @@ func TestVerifySession_unmarshal(t *testing.T) {
 		"recipient": "+14155551234",
 		"channel": "sms",
 		"status": "verified",
-		"count_of_attempts": 1,
-		"locale_used": "en-US",
+		"count": 1,
 		"destination_country_iso2": "US",
-		"charge_amount": "0.05",
-		"charge_amount_currency": "USD"
+		"charges": {"total_charge": "0.05", "validation_charge": "0.0000", "attempt_charges": null},
+		"created_at": "2023-06-30T12:12:03.187679+05:30"
 	}`)
 	var v VerifySession
 	if err := json.Unmarshal(body, &v); err != nil {
@@ -280,8 +269,8 @@ func TestVerifySession_unmarshal(t *testing.T) {
 	if v.SessionUUID != "sess-uuid" || v.Recipient != "+14155551234" || v.Status != "verified" {
 		t.Errorf("fields wrong: %+v", v)
 	}
-	if v.CountOfAttempts != 1 {
-		t.Errorf("CountOfAttempts = %d", v.CountOfAttempts)
+	if v.Count != 1 || v.Charges.TotalCharge != "0.05" {
+		t.Errorf("Count = %d, Charges = %+v", v.Count, v.Charges)
 	}
 }
 
@@ -474,7 +463,7 @@ func TestRoundTrip_Number(t *testing.T) {
 		Number:        "+14155551234",
 		Type:          "local",
 		Country:       "US",
-		AppID:         "12345",
+		Application:   "/v1/Account/MAabc/Application/12345/",
 		Alias:         "support",
 		MonthlyRental: "0.80000",
 		VoiceEnabled:  true,
@@ -488,7 +477,7 @@ func TestRoundTrip_Number(t *testing.T) {
 	if err := json.Unmarshal(b, &round); err != nil {
 		t.Fatal(err)
 	}
-	if round.Number != orig.Number || round.AppID != orig.AppID ||
+	if round.Number != orig.Number || round.Application != orig.Application ||
 		round.VoiceEnabled != orig.VoiceEnabled || round.MonthlyRental != orig.MonthlyRental {
 		t.Errorf("round-trip lost data:\norig:  %+v\nround: %+v", orig, round)
 	}
@@ -499,7 +488,6 @@ func TestRoundTrip_Message(t *testing.T) {
 		MessageUUID: "abc",
 		From:        "+1",
 		To:          "+2",
-		Text:        "hi",
 		Type:        "sms",
 		State:       "delivered",
 		Units:       1,

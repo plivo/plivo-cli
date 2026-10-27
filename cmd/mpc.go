@@ -71,11 +71,8 @@ var mpcParticipantCmd = &cobra.Command{
 	RunE:    groupRunE,
 }
 
-var (
-	mpcPartListLimit  int
-	mpcPartListOffset int
-)
-
+// mpcPartListCmd reads every participant at once: an MPC holds at most 10,
+// and the API takes no limit or offset.
 var mpcPartListCmd = &cobra.Command{
 	Use:   "list <mpc_uuid_or_name>",
 	Short: "List participants in an MPC",
@@ -139,7 +136,9 @@ func init() {
 	mpcCreateCmd.Flags().Int("max-participants", 0, "ignored")
 	mpcCreateCmd.Flags().Bool("record", false, "ignored")
 
-	registerListFlags(mpcPartListCmd, &mpcPartListLimit, &mpcPartListOffset)
+	for _, f := range []string{"limit", "offset", "all"} {
+		ignoredFlag(mpcPartListCmd, f, f == "all", "the API returns every participant at once; drop it")
+	}
 
 	mpcPartAddCmd.Flags().StringVar(&mpcPartAddFrom, "from", "", "source number for the dial-out (required)")
 	_ = mpcPartAddCmd.MarkFlagRequired("from")
@@ -177,9 +176,9 @@ func runMPCList(cmd *cobra.Command, args []string) error {
 	if effectiveFormat() == output.FormatJSON {
 		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
-	rows := [][]string{{"MPC_UUID", "NAME", "STATUS", "BILLING", "CREATED"}}
+	rows := [][]string{{"MPC_UUID", "NAME", "STATUS", "CREATED", "ENDED"}}
 	for _, m := range resp.Objects {
-		rows = append(rows, []string{m.MPCUUID, m.FriendlyName, m.Status, m.BillingType, m.CreatedAt})
+		rows = append(rows, []string{m.MPCUUID, m.FriendlyName, m.Status, m.CreationTime, m.EndTime})
 	}
 	return output.Table(os.Stdout, rows)
 }
@@ -208,9 +207,10 @@ func runMPCGet(cmd *cobra.Command, args []string) error {
 		{"mpc_uuid", m.MPCUUID},
 		{"friendly_name", m.FriendlyName},
 		{"status", m.Status},
-		{"billing_type", m.BillingType},
-		{"created_at", m.CreatedAt},
-		{"end_at", m.EndAt},
+		{"creation_time", m.CreationTime},
+		{"start_time", m.StartTime},
+		{"end_time", m.EndTime},
+		{"termination_cause", m.TerminationCause},
 	})
 }
 
@@ -250,12 +250,13 @@ func runMPCPartList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	q := url.Values{}
-	q.Set("limit", strconv.Itoa(mpcPartListLimit))
-	q.Set("offset", strconv.Itoa(mpcPartListOffset))
 	var resp api.MPCParticipantList
-	if err := fetchList(client, mpcResourceURL(client, id)+"Participant/", q, "objects", &resp); err != nil {
+	apiErr, err := client.Do("GET", mpcResourceURL(client, id, "Participant"), nil, nil, &resp)
+	if err != nil {
 		return err
+	}
+	if apiErr != nil {
+		return apiErr
 	}
 	if dryRunFlag {
 		return nil
@@ -263,9 +264,9 @@ func runMPCPartList(cmd *cobra.Command, args []string) error {
 	if effectiveFormat() == output.FormatJSON {
 		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
-	rows := [][]string{{"PARTICIPANT_ID", "FROM", "TO", "CALL_UUID", "MUTED", "HOLD", "ROLE"}}
+	rows := [][]string{{"PARTICIPANT_ID", "ADDRESS", "CALL_UUID", "MUTED", "HOLD", "ROLE"}}
 	for _, p := range resp.Objects {
-		rows = append(rows, []string{p.ParticipantID, p.From, p.To, p.CallUUID, fmt.Sprintf("%v", p.Muted), fmt.Sprintf("%v", p.OnHold), p.Role})
+		rows = append(rows, []string{p.ParticipantID, p.MemberAddress, p.CallUUID, fmt.Sprintf("%v", p.Muted), fmt.Sprintf("%v", p.OnHold), p.Role})
 	}
 	return output.Table(os.Stdout, rows)
 }

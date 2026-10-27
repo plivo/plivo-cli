@@ -194,6 +194,15 @@ func FromHTTP(statusCode int, requestID string, body []byte) *Error {
 	if parsed != nil {
 		e.Context = map[string]any{"upstream": map[string]any{"status": statusCode, "body": parsed}}
 	}
+	if statusCode >= 300 && statusCode < 400 {
+		// The CLI follows no redirect, as one would take the credentials to
+		// another port, and a 307's body to another host. Whatever the body
+		// says (a link to the new address, as a rule), the redirect is the news.
+		e.Code = CodeUpstreamError
+		e.Message = fmt.Sprintf("Got a redirect (HTTP %d), which the CLI does not follow", statusCode)
+		e.Hint = RedirectHint("", "")
+		return e
+	}
 
 	// Body-text fingerprinting first — these win over status-code defaults,
 	// except where the status alone says what happened.
@@ -269,14 +278,6 @@ func FromHTTP(statusCode int, requestID string, body []byte) *Error {
 	case statusCode == http.StatusConflict:
 		e.Code = CodeResourceConflict
 		e.Hint = "A record with this identifier already exists. Choose a unique name/id."
-	case statusCode >= 300 && statusCode < 400:
-		// The CLI follows no redirect, as one would take the credentials to
-		// another port, and a 307's body to another host.
-		e.Code = CodeUpstreamError
-		if e.Message == "" {
-			e.Message = fmt.Sprintf("Got a redirect (HTTP %d), which the CLI does not follow", statusCode)
-		}
-		e.Hint = RedirectHint("", "")
 	case statusCode >= 400 && statusCode < 500:
 		e.Code = CodeValidation
 		e.Hint = "Re-check the command flags and re-run with --help."

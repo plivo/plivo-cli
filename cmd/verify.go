@@ -28,13 +28,12 @@ var verifySessionCmd = &cobra.Command{
 }
 
 var (
-	vsCreateRecipient   string
-	vsCreateAppUUID     string
-	vsCreateChannel     string
-	vsCreateAlphaSender string
-	vsCreateLocale      string
-	vsCreateMethod      string
-	vsCreateURL         string
+	vsCreateRecipient string
+	vsCreateAppUUID   string
+	vsCreateChannel   string
+	vsCreateLocale    string
+	vsCreateMethod    string
+	vsCreateURL       string
 )
 
 var verifySessionCreateCmd = &cobra.Command{
@@ -79,7 +78,7 @@ func init() {
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateAppUUID, "app-uuid", "", "Verify application uuid (required)")
 	_ = verifySessionCreateCmd.MarkFlagRequired("app-uuid")
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateChannel, "channel", "sms", "delivery channel: sms|voice|whatsapp")
-	verifySessionCreateCmd.Flags().StringVar(&vsCreateAlphaSender, "alpha-sender", "", "alphanumeric sender id")
+	ignoredFlag(verifySessionCreateCmd, "alpha-sender", false, "the API never read it; drop it")
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateLocale, "locale", "", "BCP-47 locale, e.g. en-US")
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateMethod, "method", "", "HTTP method for callback URL")
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateURL, "url", "", "callback URL for session status events")
@@ -105,9 +104,6 @@ func runVerifySessionCreate(cmd *cobra.Command, args []string) error {
 		"recipient": vsCreateRecipient,
 		"app_uuid":  vsCreateAppUUID,
 		"channel":   vsCreateChannel,
-	}
-	if vsCreateAlphaSender != "" {
-		body["alpha_sender"] = vsCreateAlphaSender
 	}
 	if vsCreateLocale != "" {
 		body["locale"] = vsCreateLocale
@@ -181,11 +177,11 @@ func runVerifySessionGet(cmd *cobra.Command, args []string) error {
 		{"recipient", s.Recipient},
 		{"channel", s.Channel},
 		{"status", s.Status},
-		{"attempts", strconv.Itoa(s.CountOfAttempts)},
-		{"locale", s.LocaleUsed},
+		{"attempts", strconv.Itoa(s.Count)},
+		{"locale", s.Locale},
 		{"country", s.DestinationCountryISO2},
-		{"charge", s.ChargeAmount + " " + s.ChargeAmountCurrency},
-		{"created", s.CreationTime},
+		{"charge", s.Charges.TotalCharge},
+		{"created", s.CreatedAt},
 	})
 }
 
@@ -204,18 +200,18 @@ func runVerifySessionList(cmd *cobra.Command, args []string) error {
 		q.Set("status", vsListStatus)
 	}
 	var resp api.VerifySessionList
-	if err := fetchList(client, client.AccountURL("Verify", "Session"), q, "objects", &resp); err != nil {
+	if err := fetchList(client, client.AccountURL("Verify", "Session"), q, "sessions", &resp); err != nil {
 		return err
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return listJSON(os.Stdout, resp.Raw(), "objects")
+		return listJSON(os.Stdout, resp.Raw(), "sessions")
 	}
 	rows := [][]string{{"SESSION_UUID", "RECIPIENT", "CHANNEL", "STATUS", "ATTEMPTS", "CREATED"}}
-	for _, s := range resp.Objects {
-		rows = append(rows, []string{s.SessionUUID, s.Recipient, s.Channel, s.Status, strconv.Itoa(s.CountOfAttempts), s.CreationTime})
+	for _, s := range resp.Sessions {
+		rows = append(rows, []string{s.SessionUUID, s.Recipient, s.Channel, s.Status, strconv.Itoa(s.Count), s.CreatedAt})
 	}
 	return output.Table(os.Stdout, rows)
 }
@@ -230,13 +226,9 @@ func runVerifySessionValidate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	body := map[string]any{"otp": vsValidateOTP}
-	var resp struct {
-		api.RawBody
-		APIID    string `json:"api_id"`
-		Message  string `json:"message"`
-		Verified bool   `json:"verified,omitempty"`
-	}
-	apiErr, err := client.Do("POST", client.AccountURL("Verify", "Session", id, "Validation"), body, nil, &resp)
+	var resp api.GenericResponse
+	// The OTP is posted to the session itself: the API has no Validation resource.
+	apiErr, err := client.Do("POST", client.AccountURL("Verify", "Session", id), body, nil, &resp)
 	if err != nil {
 		return err
 	}
@@ -249,8 +241,5 @@ func runVerifySessionValidate(cmd *cobra.Command, args []string) error {
 	if effectiveFormat() == output.FormatJSON {
 		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
-	return output.KV(os.Stdout, [][2]string{
-		{"message", resp.Message},
-		{"verified", fmt.Sprintf("%v", resp.Verified)},
-	})
+	return output.KV(os.Stdout, [][2]string{{"message", resp.Message}})
 }

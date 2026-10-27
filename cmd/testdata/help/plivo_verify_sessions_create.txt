@@ -4,15 +4,14 @@ Usage:
   plivo verify sessions create [flags]
 
 Flags:
-      --alpha-sender string   alphanumeric sender id
-      --app-uuid string       Verify application uuid (required)
-      --channel string        delivery channel: sms|voice|whatsapp (default "sms")
-      --explain               narrate in plain English before executing
-  -h, --help                  help for create
-      --locale string         BCP-47 locale, e.g. en-US
-      --method string         HTTP method for callback URL
-      --recipient string      E.164 destination number (required)
-      --url string            callback URL for session status events
+      --app-uuid string    Verify application uuid (required)
+      --channel string     delivery channel: sms|voice|whatsapp (default "sms")
+      --explain            narrate in plain English before executing
+  -h, --help               help for create
+      --locale string      BCP-47 locale, e.g. en-US
+      --method string      HTTP method for callback URL
+      --recipient string   E.164 destination number (required)
+      --url string         callback URL for session status events
 
 Global Flags:
       --dry-run            preview requests and local changes without sending or writing anything

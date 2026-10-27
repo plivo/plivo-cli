@@ -543,7 +543,8 @@ func TestListFlags_everyPagedListChecksThePageFirst(t *testing.T) {
 	walk = func(c *cobra.Command) {
 		// docs search is local: its --limit caps search hits, not an API page.
 		// account usage pages by token, up to 1000 rows: its own case is above.
-		if c.Flags().Lookup("limit") != nil && c.CommandPath() != "plivo docs search" && c.CommandPath() != "plivo account usage" {
+		// A deprecated --limit is ignored, so there is no page to check.
+		if f := c.Flags().Lookup("limit"); f != nil && f.Deprecated == "" && c.CommandPath() != "plivo docs search" && c.CommandPath() != "plivo account usage" {
 			lists = append(lists, c)
 		}
 		for _, sub := range c.Commands() {
@@ -719,7 +720,11 @@ func pagedServer(t *testing.T, key string, rows, total int, fail func(n int) (in
 		if total < 0 {
 			meta = fmt.Sprintf(`{"limit":%d,"next":%s,"offset":%d}`, limit, next, offset)
 		}
-		_, _ = fmt.Fprintf(w, `{"api_id":"x","meta":%s,%q:[%s]}`, meta, key, strings.Join(page, ","))
+		body := fmt.Sprintf(`"meta":%s,%q:[%s]`, meta, key, strings.Join(page, ","))
+		if outer, inner, nested := strings.Cut(key, "."); nested {
+			body = fmt.Sprintf(`%q:{"meta":%s,%q:[%s]}`, outer, meta, inner, strings.Join(page, ","))
+		}
+		_, _ = fmt.Fprintf(w, `{"api_id":"x",%s}`, body)
 	}))
 	t.Cleanup(srv.Close)
 	clientForTest = &api.Client{BaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
@@ -740,7 +745,8 @@ func recordWaits(t *testing.T) *[]time.Duration {
 	return &waits
 }
 
-// dataRows decodes the rows and meta out of -o json's {"data": {...}}.
+// dataRows decodes the rows and meta out of -o json's {"data": {...}}, from
+// the object a dotted key such as "response.objects" names.
 func dataRows(t *testing.T, stdout, key string) ([]map[string]any, map[string]any) {
 	t.Helper()
 	var out struct {
@@ -749,10 +755,15 @@ func dataRows(t *testing.T, stdout, key string) ([]map[string]any, map[string]an
 	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
 		t.Fatalf("stdout is not JSON: %v\n%s", err, stdout)
 	}
+	data := out.Data
+	if outer, inner, nested := strings.Cut(key, "."); nested {
+		data, key = nil, inner
+		_ = json.Unmarshal(out.Data[outer], &data)
+	}
 	var rows []map[string]any
 	var meta map[string]any
-	_ = json.Unmarshal(out.Data[key], &rows)
-	_ = json.Unmarshal(out.Data["meta"], &meta)
+	_ = json.Unmarshal(data[key], &rows)
+	_ = json.Unmarshal(data["meta"], &meta)
 	return rows, meta
 }
 
@@ -1019,6 +1030,7 @@ func TestListAll_mergesUnderEachListsKey(t *testing.T) {
 		{"brands", []string{"messaging", "sms", "10dlc", "brands", "list"}},
 		{"campaigns", []string{"messaging", "sms", "10dlc", "campaigns", "list"}},
 		{"compliances", []string{"numbers", "compliance", "list"}},
+		{"sessions", []string{"verify", "sessions", "list"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.key, func(t *testing.T) {
@@ -1036,6 +1048,22 @@ func TestListAll_mergesUnderEachListsKey(t *testing.T) {
 				t.Errorf("an objects key appeared:\n%s", stdout)
 			}
 		})
+	}
+}
+
+// Masking sessions nest their rows and meta under response: --all merges every
+// page there, and -o jsonl still writes a line per session.
+func TestListAll_mergesNestedRows(t *testing.T) {
+	setFakeCreds(t)
+	pagedServer(t, "response.objects", 25, 25, nil)
+	args := []string{"numbers", "masking", "sessions", "list", "--all"}
+	err, stdout, _ := execCmd(t, append(args, "-o", "json")...)
+	if rows, meta := dataRows(t, stdout, "response.objects"); err != nil || len(rows) != 25 || meta["next"] != nil ||
+		strings.Count(stdout, `"objects"`) != 1 {
+		t.Fatalf("err %v; want 25 rows in data.response.objects and meta.next null there, and no others:\n%s", err, stdout)
+	}
+	if err, stdout, _ := execCmd(t, append(args, "-o", "jsonl")...); err != nil || strings.Count(stdout, "\n") != 25 {
+		t.Errorf("-o jsonl: err %v, %d lines, want 25", err, strings.Count(stdout, "\n"))
 	}
 }
 
