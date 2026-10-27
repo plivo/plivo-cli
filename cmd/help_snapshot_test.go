@@ -106,7 +106,9 @@ func TestMain(m *testing.M) {
 	rootCmd.InitDefaultHelpCmd()
 	rootCmd.InitDefaultCompletionCmd()
 	rootCmd.InitDefaultVersionFlag()
-	os.Exit(m.Run())
+	code := m.Run()
+	qaPrintSkips(os.Stdout)
+	os.Exit(code)
 }
 
 // goldenPath returns the testdata file path for a given command path slice.

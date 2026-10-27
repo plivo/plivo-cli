@@ -419,13 +419,13 @@ func TestAPI_queryIsURLParamsWithAHint(t *testing.T) {
 func TestTables_putTheAPIsFieldsInTheirColumns(t *testing.T) {
 	setFakeCreds(t)
 	ep := `{"alias":"callme","application":"/v1/Account/CIFAKEPLACEHOLDER001/Application/33406267401237901/","endpoint_id":"32866729519064","sip_uri":"sip:callme140703093944@phone.plivo.com","sub_account":null,"username":"callme140703093944"}`
-	sub := `{"auth_id":"SAFAKESUBACCOUNT0001","created":"2017-05-22","enabled":false,"modified":"2017-05-23","name":"shop"}`
+	sub := `{"auth_id":"SAQASUBACCOUNT1","created":"2017-05-22","enabled":false,"modified":"2017-05-23","name":"shop"}`
 	list := func(obj string) string { return `{"meta":{"total_count":1},"objects":[` + obj + `]}` }
 	for _, tc := range [][3]string{
 		{list(ep), "voice endpoints list", "ENDPOINT_ID USERNAME ALIAS SIP_URI APP_ID 32866729519064 callme140703093944 callme sip:callme140703093944@phone.plivo.com 33406267401237901"},
 		{ep, "voice endpoints get 32866729519064", "endpoint_id: 32866729519064 username: callme140703093944 alias: callme sip_uri: sip:callme140703093944@phone.plivo.com app_id: 33406267401237901 sub_account:"},
-		{list(sub), "account subaccounts list", "AUTH_ID NAME ENABLED CREATED SAFAKESUBACCOUNT0001 shop false 2017-05-22"},
-		{sub, "account subaccounts get SAFAKESUBACCOUNT0001", "auth_id: SAFAKESUBACCOUNT0001 name: shop enabled: false created: 2017-05-22 modified: 2017-05-23"},
+		{list(sub), "account subaccounts list", "AUTH_ID NAME ENABLED CREATED SAQASUBACCOUNT1 shop false 2017-05-22"},
+		{sub, "account subaccounts get SAQASUBACCOUNT1", "auth_id: SAQASUBACCOUNT1 name: shop enabled: false created: 2017-05-22 modified: 2017-05-23"},
 	} {
 		sipServer(t, http.StatusOK, tc[0])
 		err, stdout, _ := execCmd(t, append(strings.Fields(tc[1]), "-o", "table")...)

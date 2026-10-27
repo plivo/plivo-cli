@@ -1,8 +1,11 @@
-The JSON files in this directory are response fixtures from the Plivo Go SDK,
-https://github.com/plivo/plivo-go (fixtures/), used under the license below.
-Changes: the brand and campaign lists are cut to two entries, and a brand
-alias, the campaign list's next link, phone numbers and a callback URL are
-replaced with example values.
+The files in this directory come from the Plivo Go SDK,
+https://github.com/plivo/plivo-go, used under the license below: the
+*Response.json files are its fixtures/, and requests.json lists the requests
+its source (v7.61.0) builds, as tools/sdkparams writes them.
+Changes to the fixtures: lists are cut to a few entries that hold every
+field, and account IDs, tokens, passwords, emails, phone numbers (to
+555-01xx), hosts, IP addresses, personal names, a brand alias, the campaign
+list's next link and a callback URL are replaced with example values.
 
 Copyright (C) 2018, Plivo Inc.
 

@@ -17,7 +17,7 @@ VERSION := $(shell git describe --tags --always 2>/dev/null || echo dev)
 # -s removes the symbol table, -w drops DWARF debug info — typical for release.
 LDFLAGS := -s -w -X $(PKG)/internal/version.Value=$(VERSION)
 
-.PHONY: default build tiny build-all install run clean fmt vet test docs skill-hashes plugin-skills help
+.PHONY: default build tiny build-all install run clean fmt vet test qa sdk-params docs skill-hashes plugin-skills help
 
 default: ## Debug build with symbols (best for local dev)
 	go build -o $(BINARY) .
@@ -56,6 +56,15 @@ vet: ## go vet
 
 test: ## go test
 	go test ./...
+
+# Run in the package directory, where go test shows the skips per pending
+# finding even when everything passes.
+qa: ## Run the QA suite (cmd/qa_*_test.go; CONTRIBUTING.md says how to add a case)
+	cd cmd && go test -race -count=1 -run '^TestQA'
+
+sdk-params: ## Rewrite cmd/testdata/plivo-go/requests.json from a plivo-go checkout: make sdk-params SDK=<path>
+	@test -n "$(SDK)" || { echo "usage: make sdk-params SDK=<path to a github.com/plivo/plivo-go checkout>"; exit 2; }
+	go run ./tools/sdkparams -sdk "$(SDK)"
 
 # VERSION defaults to `git describe` (see top of file), so right after tagging
 # this needs no arguments. Override with VERSION=v0.3.0 to re-render an old tag.
