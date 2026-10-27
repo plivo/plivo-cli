@@ -527,14 +527,23 @@ type ConferenceList struct {
 // MPC — /Account/{id}/MultiPartyCall/
 type MPC struct {
 	RawBody
-	APIID        string `json:"api_id,omitempty"`
-	MPCUUID      string `json:"mpc_uuid,omitempty"`
-	FriendlyName string `json:"friendly_name,omitempty"`
-	Status       string `json:"status,omitempty"`
-	BillingType  string `json:"billing_type,omitempty"`
-	CreatedAt    string `json:"created_at,omitempty"`
-	EndAt        string `json:"end_at,omitempty"`
-	ResourceURI  string `json:"resource_uri,omitempty"`
+	APIID                string `json:"api_id,omitempty"`
+	MPCUUID              string `json:"mpc_uuid,omitempty"`
+	FriendlyName         string `json:"friendly_name,omitempty"`
+	Status               string `json:"status,omitempty"`
+	CreationTime         string `json:"creation_time,omitempty"`
+	StartTime            string `json:"start_time,omitempty"`
+	EndTime              string `json:"end_time,omitempty"`
+	Duration             int    `json:"duration,omitempty"`
+	BilledDuration       int    `json:"billed_duration,omitempty"`
+	BilledAmount         string `json:"billed_amount,omitempty"`
+	Recording            string `json:"recording,omitempty"`
+	StayAlone            bool   `json:"stay_alone,omitempty"`
+	TerminationCause     string `json:"termination_cause,omitempty"`
+	TerminationCauseCode int    `json:"termination_cause_code,omitempty"`
+	SubAccount           string `json:"sub_account,omitempty"`
+	Participants         string `json:"participants,omitempty"` // the URI of its participants
+	ResourceURI          string `json:"resource_uri,omitempty"`
 }
 
 type MPCList struct {
@@ -545,16 +554,23 @@ type MPCList struct {
 }
 
 type MPCParticipant struct {
-	ParticipantID string `json:"member_id,omitempty"`
-	From          string `json:"from,omitempty"`
-	To            string `json:"to,omitempty"`
-	CallerName    string `json:"caller_name,omitempty"`
-	CallUUID      string `json:"call_uuid,omitempty"`
-	Muted         bool   `json:"muted,omitempty"`
-	OnHold        bool   `json:"hold,omitempty"`
-	JoinTime      string `json:"join_time,omitempty"`
-	Direction     string `json:"direction,omitempty"`
-	Role          string `json:"role,omitempty"`
+	ParticipantID   string `json:"member_id,omitempty"`
+	MPCUUID         string `json:"mpc_uuid,omitempty"`
+	CallUUID        string `json:"call_uuid,omitempty"`
+	MemberAddress   string `json:"member_address,omitempty"`
+	Role            string `json:"role,omitempty"`
+	CoachMode       bool   `json:"coach_mode,omitempty"`
+	Muted           bool   `json:"mute,omitempty"`
+	OnHold          bool   `json:"hold,omitempty"`
+	JoinTime        string `json:"join_time,omitempty"`
+	ExitTime        string `json:"exit_time,omitempty"`
+	ExitCause       string `json:"exit_cause,omitempty"`
+	Duration        int    `json:"duration,omitempty"`
+	BilledDuration  int    `json:"billed_duration,omitempty"`
+	BilledAmount    string `json:"billed_amount,omitempty"`
+	StartMPCOnEnter bool   `json:"start_mpc_on_enter,omitempty"`
+	EndMPCOnExit    bool   `json:"end_mpc_on_exit,omitempty"`
+	ResourceURI     string `json:"resource_uri,omitempty"`
 }
 
 type MPCParticipantList struct {

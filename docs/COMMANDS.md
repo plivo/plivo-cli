@@ -4589,15 +4589,7 @@ plivo voice multiparty participant kick <mpc_uuid_or_name> <participant_id>
 List participants in an MPC
 
 ```
-plivo voice multiparty participant list <mpc_uuid_or_name> [flags]
-```
-
-Flags:
-
-```
-      --all          fetch every page (stops after 100 pages)
-      --limit int    results per page (1-20) (default 20)
-      --offset int   pagination offset
+plivo voice multiparty participant list <mpc_uuid_or_name>
 ```
 
 ---

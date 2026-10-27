@@ -44,9 +44,8 @@ var qaPending = map[string]string{
 	"r2/5e": "sip test probes the host it was given, never the target of its SRV record (open decision: it warns about SRV until it is known whether Plivo follows SRV)",
 
 	// Found by the SDK oracle; not yet checked against the live API.
-	"sdk/multiparty": "multiparty calls and participants are read under names the API does not send (billing_type, created_at, end_at; from, to, muted, direction), and participants list pages with limit and offset",
-	"sdk/record":     "calls record sends both_legs and transcribe, conferences record sends transcribe; the API takes record_channel_type and transcription_type",
-	"sdk/streams":    "streams list reads stream_url and resource_uri; the API sends service_url",
+	"sdk/record":  "calls record sends both_legs and transcribe, conferences record sends transcribe; the API takes record_channel_type and transcription_type",
+	"sdk/streams": "streams list reads stream_url and resource_uri; the API sends service_url",
 }
 
 // qaAuthID is the account every request goes to and qaToken its auth token;
