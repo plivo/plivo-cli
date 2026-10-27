@@ -73,6 +73,8 @@ func TestValidateAPIPath(t *testing.T) {
 		{"https://api.plivo.com/v1/Account/", true},
 		{"http://evil.example.com/", true},
 		{"ftp://host/path", true},
+		{"/Message/\n[dry-run] GET /Account/", true},
+		{"/Message/\x7f", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.path, func(t *testing.T) {

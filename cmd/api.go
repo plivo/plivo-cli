@@ -241,10 +241,15 @@ func resolveAPIMethodAndPath(args []string, methodFlag string) (string, string, 
 // validateAPIPath rejects any path that looks like a full URL. `plivo api`
 // is intentionally limited to api.plivo.com (whatever the resolved BaseURL
 // points at) — letting users pass arbitrary hosts here would be a footgun
-// and a security boundary the rest of the CLI doesn't cross.
+// and a security boundary the rest of the CLI doesn't cross. A control
+// character is refused too: a newline would add a line to the --dry-run,
+// --explain and debug output, such as a forged [dry-run] one.
 func validateAPIPath(path string) error {
 	if strings.Contains(path, "://") {
 		return clierr.BadInput("path must not include a scheme — plivo api only talks to the configured Plivo API base URL")
+	}
+	if strings.ContainsFunc(path, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+		return clierr.BadInput(fmt.Sprintf("path %q has a control character", path))
 	}
 	return nil
 }
