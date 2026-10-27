@@ -64,9 +64,6 @@ var qaFixtures = map[string]string{
 // oracle finds in it: its response for a get or list, its requests for the
 // rest.
 var qaOracleOwners = map[string]string{
-	"numbers masking sessions create":   "sdk/masking",
-	"numbers masking sessions get":      "sdk/masking",
-	"numbers masking sessions list":     "sdk/masking",
 	"voice calls record":                "sdk/record",
 	"voice calls streams list":          "sdk/streams",
 	"voice conferences record":          "sdk/record",
@@ -81,7 +78,6 @@ var qaOracleOwners = map[string]string{
 // finding's commands. A gap counts only while its finding is pending, and
 // each must still turn up: the fix that clears one deletes it.
 var qaKnownGaps = map[string][]string{
-	"sdk/masking":    {"*"},
 	"sdk/multiparty": {"billing_type", "caller_name", "created_at", "direction", "end_at", "from", "limit", "muted", "offset", "to"},
 	"sdk/record":     {"both_legs", "transcribe"},
 	"sdk/streams":    {"resource_uri", "stream_url"},
@@ -288,7 +284,7 @@ func qaSDKDecoding(t *testing.T) int {
 
 // qaShowsRecord reports whether table holds one of the text values of the
 // fixture's record: the object itself, an object it nests the record in, or
-// the first row of its list.
+// the first row of its list, at the top or in such an object.
 func qaShowsRecord(table string, doc map[string]any) bool {
 	var texts []string
 	add := func(obj map[string]any) {
@@ -298,20 +294,23 @@ func qaShowsRecord(table string, doc map[string]any) bool {
 			}
 		}
 	}
-	add(doc)
-	for _, v := range doc {
-		switch v := v.(type) {
-		case map[string]any:
-			add(v)
-		case []any:
-			if len(v) == 0 {
-				continue
-			}
-			switch row := v[0].(type) {
+	first := func(v any) {
+		if list, ok := v.([]any); ok && len(list) > 0 {
+			switch row := list[0].(type) {
 			case map[string]any:
 				add(row)
 			case string:
 				texts = append(texts, row)
+			}
+		}
+	}
+	add(doc)
+	for _, v := range doc {
+		first(v)
+		if obj, ok := v.(map[string]any); ok {
+			add(obj)
+			for _, inner := range obj {
+				first(inner)
 			}
 		}
 	}

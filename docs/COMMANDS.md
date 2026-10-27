@@ -2532,7 +2532,6 @@ Flags:
 ```
       --call-time-limit int     max per-call duration in seconds
       --first-party string      first party E.164 (required)
-      --mode string             voice|sms|both (default "both")
       --record                  record calls in this session
       --second-party string     second party E.164 (required)
       --session-expiry int      session lifetime in seconds

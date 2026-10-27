@@ -351,29 +351,40 @@ type CnamLookup struct {
 	Charge     string `json:"charge,omitempty"`
 }
 
-// MaskingSession — /Account/{id}/MaskingSession/ (number-masking)
+// MaskingSession is a number-masking session — /Account/{id}/Masking/Session/.
+// The API nests sessions under "response": a get's is response itself, a
+// list's are response.objects, beside response.meta.
 type MaskingSession struct {
+	SessionUUID      string `json:"session_uuid"`
+	FirstParty       string `json:"first_party,omitempty"`
+	SecondParty      string `json:"second_party,omitempty"`
+	VirtualNumber    string `json:"virtual_number,omitempty"`
+	Status           string `json:"status,omitempty"`
+	Duration         int    `json:"duration,omitempty"`
+	CallTimeLimit    int    `json:"call_time_limit,omitempty"`
+	RingTimeout      int    `json:"ring_timeout,omitempty"`
+	Record           bool   `json:"record,omitempty"`
+	RecordFileFormat string `json:"record_file_format,omitempty"`
+	TotalCallCount   int    `json:"total_call_count,omitempty"`
+	CreatedTime      string `json:"created_time,omitempty"`
+	ModifiedTime     string `json:"modified_time,omitempty"`
+	ExpiryTime       string `json:"expiry_time,omitempty"`
+}
+
+// MaskingSessionResponse is GET /Masking/Session/{session_uuid}/.
+type MaskingSessionResponse struct {
 	RawBody
-	APIID         string `json:"api_id,omitempty"`
-	SessionUUID   string `json:"session_uuid"`
-	FirstParty    string `json:"first_party,omitempty"`
-	SecondParty   string `json:"second_party,omitempty"`
-	VirtualNumber string `json:"virtual_number,omitempty"`
-	Status        string `json:"status,omitempty"`
-	Mode          string `json:"mode,omitempty"`
-	SessionExpiry int    `json:"session_expiry,omitempty"`
-	CallTimeLimit int    `json:"call_time_limit,omitempty"`
-	Recording     bool   `json:"record,omitempty"`
-	CreatedOn     string `json:"created_on,omitempty"`
-	ExpiresOn     string `json:"expires_on,omitempty"`
-	ResourceURI   string `json:"resource_uri,omitempty"`
+	APIID    string         `json:"api_id,omitempty"`
+	Response MaskingSession `json:"response"`
 }
 
 type MaskingSessionList struct {
 	RawBody
-	APIID   string           `json:"api_id"`
-	Meta    ListMeta         `json:"meta"`
-	Objects []MaskingSession `json:"objects"`
+	APIID    string `json:"api_id"`
+	Response struct {
+		Meta    ListMeta         `json:"meta"`
+		Objects []MaskingSession `json:"objects"`
+	} `json:"response"`
 }
 
 // Compliance — /Account/{id}/PhoneNumber/Compliance/ (unified number-compliance API).

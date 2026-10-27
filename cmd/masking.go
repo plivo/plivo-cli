@@ -31,7 +31,6 @@ var (
 	msCreateFirstParty    string
 	msCreateSecondParty   string
 	msCreateVirtualNumber string
-	msCreateMode          string
 	msCreateExpiry        int
 	msCreateTimeLimit     int
 	msCreateRecord        bool
@@ -76,7 +75,6 @@ func init() {
 	maskingSessionCreateCmd.Flags().StringVar(&msCreateSecondParty, "second-party", "", "second party E.164 (required)")
 	_ = maskingSessionCreateCmd.MarkFlagRequired("second-party")
 	maskingSessionCreateCmd.Flags().StringVar(&msCreateVirtualNumber, "virtual-number", "", "virtual number to use (else allocates from pool)")
-	maskingSessionCreateCmd.Flags().StringVar(&msCreateMode, "mode", "both", "voice|sms|both")
 	maskingSessionCreateCmd.Flags().IntVar(&msCreateExpiry, "session-expiry", 0, "session lifetime in seconds")
 	maskingSessionCreateCmd.Flags().IntVar(&msCreateTimeLimit, "call-time-limit", 0, "max per-call duration in seconds")
 	maskingSessionCreateCmd.Flags().BoolVar(&msCreateRecord, "record", false, "record calls in this session")
@@ -96,7 +94,6 @@ func runMaskingCreate(cmd *cobra.Command, args []string) error {
 	body := map[string]any{
 		"first_party":  msCreateFirstParty,
 		"second_party": msCreateSecondParty,
-		"mode":         msCreateMode,
 		"record":       msCreateRecord,
 	}
 	if msCreateVirtualNumber != "" {
@@ -148,8 +145,8 @@ func runMaskingGet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	var s api.MaskingSession
-	apiErr, err := client.Do("GET", client.AccountURL("Masking", "Session", id), nil, nil, &s)
+	var resp api.MaskingSessionResponse
+	apiErr, err := client.Do("GET", client.AccountURL("Masking", "Session", id), nil, nil, &resp)
 	if err != nil {
 		return err
 	}
@@ -160,17 +157,17 @@ func runMaskingGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, s.Raw())
+		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
+	s := resp.Response
 	return output.KV(os.Stdout, [][2]string{
 		{"session_uuid", s.SessionUUID},
 		{"first_party", s.FirstParty},
 		{"second_party", s.SecondParty},
 		{"virtual_number", s.VirtualNumber},
-		{"mode", s.Mode},
 		{"status", s.Status},
-		{"created_on", s.CreatedOn},
-		{"expires_on", s.ExpiresOn},
+		{"created_time", s.CreatedTime},
+		{"expiry_time", s.ExpiryTime},
 	})
 }
 
@@ -183,18 +180,18 @@ func runMaskingList(cmd *cobra.Command, args []string) error {
 	q.Set("limit", strconv.Itoa(msListLimit))
 	q.Set("offset", strconv.Itoa(msListOffset))
 	var resp api.MaskingSessionList
-	if err := fetchList(client, client.AccountURL("Masking", "Session"), q, "objects", &resp); err != nil {
+	if err := fetchList(client, client.AccountURL("Masking", "Session"), q, "response.objects", &resp); err != nil {
 		return err
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return listJSON(os.Stdout, resp.Raw(), "objects")
+		return listJSON(os.Stdout, resp.Raw(), "response.objects")
 	}
-	rows := [][]string{{"SESSION_UUID", "FIRST", "SECOND", "VIRTUAL", "MODE", "STATUS"}}
-	for _, s := range resp.Objects {
-		rows = append(rows, []string{s.SessionUUID, s.FirstParty, s.SecondParty, s.VirtualNumber, s.Mode, s.Status})
+	rows := [][]string{{"SESSION_UUID", "FIRST", "SECOND", "VIRTUAL", "STATUS", "CREATED"}}
+	for _, s := range resp.Response.Objects {
+		rows = append(rows, []string{s.SessionUUID, s.FirstParty, s.SecondParty, s.VirtualNumber, s.Status, s.CreatedTime})
 	}
 	return output.Table(os.Stdout, rows)
 }

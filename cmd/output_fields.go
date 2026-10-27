@@ -45,7 +45,7 @@ var outputTypes = map[string]reflect.Type{
 	"plivo numbers compliance list":               reflect.TypeFor[api.ComplianceApplicationList](),
 	"plivo numbers get":                           reflect.TypeFor[api.Number](),
 	"plivo numbers list":                          reflect.TypeFor[api.NumberList](),
-	"plivo numbers masking sessions get":          reflect.TypeFor[api.MaskingSession](),
+	"plivo numbers masking sessions get":          reflect.TypeFor[api.MaskingSessionResponse](),
 	"plivo numbers masking sessions list":         reflect.TypeFor[api.MaskingSessionList](),
 	"plivo sip calls get":                         reflect.TypeFor[api.SIPTrunkCall](),
 	"plivo sip calls insights":                    reflect.TypeFor[api.SIPCallInsights](),

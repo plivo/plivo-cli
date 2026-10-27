@@ -115,6 +115,9 @@ func TestOutputFormats_listCommandsHonourEveryFormat(t *testing.T) {
 				body = strings.Replace(body, `"objects"`, `"`+key+`"`, 1)
 			}
 		}
+		if strings.HasSuffix(r.URL.Path, "/Masking/Session/") { // meta and rows nested under response
+			body = strings.Replace(listPageBody, `"meta"`, `"response":{"meta"`, 1) + "}"
+		}
 		if strings.HasSuffix(r.URL.Path, "/Conference/") {
 			body = `{"api_id":"` + zeroUUID + `","conferences":["first","second"]}`
 		}
@@ -221,6 +224,9 @@ func listCommandPaths() [][]string {
 // one array), an array's elements, or the one value.
 func rowsOf(data any) []any {
 	if page, ok := data.(map[string]any); ok {
+		if nested, ok := page["response"].(map[string]any); ok {
+			page = nested
+		}
 		for _, v := range page {
 			if rows, ok := v.([]any); ok {
 				return rows
