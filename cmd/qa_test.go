@@ -329,9 +329,16 @@ const (
 
 // newQAServer starts a server that answers with replies, points every
 // command at it, and refuses any connection that is not to the loopback
-// address, so nothing in the suite can reach a real API.
+// address, so nothing in the suite can reach a real API. It also unsets every
+// PLIVO_* variable for the test, so none from the shell reaches a command.
 func newQAServer(t *testing.T, replies map[string]string) *qaServer {
 	t.Helper()
+	for _, kv := range os.Environ() {
+		if name, _, _ := strings.Cut(kv, "="); strings.HasPrefix(name, "PLIVO_") {
+			t.Setenv(name, "") // restored after the test
+			_ = os.Unsetenv(name)
+		}
+	}
 	s := &qaServer{}
 	keys := make([]string, 0, len(replies))
 	for k := range replies {

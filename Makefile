@@ -57,9 +57,8 @@ vet: ## go vet
 test: ## go test
 	go test ./...
 
-# Hermetic: no PLIVO_* variable reaches the tests, and they reach no network.
 qa: ## Run the QA suite (cmd/qa_*_test.go; CONTRIBUTING.md says how to add a case)
-	env $$(env | sed -n 's/^\(PLIVO_[A-Za-z0-9_]*\)=.*/-u \1/p') go test -race -count=1 -run '^TestQA' ./cmd/
+	go test -race -count=1 -run '^TestQA' ./cmd/
 
 sdk-params: ## Rewrite cmd/testdata/sdk/requests.json from a plivo-go checkout: make sdk-params SDK=<path>
 	@test -n "$(SDK)" || { echo "usage: make sdk-params SDK=<path to a github.com/plivo/plivo-go checkout>"; exit 2; }
