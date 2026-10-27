@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -66,6 +67,7 @@ func execCmd(t *testing.T, args ...string) (err error, stdout, stderr string) {
 	profileFlag = ""
 	outputFormat = ""
 	queryFlag = ""
+	showSecretsFlag = false
 	mapFlag = false
 	schemaFlag = false
 	logLevel = "warn"
@@ -196,6 +198,33 @@ func TestNoAnswer_isATimeoutNotAUsageError(t *testing.T) {
 	}
 }
 
+// PLIVO_API_URL sends the requests to a server on this machine, and naming
+// anything else is refused before any request.
+func TestAPIURLOverride_isLoopbackOnly(t *testing.T) {
+	setFakeCreds(t)
+	srv, hits := startCapturingHTTPServer(t, 200, `{}`)
+	t.Setenv("PLIVO_API_URL", srv.URL+"/v1/cli/api/")
+	if err, _, _ := execCmd(t, "voice", "calls", "get", "abc"); err != nil {
+		t.Fatalf("loopback override: %v", err)
+	}
+	for _, u := range []string{"https://example.com/v1/cli/api", "http://127.0.0.1.example.com", "ftp://127.0.0.1", "localhost:18555"} {
+		t.Setenv("PLIVO_API_URL", u)
+		if err, _, _ := execCmd(t, "voice", "calls", "get", "abc"); !strings.Contains(fmt.Sprint(err), "BAD_INPUT") {
+			t.Errorf("%q: got %v, want BAD_INPUT", u, err)
+		}
+	}
+	if got := hits(); len(got) != 1 || got[0] != "GET /v1/cli/api/v1/Account/CIFAKEPLACEHOLDER001/Call/abc/" {
+		t.Errorf("sent %q, want the one GET to the loopback server", got)
+	}
+	for u, ok := range map[string]bool{"HTTP://LocalHost:1": true, "http://127.0.0.2:1/": true, "http://localhost.example.com": false,
+		"http://u:SECRET@127.0.0.1:1": false, "http://127.0.0.1:1/?": false, "http://127.0.0.1:1/#": false} {
+		t.Setenv("PLIVO_API_URL", u)
+		if _, err := apiBaseURL(); (err == nil) != ok || strings.Contains(fmt.Sprint(err), "SECRET") {
+			t.Errorf("%q: got %v", u, err)
+		}
+	}
+}
+
 // ─── Destructive verbs refuse without --yes ──────────────────────────────────
 
 // destructiveVerbCases are the deletes, hangups and kicks. Every one must
@@ -219,6 +248,7 @@ func destructiveVerbCases() []struct {
 		{"numbers compliance delete", []string{"numbers", "compliance", "delete", "DOC-ID"}},
 		{"numbers masking sessions delete", []string{"numbers", "masking", "sessions", "delete", "SESS-UUID"}},
 		{"voice conferences hangup", []string{"voice", "conferences", "hangup", "room-1"}},
+		{"voice conferences stop-record", []string{"voice", "conferences", "stop-record", "room-1"}},
 		{"voice conferences member kick", []string{"voice", "conferences", "member", "kick", "room-1", "member-id"}},
 		{"voice multiparty end", []string{"voice", "multiparty", "end", "MPC-UUID"}},
 		{"voice multiparty participant kick", []string{"voice", "multiparty", "participant", "kick", "MPC-UUID", "PART-ID"}},

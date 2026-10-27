@@ -8,6 +8,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -359,13 +360,16 @@ func runAuthTokenRevoke(cmd *cobra.Command, args []string) error {
 	if id == "" {
 		return clierr.BadInput("token id is required")
 	}
+	if id == "." || id == ".." {
+		return clierr.BadInput(fmt.Sprintf("%q is not a token id", id))
+	}
 
 	c, err := getContactoClient()
 	if err != nil {
 		return err
 	}
 
-	path := authTokenPath + "/" + id
+	path := authTokenPath + "/" + url.PathEscape(id)
 
 	if dryRunFlag {
 		fmt.Fprintf(os.Stderr, "[dry-run] DELETE %s\n", path)

@@ -73,6 +73,8 @@ func TestValidateAPIPath(t *testing.T) {
 		{"https://api.plivo.com/v1/Account/", true},
 		{"http://evil.example.com/", true},
 		{"ftp://host/path", true},
+		{"/Message/\n[dry-run] GET /Account/", true},
+		{"/Message/\x7f", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.path, func(t *testing.T) {
@@ -476,6 +478,19 @@ func TestAPICmd_5xxEmitsRetryableEnvelope(t *testing.T) {
 	}
 }
 
+// The client follows no redirect, so a 3xx is the answer, and an error.
+func TestAPICmd_redirectIsAnError(t *testing.T) {
+	setFakeCreds(t)
+	srv, hits := startAPIServer(t, http.StatusTemporaryRedirect, "", "")
+	apiClientForTest = api.New("MAFAKEFORTEST", "fake-token", 0)
+	apiClientForTest.BaseURL = srv.URL
+	t.Cleanup(func() { apiClientForTest = nil })
+	err, _, _ := execCmd(t, "api", "GET", "/Account")
+	if e, ok := err.(*clierr.Error); !ok || e.StatusCode != http.StatusTemporaryRedirect || len(hits()) != 1 || !strings.Contains(e.Hint, "end in a slash") {
+		t.Errorf("got %v after %d requests, want the 307 as an error after 1", err, len(hits()))
+	}
+}
+
 func TestAPICmd_QueryParamsForwarded(t *testing.T) {
 	setFakeCreds(t)
 	srv, hits := startAPIServer(t, 200, "application/json", `{}`)
@@ -765,5 +780,31 @@ func TestAPICmd_sendsClientTypeHeaders(t *testing.T) {
 	}
 	if h.Get("Client-Version") == "" {
 		t.Error("Client-Version missing on `plivo api`")
+	}
+}
+
+// -o json shows auth tokens and passwords only with --show-secrets, on typed
+// commands, a merged --all list and plivo api alike; subaccounts create still
+// shows the new token, as that is what it is run for, and agent flows come out
+// as sent, as agents update writes them back.
+func TestJSONOutput_hidesSecretsUnlessShowSecrets(t *testing.T) {
+	setFakeCreds(t)
+	srv, _ := startAPIServer(t, 200, "application/json", `{"auth_id":"SA1","auth_token":"tok1","objects":[{"new_auth_token":"tok2"}]}`)
+	pointAPIAtTestServer(t, srv)
+	clientForTest = apiClientForTest
+	t.Cleanup(func() { clientForTest = nil })
+	for _, tc := range []struct {
+		args string
+		show bool
+	}{
+		{"account subaccounts list", false}, {"account subaccounts list --all", false}, {"api GET /Subaccount/", false},
+		{"account subaccounts list --show-secrets", true}, {"account subaccounts create --name x", true},
+		{"agents get d1e2f3a4-0000-4000-8000-000000000001", true}, {"api GET /AgentFlow/d1e2f3a4-0000-4000-8000-000000000001/", true},
+		{"agents list", true}, {"agents runs list d1e2f3a4-0000-4000-8000-000000000001", true}, {"agents nodes list", true},
+	} {
+		err, stdout, _ := execCmd(t, append(strings.Fields(tc.args), "-o", "json")...)
+		if err != nil || strings.Contains(stdout, "tok2") != tc.show || strings.Contains(stdout, "[REDACTED]") == tc.show {
+			t.Errorf("%s: err %v, stdout %s", tc.args, err, stdout)
+		}
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
@@ -333,7 +334,10 @@ func mpcResourceURL(c *api.Client, id string, parts ...string) string {
 	// Plivo accepts both. We use the `uuid_<id>/` form when the id has dashes
 	// (UUID-shaped), otherwise treat it as a friendly_name.
 	seg := "name_" + id
-	if looksLikeUUID(id) {
+	switch {
+	case strings.TrimSpace(id) == "":
+		seg = id // AccountURL refuses it, where name_ would be sent
+	case looksLikeUUID(id):
 		seg = "uuid_" + id
 	}
 	return c.AccountURL(append([]string{"MultiPartyCall", seg}, parts...)...)

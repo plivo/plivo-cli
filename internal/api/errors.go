@@ -16,10 +16,14 @@ type APIError = clierr.Error
 // parseError classifies an upstream HTTP response into a *clierr.Error so
 // downstream callers (output renderers, the global error handler) get a
 // stable Code, a human Hint, and a Retryable flag — useful for both AI
-// agents and humans. Retry-After is kept on the error for callers that retry.
-func parseError(status int, header http.Header, body []byte) *APIError {
-	e := clierr.FromHTTP(status, header.Get("X-Request-ID"), body)
-	e.RetryAfter = retryAfter(header.Get("Retry-After"), time.Now())
+// agents and humans. Retry-After is kept on the error for callers that retry,
+// and a redirect's hint names its Location.
+func parseError(resp *http.Response, body []byte) *APIError {
+	e := clierr.FromHTTP(resp.StatusCode, resp.Header.Get("X-Request-ID"), body)
+	e.RetryAfter = retryAfter(resp.Header.Get("Retry-After"), time.Now())
+	if resp.StatusCode/100 == 3 {
+		e.Hint = clierr.RedirectHint(resp.Header.Get("Location"), resp.Request.URL.Path)
+	}
 	return e
 }
 

@@ -148,7 +148,7 @@ func runSubCreate(cmd *cobra.Command, args []string) error {
 		"enabled": subCreateEnabled,
 	}
 	var resp struct {
-		api.RawBody
+		api.RawBodyWithSecrets
 		APIID     string `json:"api_id"`
 		AuthID    string `json:"auth_id"`
 		AuthToken string `json:"auth_token"`

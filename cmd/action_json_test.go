@@ -16,7 +16,7 @@ func TestActions_printJSONOnStdout(t *testing.T) {
 		"voice calls play UUID --urls https://example.com/a.mp3", "voice calls stop-play UUID",
 		"voice calls speak UUID --text hi", "voice calls stop-speak UUID", "voice calls dtmf UUID --digits 12",
 		"voice calls stop-record UUID", "voice calls streams stop UUID --yes", "voice calls streams stop UUID UUID --yes",
-		"voice conferences hangup room --yes", "voice conferences stop-record room",
+		"voice conferences hangup room --yes", "voice conferences stop-record room --yes",
 		"voice conferences member mute room 11", "voice conferences member unmute room 11",
 		"voice conferences member deaf room 11", "voice conferences member undeaf room 11",
 		"voice conferences member kick room 11 --yes", "voice conferences member stop-play room 11",

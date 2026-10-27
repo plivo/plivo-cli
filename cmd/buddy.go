@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -113,18 +115,45 @@ func init() {
 //
 //	PLIVO_BUDDY_URL env  >  current `--env <X>` (login only)  >
 //	[buddy].url config  >  built-in prod default
-func applyBuddyURL(c *api.Client) {
-	if u := os.Getenv("PLIVO_BUDDY_URL"); u != "" {
-		c.BuddyBaseURL = u
-		return
+//
+// The requests carry the account's credentials, and login gets a token back,
+// so an override must be https, or http to this machine for a local server.
+func applyBuddyURL(c *api.Client) error {
+	u, source := os.Getenv("PLIVO_BUDDY_URL"), "PLIVO_BUDDY_URL"
+	if u == "" {
+		cfg, err := config.Load()
+		if err != nil {
+			return nil
+		}
+		u, source = cfg.Buddy.EffectiveURL(), "[buddy].url in ~/.plivo/config.toml"
 	}
-	cfg, err := config.Load()
-	if err != nil {
-		return
+	if u == "" {
+		return nil
 	}
-	if u := cfg.Buddy.EffectiveURL(); u != "" {
-		c.BuddyBaseURL = u
+	if !safeBuddyURL(u) { // not echoed: it may hold a password
+		e := clierr.BadInput(source + " must be https, or http to this machine")
+		e.Hint = "Use an https URL, or http://127.0.0.1, http://[::1] or http://localhost for a local server; unset it to use the default."
+		return e
 	}
+	c.BuddyBaseURL = u
+	return nil
+}
+
+// safeBuddyURL reports whether u is https, or http to this machine.
+func safeBuddyURL(u string) bool {
+	p, err := url.Parse(u)
+	if err != nil || p.Host == "" {
+		return false
+	}
+	return p.Scheme == "https" || (p.Scheme == "http" && onThisMachine(p))
+}
+
+// onThisMachine reports whether a URL's host is this machine: localhost,
+// 127.0.0.0/8 or ::1, in any letter case. url.Parse lowers the scheme.
+func onThisMachine(p *url.URL) bool {
+	host := p.Hostname()
+	ip := net.ParseIP(host)
+	return strings.EqualFold(host, "localhost") || (ip != nil && ip.IsLoopback())
 }
 
 func runAsk(cmd *cobra.Command, args []string) error {
@@ -137,7 +166,9 @@ func runAsk(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	applyBuddyURL(client)
+	if err := applyBuddyURL(client); err != nil {
+		return err
+	}
 	url := client.BuddyURL("/v1/aiassist/buddy-ext/chat")
 
 	if askInteractive {
@@ -1065,7 +1096,9 @@ func runSupport(cmd *cobra.Command, args []string) error {
 			Hint:    "Run `plivo login` — a manually-entered profile has no per-user identity to filter by.",
 		}
 	}
-	applyBuddyURL(client)
+	if err := applyBuddyURL(client); err != nil {
+		return err
+	}
 
 	url := client.BuddyURL("/v1/aiassist/buddy-ext/escalations")
 	// Real response shape (from `data_adapters/buddy_escalation.py`):

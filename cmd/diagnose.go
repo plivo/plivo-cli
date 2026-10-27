@@ -153,6 +153,9 @@ func requireResourceExists(cmd *cobra.Command, segment, uuid, label string) (jso
 		return nil, err
 	}
 	record, status := readRecord(client, segment, uuid)
+	if err := client.Refused(); err != nil {
+		return nil, err // a blank, . or .. id, which the read did not send
+	}
 	if status == http.StatusNotFound {
 		// A trunk call lives in a different store and a different debugger reads
 		// it, so name the right command instead of reporting a bare not-found.
