@@ -253,8 +253,8 @@ func installSkills(skills []bundledSkill) error {
 	var err error
 	switch {
 	case skillProject:
-		if root, repo, err = projectSkillsRoot(); err == nil && !resolvesInside(repo, root) {
-			err = projectLinkErr(root + " resolves outside the repository " + repo)
+		if root, repo, err = projectSkillsRoot(); err == nil {
+			err = projectWritesInside(repo, root, skills)
 		}
 	case skillAgent != "":
 		root, err = agentSkillsRoot(skillAgent)
@@ -436,13 +436,6 @@ func installSkill(s bundledSkill, root string) (kept string, err error) {
 		}
 	}
 	dest := filepath.Join(dir, skillFileName)
-	if skillProject {
-		for _, p := range []string{dir, dest} {
-			if fi, err := os.Lstat(p); err == nil && fi.Mode()&fs.ModeSymlink != 0 {
-				return "", projectLinkErr(p + " is a symbolic link")
-			}
-		}
-	}
 
 	if !skillForce {
 		if b, err := os.ReadFile(dest); err == nil && skillEdited(s, b) {
@@ -473,21 +466,39 @@ func installSkill(s bundledSkill, root string) (kept string, err error) {
 	return "", nil
 }
 
-// projectLinkErr refuses to write a skill in a repository through a link: a
-// skills folder or copy that resolves outside the repository, or, for an
-// install, a skill folder or SKILL.md that is a link. A clone brings its links
-// along, so one could aim the write at any file the user can write. Home
-// copies follow links, as npx skills makes them there.
+// projectWritesInside refuses a project install that would write outside the
+// repository: through a skills folder, skill folder or SKILL.md whose links
+// lead out of it, or a link that leads nowhere. Links within it, as npx skills
+// makes them, are followed.
+func projectWritesInside(repo, root string, skills []bundledSkill) error {
+	paths := []string{root}
+	for _, s := range skills {
+		dir := filepath.Join(root, s.dirName)
+		paths = append(paths, dir, filepath.Join(dir, skillFileName))
+	}
+	for _, p := range paths {
+		if !resolvesInside(repo, p) {
+			return projectLinkErr(p + " resolves outside the repository " + repo)
+		}
+	}
+	return nil
+}
+
+// projectLinkErr refuses to write a skill in a repository through a link that
+// leads out of it. A clone brings its links along, so one could aim the write
+// at any file the user can write. Home copies follow links, as npx skills
+// makes them there.
 func projectLinkErr(why string) error {
 	e := clierr.BadInput(why + ", so plivo won't write a skill through it")
 	e.Hint = "A link in a repository can point anywhere. Replace it with a folder, or keep the skill in your home directory."
 	return e
 }
 
-// resolvesInside reports whether dir, with its links resolved, lies inside
-// repo. The nearest part of dir that exists decides where the rest is made.
-func resolvesInside(repo, dir string) bool {
-	near := dir
+// resolvesInside reports whether path, with its links resolved, lies inside
+// repo. The nearest part of path that exists decides where the rest is made,
+// and a link that leads nowhere lies nowhere.
+func resolvesInside(repo, path string) bool {
+	near := path
 	for {
 		if _, err := os.Lstat(near); err == nil || filepath.Dir(near) == near {
 			break

@@ -677,6 +677,25 @@ func TestSkillInstall_projectRefusesToWriteThroughALink(t *testing.T) {
 	}
 }
 
+// npx skills links .claude/skills/<skill> to its copy in .agents/skills: a link
+// that stays in the repository is installed through.
+func TestSkillInstall_projectInstallsThroughALinkInTheRepo(t *testing.T) {
+	root, _ := fakeRepo(t, false)
+	copyDir := filepath.Join(root, ".agents", "skills", "plivo-cli")
+	link := filepath.Join(root, ".claude", "skills", "plivo-cli")
+	for _, d := range []string{copyDir, filepath.Dir(link)} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(filepath.Join("..", "..", ".agents", "skills", "plivo-cli"), link); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+	if err, _, _ := execCmd(t, "skill", "install", "--project"); err != nil || !fileIs(t, filepath.Join(copyDir, skillFileName), cliskill.SkillMD) {
+		t.Errorf("install through an in-repo link: %v", err)
+	}
+}
+
 // Git for Windows checks a committed skill out with CRLF line endings by
 // default. That copy is the same skill, not an edit to keep.
 func TestSkillInstall_projectReadsCRLFAsLF(t *testing.T) {
