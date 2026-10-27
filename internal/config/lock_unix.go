@@ -21,3 +21,9 @@ func tryLock(f *os.File) (bool, error) {
 }
 
 func unlockFile(f *os.File) error { return unix.Flock(int(f.Fd()), unix.LOCK_UN) }
+
+// noLocks reports whether err says the file system takes no locks: ENOLCK,
+// ENOTSUP or ENOSYS.
+func noLocks(err error) bool {
+	return errors.Is(err, unix.ENOLCK) || errors.Is(err, errors.ErrUnsupported)
+}

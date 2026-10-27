@@ -19,6 +19,9 @@ func tryLock(f *os.File) (bool, error) {
 	return err == nil, err
 }
 
+// noLocks reports whether err says the file system takes no locks.
+func noLocks(err error) bool { return errors.Is(err, errors.ErrUnsupported) }
+
 func unlockFile(f *os.File) error {
 	return windows.UnlockFileEx(windows.Handle(f.Fd()), 0, ^uint32(0), ^uint32(0), new(windows.Overlapped))
 }

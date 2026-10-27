@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -209,6 +210,21 @@ func TestUpdate_givesUpOnALockAnotherCommandHolds(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("Update is still waiting on the lock another command holds")
+	}
+}
+
+// A file system that takes no locks, such as NFS without its lock service,
+// answers ENOLCK, ENOTSUP or ENOSYS: the change goes on unlocked.
+func TestLockWithin_goesOnWhereTheFileSystemTakesNoLocks(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "lock")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	for _, errno := range []error{syscall.ENOTSUP, syscall.ENOSYS} {
+		if err := lockWithin(f, time.Second, func(*os.File) (bool, error) { return false, errno }); err != nil {
+			t.Errorf("%v: %v, want the change to go on unlocked", errno, err)
+		}
 	}
 }
 

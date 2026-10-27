@@ -224,7 +224,7 @@ func Update(change func(*Config) error) error {
 		return err
 	}
 	defer lock.Close()
-	if err := lockWithin(lock, lockWait); err != nil {
+	if err := lockWithin(lock, lockWait, tryLock); err != nil {
 		return err
 	}
 	defer func() { _ = unlockFile(lock) }()
@@ -242,10 +242,15 @@ func Update(change func(*Config) error) error {
 // config before it gives up.
 var lockWait = 10 * time.Second
 
-// lockWithin takes the lock on f, trying again until wait has passed.
-func lockWithin(f *os.File, wait time.Duration) error {
+// lockWithin takes the lock on f with try, trying again until wait has passed.
+// On a file system that takes no locks, such as NFS without its lock service,
+// it goes on unlocked, as on the platforms without locks.
+func lockWithin(f *os.File, wait time.Duration, try func(*os.File) (bool, error)) error {
 	for start := time.Now(); ; time.Sleep(50 * time.Millisecond) {
-		ok, err := tryLock(f)
+		ok, err := try(f)
+		if noLocks(err) {
+			return nil
+		}
 		if err != nil {
 			return fmt.Errorf("locking %s: %w", f.Name(), err)
 		}
