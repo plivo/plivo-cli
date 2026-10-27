@@ -249,14 +249,20 @@ func TestQuery_refusesAResultThatOutgrowsItsBudget(t *testing.T) {
 }
 
 // to_string(@) writes out every copy [@,@] shares while it searches: a search
-// past its time limit fails as a query error instead of running on.
-func TestQuery_stopsASearchThatRunsTooLong(t *testing.T) {
-	defer func(d time.Duration) { searchTime = d }(searchTime)
-	searchTime = time.Millisecond
-	_, err := render(t, "json", "data"+strings.Repeat(" | [@,@]", 14)+" | to_string(@)", listPage)
-	var qe *QueryError
-	if !errors.As(err, &qe) || !strings.Contains(err.Error(), "ran for more than") {
-		t.Errorf("err = %v; want a *QueryError for the time the search took", err)
+// past its time or memory limit fails as a query error instead of running on.
+func TestQuery_stopsARunawaySearch(t *testing.T) {
+	defer func(d time.Duration, h uint64) { searchTime, searchHeap = d, h }(searchTime, searchHeap)
+	for _, c := range []struct {
+		time time.Duration
+		heap uint64
+		want string
+	}{{time.Millisecond, 1 << 40, "ran for more than"}, {time.Minute, 1, "MiB of memory"}} {
+		searchTime, searchHeap = c.time, c.heap
+		_, err := render(t, "json", "data"+strings.Repeat(" | [@,@]", 16)+" | to_string(@)", listPage)
+		var qe *QueryError
+		if !errors.As(err, &qe) || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("err = %v; want a *QueryError saying %q", err, c.want)
+		}
 	}
 }
 

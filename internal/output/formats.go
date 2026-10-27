@@ -245,9 +245,11 @@ func watchedSearch(search func() (any, error)) (any, error) {
 		v, err := search()
 		done <- result{v, err}
 	}()
+	// The heap is measured from its lowest point, as a collection can free
+	// what was there before the search.
 	heap := []metrics.Sample{{Name: "/memory/classes/heap/objects:bytes"}}
 	metrics.Read(heap)
-	limit := heap[0].Value.Uint64() + searchHeap
+	low := heap[0].Value.Uint64()
 	tick, deadline := time.NewTicker(10*time.Millisecond), time.After(searchTime)
 	defer tick.Stop()
 	for {
@@ -257,7 +259,9 @@ func watchedSearch(search func() (any, error)) (any, error) {
 		case <-deadline:
 			return nil, fmt.Errorf("the expression ran for more than %s", searchTime)
 		case <-tick.C:
-			if metrics.Read(heap); heap[0].Value.Uint64() > limit {
+			metrics.Read(heap)
+			now := heap[0].Value.Uint64()
+			if low = min(low, now); now-low > searchHeap {
 				return nil, fmt.Errorf("the expression took more than %d MiB of memory", searchHeap>>20)
 			}
 		}
