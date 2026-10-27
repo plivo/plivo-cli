@@ -54,8 +54,7 @@ type Number struct {
 	Region        string `json:"region,omitempty"`
 	Country       string `json:"country,omitempty"`
 	NumberType    string `json:"number_type,omitempty"`
-	Application   string `json:"application,omitempty"`
-	AppID         string `json:"app_id,omitempty"`
+	Application   string `json:"application,omitempty"` // the app's resource URI; there is no app_id
 	Subaccount    string `json:"sub_account,omitempty"`
 	Alias         string `json:"alias,omitempty"`
 	MonthlyRental string `json:"monthly_rental_rate,omitempty"`
@@ -74,15 +73,8 @@ type NumberList struct {
 	Objects []Number `json:"objects"`
 }
 
-// ResolvedAppID returns the attached application id.
-// Plivo populates AppID directly on some endpoints and embeds the id in the
-// Application resource URI on others; this method normalises both shapes.
-func (n *Number) ResolvedAppID() string {
-	if n.AppID != "" {
-		return n.AppID
-	}
-	return lastSegment(n.Application)
-}
+// ResolvedAppID returns the id of the attached application, from its URI.
+func (n *Number) ResolvedAppID() string { return lastSegment(n.Application) }
 
 // lastSegment returns the id at the end of a resource URI such as
 // /v1/Account/<auth_id>/Application/<app_id>/, or "" for an empty one.

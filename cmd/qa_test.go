@@ -46,7 +46,6 @@ var qaPending = map[string]string{
 	// Found by the SDK oracle; not yet checked against the live API.
 	"sdk/masking":    "masking sessions are read flat, as created_on, expires_on and mode, and create sends mode; the API nests a session under response, with created_time and expiry_time",
 	"sdk/multiparty": "multiparty calls and participants are read under names the API does not send (billing_type, created_at, end_at; from, to, muted, direction), and participants list pages with limit and offset",
-	"sdk/numbers":    "numbers get and list read app_id, country and type; the API sends application and number_type",
 	"sdk/record":     "calls record sends both_legs and transcribe, conferences record sends transcribe; the API takes record_channel_type and transcription_type",
 	"sdk/streams":    "streams list reads stream_url and resource_uri; the API sends service_url",
 	"sdk/verify":     "verify sessions list reads objects, the API sends sessions under other names; validate posts to .../Validation/, the API to the session itself",

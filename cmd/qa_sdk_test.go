@@ -64,8 +64,6 @@ var qaFixtures = map[string]string{
 // oracle finds in it: its response for a get or list, its requests for the
 // rest.
 var qaOracleOwners = map[string]string{
-	"numbers get":                       "sdk/numbers",
-	"numbers list":                      "sdk/numbers",
 	"numbers masking sessions create":   "sdk/masking",
 	"numbers masking sessions get":      "sdk/masking",
 	"numbers masking sessions list":     "sdk/masking",
@@ -88,7 +86,6 @@ var qaOracleOwners = map[string]string{
 var qaKnownGaps = map[string][]string{
 	"sdk/masking":    {"*"},
 	"sdk/multiparty": {"billing_type", "caller_name", "created_at", "direction", "end_at", "from", "limit", "muted", "offset", "to"},
-	"sdk/numbers":    {"app_id", "country", "type"},
 	"sdk/record":     {"both_legs", "transcribe"},
 	"sdk/streams":    {"resource_uri", "stream_url"},
 	"sdk/verify":     {"*"},
@@ -148,8 +145,8 @@ var qaConfirmed = map[string][]string{
 	"account applications": {"log_incoming_messages"},              // docs
 	"voice calls":          {"hangup_cause_name", "hangup_source"}, // docs
 	"voice calls streams":  {"audio_track", "bidirectional"},       // docs
-	"numbers get":          {"mms_enabled"},                        // docs
-	"numbers list":         {"mms_enabled"},
+	"numbers get":          {"mms_enabled", "country", "type"},     // docs; country and type QA saw live
+	"numbers list":         {"mms_enabled", "country", "type"},
 	"voice endpoints":      {"password"}, // QA saw the API return it (r3/L5)
 	"numbers compliance": {"callback_url", "callback_method", "rejection_reason", // docs; the rest with expand
 		"end_user", "documents", "linked_numbers"},

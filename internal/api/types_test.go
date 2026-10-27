@@ -16,12 +16,7 @@ func TestNumber_ResolvedAppID(t *testing.T) {
 		wantAppID string
 	}{
 		{
-			name:      "AppID directly populated",
-			n:         Number{AppID: "12345"},
-			wantAppID: "12345",
-		},
-		{
-			name:      "fallback to Application URI",
+			name:      "from the Application URI",
 			n:         Number{Application: "/v1/Account/MAabc/Application/67890/"},
 			wantAppID: "67890",
 		},
@@ -31,12 +26,7 @@ func TestNumber_ResolvedAppID(t *testing.T) {
 			wantAppID: "67890",
 		},
 		{
-			name:      "AppID wins over Application URI",
-			n:         Number{AppID: "win", Application: "/v1/Account/MAabc/Application/lose/"},
-			wantAppID: "win",
-		},
-		{
-			name:      "neither set returns empty",
+			name:      "no application returns empty",
 			n:         Number{},
 			wantAppID: "",
 		},
@@ -87,7 +77,7 @@ func TestNumber_unmarshal(t *testing.T) {
 		"type": "local",
 		"region": "California",
 		"country": "United States",
-		"app_id": "12345",
+		"application": "/v1/Account/MAabc/Application/12345/",
 		"sub_account": "SAxxx",
 		"alias": "support line",
 		"monthly_rental_rate": "0.80000",
@@ -108,8 +98,8 @@ func TestNumber_unmarshal(t *testing.T) {
 	if !n.VoiceEnabled || !n.SMSEnabled || n.MMSEnabled {
 		t.Errorf("enabled flags wrong: voice=%v sms=%v mms=%v", n.VoiceEnabled, n.SMSEnabled, n.MMSEnabled)
 	}
-	if n.AppID != "12345" {
-		t.Errorf("AppID = %q", n.AppID)
+	if n.ResolvedAppID() != "12345" {
+		t.Errorf("ResolvedAppID() = %q", n.ResolvedAppID())
 	}
 }
 
@@ -474,7 +464,7 @@ func TestRoundTrip_Number(t *testing.T) {
 		Number:        "+14155551234",
 		Type:          "local",
 		Country:       "US",
-		AppID:         "12345",
+		Application:   "/v1/Account/MAabc/Application/12345/",
 		Alias:         "support",
 		MonthlyRental: "0.80000",
 		VoiceEnabled:  true,
@@ -488,7 +478,7 @@ func TestRoundTrip_Number(t *testing.T) {
 	if err := json.Unmarshal(b, &round); err != nil {
 		t.Fatal(err)
 	}
-	if round.Number != orig.Number || round.AppID != orig.AppID ||
+	if round.Number != orig.Number || round.Application != orig.Application ||
 		round.VoiceEnabled != orig.VoiceEnabled || round.MonthlyRental != orig.MonthlyRental {
 		t.Errorf("round-trip lost data:\norig:  %+v\nround: %+v", orig, round)
 	}
