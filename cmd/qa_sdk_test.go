@@ -138,6 +138,18 @@ var qaConfirmed = map[string][]string{
 		"optout_keywords", "terms_and_conditions_link", "privacy_policy_link", "campaign_attributes", "error_reason"},
 	"messaging sms tollfree": {"terms_and_conditions_link", "privacy_policy_link", "optin_message", "help_message"},
 	"verify sessions":        {"locale", "requestor_ip", "destination_country_iso2"}, // docs: a session, in a list too
+
+	"voice calls streams list":    {"total_count"}, // QA saw it live, where the fixture has count
+	"messaging sms tollfree list": {"total_count"}, // docs and the SDK's struct, where the fixture has count
+}
+
+// qaNotSent are fields an SDK fixture has that the API does not send: the
+// oracle reads the fixture without them, so --schema must not list them.
+var qaNotSent = map[string]string{
+	"voice calls list":            "meta.total_count", // QA live
+	"voice recordings list":       "meta.total_count", // QA live
+	"voice calls streams list":    "meta.count",       // QA live: total_count
+	"messaging sms tollfree list": "meta.count",       // docs and the SDK's struct: total_count (live is 403)
 }
 
 // qaIsConfirmed reports whether a field of cmd's output, by its names, is in
@@ -203,6 +215,7 @@ func qaSDKSchemaPaths(t *testing.T) int {
 			}
 			have := map[string]bool{"api_id": true} // every response has one
 			qaJSONPaths(doc, "", have)
+			delete(have, qaNotSent[cmd])
 			missing := map[string][]string{}
 			for _, f := range outputFields(outputTypes["plivo "+cmd]) {
 				names := qaFieldNames(f.Path)
@@ -214,7 +227,7 @@ func qaSDKSchemaPaths(t *testing.T) int {
 			}
 			problems := map[string][]string{}
 			for o, paths := range missing {
-				problems[o] = []string{fmt.Sprintf("--schema lists %s, which the SDK's %s lacks", strings.Join(paths, ", "), qaFixtures[cmd])}
+				problems[o] = []string{fmt.Sprintf("--schema lists %s, which the SDK's %s lacks or qaNotSent says the API does not send", strings.Join(paths, ", "), qaFixtures[cmd])}
 			}
 			qaVerdict(t, problems)
 		})

@@ -14,8 +14,8 @@ type ListMeta struct {
 	Previous   string `json:"previous,omitempty"`
 }
 
-// PageMeta is the envelope of the lists that send no total: messages and
-// Verify sessions.
+// PageMeta is the envelope of the lists that send no total: messages, calls,
+// recordings and Verify sessions.
 type PageMeta struct {
 	Limit    int    `json:"limit"`
 	Offset   int    `json:"offset"`
@@ -24,8 +24,7 @@ type PageMeta struct {
 }
 
 // CountMeta is the envelope of the lists that send their total as count:
-// multiparty calls and their participants, audio streams and toll-free
-// verifications.
+// multiparty calls and their participants.
 type CountMeta struct {
 	Count int `json:"count"`
 	PageMeta
@@ -182,7 +181,7 @@ type LiveCall struct {
 type CallList struct {
 	RawBody
 	APIID   string   `json:"api_id"`
-	Meta    ListMeta `json:"meta"`
+	Meta    PageMeta `json:"meta"`
 	Objects []Call   `json:"objects"`
 }
 
@@ -233,7 +232,7 @@ type Recording struct {
 type RecordingList struct {
 	RawBody
 	APIID   string      `json:"api_id"`
-	Meta    ListMeta    `json:"meta"`
+	Meta    PageMeta    `json:"meta"`
 	Objects []Recording `json:"objects"`
 }
 
@@ -597,7 +596,7 @@ type AudioStream struct {
 type AudioStreamList struct {
 	RawBody
 	APIID   string        `json:"api_id,omitempty"`
-	Meta    CountMeta     `json:"meta"`
+	Meta    ListMeta      `json:"meta"`
 	Objects []AudioStream `json:"objects,omitempty"`
 }
 
@@ -765,7 +764,7 @@ type TollFreeVerification struct {
 type TollFreeVerificationList struct {
 	RawBody
 	APIID   string                 `json:"api_id"`
-	Meta    CountMeta              `json:"meta"`
+	Meta    ListMeta               `json:"meta"`
 	Objects []TollFreeVerification `json:"objects"`
 }
 
