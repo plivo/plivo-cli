@@ -640,8 +640,9 @@ var sipURIsCreateCmd = &cobra.Command{
 	Short: "Create an origination URI",
 	Long: `Create an origination URI.
 
---uri accepts host, host:port, host;transport=udp|tcp|tls, sip:user@host or
-sips:host. The API refuses a scheme, so sip: is dropped and sips: becomes
+--uri accepts host, host:port, host;transport=udp|tcp|tls, sip:host or
+sips:host, with no user part (user@): the API refuses one. The API refuses a
+scheme too, so sip: is dropped and sips: becomes
 ;transport=tls, on port 5061 unless one is given, or with --platform on the
 guide's TLS port where it gives one; with another transport it is refused.
 stderr names the URI sent. The host is a name or a public IPv4 address:
@@ -710,7 +711,7 @@ func runSIPURIsCreate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if uri == "" {
-		return clierr.BadInput("--uri is required (host, host:port, host;transport=…, or sip:user@host)")
+		return clierr.BadInput("--uri is required (host, host:port, host;transport=…, or sip:host)")
 	}
 	if uri, err = originationURI(uri); err != nil {
 		return err
@@ -1388,7 +1389,7 @@ func init() {
 
 	ucf := sipURIsCreateCmd.Flags()
 	ucf.StringVar(&uriCreateName, "name", "", "URI name (required)")
-	ucf.StringVar(&uriCreateURI, "uri", "", "host, host:port, host;transport=…, or sip:user@host")
+	ucf.StringVar(&uriCreateURI, "uri", "", "host, host:port, host;transport=…, or sip:host")
 	ucf.StringVar(&uriCreateUsername, "username", "", "username when authentication is needed")
 	ucf.BoolVar(&uriCreatePasswordStdin, "password-stdin", false, "read the URI password from stdin")
 	ucf.BoolVar(&uriCreateAuthNeeded, "authentication-needed", false, "require authentication")

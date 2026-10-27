@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/plivo/plivo-cli/internal/api"
+	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -39,7 +40,6 @@ var (
 	streamStartCallbackURL  string
 	streamStartStatusURL    string
 	streamStartExtraHeaders string
-	streamStartServiceType  string
 )
 
 var streamStartCmd = &cobra.Command{
@@ -59,13 +59,12 @@ var streamStopCmd = &cobra.Command{
 func init() {
 	streamStartCmd.Flags().StringVar(&streamStartURL, "url", "", "WebSocket URL to receive audio (wss://...) (required)")
 	_ = streamStartCmd.MarkFlagRequired("url")
-	streamStartCmd.Flags().StringVar(&streamStartTrack, "audio-track", "inbound", "inbound|outbound|both")
-	streamStartCmd.Flags().BoolVar(&streamStartBiDi, "bidirectional", false, "let the WebSocket send audio back into the call")
+	streamStartCmd.Flags().StringVar(&streamStartTrack, "audio-track", "inbound", oneOf(streamTracks))
+	streamStartCmd.Flags().BoolVar(&streamStartBiDi, "bidirectional", false, "let the WebSocket send audio back into the call (needs --audio-track inbound)")
 	streamStartCmd.Flags().StringVar(&streamStartContentType, "content-type", "audio/x-l16;rate=16000", "audio codec content-type")
 	streamStartCmd.Flags().StringVar(&streamStartCallbackURL, "stream-status-callback", "", "URL hit when stream starts/ends")
 	streamStartCmd.Flags().StringVar(&streamStartStatusURL, "callback-url", "", "alias for --stream-status-callback")
 	streamStartCmd.Flags().StringVar(&streamStartExtraHeaders, "extra-headers", "", "comma-separated extra WebSocket headers (k1=v1,k2=v2)")
-	streamStartCmd.Flags().StringVar(&streamStartServiceType, "service-type", "", "Plivo service type override")
 
 	streamCmd.AddCommand(streamListCmd, streamGetCmd, streamStartCmd, streamStopCmd)
 	callCmd.AddCommand(streamCmd)
@@ -130,8 +129,20 @@ func runStreamGet(cmd *cobra.Command, args []string) error {
 	})
 }
 
+// streamTracks are the audio tracks a stream can carry.
+var streamTracks = []string{"inbound", "outbound", "both"}
+
 func runStreamStart(cmd *cobra.Command, args []string) error {
 	callUUID := args[0]
+	if err := validateEnum("audio-track", &streamStartTrack, streamTracks...); err != nil {
+		return err
+	}
+	if streamStartTrack == "" {
+		streamStartTrack = "inbound" // the default, as when the flag is left out
+	}
+	if streamStartBiDi && streamStartTrack != "inbound" {
+		return clierr.BadFlag("audio-track", streamStartTrack+" with --bidirectional: Plivo takes a two-way stream on the inbound track only")
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -147,13 +158,10 @@ func runStreamStart(cmd *cobra.Command, args []string) error {
 		callback = streamStartStatusURL
 	}
 	if callback != "" {
-		body["stream_status_callback_url"] = callback
+		body["status_callback_url"] = callback
 	}
 	if streamStartExtraHeaders != "" {
 		body["extra_headers"] = streamStartExtraHeaders
-	}
-	if streamStartServiceType != "" {
-		body["service_type"] = streamStartServiceType
 	}
 
 	var resp struct {

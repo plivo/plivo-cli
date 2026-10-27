@@ -1,0 +1,18 @@
+{
+    "api_id": "2ba626e0-08da-11ed-9bfc-0242ac110004",
+    "brand": {
+        "address": {
+            "city": "",
+            "country": "",
+            "postal_code": "",
+            "state": "",
+            "street": ""
+        },
+        "authorized_contact": {},
+        "brand_id": "BRPXS6E",
+        "brand_type": "STARTER",
+        "ein_issuing_country": "US",
+        "registration_status": "COMPLETED",
+        "created_at": "2023-02-28T11:06:00.360401Z"
+    }
+}

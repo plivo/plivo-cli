@@ -1,14 +1,11 @@
-Play audio file(s) into a member's channel
+Play an audio file into a member's channel
 
 Usage:
   plivo voice conferences member play <conference_name> <member_id> [flags]
 
 Flags:
-  -h, --help          help for play
-      --length int    stop after N seconds
-      --loop          loop playback
-      --mix           mix with conference audio (default true)
-      --urls string   comma-separated audio file URLs (required)
+  -h, --help         help for play
+      --url string   URL of the .mp3 or .wav file to play (required)
 
 Global Flags:
       --dry-run            print the HTTP request without sending

@@ -72,6 +72,10 @@ var (
 	callMakeMachineDetect string
 )
 
+// demoAnswerURL is Plivo's hello-world answer XML, the --answer-url default: a
+// static file, so it is fetched with GET.
+const demoAnswerURL = "https://s3.amazonaws.com/static.plivo.com/answer.xml"
+
 var callMakeCmd = &cobra.Command{
 	Use:   "make",
 	Short: "Make an outbound call (requires --yes; spends money — use --dry-run to preview)",
@@ -92,12 +96,12 @@ func init() {
 	_ = callMakeCmd.MarkFlagRequired("from")
 	callMakeCmd.Flags().StringVar(&callMakeTo, "to", "", "destination: an E.164 number or a sip: URI, or several joined with < (required)")
 	_ = callMakeCmd.MarkFlagRequired("to")
-	callMakeCmd.Flags().StringVar(&callMakeAnswerURL, "answer-url", "https://s3.amazonaws.com/static.plivo.com/answer.xml",
+	callMakeCmd.Flags().StringVar(&callMakeAnswerURL, "answer-url", demoAnswerURL,
 		"URL returning PlivoXML to play on answer (default: Plivo's hello demo)")
-	callMakeCmd.Flags().StringVar(&callMakeAnswerMethod, "answer-method", "GET", "GET|POST")
+	callMakeCmd.Flags().StringVar(&callMakeAnswerMethod, "answer-method", "", "GET|POST (default: GET for the hello demo, else Plivo's POST)")
 	callMakeCmd.Flags().StringVar(&callMakeHangupURL, "hangup-url", "", "URL hit when call ends")
 	callMakeCmd.Flags().StringVar(&callMakeRingURL, "ring-url", "", "URL hit when call starts ringing")
-	callMakeCmd.Flags().StringVar(&callMakeMachineDetect, "machine-detection", "", "none|true|hangup")
+	callMakeCmd.Flags().StringVar(&callMakeMachineDetect, "machine-detection", "", "answering-machine detection: true|hangup (off when omitted)")
 	registerExplainFlag(callMakeCmd)
 
 	callTransferCmd.Flags().StringVar(&callTransferLegs, "legs", "aleg", "which leg(s) to act on: aleg|bleg|both")
@@ -452,16 +456,27 @@ func runCallMake(cmd *cobra.Command, args []string) error {
 	if err := validateCallParties(callMakeFrom, callMakeTo); err != nil {
 		return err
 	}
+	if err := validateEnum("machine-detection", &callMakeMachineDetect, "true", "hangup"); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
 	}
 
 	body := map[string]any{
-		"from":          callMakeFrom,
-		"to":            callMakeTo,
-		"answer_url":    callMakeAnswerURL,
-		"answer_method": callMakeAnswerMethod,
+		"from":       callMakeFrom,
+		"to":         callMakeTo,
+		"answer_url": callMakeAnswerURL,
+	}
+	// GET is for the demo's static XML. Any other URL gets Plivo's default,
+	// POST, unless --answer-method is given.
+	method := callMakeAnswerMethod
+	if method == "" && callMakeAnswerURL == demoAnswerURL {
+		method = "GET"
+	}
+	if method != "" {
+		body["answer_method"] = method
 	}
 	if callMakeHangupURL != "" {
 		body["hangup_url"] = callMakeHangupURL

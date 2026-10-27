@@ -64,10 +64,16 @@ func (n *Number) ResolvedAppID() string {
 	if n.AppID != "" {
 		return n.AppID
 	}
-	if n.Application == "" {
+	return lastSegment(n.Application)
+}
+
+// lastSegment returns the id at the end of a resource URI such as
+// /v1/Account/<auth_id>/Application/<app_id>/, or "" for an empty one.
+func lastSegment(uri string) string {
+	if uri == "" {
 		return ""
 	}
-	parts := strings.Split(strings.Trim(n.Application, "/"), "/")
+	parts := strings.Split(strings.Trim(uri, "/"), "/")
 	return parts[len(parts)-1]
 }
 
@@ -84,7 +90,7 @@ type Application struct {
 	FallbackMethod      string `json:"fallback_method,omitempty"`
 	MessageURL          string `json:"message_url,omitempty"`
 	MessageMethod       string `json:"message_method,omitempty"`
-	DefaultNumberApp    bool   `json:"default_number_app,omitempty"`
+	DefaultApp          bool   `json:"default_app,omitempty"`
 	DefaultEndpointApp  bool   `json:"default_endpoint_app,omitempty"`
 	SubAccount          string `json:"sub_account,omitempty"`
 	LogIncomingMessages bool   `json:"log_incoming_messages,omitempty"`
@@ -285,8 +291,8 @@ type Subaccount struct {
 	Name        string `json:"name"`
 	AuthToken   string `json:"auth_token,omitempty"`
 	Enabled     bool   `json:"enabled,omitempty"`
-	CreatedOn   string `json:"created_on,omitempty"`
-	ModifiedOn  string `json:"modified_on,omitempty"`
+	Created     string `json:"created,omitempty"`
+	Modified    string `json:"modified,omitempty"`
 	Account     string `json:"account,omitempty"`
 	ResourceURI string `json:"resource_uri,omitempty"`
 }
@@ -307,11 +313,13 @@ type Endpoint struct {
 	Alias       string `json:"alias,omitempty"`
 	SipURI      string `json:"sip_uri,omitempty"`
 	Password    string `json:"password,omitempty"`
-	Application string `json:"application,omitempty"`
-	AppID       string `json:"app_id,omitempty"`
+	Application string `json:"application,omitempty"` // the app's resource URI; there is no app_id
 	Subaccount  string `json:"sub_account,omitempty"`
 	ResourceURI string `json:"resource_uri,omitempty"`
 }
+
+// ResolvedAppID returns the id of the attached application, from its URI.
+func (e *Endpoint) ResolvedAppID() string { return lastSegment(e.Application) }
 
 type EndpointList struct {
 	RawBody
@@ -555,26 +563,54 @@ type AudioStreamList struct {
 	Objects []AudioStream `json:"objects,omitempty"`
 }
 
-// Brand10DLC — /Account/{id}/10dlc/Brand/
+// Brand10DLC is a 10DLC brand, as the Go SDK's Brand reads it: a list carries
+// them under "brands" and a get nests one under "brand". The company details
+// come from the profile the brand was registered with.
 type Brand10DLC struct {
+	BrandID            string           `json:"brand_id"`
+	BrandAlias         string           `json:"brand_alias,omitempty"`
+	BrandType          string           `json:"brand_type,omitempty"`
+	ProfileUUID        string           `json:"profile_uuid,omitempty"`
+	CompanyName        string           `json:"company_name,omitempty"`
+	EntityType         string           `json:"entity_type,omitempty"`
+	Vertical           string           `json:"vertical,omitempty"`
+	Website            string           `json:"website,omitempty"`
+	EIN                string           `json:"ein,omitempty"`
+	EINIssuingCountry  string           `json:"ein_issuing_country,omitempty"`
+	StockSymbol        string           `json:"stock_symbol,omitempty"`
+	StockExchange      string           `json:"stock_exchange,omitempty"`
+	RegistrationStatus string           `json:"registration_status,omitempty"`
+	VettingStatus      string           `json:"vetting_status,omitempty"`
+	VettingScore       FlexString       `json:"vetting_score,omitempty"`
+	Address            Address10DLC     `json:"address"`
+	AuthorizedContact  AuthContact10DLC `json:"authorized_contact"`
+	CreatedAt          string           `json:"created_at,omitempty"`
+}
+
+// Address10DLC is a brand's or a profile's postal address.
+type Address10DLC struct {
+	Street     string `json:"street,omitempty"`
+	City       string `json:"city,omitempty"`
+	State      string `json:"state,omitempty"`
+	PostalCode string `json:"postal_code,omitempty"`
+	Country    string `json:"country,omitempty"`
+}
+
+// AuthContact10DLC is the person a brand names as its authorized contact.
+type AuthContact10DLC struct {
+	FirstName string `json:"first_name,omitempty"`
+	LastName  string `json:"last_name,omitempty"`
+	Email     string `json:"email,omitempty"`
+	Phone     string `json:"phone,omitempty"`
+	Title     string `json:"title,omitempty"`
+	Seniority string `json:"seniority,omitempty"`
+}
+
+// Brand10DLCResponse is GET /10dlc/Brand/{brand_id}/.
+type Brand10DLCResponse struct {
 	RawBody
-	APIID             string `json:"api_id,omitempty"`
-	BrandID           string `json:"brand_id"`
-	BrandAlias        string `json:"brand_alias,omitempty"`
-	LegalEntityName   string `json:"legal_entity_name,omitempty"`
-	BrandStatus       string `json:"brand_status,omitempty"`
-	BrandType         string `json:"brand_type,omitempty"`
-	EntityType        string `json:"entity_type,omitempty"`
-	Vertical          string `json:"vertical,omitempty"`
-	Website           string `json:"website,omitempty"`
-	EIN               string `json:"ein,omitempty"`
-	EINIssuingCountry string `json:"ein_issuing_country,omitempty"`
-	StockSymbol       string `json:"stock_symbol,omitempty"`
-	StockExchange     string `json:"stock_exchange,omitempty"`
-	Email             string `json:"email,omitempty"`
-	Phone             string `json:"phone,omitempty"`
-	CreatedAt         string `json:"created_at,omitempty"`
-	ResourceURI       string `json:"resource_uri,omitempty"`
+	APIID string     `json:"api_id,omitempty"`
+	Brand Brand10DLC `json:"brand"`
 }
 
 type Brand10DLCList struct {
@@ -584,34 +620,56 @@ type Brand10DLCList struct {
 	Brands []Brand10DLC `json:"brands"`
 }
 
-// Campaign10DLC — /Account/{id}/10dlc/Campaign/
+// Campaign10DLC is a 10DLC campaign, as the Go SDK's Campaign reads it: a
+// list carries them under "campaigns", and a get or an update nests one under
+// "campaign".
 type Campaign10DLC struct {
+	CampaignID             string                  `json:"campaign_id"`
+	CampaignAlias          string                  `json:"campaign_alias,omitempty"`
+	BrandID                string                  `json:"brand_id,omitempty"`
+	Usecase                string                  `json:"usecase,omitempty"`
+	SubUsecase             string                  `json:"sub_usecase,omitempty"` // comma-separated
+	Vertical               string                  `json:"vertical,omitempty"`
+	Description            string                  `json:"description,omitempty"`
+	RegistrationStatus     string                  `json:"registration_status,omitempty"`
+	CampaignSource         string                  `json:"campaign_source,omitempty"`
+	ResellerID             string                  `json:"reseller_id,omitempty"`
+	MessageFlow            string                  `json:"message_flow,omitempty"`
+	Sample1                string                  `json:"sample1,omitempty"`
+	Sample2                string                  `json:"sample2,omitempty"`
+	HelpMessage            string                  `json:"help_message,omitempty"`
+	HelpKeywords           string                  `json:"help_keywords,omitempty"`
+	OptinMessage           string                  `json:"optin_message,omitempty"`
+	OptinKeywords          string                  `json:"optin_keywords,omitempty"`
+	OptoutMessage          string                  `json:"optout_message,omitempty"`
+	OptoutKeywords         string                  `json:"optout_keywords,omitempty"`
+	TermsAndConditionsLink string                  `json:"terms_and_conditions_link,omitempty"`
+	PrivacyPolicyLink      string                  `json:"privacy_policy_link,omitempty"`
+	CampaignAttributes     Campaign10DLCAttributes `json:"campaign_attributes"`
+	// Throughput per carrier, kept as sent: T-Mobile's entry has a brand_tier
+	// where the others have a tpm.
+	MnoMetadata json.RawMessage `json:"mno_metadata,omitempty"`
+	ErrorReason string          `json:"error_reason,omitempty"`
+	CreatedAt   string          `json:"created_at,omitempty"`
+}
+
+// Campaign10DLCAttributes are a campaign's yes/no declarations.
+type Campaign10DLCAttributes struct {
+	EmbeddedLink       bool `json:"embedded_link"`
+	EmbeddedPhone      bool `json:"embedded_phone"`
+	AgeGated           bool `json:"age_gated"`
+	DirectLending      bool `json:"direct_lending"`
+	AffiliateMarketing bool `json:"affiliate_marketing"`
+	SubscriberOptin    bool `json:"subscriber_optin"`
+	SubscriberOptout   bool `json:"subscriber_optout"`
+	SubscriberHelp     bool `json:"subscriber_help"`
+}
+
+// Campaign10DLCResponse is GET or POST /10dlc/Campaign/{campaign_id}/.
+type Campaign10DLCResponse struct {
 	RawBody
-	APIID              string   `json:"api_id,omitempty"`
-	CampaignID         string   `json:"campaign_id"`
-	CampaignAlias      string   `json:"campaign_alias,omitempty"`
-	BrandID            string   `json:"brand_id,omitempty"`
-	Usecase            string   `json:"usecase,omitempty"`
-	SubUsecases        []string `json:"sub_usecases,omitempty"`
-	Description        string   `json:"description,omitempty"`
-	CampaignStatus     string   `json:"campaign_status,omitempty"`
-	MessageFlow        string   `json:"message_flow,omitempty"`
-	SampleMessage1     string   `json:"sample_message_1,omitempty"`
-	SampleMessage2     string   `json:"sample_message_2,omitempty"`
-	HelpKeywords       string   `json:"help_keywords,omitempty"`
-	HelpMessage        string   `json:"help_message,omitempty"`
-	OptInKeywords      string   `json:"opt_in_keywords,omitempty"`
-	OptInMessage       string   `json:"opt_in_message,omitempty"`
-	OptOutKeywords     string   `json:"opt_out_keywords,omitempty"`
-	OptOutMessage      string   `json:"opt_out_message,omitempty"`
-	EmbeddedLink       bool     `json:"embedded_link,omitempty"`
-	EmbeddedPhone      bool     `json:"embedded_phone,omitempty"`
-	AgeGated           bool     `json:"age_gated,omitempty"`
-	DirectLending      bool     `json:"direct_lending,omitempty"`
-	AffiliateMarketing bool     `json:"affiliate_marketing,omitempty"`
-	NumberPool         bool     `json:"number_pool,omitempty"`
-	CreatedAt          string   `json:"created_at,omitempty"`
-	ResourceURI        string   `json:"resource_uri,omitempty"`
+	APIID    string        `json:"api_id,omitempty"`
+	Campaign Campaign10DLC `json:"campaign"`
 }
 
 type Campaign10DLCList struct {
@@ -621,39 +679,49 @@ type Campaign10DLCList struct {
 	Campaigns []Campaign10DLC `json:"campaigns"`
 }
 
-// NumberLink10DLC — /Account/{id}/10dlc/NumberLinking/
-type NumberLink10DLC struct {
-	APIID      string `json:"api_id,omitempty"`
-	LinkID     string `json:"link_id,omitempty"`
-	Number     string `json:"number,omitempty"`
-	CampaignID string `json:"campaign_id,omitempty"`
-	Status     string `json:"status,omitempty"`
-	CreatedAt  string `json:"created_at,omitempty"`
-}
-
-type NumberLink10DLCList struct {
+// CampaignNumbers10DLC is GET /10dlc/Campaign/{campaign_id}/Number/[{number}/]:
+// the numbers linked to a campaign, each with its link's status.
+type CampaignNumbers10DLC struct {
 	RawBody
-	APIID   string            `json:"api_id"`
-	Meta    ListMeta          `json:"meta"`
-	Objects []NumberLink10DLC `json:"objects"`
+	APIID         string                `json:"api_id,omitempty"`
+	CampaignID    string                `json:"campaign_id"`
+	CampaignAlias string                `json:"campaign_alias,omitempty"`
+	Usecase       string                `json:"usecase,omitempty"`
+	PhoneNumbers  []CampaignNumber10DLC `json:"phone_numbers"`
 }
 
-// TollFreeVerification — /Account/{id}/TollfreeVerification/
+type CampaignNumber10DLC struct {
+	Number string `json:"number"`
+	Status string `json:"status"`
+}
+
+// TollFreeVerification is a toll-free verification request, as the Go SDK's
+// TollfreeVerification reads it: GET /TollfreeVerification/{uuid}/, or a row
+// of the list.
 type TollFreeVerification struct {
 	RawBody
-	APIID                    string   `json:"api_id,omitempty"`
-	ProfileUUID              string   `json:"profile_uuid"`
-	Status                   string   `json:"status,omitempty"`
-	BusinessName             string   `json:"business_name,omitempty"`
-	BusinessWebsite          string   `json:"business_website,omitempty"`
-	UseCase                  string   `json:"use_case,omitempty"`
-	UseCaseSummary           string   `json:"use_case_summary,omitempty"`
-	MessageVolume            string   `json:"message_volume,omitempty"`
-	ProductionMessageContent string   `json:"production_message_content,omitempty"`
-	OptInWorkflow            string   `json:"opt_in_workflow,omitempty"`
-	NumbersList              []string `json:"numbers_list,omitempty"`
-	CreatedAt                string   `json:"created_at,omitempty"`
-	ResourceURI              string   `json:"resource_uri,omitempty"`
+	APIID                  string `json:"api_id,omitempty"`
+	UUID                   string `json:"uuid"`
+	ProfileUUID            string `json:"profile_uuid,omitempty"`
+	Number                 string `json:"number,omitempty"`
+	Usecase                string `json:"usecase,omitempty"`
+	UsecaseSummary         string `json:"usecase_summary,omitempty"`
+	MessageSample          string `json:"message_sample,omitempty"`
+	OptinType              string `json:"optin_type,omitempty"`
+	OptinImageURL          string `json:"optin_image_url,omitempty"`
+	Volume                 string `json:"volume,omitempty"`
+	AdditionalInformation  string `json:"additional_information,omitempty"`
+	TermsAndConditionsLink string `json:"terms_and_conditions_link,omitempty"`
+	PrivacyPolicyLink      string `json:"privacy_policy_link,omitempty"`
+	OptinMessage           string `json:"optin_message,omitempty"`
+	HelpMessage            string `json:"help_message,omitempty"`
+	ExtraData              string `json:"extra_data,omitempty"`
+	CallbackURL            string `json:"callback_url,omitempty"`
+	CallbackMethod         string `json:"callback_method,omitempty"`
+	Status                 string `json:"status,omitempty"`
+	ErrorMessage           string `json:"error_message,omitempty"`
+	Created                string `json:"created,omitempty"`
+	LastModified           string `json:"last_modified,omitempty"`
 }
 
 type TollFreeVerificationList struct {

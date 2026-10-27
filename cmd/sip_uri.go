@@ -27,7 +27,7 @@ type sipURI struct {
 // origination URI: UDP, TCP or TLS.
 var sipTransports = []string{"udp", "tcp", "tls"}
 
-const sipURIHint = "Accepted: host, host:port, host;transport=udp|tcp|tls, sip:user@host or sips:host. " +
+const sipURIHint = "Accepted: host, host:port, host;transport=udp|tcp|tls, sip:host or sips:host. " +
 	"The host is a name or an IPv4 address."
 
 // badURI refuses --uri as BAD_FLAG, with the accepted shapes as the hint.
@@ -49,13 +49,17 @@ func parseURIFlag(v string) (sipURI, error) {
 
 // originationURI is parseURIFlag for a URI the API stores, and returns it as
 // sent: host first (hostFirstURI), named on stderr when that rewrote it. It
-// also refuses an IPv6 host, which the API answers "IP from Private IP range
-// is not allowed", and an IPv4 host Plivo can never reach (unreachableKind).
-// sip test keeps all of these, as it only probes from this machine.
+// also refuses a user part (user@host), which the API refuses too, an IPv6
+// host, which the API answers "IP from Private IP range is not allowed", and
+// an IPv4 host Plivo can never reach (unreachableKind). sip test keeps all of
+// these, as it only probes from this machine.
 func originationURI(v string) (string, error) {
 	u, err := parseURIFlag(v)
 	if err != nil {
 		return "", err
+	}
+	if u.User != "" {
+		return "", badURI("has a user part before @, which Plivo refuses on an origination URI: give the host alone")
 	}
 	if strings.Contains(u.Host, ":") {
 		return "", badURI("has an IPv6 host, which Plivo does not accept: use a hostname or an IPv4 address")
@@ -75,8 +79,8 @@ func originationURI(v string) (string, error) {
 }
 
 // hostFirstURI returns a URI in the host-first form the API stores: it answers
-// a sip: or sips: URI "URI could not be created". The scheme goes; the user
-// part, host, port and params stay. sips: means TLS, so it becomes
+// a sip: or sips: URI "URI could not be created". The scheme goes; the rest
+// stays. sips: means TLS, so it becomes
 // ;transport=tls, on tlsPort unless the URI gives a port (0 adds none).
 func hostFirstURI(s string, tlsPort int) (string, error) {
 	s = normalizeSIPURI(s)
@@ -99,10 +103,10 @@ func hostFirstURI(s string, tlsPort int) (string, error) {
 }
 
 // parseSIPURI accepts the shapes Plivo's docs and the platforms' guides use:
-// host, host:port, host;transport=tcp, sip:user@host, sip:host;transport=tls,
-// sips:host, and IPv4 or [IPv6] hosts, and user@host: the form sip:user@host
-// is sent in, so a URI read back can be passed again. It names the part that
-// is wrong rather than refusing the whole value.
+// host, host:port, host;transport=tcp, sip:host;transport=tls, sips:host, and
+// IPv4 or [IPv6] hosts. A user part (user@host) parses, for sip test's probe;
+// originationURI refuses it. It names the part that is wrong rather than
+// refusing the whole value.
 func parseSIPURI(raw string) (sipURI, error) {
 	s := normalizeSIPURI(raw)
 	if s == "" {

@@ -104,7 +104,7 @@ func runSubList(cmd *cobra.Command, args []string) error {
 	}
 	rows := [][]string{{"AUTH_ID", "NAME", "ENABLED", "CREATED"}}
 	for _, s := range resp.Objects {
-		rows = append(rows, []string{s.AuthID, s.Name, fmt.Sprintf("%v", s.Enabled), s.CreatedOn})
+		rows = append(rows, []string{s.AuthID, s.Name, fmt.Sprintf("%v", s.Enabled), s.Created})
 	}
 	return output.Table(os.Stdout, rows)
 }
@@ -133,8 +133,8 @@ func runSubGet(cmd *cobra.Command, args []string) error {
 		{"auth_id", s.AuthID},
 		{"name", s.Name},
 		{"enabled", fmt.Sprintf("%v", s.Enabled)},
-		{"created_on", s.CreatedOn},
-		{"modified_on", s.ModifiedOn},
+		{"created", s.Created},
+		{"modified", s.Modified},
 	})
 }
 

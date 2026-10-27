@@ -255,7 +255,7 @@ func destructiveVerbCases() []struct {
 		{"voice calls streams stop", []string{"voice", "calls", "streams", "stop", "CALL-UUID"}},
 		{"messaging sms powerpacks delete", []string{"messaging", "sms", "powerpacks", "delete", "PP-UUID"}},
 		{"messaging sms powerpacks numbers remove", []string{"messaging", "sms", "powerpacks", "numbers", "remove", "PP-UUID", "+14155551234"}},
-		{"messaging sms 10dlc links delete", []string{"messaging", "sms", "10dlc", "links", "delete", "LINK-ID"}},
+		{"messaging sms 10dlc links delete", []string{"messaging", "sms", "10dlc", "links", "delete", "CAMPAIGN-ID", "+14155551234"}},
 		{"agents delete", []string{"agents", "delete", "AGENT-ID"}},
 		// `plivo api` escape hatch: mutating methods share the spend-verb gate
 		// so an agent can't accidentally POST/PUT/PATCH/DELETE without --yes.
@@ -353,7 +353,7 @@ func spendVerbCases() []struct {
 		{"numbers buy", []string{"numbers", "buy", "+14155551234"}},
 		{"numbers buy --compliance-application-id", []string{"numbers", "buy", "+14155551234", "--compliance-application-id", "00000000-0000-0000-0000-000000000000"}},
 		{"numbers masking sessions create", []string{"numbers", "masking", "sessions", "create", "--first-party", "+1", "--second-party", "+2"}},
-		{"messaging sms 10dlc brands create", []string{"messaging", "sms", "10dlc", "brands", "create", "--alias", "ci", "--legal-name", "ACME Inc"}},
+		{"messaging sms 10dlc brands create", []string{"messaging", "sms", "10dlc", "brands", "create", "--alias", "ci", "--profile-uuid", "p1"}},
 		{"messaging sms 10dlc campaigns create", []string{
 			"messaging", "sms", "10dlc", "campaigns", "create",
 			"--alias", "ci",
@@ -361,8 +361,10 @@ func spendVerbCases() []struct {
 			"--usecase", "MARKETING",
 			"--description", "x",
 			"--message-flow", "x",
-			"--sample-message-1", "x",
+			"--sample-message-1", "x", "--sample-message-2", "x", "--vertical", "TECHNOLOGY", "--help-message", "x",
+			"--opt-out-message", "x", "--subscriber-optin", "--subscriber-optout", "--subscriber-help",
 		}},
+		{"messaging sms 10dlc campaigns update", []string{"messaging", "sms", "10dlc", "campaigns", "update", "c1", "--description", "x"}},
 	}
 }
 
@@ -516,5 +518,24 @@ func TestNew_clientPicksAuthMode(t *testing.T) {
 	// Cross-check the clierr surface tests still see the same code constant.
 	if clierr.CodeDestructiveRefused == "" {
 		t.Error("DESTRUCTIVE_REFUSED code constant unexpectedly empty")
+	}
+}
+
+// --cascade=false must reach the API, whose default deletes the app's endpoints.
+func TestAppDelete_sendsCascadeWhenGiven(t *testing.T) {
+	setFakeCreds(t)
+	del := []string{"account", "applications", "delete", "31000000000000001", "--yes", "--dry-run"}
+	for args, query := range map[string]string{"": "", "--cascade=false": "?cascade=false",
+		"--cascade=false --new-endpoint-application 31000000000000002": "?cascade=false&new_endpoint_application=31000000000000002"} {
+		if err, _, stderr := execCmd(t, append(del, strings.Fields(args)...)...); err != nil || !strings.HasSuffix(stderr, "/Application/31000000000000001/"+query+"\n") {
+			t.Errorf("%q: %v, %q; want query %q", args, err, stderr, query)
+		}
+	}
+	err, _, _ := execCmd(t, append(del, "--new-endpoint-application", "31000000000000002")...)
+	if e, ok := err.(*clierr.Error); !ok || e.Code != clierr.CodeBadFlag {
+		t.Errorf("--new-endpoint-application without --cascade=false: %v, want BAD_FLAG", err)
+	}
+	if err, _, _ := execCmd(t, "account", "applications", "delete", "31000000000000001"); err == nil || !strings.Contains(err.Error(), "and its endpoints") {
+		t.Errorf("the refusal should say the endpoints go too: %v", err)
 	}
 }

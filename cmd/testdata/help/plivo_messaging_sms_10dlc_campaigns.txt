@@ -11,7 +11,7 @@ Available Commands:
   create      Register a new campaign (spends money — TCR fee, requires --yes)
   get         Get a campaign by ID
   list        List campaigns
-  update      Update mutable campaign fields
+  update      Update a failed campaign (spends money — carrier review fee, requires --yes)
 
 Flags:
   -h, --help   help for campaigns

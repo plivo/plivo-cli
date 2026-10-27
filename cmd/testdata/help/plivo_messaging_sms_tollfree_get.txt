@@ -1,7 +1,7 @@
-Get a toll-free verification profile by uuid
+Get a toll-free verification request by its uuid
 
 Usage:
-  plivo messaging sms tollfree get <profile_uuid> [flags]
+  plivo messaging sms tollfree get <uuid> [flags]
 
 Flags:
   -h, --help   help for get

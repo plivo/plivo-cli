@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/plivo/plivo-cli/internal/api"
+	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -71,13 +72,21 @@ var applicationUpdateCmd = &cobra.Command{
 	RunE:  runAppUpdate,
 }
 
-var appDeleteCascade bool
+var (
+	appDeleteCascade        bool
+	appDeleteNewEndpointApp string
+)
 
 var applicationDeleteCmd = &cobra.Command{
 	Use:   "delete <app_id>",
 	Short: "Delete an application (requires --yes)",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runAppDelete,
+	Long: `Delete an application (requires --yes).
+
+Plivo deletes the app's endpoints with it. --cascade=false keeps them,
+detached from any app, or attached to the app --new-endpoint-application
+names.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runAppDelete,
 }
 
 func init() {
@@ -101,7 +110,8 @@ func init() {
 	applicationUpdateCmd.Flags().StringVar(&appUpdateHangupURL, "hangup-url", "", "new hangup URL")
 	applicationUpdateCmd.Flags().StringVar(&appUpdateMessageURL, "message-url", "", "new message URL")
 
-	applicationDeleteCmd.Flags().BoolVar(&appDeleteCascade, "cascade", false, "also detach numbers/endpoints")
+	applicationDeleteCmd.Flags().BoolVar(&appDeleteCascade, "cascade", true, "delete the app's endpoints too; --cascade=false keeps them")
+	applicationDeleteCmd.Flags().StringVar(&appDeleteNewEndpointApp, "new-endpoint-application", "", "with --cascade=false, the app_id the endpoints move to")
 
 	applicationCmd.AddCommand(applicationCreateCmd, applicationListCmd, applicationGetCmd, applicationUpdateCmd, applicationDeleteCmd)
 	accountCmd.AddCommand(applicationCmd)
@@ -261,16 +271,28 @@ func runAppUpdate(cmd *cobra.Command, args []string) error {
 
 func runAppDelete(cmd *cobra.Command, args []string) error {
 	appID := args[0]
-	if err := confirmDestructive("delete application " + appID); err != nil {
+	if appDeleteNewEndpointApp != "" && appDeleteCascade {
+		return clierr.BadFlag("new-endpoint-application", "needs --cascade=false: without it the endpoints are deleted with the app")
+	}
+	action := "delete application " + appID + " and its endpoints"
+	if !appDeleteCascade {
+		action = "delete application " + appID + ", keeping its endpoints"
+	}
+	if err := confirmDestructive(action); err != nil {
 		return err
 	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
 	}
+	// Sent whenever given: the API's own default is true, so leaving out a
+	// false deletes the endpoints.
 	q := url.Values{}
-	if appDeleteCascade {
-		q.Set("cascade", "true")
+	if cmd.Flags().Changed("cascade") {
+		q.Set("cascade", strconv.FormatBool(appDeleteCascade))
+	}
+	if appDeleteNewEndpointApp != "" {
+		q.Set("new_endpoint_application", appDeleteNewEndpointApp)
 	}
 	apiErr, err := client.Do("DELETE", client.AccountURL("Application", appID), nil, q, nil)
 	if err != nil {

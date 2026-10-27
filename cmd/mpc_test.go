@@ -71,6 +71,24 @@ func TestMPCCreate_pointsToParticipantAdd(t *testing.T) {
 	}
 }
 
+// Each verb sends the request the API documents for it.
+func TestParticipantVerbs_sendWhatTheAPITakes(t *testing.T) {
+	setFakeCreds(t)
+	for args, want := range map[string]string{
+		"multiparty participant mute room 11":                             `/MultiPartyCall/name_room/Participant/11/ body: { "mute": true }`,
+		"multiparty participant unmute room 11":                           `/MultiPartyCall/name_room/Participant/11/ body: { "mute": false }`,
+		"multiparty participant hold room 11":                             `/MultiPartyCall/name_room/Participant/11/ body: { "hold": true }`,
+		"multiparty participant unhold room 11":                           `/MultiPartyCall/name_room/Participant/11/ body: { "hold": false }`,
+		"conferences member kick room 11":                                 "/Conference/room/Member/11/Kick/ body: {}",
+		"conferences member play room 11 --url https://example.com/a.mp3": `/Conference/room/Member/11/Play/ body: { "url": "https://example.com/a.mp3" }`,
+	} {
+		err, _, stderr := execCmd(t, append(strings.Fields("voice "+args), "--yes", "--dry-run")...)
+		if got := strings.Join(strings.Fields(stderr), " "); err != nil || !strings.HasPrefix(got, "[dry-run] POST ") || !strings.HasSuffix(got, want) {
+			t.Errorf("%s: %v, sent %q; want a POST to ...%s", args, err, got, want)
+		}
+	}
+}
+
 // A blank call ID is refused, not sent as the call named "name_".
 func TestMPCEnd_refusesABlankID(t *testing.T) {
 	setFakeCreds(t)

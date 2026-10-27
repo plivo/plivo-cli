@@ -64,7 +64,8 @@ HTTP/WebSocket server, points the app at the tunnel, and forwards
 incoming call audio to your local WebSocket handler. Restores the
 original answer_url on Ctrl+C, or when the tunnel stops (then exits 3).
 The original is saved in ~/.plivo first, so after a killed run the next
-one restores it, and a second forward on the app is refused while one runs.
+one restores it and, on macOS and Linux, stops the tunnel it left running;
+a second forward on the app is refused while one runs.
 A localhost.run or trycloudflare.com answer_url is never taken as the
 original. An ngrok one is, with a warning: ngrok also gives fixed domains.
 
@@ -162,7 +163,8 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	original := &forwardState{AnswerURL: app.AnswerURL, AnswerMethod: app.AnswerMethod}
 	manualRestore := restoreCommand(streamsFwdAppID, "<url>", "")
 	onTunnel, throwaway := tunnel.IsTunnelURL(app.AnswerURL)
-	switch saved := readForwardState(statePath); {
+	saved := readForwardState(statePath)
+	switch {
 	case saved != nil && saved.TunnelAnswerURL == app.AnswerURL:
 		if processAlive(saved.PID) {
 			return &clierr.Error{
@@ -216,6 +218,11 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	// A forward killed before its teardown leaves its tunnel process running.
+	if saved != nil && !processAlive(saved.PID) && tunnel.StopLeftover(saved.TunnelPID, saved.TunnelArgs) {
+		fmt.Fprintf(os.Stderr, "Stopped the tunnel an earlier forward left running (pid %d).\n", saved.TunnelPID)
+	}
+
 	// --- Bind local server on random port ---
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -255,6 +262,7 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	if original != nil {
 		state := *original
 		state.TunnelAnswerURL, state.PID = tunnelAnswerURL, os.Getpid()
+		state.TunnelPID, state.TunnelArgs = tn.PID, tn.Args
 		if err := writeForwardState(statePath, state); err != nil {
 			listener.Close()
 			return clierr.Wrap(fmt.Errorf("save the app's answer URL before changing it: %w", err))
@@ -405,12 +413,14 @@ func restoreAnswerURL(client *api.Client, appID, answerURL, method string) error
 // forwardState is the app's own answer URL and method, saved with the tunnel
 // URL and pid of the run before it points the app at that tunnel, and removed
 // once they are restored. A run killed in between leaves it, so the next run
-// restores them, not the dead tunnel.
+// restores them, not the dead tunnel, and stops that tunnel's process.
 type forwardState struct {
-	AnswerURL       string `json:"answer_url"`
-	AnswerMethod    string `json:"answer_method"`
-	TunnelAnswerURL string `json:"tunnel_answer_url"` // what that run pointed the app at
-	PID             int    `json:"pid"`               // that run's process
+	AnswerURL       string   `json:"answer_url"`
+	AnswerMethod    string   `json:"answer_method"`
+	TunnelAnswerURL string   `json:"tunnel_answer_url"` // what that run pointed the app at
+	PID             int      `json:"pid"`               // that run's process
+	TunnelPID       int      `json:"tunnel_pid,omitempty"`
+	TunnelArgs      []string `json:"tunnel_args,omitempty"` // its command line, checked before it is stopped
 }
 
 // forwardStatePath is the app's state file in the CLI's config directory.
