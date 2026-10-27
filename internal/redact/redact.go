@@ -1,5 +1,5 @@
-// Package redact removes credentials from request bodies before they are
-// shown to a human or written to a log.
+// Package redact removes credentials from request and response bodies before
+// they are shown to a human or written to a log.
 //
 // SA-05: --log-level debug and --dry-run printed the request body verbatim,
 // so `plivo voice endpoints create --password ...` put the SIP password into
@@ -12,6 +12,7 @@ package redact
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/url"
 	"regexp"
 	"strings"
@@ -104,3 +105,69 @@ func Body(body []byte) []byte {
 
 // String is Body for callers holding a string.
 func String(s string) string { return string(Body([]byte(s))) }
+
+// Secrets returns a JSON response body with the value of every field named
+// *password or *auth_token replaced by Placeholder, and the rest, key order
+// included, byte for byte as it was. Subaccount reads carry auth_token and
+// new_auth_token, and endpoint reads a password hash.
+//
+// Narrower than Body on purpose: responses name IDs after credentials
+// (credential_uuid). A null or empty value hides nothing and is left alone;
+// any other, an object or a number too, is replaced whole. A body that is not
+// JSON comes back unchanged.
+func Secrets(body []byte) []byte {
+	dec := json.NewDecoder(bytes.NewReader(body))
+	var out []byte
+	done := 0 // body[:done] is in out already
+	// One frame per open object or array; keyNext while an object waits for a key.
+	type frame struct{ object, keyNext bool }
+	var stack []frame
+	for {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return body
+		}
+		top := len(stack) - 1
+		switch t := tok.(type) {
+		case json.Delim:
+			if t == '{' || t == '[' {
+				stack = append(stack, frame{object: t == '{', keyNext: t == '{'})
+				continue
+			}
+			stack, top = stack[:top], top-1
+		case string:
+			if top >= 0 && stack[top].keyNext {
+				stack[top].keyNext = false
+				if !secretField(t) {
+					continue // the next token is this key's value
+				}
+				var v json.RawMessage
+				if dec.Decode(&v) != nil {
+					return body
+				}
+				if s := string(v); s != "null" && s != `""` && s != `"`+Placeholder+`"` {
+					end := int(dec.InputOffset())
+					out = append(append(out, body[done:end-len(v)]...), `"`+Placeholder+`"`...)
+					done = end
+				}
+			}
+		}
+		// A value ended, so an object waits for its next key.
+		if top >= 0 && stack[top].object {
+			stack[top].keyNext = true
+		}
+	}
+	if out == nil {
+		return body
+	}
+	return append(out, body[done:]...)
+}
+
+// secretField reports whether a response field holds a credential.
+func secretField(k string) bool {
+	k = strings.ToLower(k)
+	return strings.HasSuffix(k, "password") || strings.HasSuffix(k, "auth_token")
+}

@@ -57,7 +57,7 @@ func TestSIPURIsCreate_platformFillsThePublishedValues(t *testing.T) {
 		{"retell", "sip.retellai.com;transport=tcp", []string{"--platform", "retell"}},
 		{"vapi us", "sip.vapi.ai;transport=udp", []string{"--platform", "vapi"}},
 		{"vapi eu", "sip.eu.vapi.ai;transport=udp", []string{"--platform", "vapi", "--uri", "sip.eu.vapi.ai"}},
-		{"typed values win", "+14155551234@sip.rtc.elevenlabs.io:5080;transport=tcp", []string{"--platform", "elevenlabs", "--uri", "sip:+14155551234@sip.rtc.elevenlabs.io:5080;transport=tcp"}},
+		{"typed values win", "sip.rtc.elevenlabs.io:5080;transport=tcp", []string{"--platform", "elevenlabs", "--uri", "sip:sip.rtc.elevenlabs.io:5080;transport=tcp"}},
 		{"transport without a platform", "sip.example.com;transport=tls", []string{"--uri", "sip.example.com", "--transport", "tls"}},
 		{"elevenlabs sips", "sip.rtc.elevenlabs.io:5061;transport=tls", []string{"--platform", "elevenlabs", "--uri", "sips:sip.rtc.elevenlabs.io"}},
 		{"livekit sips", "abc123.sip.livekit.cloud;transport=tls", []string{"--platform", "livekit", "--uri", "sips:abc123.sip.livekit.cloud"}},

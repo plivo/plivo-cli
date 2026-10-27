@@ -1,18 +1,22 @@
-Submit a new toll-free verification profile
+Submit one toll-free number for verification. The business's details come
+from a profile, the kind 10DLC brands use: list yours with
+plivo api GET /Profile/ (fields: plivo docs show messaging/api/10dlc/profile).
 
 Usage:
   plivo messaging sms tollfree submit [flags]
 
 Flags:
-      --business-name string                business name (required)
-      --business-website string             business website URL
   -h, --help                                help for submit
-      --message-volume string               expected volume: LOW|MEDIUM|HIGH
-      --numbers string                      comma-separated toll-free numbers to verify
-      --opt-in-workflow string              describe how recipients opt in
-      --production-message-content string   sample message content
-      --use-case string                     use case category (required)
-      --use-case-summary string             free-text use case summary
+      --message-volume string               messages a month: 10, 100, 1000, 10000, 100000, 250000, 500000, 750000, 1000000, 5000000 or 10,000,000+ (required)
+      --number string                       the toll-free number: digits with the country code, e.g. 18005550100 (required)
+      --opt-in-image-url string             URL of an image or document that shows the opt-in (required)
+      --opt-in-type string                  how recipients opt in: VERBAL|WEB_FORM|PAPER_FORM|VIA_TEXT|MOBILE_QR_CODE (required)
+      --privacy-policy-link string          public URL of your privacy policy (required)
+      --production-message-content string   sample messages you will send (required)
+      --profile-uuid string                 the profile holding the business's details (required)
+      --terms-and-conditions-link string    public URL of your terms and conditions (required)
+      --use-case string                     use case, or several comma-separated, e.g. 2FA,CUSTOMER_CARE (required)
+      --use-case-summary string             how the number's messages are used (required)
 
 Global Flags:
       --dry-run            print the HTTP request without sending
@@ -23,5 +27,6 @@ Global Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
+      --show-secrets       show auth tokens and passwords in API responses instead of [REDACTED]
       --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts

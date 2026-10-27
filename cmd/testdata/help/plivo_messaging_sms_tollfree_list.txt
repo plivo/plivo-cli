@@ -1,4 +1,10 @@
-List toll-free verification profiles
+List toll-free verification requests. Without a date filter the API returns
+only those created in the last 7 days. For a wider window give both ends, at
+most 2 years apart:
+
+  plivo api GET /TollfreeVerification/ --query created__gte=2026-01-01 --query created__lte=2026-06-30
+
+tollfree get <uuid> reads a request of any age.
 
 Usage:
   plivo messaging sms tollfree list [flags]
@@ -19,5 +25,6 @@ Global Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
+      --show-secrets       show auth tokens and passwords in API responses instead of [REDACTED]
       --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts

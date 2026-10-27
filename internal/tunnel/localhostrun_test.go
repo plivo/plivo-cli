@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -154,5 +155,25 @@ func TestIsTunnelURL(t *testing.T) {
 		if tn, throwaway := IsTunnelURL(u); tn != want[0] || throwaway != want[1] {
 			t.Errorf("IsTunnelURL(%q) = %v, %v, want %v", u, tn, throwaway, want)
 		}
+	}
+}
+
+// A leftover tunnel is stopped only while its pid runs the recorded command line.
+func TestStopLeftover_onlyTheRecordedCommandLine(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("reads another process's command line on linux and darwin only")
+	}
+	cmd := exec.Command("sleep", "30")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	tn := watch(cmd)
+	t.Cleanup(func() { _ = tn.Close() })
+	if StopLeftover(tn.PID, []string{"sleep", "31"}) || !StopLeftover(tn.PID, tn.Args) {
+		t.Fatal("want only the recorded command line stopped")
+	}
+	<-tn.Done
+	if tn.Err() == nil {
+		t.Error("the tunnel process outlived the stop")
 	}
 }

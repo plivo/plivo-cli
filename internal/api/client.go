@@ -158,6 +158,11 @@ type Client struct {
 	HTTP       *http.Client
 	DryRun     bool
 	LogRequest func(method, url string, body []byte)
+
+	// badPart is the first path part AccountURL or LookupURL refused. Do and
+	// DoMultipart return it instead of sending or printing anything, so the
+	// commands building those URLs need no check of their own.
+	badPart *clierr.Error
 }
 
 // IsScopedToken reports whether AuthToken is a scoped token (stk_ prefix).
@@ -176,23 +181,50 @@ func New(authID, authToken string, timeout time.Duration) *Client {
 		AuthID:           authID,
 		AuthToken:        authToken,
 		TelemetryEnabled: true,
-		HTTP:             &http.Client{Timeout: timeout},
+		HTTP:             &http.Client{Timeout: timeout, CheckRedirect: noRedirect},
 	}
 }
 
-// AccountURL returns BaseURL + "/v1/Account/{auth_id}/" + joined parts + "/".
+// noRedirect stops at a 3xx and returns it, which Do reports as an error.
+// Following one re-sent the Authorization header to another port of the same
+// host, and a 307's body to any host.
+func noRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+// AccountURL returns BaseURL + "/v1/Account/{auth_id}/" + parts + "/", each
+// part path-escaped, so an ID holding '/', '?', '#' or a newline stays one
+// segment: unescaped, `conferences hangup 'team#2'` ended conference team.
 func (c *Client) AccountURL(parts ...string) string {
-	u := c.BaseURL + "/v1/Account/" + c.AuthID + "/"
-	if len(parts) == 0 {
-		return u
+	u := c.BaseURL + "/v1/Account/" + url.PathEscape(c.AuthID) + "/"
+	for _, p := range parts {
+		u += c.pathPart(p) + "/"
 	}
-	return u + strings.Join(parts, "/") + "/"
+	return u
 }
 
-// LookupURL returns the Lookup API URL for a number.
-// No trailing slash; the caller appends ?type=carrier.
+// LookupURL returns the Lookup API URL for a number, escaped as AccountURL
+// escapes a part. No trailing slash; the caller appends ?type=carrier.
 func (c *Client) LookupURL(number string) string {
-	return c.BaseURL + "/v1/Lookup/Number/" + number
+	return c.BaseURL + "/v1/Lookup/Number/" + c.pathPart(number)
+}
+
+// pathPart escapes one path segment, all but its commas: member and
+// participant IDs take a comma list (1,2). A blank, "." or ".." one names
+// another resource (/Call//, /Conference/../), so the first is kept as badPart.
+func (c *Client) pathPart(p string) string {
+	if c.badPart == nil && (strings.TrimSpace(p) == "" || p == "." || p == "..") {
+		c.badPart = clierr.BadInput(fmt.Sprintf("%q is not an ID or name", p))
+		c.badPart.Hint = "IDs and names go into the request path, where a blank one, . or .. would reach a different resource."
+	}
+	return strings.ReplaceAll(url.PathEscape(p), "%2C", ",")
+}
+
+// Refused is the path part refused so far, or nil: for a caller that swallows
+// Do's error, as a best-effort read does, and must not go on regardless.
+func (c *Client) Refused() error {
+	if c.badPart == nil {
+		return nil
+	}
+	return c.badPart
 }
 
 // BuddyURL joins BuddyBaseURL with the given absolute path. AI surfaces
@@ -216,10 +248,13 @@ func (c *Client) BuddyURL(path string) string {
 // If body is non-nil it is marshalled to JSON.
 // queryParams (if non-nil and non-empty) are appended to the URL.
 // On success (2xx), response is unmarshalled into out (if non-nil).
-// On API error (>=400), returns an *APIError with no Go error.
+// On API error (>=400) or a redirect, returns an *APIError with no Go error.
 // On transport errors (no answer, or a cut-off one), returns a nil *APIError
 // and, as the Go error, a NETWORK_ERROR or UPSTREAM_TIMEOUT *clierr.Error.
 func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, out any) (*APIError, error) {
+	if c.badPart != nil {
+		return nil, c.badPart
+	}
 	if len(queryParams) > 0 {
 		sep := "?"
 		if strings.Contains(fullURL, "?") {
@@ -294,8 +329,8 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 		return nil, transportError(method, req.URL.Host, fmt.Errorf("read response: %w", err))
 	}
 
-	if resp.StatusCode >= 400 {
-		return parseError(resp.StatusCode, resp.Header, respBytes), nil
+	if resp.StatusCode >= 300 { // a redirect too, as none is followed
+		return parseError(resp, respBytes), nil
 	}
 	if method != http.MethodGet {
 		WriteSent.Store(true)
@@ -309,7 +344,7 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 		if err := json.Unmarshal(respBytes, out); err != nil {
 			return nil, fmt.Errorf("decode response: %w (body: %s)", err, string(respBytes))
 		}
-		// Keep the bytes so -o json can echo them losslessly.
+		// Keep the bytes so -o json can echo them; SetRaw hides credentials.
 		if rc, ok := out.(RawCapturer); ok {
 			rc.SetRaw(respBytes)
 		}
@@ -322,6 +357,9 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 // e.g. "documents[0].file" -> "/path/passport.pdf"). Auth, headers, dry-run,
 // and error handling mirror Do; used by the compliance create/update verbs.
 func (c *Client) DoMultipart(method, fullURL string, dataJSON []byte, files map[string]string, out any) (*APIError, error) {
+	if c.badPart != nil {
+		return nil, c.badPart
+	}
 	if c.DryRun {
 		fmt.Fprintf(os.Stderr, "[dry-run] %s %s (multipart/form-data)\n", method, fullURL)
 		if len(dataJSON) > 0 {
@@ -395,8 +433,8 @@ func (c *Client) DoMultipart(method, fullURL string, dataJSON []byte, files map[
 	if err != nil {
 		return nil, transportError(method, req.URL.Host, fmt.Errorf("read response: %w", err))
 	}
-	if resp.StatusCode >= 400 {
-		return parseError(resp.StatusCode, resp.Header, respBytes), nil
+	if resp.StatusCode >= 300 { // a redirect too, as none is followed
+		return parseError(resp, respBytes), nil
 	}
 	if method != http.MethodGet {
 		WriteSent.Store(true)
@@ -408,7 +446,7 @@ func (c *Client) DoMultipart(method, fullURL string, dataJSON []byte, files map[
 		if err := json.Unmarshal(respBytes, out); err != nil {
 			return nil, fmt.Errorf("decode response: %w (body: %s)", err, string(respBytes))
 		}
-		// Keep the bytes so -o json can echo them losslessly.
+		// Keep the bytes so -o json can echo them; SetRaw hides credentials.
 		if rc, ok := out.(RawCapturer); ok {
 			rc.SetRaw(respBytes)
 		}

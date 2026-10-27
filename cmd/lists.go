@@ -545,7 +545,7 @@ var (
 	verifyStatusValues  = []string{"in-progress", "verified", "expired"}
 	agentStateValues    = []string{"DRAFT", "ACTIVE", "PAUSED"}
 	complianceStatuses  = []string{"draft", "submitted", "accepted", "rejected", "suspended", "expired"}
-	complianceNumTypes  = []string{"local", "mobile", "tollfree"}
+	complianceNumTypes  = []string{"local", "mobile", "tollfree", "national"} // national: accepted, not in the docs
 	complianceUserTypes = []string{"individual", "business"}
 )
 
