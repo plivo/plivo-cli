@@ -130,8 +130,8 @@ func applyBuddyURL(c *api.Client) error {
 	if u == "" {
 		return nil
 	}
-	if !safeBuddyURL(u) {
-		e := clierr.BadInput(fmt.Sprintf("%s is %q: the assistant URL must be https, or http to this machine", source, u))
+	if !safeBuddyURL(u) { // not echoed: it may hold a password
+		e := clierr.BadInput(source + " must be https, or http to this machine")
 		e.Hint = "Use an https URL, or http://127.0.0.1, http://[::1] or http://localhost for a local server; unset it to use the default."
 		return e
 	}
@@ -139,15 +139,21 @@ func applyBuddyURL(c *api.Client) error {
 	return nil
 }
 
-// safeBuddyURL reports whether u is https, or http to a loopback address.
+// safeBuddyURL reports whether u is https, or http to this machine.
 func safeBuddyURL(u string) bool {
 	p, err := url.Parse(u)
 	if err != nil || p.Host == "" {
 		return false
 	}
+	return p.Scheme == "https" || (p.Scheme == "http" && onThisMachine(p))
+}
+
+// onThisMachine reports whether a URL's host is this machine: localhost,
+// 127.0.0.0/8 or ::1, in any letter case. url.Parse lowers the scheme.
+func onThisMachine(p *url.URL) bool {
 	host := p.Hostname()
 	ip := net.ParseIP(host)
-	return p.Scheme == "https" || (p.Scheme == "http" && (host == "localhost" || (ip != nil && ip.IsLoopback())))
+	return strings.EqualFold(host, "localhost") || (ip != nil && ip.IsLoopback())
 }
 
 func runAsk(cmd *cobra.Command, args []string) error {

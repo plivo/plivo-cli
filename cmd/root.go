@@ -275,20 +275,19 @@ func getClient() (*api.Client, string, error) {
 
 // apiBaseURL is api.DefaultBaseURL, or PLIVO_API_URL when set, to point the CLI
 // at a local capture server. The requests carry the account's credentials, so
-// only an http or https URL on this machine is taken; anything else is refused,
-// never ignored.
+// only an http or https URL on this machine is taken, and with no user, query
+// or fragment, as the request path is appended to it. Anything else is refused,
+// never ignored, and not echoed: it may hold a password.
 func apiBaseURL() (string, error) {
 	u := os.Getenv("PLIVO_API_URL")
 	if u == "" {
 		return api.DefaultBaseURL, nil
 	}
-	if p, err := url.Parse(u); err == nil && (p.Scheme == "http" || p.Scheme == "https") {
-		switch p.Hostname() {
-		case "127.0.0.1", "::1", "localhost":
-			return strings.TrimRight(u, "/"), nil
-		}
+	if p, err := url.Parse(u); err == nil && (p.Scheme == "http" || p.Scheme == "https") && onThisMachine(p) &&
+		p.User == nil && !strings.ContainsAny(u, "?#") {
+		return strings.TrimRight(u, "/"), nil
 	}
-	e := clierr.BadInput(fmt.Sprintf("PLIVO_API_URL is %q: it must be an http or https URL on this machine", u))
+	e := clierr.BadInput("PLIVO_API_URL must be an http or https URL on this machine, with no user, query or fragment")
 	e.Hint = "Use host 127.0.0.1, [::1] or localhost with any port, e.g. http://127.0.0.1:18555/v1/cli/api, or unset it to reach the Plivo API."
 	return "", e
 }

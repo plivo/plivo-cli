@@ -216,6 +216,13 @@ func TestAPIURLOverride_isLoopbackOnly(t *testing.T) {
 	if got := hits(); len(got) != 1 || got[0] != "GET /v1/cli/api/v1/Account/CIFAKEPLACEHOLDER001/Call/abc/" {
 		t.Errorf("sent %q, want the one GET to the loopback server", got)
 	}
+	for u, ok := range map[string]bool{"HTTP://LocalHost:1": true, "http://127.0.0.2:1/": true, "http://localhost.example.com": false,
+		"http://u:SECRET@127.0.0.1:1": false, "http://127.0.0.1:1/?": false, "http://127.0.0.1:1/#": false} {
+		t.Setenv("PLIVO_API_URL", u)
+		if _, err := apiBaseURL(); (err == nil) != ok || strings.Contains(fmt.Sprint(err), "SECRET") {
+			t.Errorf("%q: got %v", u, err)
+		}
+	}
 }
 
 // ─── Destructive verbs refuse without --yes ──────────────────────────────────
