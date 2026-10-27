@@ -22,12 +22,14 @@ import (
 	"github.com/plivo/plivo-cli/internal/clierr"
 )
 
-// The QA suite runs commands in-process against a local server and checks
-// what each sends, its exit code and its output:
+// The QA suite runs every command in-process against a local server and
+// checks what it sends, its exit code and its output:
 //
 //   - TestQA_regressions replays one case per QA finding, named round/item as
 //     QA filed it (qa_r1_test.go, qa_r2_test.go, qa_r3_test.go), and what QA
 //     confirmed works and must keep working (qa_keep_test.go).
+//   - TestQA_sweep* look for the same kinds of bug in every command
+//     (qa_sweep_test.go, with the invocations in qa_samples_test.go).
 //
 // Every run also checks its exit code is the one its error's code maps to.
 
