@@ -89,6 +89,22 @@ jobs:
       - name: tap freshness
         run: ./scripts/check-tap-fresh.sh
 
+  # Every QA finding replayed, every command swept for the same kinds of bug,
+  # requests and responses held to the Plivo Go SDK.
+  qa-suite:
+    name: qa-suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: make qa
+        run: make qa
+
   # Build and run the binary natively on every platform we ship.
   smoke-os:
     name: smoke-os (${{ matrix.runner }})

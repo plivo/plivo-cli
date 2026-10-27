@@ -17,7 +17,7 @@ VERSION := $(shell git describe --tags --always 2>/dev/null || echo dev)
 # -s removes the symbol table, -w drops DWARF debug info — typical for release.
 LDFLAGS := -s -w -X $(PKG)/internal/version.Value=$(VERSION)
 
-.PHONY: default build tiny build-all install run clean fmt vet test sdk-params docs skill-hashes plugin-skills help
+.PHONY: default build tiny build-all install run clean fmt vet test qa sdk-params docs skill-hashes plugin-skills help
 
 default: ## Debug build with symbols (best for local dev)
 	go build -o $(BINARY) .
@@ -56,6 +56,10 @@ vet: ## go vet
 
 test: ## go test
 	go test ./...
+
+# Hermetic: no PLIVO_* variable reaches the tests, and they reach no network.
+qa: ## Run the QA suite (cmd/qa_*_test.go; CONTRIBUTING.md says how to add a case)
+	env $$(env | sed -n 's/^\(PLIVO_[A-Za-z0-9_]*\)=.*/-u \1/p') go test -race -count=1 -run '^TestQA' ./cmd/
 
 sdk-params: ## Rewrite cmd/testdata/sdk/requests.json from a plivo-go checkout: make sdk-params SDK=<path>
 	@test -n "$(SDK)" || { echo "usage: make sdk-params SDK=<path to a github.com/plivo/plivo-go checkout>"; exit 2; }

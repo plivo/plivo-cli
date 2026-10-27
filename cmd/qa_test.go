@@ -34,6 +34,7 @@ import (
 //     Go SDK and the API docs (qa_sdk_test.go, testdata/sdk).
 //
 // Every run also checks its exit code is the one its error's code maps to.
+// `make qa` runs only these. CONTRIBUTING.md says how to add a case.
 
 // pending holds the findings whose fix is not on main yet, each with what is
 // still wrong. Their regression cases are skipped, and so is a sweep failure
