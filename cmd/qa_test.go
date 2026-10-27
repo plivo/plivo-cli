@@ -42,9 +42,6 @@ import (
 // the PR that fixes a finding must delete its entry (and its qaKnownGaps).
 var qaPending = map[string]string{
 	"r2/5e": "sip test probes the host it was given, never the target of its SRV record (open decision: it warns about SRV until it is known whether Plivo follows SRV)",
-
-	// Found by the SDK oracle; not yet checked against the live API.
-	"sdk/streams": "streams list reads stream_url and resource_uri; the API sends service_url",
 }
 
 // qaAuthID is the account every request goes to and qaToken its auth token;

@@ -583,15 +583,15 @@ type MPCParticipantList struct {
 // AudioStream — /Account/{id}/Call/{uuid}/Stream/
 type AudioStream struct {
 	RawBody
-	StreamID      string `json:"stream_id,omitempty"`
-	CallUUID      string `json:"call_uuid,omitempty"`
-	StreamURL     string `json:"stream_url,omitempty"`
-	Status        string `json:"status,omitempty"`
-	AudioTrack    string `json:"audio_track,omitempty"`
-	BiDirectional bool   `json:"bidirectional,omitempty"`
-	StartTime     string `json:"start_time,omitempty"`
-	EndTime       string `json:"end_time,omitempty"`
-	ResourceURI   string `json:"resource_uri,omitempty"`
+	StreamID          string `json:"stream_id,omitempty"`
+	CallUUID          string `json:"call_uuid,omitempty"`
+	ServiceURL        string `json:"service_url,omitempty"` // the WebSocket the audio goes to
+	Status            string `json:"status,omitempty"`
+	AudioTrack        string `json:"audio_track,omitempty"`
+	BiDirectional     bool   `json:"bidirectional,omitempty"`
+	StatusCallbackURL string `json:"status_callback_url,omitempty"`
+	StartTime         string `json:"start_time,omitempty"`
+	EndTime           string `json:"end_time,omitempty"`
 }
 
 type AudioStreamList struct {

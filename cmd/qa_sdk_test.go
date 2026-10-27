@@ -63,18 +63,14 @@ var qaFixtures = map[string]string{
 // qaOracleOwners names the open finding about a command, for what the
 // oracle finds in it: its response for a get or list, its requests for the
 // rest.
-var qaOracleOwners = map[string]string{
-	"voice calls streams list": "sdk/streams",
-}
+var qaOracleOwners = map[string]string{}
 
 // qaKnownGaps are what the oracle finds today, by the finding that reports
 // it: the name of a field --schema lists that the response lacks, or of a
 // parameter the references do not take; "*" covers anything in that
 // finding's commands. A gap counts only while its finding is pending, and
 // each must still turn up: the fix that clears one deletes it.
-var qaKnownGaps = map[string][]string{
-	"sdk/streams": {"resource_uri", "stream_url"},
-}
+var qaKnownGaps = map[string][]string{}
 
 // qaGapOwner is the first pending finding of owners whose known gaps hold
 // name ("" for a whole request or response), or "" when none does. It marks

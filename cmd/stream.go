@@ -120,7 +120,7 @@ func runStreamGet(cmd *cobra.Command, args []string) error {
 	return output.KV(os.Stdout, [][2]string{
 		{"stream_id", s.StreamID},
 		{"call_uuid", s.CallUUID},
-		{"stream_url", s.StreamURL},
+		{"service_url", s.ServiceURL},
 		{"status", s.Status},
 		{"audio_track", s.AudioTrack},
 		{"bidirectional", fmt.Sprintf("%v", s.BiDirectional)},
