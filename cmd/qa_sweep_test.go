@@ -39,16 +39,12 @@ var qaSweepReplies = map[string]string{
 // ("" for none). When every owner is pending it skips instead.
 func qaVerdict(t *testing.T, problems map[string][]string) {
 	t.Helper()
-	var failing, skipped []string
-	owners := make([]string, 0, len(problems))
-	for owner := range problems {
-		owners = append(owners, owner)
-	}
-	sort.Strings(owners)
-	for _, owner := range owners {
+	var failing, skipped, owners []string
+	for _, owner := range qaSorted(problems) {
 		text := strings.Join(problems[owner], "\n")
 		if reason, ok := qaPending[owner]; ok {
 			skipped = append(skipped, fmt.Sprintf("pending %s (%s):\n%s", owner, reason, text))
+			owners = append(owners, owner)
 			continue
 		}
 		if owner != "" {
@@ -60,7 +56,7 @@ func qaVerdict(t *testing.T, problems map[string][]string) {
 	case len(failing) > 0:
 		t.Error(strings.Join(append(failing, skipped...), "\n"))
 	case len(skipped) > 0:
-		t.Skip(strings.Join(skipped, "\n"))
+		qaSkip(t, strings.Join(skipped, "\n"), owners...)
 	}
 }
 
@@ -73,7 +69,7 @@ func qaControl(t *testing.T, s qaSample, r qaResult) {
 	}
 	msg := fmt.Sprintf("the sample does not run: exit %d (%v), tried to reach %v", r.exit, r.err, r.blocked)
 	if owner := qaAfterFix[s.path].owner; qaPending[owner] != "" {
-		t.Skipf("pending %s (%s): %s", owner, qaPending[owner], msg)
+		qaSkip(t, fmt.Sprintf("pending %s (%s): %s", owner, qaPending[owner], msg), owner)
 	}
 	t.Fatal(msg)
 }
@@ -220,7 +216,7 @@ func TestQA_sweepDryRun(t *testing.T) {
 	for _, s := range append(qaAPISamples(), qaCollect(qaLocalSamples)...) {
 		t.Run(s.path, func(t *testing.T) {
 			if owner := qaDryRunOwners[s.path]; qaPending[owner] != "" {
-				t.Skipf("pending %s: %s", owner, qaPending[owner])
+				qaSkip(t, fmt.Sprintf("pending %s: %s", owner, qaPending[owner]), owner)
 			}
 			writeProfile(t, home, "active = \"test\"\n\n[profiles.test]\nauth_id = \"CIFAKEPLACEHOLDER001\"\n\n[profiles.other]\nauth_id = \"CIFAKEPLACEHOLDER002\"\n")
 			if err := config.SetToken("test", "qa-keychain-value"); err != nil {

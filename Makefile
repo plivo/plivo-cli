@@ -57,8 +57,10 @@ vet: ## go vet
 test: ## go test
 	go test ./...
 
+# Run in the package directory, where go test shows the skips per pending
+# finding even when everything passes.
 qa: ## Run the QA suite (cmd/qa_*_test.go; CONTRIBUTING.md says how to add a case)
-	go test -race -count=1 -run '^TestQA' ./cmd/
+	cd cmd && go test -race -count=1 -run '^TestQA'
 
 sdk-params: ## Rewrite cmd/testdata/sdk/requests.json from a plivo-go checkout: make sdk-params SDK=<path>
 	@test -n "$(SDK)" || { echo "usage: make sdk-params SDK=<path to a github.com/plivo/plivo-go checkout>"; exit 2; }

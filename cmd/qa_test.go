@@ -177,7 +177,7 @@ func TestQA_regressions(t *testing.T) {
 			case isPending && len(problems) == 0:
 				t.Errorf("%s passes now: delete it from qaPending", c.id)
 			case isPending:
-				t.Skipf("pending: %s\n%s", reason, strings.Join(problems, "\n"))
+				qaSkip(t, fmt.Sprintf("pending: %s\n%s", reason, strings.Join(problems, "\n")), c.id)
 			case len(problems) > 0:
 				t.Errorf("%s (%s):\n%s", c.id, c.title, strings.Join(problems, "\n"))
 			}
@@ -187,6 +187,38 @@ func TestQA_regressions(t *testing.T) {
 		if _, oracle := qaKnownGaps[id]; !seen[id] && !oracle {
 			t.Errorf("qaPending names %s, which has no case and no known gaps in the SDK oracle", id)
 		}
+	}
+}
+
+// qaSkips counts the checks skipped for each pending finding.
+var (
+	qaSkipsMu sync.Mutex
+	qaSkips   = map[string]int{}
+)
+
+// qaSkip skips t for the pending findings owners, counting it for each.
+func qaSkip(t *testing.T, msg string, owners ...string) {
+	t.Helper()
+	qaSkipsMu.Lock()
+	for _, owner := range owners {
+		qaSkips[owner]++
+	}
+	qaSkipsMu.Unlock()
+	t.Skip(msg)
+}
+
+// qaPrintSkips prints how many checks each pending finding skipped. TestMain
+// calls it once the tests are done; make qa runs go test in the package
+// directory, where it shows without -v.
+func qaPrintSkips(w io.Writer) {
+	qaSkipsMu.Lock()
+	defer qaSkipsMu.Unlock()
+	if len(qaSkips) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "QA checks skipped while their finding is pending:")
+	for _, owner := range qaSorted(qaSkips) {
+		fmt.Fprintf(w, "  %-14s %4d  %s\n", owner, qaSkips[owner], qaPending[owner])
 	}
 }
 

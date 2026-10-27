@@ -44,7 +44,7 @@ make docs
 
 ### When QA finds a bug
 
-`make qa` runs the QA suite (`cmd/qa_*_test.go`), and CI runs it on every pull request as `qa-suite`. It runs every command in-process against a local server, with nothing set from your `PLIVO_*` variables and no network, and checks what each command sends, its exit code and its output.
+`make qa` runs the QA suite (`cmd/qa_*_test.go`), and CI runs it on every pull request as `qa-suite`. It runs every command in-process against a local server, with nothing set from your `PLIVO_*` variables and no network, and checks what each command sends, its exit code and its output. It ends with how many checks each pending finding skipped.
 
 - **Add a case** for each finding to the round's table, `cmd/qa_r<N>_test.go`, named `r<N>/<QA's id>`: the command QA ran, the API's answer if it matters, and what must happen now (the requests sent, the exit code, text that must or must not be printed). Check that it fails without the fix.
 - **Not fixed yet?** Add the id to `qaPending` in `cmd/qa_test.go`, with what is still wrong and the pull request with its fix. A pending case still runs: it is skipped while it fails and fails the suite once it passes, so the pull request with the fix deletes the entry.
