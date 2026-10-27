@@ -355,7 +355,7 @@ func TestQA_sweepUnconfirmed(t *testing.T) {
 			}
 		})
 	}
-	if checked < 25 {
+	if checked < 30 { // 33 today
 		t.Errorf("only %d commands delete or spend; the samples have stopped reaching the API", checked)
 	}
 }
@@ -482,7 +482,7 @@ func TestQA_sweepTokens(t *testing.T) {
 			}
 		})
 	}
-	if logged < 100 {
+	if logged < 150 { // 156 today
 		t.Errorf("only %d commands log a request at --log-level debug; the samples have stopped reaching the client", logged)
 	}
 }
