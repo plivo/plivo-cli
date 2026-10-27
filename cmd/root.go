@@ -175,7 +175,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&noColorFlag, "no-color", false, "disable colored output")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "warn", "log level: debug|info|warn|error|none")
 	rootCmd.PersistentFlags().BoolVarP(&yesFlag, "yes", "y", false, "skip confirmation prompts")
-	rootCmd.PersistentFlags().BoolVar(&dryRunFlag, "dry-run", false, "print the HTTP request without sending")
+	rootCmd.PersistentFlags().BoolVar(&dryRunFlag, "dry-run", false, "preview requests and local changes without sending or writing anything")
 	timeoutFlag = 30 * time.Second
 	rootCmd.PersistentFlags().Var(secondsOrDuration{&timeoutFlag}, "timeout", "request timeout: seconds, or a duration such as 90s or 2m")
 	// Additional admin-only flags are registered in build-tag-gated files;

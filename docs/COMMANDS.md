@@ -278,7 +278,7 @@ Subcommands:
 Flags:
 
 ```
-      --dry-run            print the HTTP request without sending
+      --dry-run            preview requests and local changes without sending or writing anything
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --map                print every command with its arguments and flags
       --no-color           disable colored output
