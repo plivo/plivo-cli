@@ -11,7 +11,7 @@
     {
       "call_uuid": "4f045f7a-b04a-4364-8523-74e6072f4f72",
       "end_time": null,
-      "service_url": "ws://3ee3-106-51-87-58.ngrok.io",
+      "service_url": "ws://abc123.ngrok.example",
       "start_time": null,
       "status": "initiated",
       "status_callback_url": "",

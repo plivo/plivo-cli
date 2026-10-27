@@ -3,8 +3,8 @@ https://github.com/plivo/plivo-go (v7.61.0), used under the license below:
 the *Response.json files are its fixtures/, and requests.json lists the
 requests its source builds (tools/sdkparams writes it).
 Changes to the fixtures: lists are cut to the entries that hold every field,
-and account IDs, tokens, passwords, emails, IP addresses and personal names
-are replaced with example values.
+and account IDs, tokens, passwords, emails, phone numbers (555-01xx), hosts,
+IP addresses and personal names are replaced with example values.
 
 Copyright (C) 2018, Plivo Inc.
 

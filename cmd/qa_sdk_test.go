@@ -183,7 +183,9 @@ func qaFieldNames(path string) []string {
 }
 
 // qaFixture reads an SDK fixture: from testdata/sdk, or testdata/plivo-go,
-// where the 10DLC and toll-free commands keep theirs.
+// where the 10DLC and toll-free commands keep theirs once #171 is in. The
+// two overlap: after #171 merges, testdata/sdk moves into testdata/plivo-go,
+// under one LICENSE.
 func qaFixture(name string) (map[string]any, bool) {
 	for _, dir := range []string{"sdk", "plivo-go"} {
 		b, err := os.ReadFile(filepath.Join("testdata", dir, name+".json"))
