@@ -152,7 +152,7 @@ func init() {
 	confRecordCmd.Flags().IntVar(&confRecordTimeLimit, "time-limit", 60, "max recording length in seconds")
 	confRecordCmd.Flags().StringVar(&confRecordFileFormat, "file-format", "mp3", "mp3|wav")
 	confRecordCmd.Flags().StringVar(&confRecordCallbackURL, "callback-url", "", "URL hit when recording finishes")
-	confRecordCmd.Flags().StringVar(&confRecordTransType, "transcription-type", "", transcriptionTypeUsage)
+	confRecordCmd.Flags().StringVar(&confRecordTransType, "transcription-type", "", "transcription type: auto (results go to --transcription-url)")
 	confRecordCmd.Flags().StringVar(&confRecordTransURL, "transcription-url", "", "URL the transcription is sent to")
 	ignoredFlag(confRecordCmd, "transcribe", true, transcribeNote)
 

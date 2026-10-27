@@ -4352,7 +4352,7 @@ Flags:
       --callback-url string         URL hit when recording finishes
       --file-format string          mp3|wav (default "mp3")
       --time-limit int              max recording length in seconds (default 60)
-      --transcription-type string   transcription type: auto|hybrid|manual (results go to --transcription-url)
+      --transcription-type string   transcription type: auto (results go to --transcription-url)
       --transcription-url string    URL the transcription is sent to
 ```
 

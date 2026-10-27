@@ -133,7 +133,7 @@ func init() {
 	callRecordCmd.Flags().StringVar(&callRecordCallbackURL, "callback-url", "", "URL hit when recording finishes")
 	callRecordCmd.Flags().StringVar(&callRecordCallbackMethod, "callback-method", "POST", "GET|POST")
 	callRecordCmd.Flags().StringVar(&callRecordChannelType, "record-channel-type", "", "mono|stereo (stereo puts each leg on its own channel)")
-	callRecordCmd.Flags().StringVar(&callRecordTransType, "transcription-type", "", transcriptionTypeUsage)
+	callRecordCmd.Flags().StringVar(&callRecordTransType, "transcription-type", "", "transcription type: auto|hybrid|manual (results go to --transcription-url)")
 	callRecordCmd.Flags().StringVar(&callRecordTransURL, "transcription-url", "", "URL the transcription is sent to")
 	ignoredFlag(callRecordCmd, "both-legs", true, "the API always records both legs; --record-channel-type stereo puts each on its own channel")
 	ignoredFlag(callRecordCmd, "transcribe", true, transcribeNote)
@@ -349,9 +349,6 @@ var (
 	callRecordTransType      string
 	callRecordTransURL       string
 )
-
-// transcriptionTypeUsage is --transcription-type's help on the Record APIs.
-const transcriptionTypeUsage = "transcription type: auto|hybrid|manual (results go to --transcription-url)"
 
 // transcribeNote is what --transcribe, which the Record APIs never read, says.
 const transcribeNote = "the API never read it, so nothing was transcribed; use --transcription-type auto with --transcription-url"
