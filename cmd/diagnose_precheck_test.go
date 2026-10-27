@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -203,5 +204,17 @@ func TestDiagnose_unknownID_neverFilesATicket(t *testing.T) {
 				t.Errorf("assistant endpoint received %d request(s) for an unknown id, want 0 — this would auto-file a support ticket", got)
 			}
 		})
+	}
+}
+
+// The pre-check read swallows its errors, but not the refusal of a blank, . or
+// .. id: that would hand the assistant a turn about nothing.
+func TestDiagnose_refusesABlankIDBeforeAnyRequest(t *testing.T) {
+	for _, args := range [][]string{{"voice", "calls", "diagnose", " "}, {"messaging", "sms", "diagnose", ".."}} {
+		setFakeCreds(t)
+		_, paths := diagnoseServer(t, http.StatusOK)
+		if err, _, _ := execCmd(t, args...); !strings.Contains(fmt.Sprint(err), "BAD_INPUT") || len(paths()) != 0 {
+			t.Errorf("%q: got %v after %q, want BAD_INPUT before any request", args, err, paths())
+		}
 	}
 }

@@ -218,6 +218,15 @@ func (c *Client) pathPart(p string) string {
 	return strings.ReplaceAll(url.PathEscape(p), "%2C", ",")
 }
 
+// Refused is the path part refused so far, or nil: for a caller that swallows
+// Do's error, as a best-effort read does, and must not go on regardless.
+func (c *Client) Refused() error {
+	if c.badPart == nil {
+		return nil
+	}
+	return c.badPart
+}
+
 // BuddyURL joins BuddyBaseURL with the given absolute path. AI surfaces
 // (/v1/aiassist/...) route under /v1/cli/cx so they share the same auth +
 // version-gate + analytics middleware as /v1/cli/api. Login surfaces
