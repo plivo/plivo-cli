@@ -330,7 +330,7 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 	}
 
 	if resp.StatusCode >= 300 { // a redirect too, as none is followed
-		return parseError(resp.StatusCode, resp.Header, respBytes), nil
+		return parseError(resp, respBytes), nil
 	}
 	if method != http.MethodGet {
 		WriteSent.Store(true)
@@ -434,7 +434,7 @@ func (c *Client) DoMultipart(method, fullURL string, dataJSON []byte, files map[
 		return nil, transportError(method, req.URL.Host, fmt.Errorf("read response: %w", err))
 	}
 	if resp.StatusCode >= 300 { // a redirect too, as none is followed
-		return parseError(resp.StatusCode, resp.Header, respBytes), nil
+		return parseError(resp, respBytes), nil
 	}
 	if method != http.MethodGet {
 		WriteSent.Store(true)

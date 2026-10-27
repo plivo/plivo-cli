@@ -485,8 +485,8 @@ func TestAPICmd_redirectIsAnError(t *testing.T) {
 	apiClientForTest = api.New("MAFAKEFORTEST", "fake-token", 0)
 	apiClientForTest.BaseURL = srv.URL
 	t.Cleanup(func() { apiClientForTest = nil })
-	err, _, _ := execCmd(t, "api", "GET", "/Account/")
-	if e, ok := err.(*clierr.Error); !ok || e.StatusCode != http.StatusTemporaryRedirect || len(hits()) != 1 {
+	err, _, _ := execCmd(t, "api", "GET", "/Account")
+	if e, ok := err.(*clierr.Error); !ok || e.StatusCode != http.StatusTemporaryRedirect || len(hits()) != 1 || !strings.Contains(e.Hint, "end in a slash") {
 		t.Errorf("got %v after %d requests, want the 307 as an error after 1", err, len(hits()))
 	}
 }

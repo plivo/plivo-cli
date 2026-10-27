@@ -440,8 +440,12 @@ func TestRedirect_isNotFollowed(t *testing.T) {
 	defer srv.Close()
 	c := New("MA1", "tok", time.Second)
 	apiErr, err := c.Do("POST", srv.URL+"/x", map[string]string{"k": "v"}, nil, nil)
-	if err != nil || apiErr == nil || apiErr.StatusCode != 307 || apiErr.Code != clierr.CodeUpstreamError || apiErr.Message == "" {
-		t.Errorf("Do: got %v / %v, want an UPSTREAM_ERROR naming the 307", apiErr, err)
+	if err != nil || apiErr == nil || apiErr.StatusCode != 307 || apiErr.Code != clierr.CodeUpstreamError || apiErr.Message == "" ||
+		!strings.Contains(apiErr.Hint, target.URL+"/landed") || !strings.Contains(apiErr.Hint, "end in a slash") {
+		t.Errorf("Do: got %v / %v, want an UPSTREAM_ERROR naming the 307, its target and the slash", apiErr, err)
+	}
+	if apiErr, err := c.DoMultipart("POST", srv.URL+"/x/", []byte("{}"), nil, nil); err != nil || apiErr == nil || apiErr.StatusCode != 307 {
+		t.Errorf("DoMultipart: got %v / %v, want the 307", apiErr, err)
 	}
 	var httpErr *SSEHTTPError
 	if err := c.StreamSSE(context.Background(), "POST", srv.URL+"/x", nil, func(SSEEvent) bool { return true }); !errors.As(err, &httpErr) || httpErr.StatusCode != 307 {

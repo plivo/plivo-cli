@@ -442,7 +442,11 @@ func renderAPIResponse(resp *http.Response, body []byte) error {
 	format := effectiveFormat()
 
 	if resp.StatusCode >= 300 { // a redirect too, as none is followed
-		return apiErrorFromUpstream(resp.StatusCode, resp.Header.Get("X-Request-ID"), body, isJSON)
+		err := apiErrorFromUpstream(resp.StatusCode, resp.Header.Get("X-Request-ID"), body, isJSON)
+		if e, ok := err.(*clierr.Error); ok && resp.StatusCode < 400 {
+			e.Hint = clierr.RedirectHint(resp.Header.Get("Location"), resp.Request.URL.Path)
+		}
+		return err
 	}
 	// An agent flow comes back as sent, as agents get does: see api.RawBodyWithSecrets.
 	if !strings.Contains(resp.Request.URL.Path, "/AgentFlow") {

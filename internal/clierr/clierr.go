@@ -276,7 +276,7 @@ func FromHTTP(statusCode int, requestID string, body []byte) *Error {
 		if e.Message == "" {
 			e.Message = fmt.Sprintf("Got a redirect (HTTP %d), which the CLI does not follow", statusCode)
 		}
-		e.Hint = "Nothing was sent to the new address. If PLIVO_BUDDY_URL or [buddy].url is set, check it."
+		e.Hint = RedirectHint("", "")
 	case statusCode >= 400 && statusCode < 500:
 		e.Code = CodeValidation
 		e.Hint = "Re-check the command flags and re-run with --help."
@@ -288,6 +288,21 @@ func FromHTTP(statusCode int, requestID string, body []byte) *Error {
 		e.Code = CodeUpstreamError
 	}
 	return e
+}
+
+// RedirectHint is the hint on a redirect, which the CLI does not follow: where
+// it pointed, and the fix for a request path that lacks its trailing slash.
+// location and path are "" where not known.
+func RedirectHint(location, path string) string {
+	h := "Nothing was sent to the new address"
+	if location != "" {
+		h += fmt.Sprintf(", %q", location)
+	}
+	h += "."
+	if path != "" && !strings.HasSuffix(path, "/") {
+		h += " Plivo API paths end in a slash: add one."
+	}
+	return h + " If PLIVO_API_URL, PLIVO_BUDDY_URL or [buddy].url is set, check it."
 }
 
 // twoFactor finds a 2FA message. "2fa" counts only where no letter or digit
