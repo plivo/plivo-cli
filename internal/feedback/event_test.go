@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"runtime"
 	"strings"
 	"testing"
@@ -165,18 +166,27 @@ func TestSubmit_propagates4xx(t *testing.T) {
 	}
 }
 
-func TestMachineID_persistsAcrossInvocations(t *testing.T) {
+// The machine id is kept once feedback is sent, and not before: building an
+// event, as --dry-run does to print it, writes nothing.
+func TestMachineID_keptOnceFeedbackIsSent(t *testing.T) {
 	// Force machineID() to use the file path (NOT the env override).
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 	t.Setenv(MachineIDEnvVar, "")
+	t.Setenv(TelemetryOptOutEnvVar, "")
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	t.Cleanup(srv.Close)
+	t.Setenv(EndpointEnvVar, srv.URL)
 
-	a := machineID()
-	b := machineID()
-	if a == "" {
-		t.Fatal("got empty machineID")
+	e := NewEvent("")
+	if entries, _ := os.ReadDir(tmp); len(entries) > 0 {
+		t.Fatalf("building an event wrote %v", entries)
 	}
-	if a != b {
-		t.Errorf("machineID not stable: %q vs %q", a, b)
+	if err := e.Submit(context.Background(), "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if a, b := machineID(), machineID(); a != e.AnonMachineID || b != a {
+		t.Errorf("machine id after a send: %q, %q; want %q kept", a, b, e.AnonMachineID)
 	}
 }
