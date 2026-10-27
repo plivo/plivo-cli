@@ -9,9 +9,11 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"runtime/metrics"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jmespath/go-jmespath"
 	"gopkg.in/yaml.v3"
@@ -208,7 +210,8 @@ func runQuery(doc []byte) (out []byte, err error) {
 			out, err = nil, &QueryError{Expr: queryExpr, Err: fmt.Errorf("%v", r)}
 		}
 	}()
-	res, err := query.Search(queryNumbers(v))
+	q := query
+	res, err := watchedSearch(func() (any, error) { return q.Search(queryNumbers(v)) })
 	if err != nil {
 		return nil, &QueryError{Expr: queryExpr, Err: err}
 	}
@@ -219,6 +222,46 @@ func runQuery(doc []byte) (out []byte, err error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// A --query search may run for searchTime and grow the heap by searchHeap:
+// to_string(@) over [@,@] | [@,@] | ... writes out every copy the search
+// shares. go-jmespath can't be stopped, so a search past either limit is left
+// to the exiting process and the query fails.
+var searchTime, searchHeap = 10 * time.Second, uint64(256 << 20)
+
+func watchedSearch(search func() (any, error)) (any, error) {
+	type result struct {
+		v   any
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				done <- result{err: fmt.Errorf("%v", r)}
+			}
+		}()
+		v, err := search()
+		done <- result{v, err}
+	}()
+	heap := []metrics.Sample{{Name: "/memory/classes/heap/objects:bytes"}}
+	metrics.Read(heap)
+	limit := heap[0].Value.Uint64() + searchHeap
+	tick, deadline := time.NewTicker(10*time.Millisecond), time.After(searchTime)
+	defer tick.Stop()
+	for {
+		select {
+		case r := <-done:
+			return r.v, r.err
+		case <-deadline:
+			return nil, fmt.Errorf("the expression ran for more than %s", searchTime)
+		case <-tick.C:
+			if metrics.Read(heap); heap[0].Value.Uint64() > limit {
+				return nil, fmt.Errorf("the expression took more than %d MiB of memory", searchHeap>>20)
+			}
+		}
+	}
 }
 
 // keyOrders records each decoded object's keys, in the order raw has them,

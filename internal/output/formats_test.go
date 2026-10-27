@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 // listPage is a list response as the API sends it: keys in the server's
@@ -244,6 +245,18 @@ func TestQuery_refusesAResultThatOutgrowsItsBudget(t *testing.T) {
 	var qe *QueryError
 	if !errors.As(err, &qe) || got != "" {
 		t.Errorf("wrote %d bytes, err %v; want a *QueryError and nothing written", len(got), err)
+	}
+}
+
+// to_string(@) writes out every copy [@,@] shares while it searches: a search
+// past its time limit fails as a query error instead of running on.
+func TestQuery_stopsASearchThatRunsTooLong(t *testing.T) {
+	defer func(d time.Duration) { searchTime = d }(searchTime)
+	searchTime = time.Millisecond
+	_, err := render(t, "json", "data"+strings.Repeat(" | [@,@]", 14)+" | to_string(@)", listPage)
+	var qe *QueryError
+	if !errors.As(err, &qe) || !strings.Contains(err.Error(), "ran for more than") {
+		t.Errorf("err = %v; want a *QueryError for the time the search took", err)
 	}
 }
 
