@@ -291,7 +291,7 @@ Plivo publishes guides for LiveKit, ElevenLabs, Retell, Vapi and xAI, plus a gen
 | Retell | `sip.retellai.com;transport=tcp` (or `tls`) | credential, **required even incoming only**: Retell will not import a number without it | off by default; if on, Retell Outbound Transport = TLS | import the number with `trunk_domain` (no `sip:`), credential username, password, transport; bind incoming and outgoing agents. Imports cannot be edited: delete and re-import | not in Plivo's docs; confirm with Retell |
 | Vapi | `sip.vapi.ai;transport=udp` | IP list with the two `/32` addresses in Plivo's Vapi guide | no | register the number (BYO SIP trunk) and assign an assistant | **not supported** |
 | xAI Voice Agents | `sip.voice.x.ai;transport=tls` (the console shows `sip:sip.voice.x.ai;transport=tls`: drop the `sip:`, which the API rejects; from v1.3.1 the CLI drops it for you) | none: **incoming only** | not used | add the number to the agent (Direct SIP); allow every Plivo signaling range the xAI guide lists, or set the same SIP digest credentials on both sides | not stated; confirm with xAI |
-| Other or self-hosted | `<host>[:port];transport=<what it documents>` (TLS usually 5061), with no `sip:` or `sips:` scheme (the API rejects both) and never a password | credential; IP list only for published static IPs | both sides must agree | route the number to an agent; allow Plivo signaling and media (below); **no digest challenge** to Plivo unless the same username and password are on the URI | must terminate SIP and media in India |
+| Other or self-hosted | `<host>[:port];transport=<what it documents>` (TLS usually 5061), with no `sip:` or `sips:` scheme and no `user@` part (the API rejects them all) | credential; IP list only for published static IPs | both sides must agree | route the number to an agent; allow Plivo signaling and media (below); **no digest challenge** to Plivo unless the same username and password are on the URI | must terminate SIP and media in India |
 
 `--platform livekit|elevenlabs|retell|vapi` fills the table's values: the host, port and transport on `sip uris create` (LiveKit has no shared host: pass yours with `--uri`) and Vapi's addresses on `sip ip-acl create`; on `sip trunks create` it only checks the trunk against the guide. It never sets `--secure`, and flags you pass win. Each preset carries the date it was checked; when that is more than 90 days old the CLI warns, so compare with the platform's docs. The API rejects `sip:` and `sips:` URIs ("URI could not be created"), so write the matrix's host-first form. From v1.3.1 the CLI rewrites one before sending: it drops `sip:`, turns `sips:` into `;transport=tls` (port 5061 when none is given), refuses `sips:` with another transport, and prints the form it sent; earlier versions send it as typed, and the create fails. With `--platform`, a `sips:` URI gets the guide's TLS entry, the same as `--transport tls` (ElevenLabs port 5061; LiveKit and Retell no port; Vapi lists no TLS, so the CLI warns).
 
@@ -314,6 +314,7 @@ Breaks or misroutes calls (the CLI refuses the first four on `sip uris create|up
 - A space, no host, a host with characters other than letters, digits, dots and hyphens, a non-numeric port, or `transport=` other than `udp`, `tcp` or `tls`.
 - A password inside the URI (`sip:user:pass@host`): before v1.2.1 it is stored and printed in plain text. Use `--authentication-needed` with `--password-stdin`.
 - An IPv6 host: the API refuses it. Use a hostname or IPv4 (`sip test` still takes a bracketed IPv6 host).
+- A user part (`user@host`, such as `sip:+<number>@host`): the API refuses it, so give the host alone. From v1.3.1 the CLI refuses it too.
 - A private or unroutable host (10.x, 127.x, 192.168.x, 172.16-31.x, 169.254.x, 100.64-127.x, 0.x). From v1.3.1 the CLI refuses these addresses in URIs and IP lists.
 - A host that differs from the documented host for the named platform.
 - An Indian number with a non-India endpoint (4590).
@@ -322,7 +323,7 @@ Fix before go-live:
 
 - No `;transport=`, or one the platform does not document. Plivo's generic guide calls a transport mismatch the most common reason an incoming integration fails silently, and Plivo documents no default, so always set what the platform documents.
 - A port the platform's guide does not use, or 5061 without `transport=tls`. Some guides publish a TLS URI with no port: write what the guide shows.
-- A `sip:` or `sips:` scheme (the API rejects one on create: use the host-first form), or a user part where the platform's guide shows the host-first form.
+- A `sip:` or `sips:` scheme (the API rejects one on create: use the host-first form).
 - Any parameter other than `transport=`, a parameter with no value, or a host ending in a dot.
 
 ### Outgoing details
