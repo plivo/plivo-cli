@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/plivo/plivo-cli/internal/redact"
 	"github.com/plivo/plivo-cli/internal/version"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"golang.org/x/term"
 	"regexp"
 )
@@ -158,7 +160,10 @@ func init() {
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		api.CLICommand = commandPath(cmd)
 		api.ShowSecrets = showSecretsFlag
-		return configureOutput(cmd)
+		if err := configureOutput(cmd); err != nil {
+			return err
+		}
+		return refuseBlankRequired(cmd)
 	}
 	// Set here, not in the literal: runRoot walks rootCmd itself.
 	rootCmd.RunE = runRoot
@@ -174,7 +179,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&noColorFlag, "no-color", false, "disable colored output")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "warn", "log level: debug|info|warn|error|none")
 	rootCmd.PersistentFlags().BoolVarP(&yesFlag, "yes", "y", false, "skip confirmation prompts")
-	rootCmd.PersistentFlags().BoolVar(&dryRunFlag, "dry-run", false, "print the HTTP request without sending")
+	rootCmd.PersistentFlags().BoolVar(&dryRunFlag, "dry-run", false, "preview requests and local changes without sending or writing anything")
 	rootCmd.PersistentFlags().BoolVar(&showSecretsFlag, "show-secrets", false, "show auth tokens and passwords in API responses instead of [REDACTED]")
 	timeoutFlag = 30 * time.Second
 	rootCmd.PersistentFlags().Var(secondsOrDuration{&timeoutFlag}, "timeout", "request timeout: seconds, or a duration such as 90s or 2m")
@@ -187,6 +192,35 @@ func init() {
 	// It's registered locally, per command, via registerExplainFlag — see
 	// call sites in api.go, application.go, auth.go, call.go, message.go,
 	// number.go, verify.go.
+}
+
+// refuseBlankRequired refuses a flag marked required that was given an empty
+// or all-space value: cobra checks only that it is there, so an empty --dst
+// built a request. Flags a command checks by hand keep their own messages.
+func refuseBlankRequired(cmd *cobra.Command) (err error) {
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if err != nil || !f.Changed || len(f.Annotations[cobra.BashCompOneRequiredFlag]) == 0 || strings.TrimSpace(f.Value.String()) != "" {
+			return
+		}
+		if with := f.Annotations[emptyWith]; len(with) > 0 && filled(cmd.Flags().Lookup(with[0])) {
+			return
+		}
+		err = clierr.BadFlag(f.Name, "is required and can't be empty")
+	})
+	return err
+}
+
+// emptyWith lets a required flag be empty once the flag it names is filled.
+const emptyWith = "plivo_empty_with"
+
+// filled reports whether f was given a value that is not blank, or for a list
+// flag, at least one.
+func filled(f *pflag.Flag) bool {
+	vals := []string{f.Value.String()}
+	if list, ok := f.Value.(pflag.SliceValue); ok {
+		vals = list.GetSlice()
+	}
+	return f.Changed && slices.ContainsFunc(vals, func(v string) bool { return strings.TrimSpace(v) != "" })
 }
 
 // secondsOrDuration is --timeout's value: a bare integer is seconds, the form

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -84,18 +85,15 @@ func offerSkills() {
 		lines = questionLines()
 	}
 	if !yesFlag && lines == nil {
-		if !slices.Contains(cfg.Skills.Hinted, a.name) {
-			cfg.Skills.Hinted = append(cfg.Skills.Hinted, a.name)
-			if config.Save(cfg) == nil {
-				printInstallCommand(a)
-			}
+		if config.Update(func(c *config.Config) error { return appendNew(&c.Skills.Hinted, a.name) }) == nil {
+			printInstallCommand(a)
 		}
 		return
 	}
 	// The machine's one question, or a --yes install. Recorded before asking,
 	// so a question left unanswered isn't asked again.
-	cfg.Skills.Offered = append(cfg.Skills.Offered, a.name)
-	if config.Save(cfg) != nil || (!yesFlag && !askToInstall(a, lines)) {
+	if config.Update(func(c *config.Config) error { return appendNew(&c.Skills.Offered, a.name) }) != nil ||
+		(!yesFlag && !askToInstall(a, lines)) {
 		return
 	}
 	if err := installSkillsIn(bundledSkills, root); err != nil {
@@ -110,6 +108,17 @@ func offerSkills() {
 		}
 		fmt.Fprintf(os.Stderr, "Retry with: %s\n", retry)
 	}
+}
+
+// appendNew appends name to list, read under the config lock. A login running
+// at the same time may have recorded it first: then it returns fs.ErrExist,
+// so nothing is saved and the offer is not made twice.
+func appendNew(list *[]string, name string) error {
+	if slices.Contains(*list, name) {
+		return fs.ErrExist
+	}
+	*list = append(*list, name)
+	return nil
 }
 
 // questionLines returns the lines to read an answer from, or nil when the

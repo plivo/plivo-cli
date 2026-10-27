@@ -9,9 +9,11 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"runtime/metrics"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jmespath/go-jmespath"
 	"gopkg.in/yaml.v3"
@@ -208,11 +210,62 @@ func runQuery(doc []byte) (out []byte, err error) {
 			out, err = nil, &QueryError{Expr: queryExpr, Err: fmt.Errorf("%v", r)}
 		}
 	}()
-	res, err := query.Search(queryNumbers(v))
+	q := query
+	res, err := watchedSearch(func() (any, error) { return q.Search(queryNumbers(v)) })
 	if err != nil {
 		return nil, &QueryError{Expr: queryExpr, Err: err}
 	}
-	return marshalOrdered(res, order, rank)
+	// The search shares the parts it repeats, so [@,@] | [@,@] | ... stays
+	// cheap there while the result doubles at each step: it gets a budget.
+	var buf bytes.Buffer
+	if err := marshalOrdered(&buf, res, order, rank, 32*len(doc)+1<<20); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// A --query search may run for searchTime and grow the heap by searchHeap:
+// to_string(@) over [@,@] | [@,@] | ... writes out every copy the search
+// shares. go-jmespath can't be stopped, so a search past either limit is left
+// to the exiting process and the query fails.
+var searchTime, searchHeap = 10 * time.Second, uint64(256 << 20)
+
+func watchedSearch(search func() (any, error)) (any, error) {
+	type result struct {
+		v   any
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				done <- result{err: fmt.Errorf("%v", r)}
+			}
+		}()
+		v, err := search()
+		done <- result{v, err}
+	}()
+	// The heap is measured from its lowest point, as a collection can free
+	// what was there before the search.
+	heap := []metrics.Sample{{Name: "/memory/classes/heap/objects:bytes"}}
+	metrics.Read(heap)
+	low := heap[0].Value.Uint64()
+	tick, deadline := time.NewTicker(10*time.Millisecond), time.After(searchTime)
+	defer tick.Stop()
+	for {
+		select {
+		case r := <-done:
+			return r.v, r.err
+		case <-deadline:
+			return nil, fmt.Errorf("the expression ran for more than %s", searchTime)
+		case <-tick.C:
+			metrics.Read(heap)
+			now := heap[0].Value.Uint64()
+			if low = min(low, now); now-low > searchHeap {
+				return nil, fmt.Errorf("the expression took more than %d MiB of memory", searchHeap>>20)
+			}
+		}
+	}
 }
 
 // keyOrders records each decoded object's keys, in the order raw has them,
@@ -235,22 +288,23 @@ func keyOrders(v any, raw json.RawMessage, order map[uintptr][]string) {
 	}
 }
 
-// marshalOrdered is Marshal with each object's keys in order: an object from
-// the document as it has them, one the query built (a multiselect hash) in
-// rank order, the order the expression names them; unranked keys go last,
-// sorted.
-func marshalOrdered(v any, order map[uintptr][]string, rank map[string]int) ([]byte, error) {
-	var parts [][]byte
+// marshalOrdered appends v to buf as Marshal would, with each object's keys in
+// order: an object from the document as it has them, one the query built (a
+// multiselect hash) in rank order, the order the expression names them;
+// unranked keys go last, sorted. Past limit bytes it stops with a QueryError.
+func marshalOrdered(buf *bytes.Buffer, v any, order map[uintptr][]string, rank map[string]int, limit int) error {
 	switch t := v.(type) {
 	case []any:
-		for _, e := range t {
-			b, err := marshalOrdered(e, order, rank)
-			if err != nil {
-				return nil, err
+		buf.WriteByte('[')
+		for i, e := range t {
+			if i > 0 {
+				buf.WriteByte(',')
 			}
-			parts = append(parts, b)
+			if err := marshalOrdered(buf, e, order, rank, limit); err != nil {
+				return err
+			}
 		}
-		return append(append([]byte{'['}, bytes.Join(parts, []byte{','})...), ']'), nil
+		buf.WriteByte(']')
 	case map[string]any:
 		keys, ok := order[reflect.ValueOf(t).Pointer()]
 		if !ok {
@@ -266,17 +320,31 @@ func marshalOrdered(v any, order map[uintptr][]string, rank map[string]int) ([]b
 				return iok || (!jok && keys[i] < keys[j])
 			})
 		}
-		for _, k := range keys {
-			b, err := marshalOrdered(t[k], order, rank)
-			if err != nil {
-				return nil, err
+		buf.WriteByte('{')
+		for i, k := range keys {
+			if i > 0 {
+				buf.WriteByte(',')
 			}
 			key, _ := Marshal(k)
-			parts = append(parts, append(append(key, ':'), b...))
+			buf.Write(key)
+			buf.WriteByte(':')
+			if err := marshalOrdered(buf, t[k], order, rank, limit); err != nil {
+				return err
+			}
 		}
-		return append(append([]byte{'{'}, bytes.Join(parts, []byte{','})...), '}'), nil
+		buf.WriteByte('}')
+	default:
+		b, err := Marshal(v)
+		if err != nil {
+			return err
+		}
+		buf.Write(b)
 	}
-	return Marshal(v)
+	if buf.Len() > limit {
+		return &QueryError{Expr: queryExpr, Err: fmt.Errorf(
+			"the result is larger than %d bytes, 32 times the response plus 1 MiB: the expression repeats parts of it", limit)}
+	}
+	return nil
 }
 
 // queryNumbers turns decoded numbers into float64, the only number type

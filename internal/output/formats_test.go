@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
+	"time"
 )
 
 // listPage is a list response as the API sends it: keys in the server's
@@ -232,6 +234,34 @@ func TestQuery_runtimeFailureWritesNothing(t *testing.T) {
 		}
 		if got != "" {
 			t.Errorf("%s: wrote %q before failing", expr, got)
+		}
+	}
+}
+
+// [@,@] doubles the result at each step while the search stays cheap: past
+// its budget the query fails, instead of writing 2^n copies of the response.
+func TestQuery_refusesAResultThatOutgrowsItsBudget(t *testing.T) {
+	got, err := render(t, "json", "data"+strings.Repeat(" | [@,@]", 12), listPage)
+	var qe *QueryError
+	if !errors.As(err, &qe) || got != "" {
+		t.Errorf("wrote %d bytes, err %v; want a *QueryError and nothing written", len(got), err)
+	}
+}
+
+// to_string(@) writes out every copy [@,@] shares while it searches: a search
+// past its time or memory limit fails as a query error instead of running on.
+func TestQuery_stopsARunawaySearch(t *testing.T) {
+	defer func(d time.Duration, h uint64) { searchTime, searchHeap = d, h }(searchTime, searchHeap)
+	for _, c := range []struct {
+		time time.Duration
+		heap uint64
+		want string
+	}{{time.Millisecond, 1 << 40, "ran for more than"}, {time.Minute, 1, "MiB of memory"}} {
+		searchTime, searchHeap = c.time, c.heap
+		_, err := render(t, "json", "data"+strings.Repeat(" | [@,@]", 16)+" | to_string(@)", listPage)
+		var qe *QueryError
+		if !errors.As(err, &qe) || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("err = %v; want a *QueryError saying %q", err, c.want)
 		}
 	}
 }

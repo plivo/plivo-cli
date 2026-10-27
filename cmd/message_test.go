@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/plivo/plivo-cli/internal/api"
+	"github.com/plivo/plivo-cli/internal/clierr"
 )
 
 // captureOneRequest returns an httptest server that records the last
@@ -73,6 +75,29 @@ func TestMmsSend_noMediaURL_keyOmitted(t *testing.T) {
 	}
 	if _, ok := getBody()["media_urls"]; ok {
 		t.Errorf("media_urls should be omitted when --media-url wasn't passed, got body: %#v", getBody())
+	}
+}
+
+// A required flag given an empty or all-space value is refused before any
+// request, except an MMS's --text when it carries media.
+func TestSend_refusesABlankRequiredFlag(t *testing.T) {
+	setFakeCreds(t)
+	srv, getBody := captureOneRequest(t)
+	messageClientForTest = &api.Client{BaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", HTTP: &http.Client{}}
+	defer func() { messageClientForTest = nil }()
+
+	err, _, _ := execCmd(t, "messaging", "sms", "send", "--src", " ", "--dst", "+14155550101", "--text", "", "--yes")
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeBadFlag || getBody() != nil {
+		t.Errorf("err = %v, body %v; want BAD_FLAG and no request", err, getBody())
+	}
+	if err, _, _ := execCmd(t, "messaging", "mms", "send", "--src", "+14155550100", "--dst", "+14155550101",
+		"--text", "", "--media-url", " ", "--yes"); !errors.As(err, &ce) || ce.Code != clierr.CodeBadFlag || getBody() != nil {
+		t.Errorf("an MMS with a blank --media-url and no text: %v, want BAD_FLAG", err)
+	}
+	if err, _, _ := execCmd(t, "messaging", "mms", "send", "--src", "+14155550100", "--dst", "+14155550101",
+		"--text", "", "--media-url", "https://example.com/a.jpg", "--yes"); err != nil || getBody() == nil {
+		t.Errorf("an MMS with media and no text: %v, want it sent", err)
 	}
 }
 
