@@ -26,7 +26,7 @@ import (
 // what each sends, its exit code and its output:
 //
 //   - TestQA_regressions replays one case per QA finding, named round/item as
-//     QA filed it (qa_r1_test.go, qa_r2_test.go).
+//     QA filed it (qa_r1_test.go, qa_r2_test.go, qa_r3_test.go).
 //
 // Every run also checks its exit code is the one its error's code maps to.
 
@@ -36,7 +36,45 @@ import (
 // `go test ./cmd -run TestQA -qa-pending` runs the pending cases and fails
 // every one that passes, so an entry cannot outlive its fix.
 var pending = map[string]string{
-	"r2/5e": "sip test probes the host it was given, never the target of its SRV record (open)",
+	"r2/5e":    "sip test probes the host it was given, never the target of its SRV record (open)",
+	"r3/L1":    "applications delete leaves out cascade=false (PR #172)",
+	"r3/L2":    "IDs go into request paths unescaped (request-safety PR)",
+	"r3/L3":    "-o json prints subaccount auth tokens (request-safety PR)",
+	"r3/L4":    "brands and campaigns are read flat, under names the API does not send (PR #171)",
+	"r3/L5":    "-o json prints the endpoint password hash (request-safety PR)",
+	"r3/L6":    "endpoints create takes --alias as optional (PR #172)",
+	"r3/L7":    "numbers search drops the error a 200 body carries (PR #172)",
+	"r3/L8":    "compliance list refuses --number-type national (PR #172)",
+	"r3/L9":    "endpoint, subaccount and application fields are read under names the API does not send (PR #172)",
+	"r3/O1":    "auth use/remove, logout and config set/telemetry act under --dry-run (local-safety PR)",
+	"r3/O2":    "config changes are not locked (local-safety PR)",
+	"r3/O3":    "a failed docs refresh shows the cache silently (PR #172)",
+	"r3/O4":    "skill install --project writes through links (local-safety PR)",
+	"r3/O5":    "a --query result has no size limit (local-safety PR)",
+	"r3/O6":    "lookup says nothing about its price (PR #172)",
+	"r3/O7":    "the assistant URL may be plain http to any host (request-safety PR)",
+	"r3/O8a":   "required flags take blank values (local-safety PR)",
+	"r3/O8b":   "a blank, . or .. ID reaches the request path (request-safety PR)",
+	"r3/O9":    "a newline in an ID adds lines to the --dry-run preview (request-safety PR)",
+	"r3/W1":    "a # in a conference name cuts the path (request-safety PR)",
+	"r3/W2":    "conferences stop-record takes no --yes (request-safety PR)",
+	"r3/W3":    "subaccounts update '#' posts to /Subaccount/, a create (request-safety PR)",
+	"r3/W4":    "a redirect to another port is followed with the credentials (request-safety PR)",
+	"r3/W5":    "a redirect to another host is followed with the body (request-safety PR)",
+	"r3/D1":    "brands create sends no profile_uuid (PR #171)",
+	"r3/D2":    "campaigns create sends keys the API does not take (PR #171)",
+	"r3/D3":    "tollfree submit sends keys the API does not take (PR #171)",
+	"r3/D4":    "multiparty mute and hold post to resources the API does not have (PR #172)",
+	"r3/D5":    "member kick sends DELETE, a hangup (PR #172)",
+	"r3/D6":    "member play sends urls, loop and mix (PR #172)",
+	"r3/D7a":   "streams start sends stream_status_callback_url (PR #172)",
+	"r3/D7b":   "streams start takes --bidirectional with any track (PR #172)",
+	"r3/D8a":   "calls make sends answer_method GET with any answer URL (PR #172)",
+	"r3/D8b":   "calls make takes --machine-detection none (PR #172)",
+	"r3/F1":    "sip uris create takes a user part (PR #172)",
+	"r3/F2":    "--timeout takes 0 and negative values (PR #172)",
+	"r3/F4":    "plivo api reports every API error as UPSTREAM_ERROR, exit 3: fix the codes or the help (open)",
+	"r3/links": "links call /10dlc/NumberLinking/ (PR #171)",
 }
 
 var qaRunPending = flag.Bool("qa-pending", false, "also run the QA cases listed in pending, failing those that pass")
@@ -112,7 +150,7 @@ func (r qaReq) String() string {
 // skipped (with -qa-pending it runs, and fails if it passes).
 func TestQA_regressions(t *testing.T) {
 	var cases []qaCase
-	for _, round := range [][]qaCase{r1Cases(), r2Cases()} {
+	for _, round := range [][]qaCase{r1Cases(), r2Cases(), r3Cases()} {
 		cases = append(cases, round...)
 	}
 	seen := map[string]bool{}
