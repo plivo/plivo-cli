@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -8,6 +9,23 @@ import (
 
 	"github.com/plivo/plivo-cli/internal/clierr"
 )
+
+// Record sends the fields the Record APIs take, those that are set.
+func TestRecord_sendsTheAPIsFields(t *testing.T) {
+	transcribe := " --transcription-type auto --transcription-url https://example.com/t"
+	for args, want := range map[string]string{
+		"voice calls record c1": "file_format time_limit",
+		"voice calls record c1 --record-channel-type stereo" + transcribe: "file_format record_channel_type time_limit transcription_type transcription_url",
+		"voice conferences record room" + transcribe:                      "file_format time_limit transcription_type transcription_url",
+	} {
+		setFakeCreds(t)
+		sent := serveFixture(t, `{"api_id":"x","message":"ok"}`)
+		err, _, _ := execCmd(t, strings.Fields(args)...)
+		if _, bodies := sent(); err != nil || len(bodies) != 1 || strings.Join(slices.Sorted(maps.Keys(bodies[0])), " ") != want {
+			t.Errorf("%s: err %v, sent %v; want the keys %s", args, err, bodies, want)
+		}
+	}
+}
 
 // --live reads the call in progress (?status=live), whose fields are from and
 // to, not the record's from_number and to_number. Once it ends, the hint

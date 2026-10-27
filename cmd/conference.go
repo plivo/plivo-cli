@@ -122,7 +122,8 @@ var (
 	confRecordTimeLimit   int
 	confRecordFileFormat  string
 	confRecordCallbackURL string
-	confRecordTranscribe  bool
+	confRecordTransType   string
+	confRecordTransURL    string
 )
 
 var confRecordCmd = &cobra.Command{
@@ -151,7 +152,8 @@ func init() {
 	confRecordCmd.Flags().IntVar(&confRecordTimeLimit, "time-limit", 60, "max recording length in seconds")
 	confRecordCmd.Flags().StringVar(&confRecordFileFormat, "file-format", "mp3", "mp3|wav")
 	confRecordCmd.Flags().StringVar(&confRecordCallbackURL, "callback-url", "", "URL hit when recording finishes")
-	confRecordCmd.Flags().BoolVar(&confRecordTranscribe, "transcribe", false, "request transcription")
+	confRecordCmd.Flags().StringVar(&confRecordTransType, "transcription-type", "", transcriptionTypeUsage)
+	confRecordCmd.Flags().StringVar(&confRecordTransURL, "transcription-url", "", "URL the transcription is sent to")
 
 	confMemberCmd.AddCommand(confMemberKickCmd, confMemberMuteCmd, confMemberUnmuteCmd,
 		confMemberDeafCmd, confMemberUndeafCmd, confMemberPlayCmd, confMemberStopPlayCmd,
@@ -292,8 +294,8 @@ func runConferenceRecord(cmd *cobra.Command, args []string) error {
 	body := map[string]any{
 		"time_limit":  confRecordTimeLimit,
 		"file_format": confRecordFileFormat,
-		"transcribe":  confRecordTranscribe,
 	}
+	putSet(body, map[string]string{"transcription_type": confRecordTransType, "transcription_url": confRecordTransURL})
 	if confRecordCallbackURL != "" {
 		body["callback_url"] = confRecordCallbackURL
 	}

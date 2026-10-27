@@ -4008,12 +4008,13 @@ plivo voice calls record <call_uuid> [flags]
 Flags:
 
 ```
-      --both-legs                record both legs (default: just A-leg)
-      --callback-method string   GET|POST (default "POST")
-      --callback-url string      URL hit when recording finishes
-      --file-format string       mp3|wav (default "mp3")
-      --time-limit int           max recording length in seconds (default 60)
-      --transcribe               request transcription
+      --callback-method string       GET|POST (default "POST")
+      --callback-url string          URL hit when recording finishes
+      --file-format string           mp3|wav (default "mp3")
+      --record-channel-type string   mono|stereo (stereo puts each leg on its own channel)
+      --time-limit int               max recording length in seconds (default 60)
+      --transcription-type string    transcription type: auto|hybrid|manual (results go to --transcription-url)
+      --transcription-url string     URL the transcription is sent to
 ```
 
 ---
@@ -4350,10 +4351,11 @@ plivo voice conferences record <conference_name> [flags]
 Flags:
 
 ```
-      --callback-url string   URL hit when recording finishes
-      --file-format string    mp3|wav (default "mp3")
-      --time-limit int        max recording length in seconds (default 60)
-      --transcribe            request transcription
+      --callback-url string         URL hit when recording finishes
+      --file-format string          mp3|wav (default "mp3")
+      --time-limit int              max recording length in seconds (default 60)
+      --transcription-type string   transcription type: auto|hybrid|manual (results go to --transcription-url)
+      --transcription-url string    URL the transcription is sent to
 ```
 
 ---

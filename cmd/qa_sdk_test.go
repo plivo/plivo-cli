@@ -64,9 +64,7 @@ var qaFixtures = map[string]string{
 // oracle finds in it: its response for a get or list, its requests for the
 // rest.
 var qaOracleOwners = map[string]string{
-	"voice calls record":       "sdk/record",
 	"voice calls streams list": "sdk/streams",
-	"voice conferences record": "sdk/record",
 }
 
 // qaKnownGaps are what the oracle finds today, by the finding that reports
@@ -75,7 +73,6 @@ var qaOracleOwners = map[string]string{
 // finding's commands. A gap counts only while its finding is pending, and
 // each must still turn up: the fix that clears one deletes it.
 var qaKnownGaps = map[string][]string{
-	"sdk/record":  {"both_legs", "transcribe"},
 	"sdk/streams": {"resource_uri", "stream_url"},
 }
 
