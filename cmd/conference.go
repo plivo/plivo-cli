@@ -154,6 +154,7 @@ func init() {
 	confRecordCmd.Flags().StringVar(&confRecordCallbackURL, "callback-url", "", "URL hit when recording finishes")
 	confRecordCmd.Flags().StringVar(&confRecordTransType, "transcription-type", "", transcriptionTypeUsage)
 	confRecordCmd.Flags().StringVar(&confRecordTransURL, "transcription-url", "", "URL the transcription is sent to")
+	ignoredFlag(confRecordCmd, "transcribe", true, transcribeNote)
 
 	confMemberCmd.AddCommand(confMemberKickCmd, confMemberMuteCmd, confMemberUnmuteCmd,
 		confMemberDeafCmd, confMemberUndeafCmd, confMemberPlayCmd, confMemberStopPlayCmd,

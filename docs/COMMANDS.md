@@ -2530,12 +2530,11 @@ plivo numbers masking sessions create [flags]
 Flags:
 
 ```
-      --call-time-limit int     max per-call duration in seconds
-      --first-party string      first party E.164 (required)
-      --record                  record calls in this session
-      --second-party string     second party E.164 (required)
-      --session-expiry int      session lifetime in seconds
-      --virtual-number string   virtual number to use (else allocates from pool)
+      --call-time-limit int   max per-call duration in seconds
+      --first-party string    first party E.164 (required)
+      --record                record calls in this session
+      --second-party string   second party E.164 (required)
+      --session-expiry int    session lifetime in seconds
 ```
 
 ---
@@ -3719,14 +3718,13 @@ plivo verify sessions create [flags]
 Flags:
 
 ```
-      --alpha-sender string   alphanumeric sender id
-      --app-uuid string       Verify application uuid (required)
-      --channel string        delivery channel: sms|voice|whatsapp (default "sms")
-      --explain               narrate in plain English before executing
-      --locale string         BCP-47 locale, e.g. en-US
-      --method string         HTTP method for callback URL
-      --recipient string      E.164 destination number (required)
-      --url string            callback URL for session status events
+      --app-uuid string    Verify application uuid (required)
+      --channel string     delivery channel: sms|voice|whatsapp (default "sms")
+      --explain            narrate in plain English before executing
+      --locale string      BCP-47 locale, e.g. en-US
+      --method string      HTTP method for callback URL
+      --recipient string   E.164 destination number (required)
+      --url string         callback URL for session status events
 ```
 
 ---

@@ -28,12 +28,11 @@ var maskingSessionCmd = &cobra.Command{
 }
 
 var (
-	msCreateFirstParty    string
-	msCreateSecondParty   string
-	msCreateVirtualNumber string
-	msCreateExpiry        int
-	msCreateTimeLimit     int
-	msCreateRecord        bool
+	msCreateFirstParty  string
+	msCreateSecondParty string
+	msCreateExpiry      int
+	msCreateTimeLimit   int
+	msCreateRecord      bool
 )
 
 var maskingSessionCreateCmd = &cobra.Command{
@@ -74,10 +73,11 @@ func init() {
 	_ = maskingSessionCreateCmd.MarkFlagRequired("first-party")
 	maskingSessionCreateCmd.Flags().StringVar(&msCreateSecondParty, "second-party", "", "second party E.164 (required)")
 	_ = maskingSessionCreateCmd.MarkFlagRequired("second-party")
-	maskingSessionCreateCmd.Flags().StringVar(&msCreateVirtualNumber, "virtual-number", "", "virtual number to use (else allocates from pool)")
 	maskingSessionCreateCmd.Flags().IntVar(&msCreateExpiry, "session-expiry", 0, "session lifetime in seconds")
 	maskingSessionCreateCmd.Flags().IntVar(&msCreateTimeLimit, "call-time-limit", 0, "max per-call duration in seconds")
 	maskingSessionCreateCmd.Flags().BoolVar(&msCreateRecord, "record", false, "record calls in this session")
+	ignoredFlag(maskingSessionCreateCmd, "mode", false, "the API never read it; drop it")
+	ignoredFlag(maskingSessionCreateCmd, "virtual-number", false, "the API picks the virtual number; drop it")
 
 	registerListFlags(maskingSessionListCmd, &msListLimit, &msListOffset)
 
@@ -95,9 +95,6 @@ func runMaskingCreate(cmd *cobra.Command, args []string) error {
 		"first_party":  msCreateFirstParty,
 		"second_party": msCreateSecondParty,
 		"record":       msCreateRecord,
-	}
-	if msCreateVirtualNumber != "" {
-		body["virtual_number"] = msCreateVirtualNumber
 	}
 	if msCreateExpiry > 0 {
 		body["session_expiry"] = msCreateExpiry

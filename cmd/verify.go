@@ -28,13 +28,12 @@ var verifySessionCmd = &cobra.Command{
 }
 
 var (
-	vsCreateRecipient   string
-	vsCreateAppUUID     string
-	vsCreateChannel     string
-	vsCreateAlphaSender string
-	vsCreateLocale      string
-	vsCreateMethod      string
-	vsCreateURL         string
+	vsCreateRecipient string
+	vsCreateAppUUID   string
+	vsCreateChannel   string
+	vsCreateLocale    string
+	vsCreateMethod    string
+	vsCreateURL       string
 )
 
 var verifySessionCreateCmd = &cobra.Command{
@@ -79,7 +78,7 @@ func init() {
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateAppUUID, "app-uuid", "", "Verify application uuid (required)")
 	_ = verifySessionCreateCmd.MarkFlagRequired("app-uuid")
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateChannel, "channel", "sms", "delivery channel: sms|voice|whatsapp")
-	verifySessionCreateCmd.Flags().StringVar(&vsCreateAlphaSender, "alpha-sender", "", "alphanumeric sender id")
+	ignoredFlag(verifySessionCreateCmd, "alpha-sender", false, "the API never read it; drop it")
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateLocale, "locale", "", "BCP-47 locale, e.g. en-US")
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateMethod, "method", "", "HTTP method for callback URL")
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateURL, "url", "", "callback URL for session status events")
@@ -105,9 +104,6 @@ func runVerifySessionCreate(cmd *cobra.Command, args []string) error {
 		"recipient": vsCreateRecipient,
 		"app_uuid":  vsCreateAppUUID,
 		"channel":   vsCreateChannel,
-	}
-	if vsCreateAlphaSender != "" {
-		body["alpha_sender"] = vsCreateAlphaSender
 	}
 	if vsCreateLocale != "" {
 		body["locale"] = vsCreateLocale

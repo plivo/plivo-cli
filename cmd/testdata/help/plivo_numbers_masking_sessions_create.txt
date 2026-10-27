@@ -4,13 +4,12 @@ Usage:
   plivo numbers masking sessions create [flags]
 
 Flags:
-      --call-time-limit int     max per-call duration in seconds
-      --first-party string      first party E.164 (required)
-  -h, --help                    help for create
-      --record                  record calls in this session
-      --second-party string     second party E.164 (required)
-      --session-expiry int      session lifetime in seconds
-      --virtual-number string   virtual number to use (else allocates from pool)
+      --call-time-limit int   max per-call duration in seconds
+      --first-party string    first party E.164 (required)
+  -h, --help                  help for create
+      --record                record calls in this session
+      --second-party string   second party E.164 (required)
+      --session-expiry int    session lifetime in seconds
 
 Global Flags:
       --dry-run            preview requests and local changes without sending or writing anything

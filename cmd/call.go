@@ -135,6 +135,8 @@ func init() {
 	callRecordCmd.Flags().StringVar(&callRecordChannelType, "record-channel-type", "", "mono|stereo (stereo puts each leg on its own channel)")
 	callRecordCmd.Flags().StringVar(&callRecordTransType, "transcription-type", "", transcriptionTypeUsage)
 	callRecordCmd.Flags().StringVar(&callRecordTransURL, "transcription-url", "", "URL the transcription is sent to")
+	ignoredFlag(callRecordCmd, "both-legs", true, "the API always records both legs; --record-channel-type stereo puts each on its own channel")
+	ignoredFlag(callRecordCmd, "transcribe", true, transcribeNote)
 
 	callCmd.AddCommand(callListCmd, callGetCmd, callMakeCmd, callHangupCmd, callTransferCmd,
 		callPlayCmd, callStopPlayCmd, callSpeakCmd, callStopSpeakCmd, callDTMFCmd,
@@ -350,6 +352,9 @@ var (
 
 // transcriptionTypeUsage is --transcription-type's help on the Record APIs.
 const transcriptionTypeUsage = "transcription type: auto|hybrid|manual (results go to --transcription-url)"
+
+// transcribeNote is what --transcribe, which the Record APIs never read, says.
+const transcribeNote = "the API never read it, so nothing was transcribed; use --transcription-type auto with --transcription-url"
 
 var callRecordCmd = &cobra.Command{
 	Use:   "record <call_uuid>",

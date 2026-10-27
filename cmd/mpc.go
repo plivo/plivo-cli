@@ -136,6 +136,10 @@ func init() {
 	mpcCreateCmd.Flags().Int("max-participants", 0, "ignored")
 	mpcCreateCmd.Flags().Bool("record", false, "ignored")
 
+	for _, f := range []string{"limit", "offset", "all"} {
+		ignoredFlag(mpcPartListCmd, f, f == "all", "the API returns every participant at once; drop it")
+	}
+
 	mpcPartAddCmd.Flags().StringVar(&mpcPartAddFrom, "from", "", "source number for the dial-out (required)")
 	_ = mpcPartAddCmd.MarkFlagRequired("from")
 	mpcPartAddCmd.Flags().StringVar(&mpcPartAddTo, "to", "", "destination number to add (required)")

@@ -543,7 +543,8 @@ func TestListFlags_everyPagedListChecksThePageFirst(t *testing.T) {
 	walk = func(c *cobra.Command) {
 		// docs search is local: its --limit caps search hits, not an API page.
 		// account usage pages by token, up to 1000 rows: its own case is above.
-		if c.Flags().Lookup("limit") != nil && c.CommandPath() != "plivo docs search" && c.CommandPath() != "plivo account usage" {
+		// A deprecated --limit is ignored, so there is no page to check.
+		if f := c.Flags().Lookup("limit"); f != nil && f.Deprecated == "" && c.CommandPath() != "plivo docs search" && c.CommandPath() != "plivo account usage" {
 			lists = append(lists, c)
 		}
 		for _, sub := range c.Commands() {

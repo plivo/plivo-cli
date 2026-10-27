@@ -27,6 +27,29 @@ func TestRecord_sendsTheAPIsFields(t *testing.T) {
 	}
 }
 
+// Flags the APIs never read stay, deprecated, so scripts that pass them keep
+// running: each is accepted with a note on what to use instead, and none of
+// their values is sent.
+func TestIgnoredFlags_acceptedNeverSent(t *testing.T) {
+	for args, want := range map[string]string{
+		"voice calls record c1 --both-legs --transcribe": "POST file_format time_limit",
+		"voice conferences record room --transcribe":     "POST file_format time_limit",
+		"numbers masking sessions create --first-party +14155550100 --second-party +14155550101 --mode voice --virtual-number +14155550102 --yes": "POST first_party record second_party",
+		"verify sessions create --recipient +14155550100 --app-uuid a1 --alpha-sender ACME --yes":                                                 "POST app_uuid channel recipient",
+		"voice multiparty participant list m1 --limit 5 --offset 5 --all":                                                                         "GET ",
+	} {
+		setFakeCreds(t)
+		sent := serveFixture(t, `{"api_id":"x","message":"ok"}`)
+		err, stdout, stderr := execCmd(t, strings.Fields(args)...)
+		calls, bodies := sent()
+		if len(calls) != 1 || err != nil || !strings.Contains(stdout+stderr, "has been deprecated, ") {
+			t.Errorf("%s: err %v, sent %v; want one request and a deprecation note:\n%s", args, err, calls, stdout+stderr)
+		} else if got := strings.Fields(calls[0])[0] + " " + strings.Join(slices.Sorted(maps.Keys(bodies[0])), " "); got != want {
+			t.Errorf("%s: sent %s, want %s", args, got, want)
+		}
+	}
+}
+
 // --live reads the call in progress (?status=live), whose fields are from and
 // to, not the record's from_number and to_number. Once it ends, the hint
 // says to drop --live.
