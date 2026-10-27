@@ -800,6 +800,7 @@ func TestJSONOutput_hidesSecretsUnlessShowSecrets(t *testing.T) {
 		{"account subaccounts list", false}, {"account subaccounts list --all", false}, {"api GET /Subaccount/", false},
 		{"account subaccounts list --show-secrets", true}, {"account subaccounts create --name x", true},
 		{"agents get d1e2f3a4-0000-4000-8000-000000000001", true}, {"api GET /AgentFlow/d1e2f3a4-0000-4000-8000-000000000001/", true},
+		{"agents list", true}, {"agents runs list d1e2f3a4-0000-4000-8000-000000000001", true}, {"agents nodes list", true},
 	} {
 		err, stdout, _ := execCmd(t, append(strings.Fields(tc.args), "-o", "json")...)
 		if err != nil || strings.Contains(stdout, "tok2") != tc.show || strings.Contains(stdout, "[REDACTED]") == tc.show {

@@ -67,6 +67,7 @@ func execCmd(t *testing.T, args ...string) (err error, stdout, stderr string) {
 	profileFlag = ""
 	outputFormat = ""
 	queryFlag = ""
+	showSecretsFlag = false
 	mapFlag = false
 	schemaFlag = false
 	logLevel = "warn"
