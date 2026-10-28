@@ -23,9 +23,10 @@ Add `## [X.Y.Z] - YYYY-MM-DD` at the top of `CHANGELOG.md`, under
 so write it for someone deciding whether to upgrade: what changed for them,
 not which files moved.
 
-In the same PR, set `version` in `plugin/.claude-plugin/plugin.json` to `X.Y.Z`.
-Plugin installs stay on that version until it changes, and
-`make test-release-notes` fails until the two match.
+In the same PR, set `version` to `X.Y.Z` in `plugin/.claude-plugin/plugin.json`,
+`plugin/plugin.json`, `plugin/.cursor-plugin/plugin.json` and
+`gemini-extension.json`. Plugin installs stay on that version until it changes,
+and `make test-release-notes` fails until they all match the CHANGELOG.
 
 Preview exactly what GitHub will show:
 

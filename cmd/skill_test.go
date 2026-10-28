@@ -1032,13 +1032,16 @@ func TestSkillUpdate_reportsARetiredSkillInTheProject(t *testing.T) {
 }
 
 // The plugin in plugin/ ships copies of the bundled skills, refreshed by
-// `make plugin-skills`.
+// `make plugin-skills`, and so does the Gemini CLI extension in skills/.
 func TestPluginSkillsMatchBundled(t *testing.T) {
 	dir := filepath.Join("..", "plugin", "skills")
 	for _, s := range bundledSkills {
 		got, err := os.ReadFile(filepath.Join(dir, s.dirName, "SKILL.md"))
 		if err != nil || string(got) != s.content {
 			t.Errorf("plugin/skills/%s/SKILL.md is not the bundled skill: run `make plugin-skills`", s.dirName)
+		}
+		if got, err := os.ReadFile(filepath.Join("..", "skills", s.dirName, "SKILL.md")); err != nil || string(got) != s.content {
+			t.Errorf("skills/%s/SKILL.md is not the bundled skill: run `make plugin-skills`", s.dirName)
 		}
 	}
 	if entries, _ := os.ReadDir(dir); len(entries) != len(bundledSkills) {
