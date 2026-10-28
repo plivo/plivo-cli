@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -108,24 +109,26 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	if err := wsproxy.ValidateCodecRate(streamsTestCodec, streamsTestRate); err != nil {
 		return clierr.BadFlag("codec", err.Error())
 	}
-	readBack := streamsTestBidirectional || streamsTestExpectAudio
-	header, profile, err := streamsTestSignature(streamsTestTo)
+	u, err := url.Parse(streamsTestTo)
+	if err != nil {
+		return clierr.BadFlag("to", err.Error())
+	}
+	signer, err := resolveStreamSigner()
+	if err != nil {
+		return err
+	}
+	header, err := signer.upgrade(u)
 	if err != nil {
 		return err
 	}
 	if dryRunFlag {
 		signed := "unsigned"
-		if profile != "" {
-			signed = "signed for profile " + profile
+		if signer.profile != "" {
+			signed = "signed for profile " + signer.profile
 		}
 		fmt.Fprintf(os.Stderr, "[dry-run] Would connect to %s (%s) and stream %ds of %s audio at %d Hz\n",
 			streamsTestTo, signed, streamsTestDuration, streamsTestCodec, streamsTestRate)
 		return nil
-	}
-
-	mediaFormat := wsproxy.MediaFormat{
-		Encoding:   wsproxy.Encoding(streamsTestCodec),
-		SampleRate: streamsTestRate,
 	}
 
 	// Build a context that cancels on SIGINT so Ctrl+C tears down cleanly
@@ -133,169 +136,17 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	httpClient := &http.Client{}
-	if streamsTestInsecure {
-		httpClient.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-	}
-
 	out := cmd.OutOrStdout()
 	jsonOut := effectiveFormat() == output.FormatJSON
-	result := streamsTestResult{Codec: streamsTestCodec, Rate: streamsTestRate, Bidirectional: readBack, Signed: profile != "", Warnings: []string{}}
-	warn := func(msg string) {
-		result.Warnings = append(result.Warnings, msg)
-		if !jsonOut {
-			fmt.Fprintf(out, "⚠ %s\n", msg)
-		}
-	}
-
-	// --- Phase 1: connect ---
-	dialCtx, dialCancel := context.WithTimeout(ctx, 10*time.Second)
-	dialStart := time.Now()
-	conn, resp, err := websocket.Dial(dialCtx, streamsTestTo, &websocket.DialOptions{HTTPClient: httpClient, HTTPHeader: header})
-	latency := time.Since(dialStart)
-	dialCancel()
+	result, err := streamsProbe{
+		url: streamsTestTo, header: header, profile: signer.profile,
+		codec: streamsTestCodec, rate: streamsTestRate, duration: streamsTestDuration,
+		readBack: streamsTestBidirectional || streamsTestExpectAudio, insecure: streamsTestInsecure,
+		// Plivo's stream and call ids are UUIDs.
+		streamID: uuid.NewString(), callID: uuid.NewString(), accountID: "test-account",
+	}.run(ctx, out, jsonOut)
 	if err != nil {
-		if resp != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
-			return streamsTestRefused(resp.StatusCode, profile)
-		}
-		return clierr.NetworkError(streamsTestTo, err)
-	}
-	defer conn.Close(websocket.StatusNormalClosure, "test complete")
-	result.Connected = true
-	result.LatencyMs = latency.Milliseconds()
-	if !jsonOut {
-		signedAs := ""
-		if profile != "" {
-			signedAs = fmt.Sprintf(", signed with profile %q", profile)
-		}
-		fmt.Fprintf(out, "✓ Connection established (%dms%s)\n", result.LatencyMs, signedAs)
-	}
-
-	// --- Phase 2: handshake (start frame) ---
-	streamID := uuid.NewString() // Plivo's stream and call ids are UUIDs
-	startFrame, err := wsproxy.EncodeStart(streamID, uuid.NewString(), "test-account", mediaFormat)
-	if err != nil {
-		return clierr.Wrap(fmt.Errorf("encode start frame: %w", err))
-	}
-	writeCtx, writeCancel := context.WithTimeout(ctx, 2*time.Second)
-	err = conn.Write(writeCtx, websocket.MessageText, startFrame)
-	writeCancel()
-	if err != nil {
-		return clierr.NetworkError(streamsTestTo, fmt.Errorf("send start frame: %w", err))
-	}
-	result.HandshakeSent = true
-	if !jsonOut {
-		fmt.Fprintf(out, "✓ Sent Plivo handshake frame\n")
-	}
-
-	// --- Phase 3: stream synthetic audio ---
-	const frameMs = 20
-	totalFrames := streamsTestDuration * 1000 / frameMs
-	frames := wsproxy.SyntheticAudio(streamsTestCodec, totalFrames, frameMs, streamsTestRate)
-
-	// The reader starts before the first media frame, so an answer is read,
-	// and timed, as it arrives rather than after the whole stream. It runs in
-	// every mode: it is also what sees the endpoint close the connection.
-	sendStart := time.Now()
-	rb := startStreamsReadBack(conn)
-	for i, audio := range frames {
-		if ctx.Err() != nil {
-			break
-		}
-		// A write that runs out of time closes the connection, so the
-		// bound only catches an endpoint that has stopped reading.
-		mediaCtx, mediaCancel := context.WithTimeout(ctx, 2*time.Second)
-		raw, _ := wsproxy.EncodeMedia(streamID, i+1, sendStart.UnixMilli()+int64(i*frameMs), audio)
-		err := conn.Write(mediaCtx, websocket.MessageText, raw)
-		mediaCancel()
-		if err != nil {
-			if ctx.Err() != nil {
-				break
-			}
-			// The socket is gone after any failed write: no point retrying.
-			_ = conn.CloseNow()
-			rb.stop()
-			if e := endpointClosed(rb, fmt.Sprintf("at frame %d of %d", i+1, totalFrames)); e != nil {
-				return e
-			}
-			return clierr.NetworkError(streamsTestTo, fmt.Errorf("send frame %d: %w", i+1, err))
-		}
-		result.FramesSent++
-		// 20ms-paced; if we're falling behind, send-as-fast-as-possible
-		// instead. The endpoint should drain.
-		nextSend := sendStart.Add(time.Duration(i+1) * time.Duration(frameMs) * time.Millisecond)
-		if d := time.Until(nextSend); d > 0 {
-			select {
-			case <-time.After(d):
-			case <-ctx.Done():
-			}
-		}
-	}
-	if !jsonOut {
-		fmt.Fprintf(out, "✓ Streamed %ds of synthetic %s %dHz audio (%d frames)\n",
-			streamsTestDuration, streamsTestCodec, streamsTestRate, result.FramesSent)
-	}
-	if ctx.Err() != nil {
-		warn(fmt.Sprintf("Interrupted after %d of %d frames", result.FramesSent, totalFrames))
-	}
-
-	// --- Phase 4: give the endpoint time to answer ---
-	if readBack && ctx.Err() == nil {
-		rb.waitForAnswer(ctx, time.Duration(streamsTestDuration)*time.Second)
-	}
-
-	// --- Phase 5: stop, close, then stop reading ---
-	// In that order: coder/websocket drops the connection when a Read's
-	// context ends, which used to cut the socket before stop went out.
-	stop, _ := wsproxy.EncodeStop()
-	stopCtx, stopCancel := context.WithTimeout(context.WithoutCancel(ctx), 1*time.Second)
-	stopErr := conn.Write(stopCtx, websocket.MessageText, stop)
-	stopCancel()
-	if stopErr != nil {
-		// If the endpoint's close failed the write, the reader may still be
-		// taking that close in: give it a moment.
-		select {
-		case <-rb.done:
-		case <-time.After(100 * time.Millisecond):
-		}
-	}
-	// Reading ended before our close: the endpoint hung up first, which on a
-	// real call drops the stream.
-	closedEarly := ctx.Err() == nil && rb.ended()
-	_ = conn.Close(websocket.StatusNormalClosure, "test complete")
-	rb.stop()
-	if closedEarly {
-		if e := endpointClosed(rb, "before the stop frame"); e != nil {
-			return e
-		}
-		return clierr.NetworkError(streamsTestTo, fmt.Errorf("%w before the stop frame", rb.err))
-	}
-
-	if readBack {
-		result.FramesReadBack = rb.frames
-		result.PlayAudioFrames = rb.playAudio
-		if !rb.firstAudio.IsZero() {
-			ms := rb.firstAudio.Sub(sendStart).Milliseconds()
-			result.FirstResponseMs = &ms
-		}
-		if rb.frames == 0 {
-			warn("No frames received back from endpoint: the bot→caller path may not be wired")
-		} else if !jsonOut {
-			fmt.Fprintf(out, "✓ Received %d frames back from endpoint (bot→caller path live)\n", rb.frames)
-		}
-		if rb.playAudio > 0 {
-			if !jsonOut {
-				fmt.Fprintf(out, "✓ First playAudio %dms after the first frame (%d playAudio frames)\n",
-					*result.FirstResponseMs, rb.playAudio)
-			}
-		} else if rb.frames > 0 {
-			warn(fmt.Sprintf("%d frames came back but none was playAudio carrying audio", rb.frames))
-		}
-	}
-	if stopErr != nil {
-		warn("Stop frame not sent: " + writeFailure(rb, stopErr).Error())
+		return err
 	}
 
 	var outcome error
@@ -319,43 +170,250 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// streamsTestSignature signs the upgrade as Plivo signs a stream, over the
-// http:// form of the URL without its query, so an endpoint that checks the
-// signature lets the test in. Logged out, the test stays unsigned.
-func streamsTestSignature(wsURL string) (http.Header, string, error) {
-	u, err := url.Parse(wsURL)
-	if err != nil {
-		return nil, "", clierr.BadFlag("to", err.Error())
+// streamsProbe is one synthetic call to a WebSocket endpoint: a start frame,
+// duration seconds of a tone, then stop and a normal close. `streams test`
+// and `streams simulate` both run it.
+type streamsProbe struct {
+	url      string
+	header   http.Header // the upgrade's signature, if any
+	profile  string      // the profile that signed it; "" when unsigned
+	codec    string
+	rate     int
+	duration int  // seconds of audio
+	readBack bool // count what the endpoint sends back, and wait for its answer
+	insecure bool // skip TLS verification
+
+	streamID, callID, accountID string // the start frame's ids
+}
+
+// run plays the call and returns its summary, narrating each step on out
+// unless quiet. A refused upgrade, a failed send or an endpoint that hangs
+// up before the stop frame is the error.
+func (p streamsProbe) run(ctx context.Context, out io.Writer, quiet bool) (streamsTestResult, error) {
+	mediaFormat := wsproxy.MediaFormat{
+		Encoding:   wsproxy.Encoding(p.codec),
+		SampleRate: p.rate,
 	}
+
+	httpClient := &http.Client{}
+	if p.insecure {
+		httpClient.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
+
+	result := streamsTestResult{Codec: p.codec, Rate: p.rate, Bidirectional: p.readBack, Signed: p.profile != "", Warnings: []string{}}
+	warn := func(msg string) {
+		result.Warnings = append(result.Warnings, msg)
+		if !quiet {
+			fmt.Fprintf(out, "⚠ %s\n", msg)
+		}
+	}
+
+	// --- Phase 1: connect ---
+	dialCtx, dialCancel := context.WithTimeout(ctx, 10*time.Second)
+	dialStart := time.Now()
+	conn, resp, err := websocket.Dial(dialCtx, p.url, &websocket.DialOptions{HTTPClient: httpClient, HTTPHeader: p.header})
+	latency := time.Since(dialStart)
+	dialCancel()
+	if err != nil {
+		if resp != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
+			return result, streamsTestRefused(p.url, resp.StatusCode, p.profile)
+		}
+		e := clierr.NetworkError(p.url, err)
+		if errors.Is(err, http.ErrSchemeMismatch) {
+			e.Hint = "The URL is wss://, but the server answered without TLS: use ws:// for a server without TLS on this machine; real calls need wss://, through a tunnel or a TLS host."
+		}
+		return result, e
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "test complete")
+	result.Connected = true
+	result.LatencyMs = latency.Milliseconds()
+	if !quiet {
+		signedAs := ""
+		if p.profile != "" {
+			signedAs = fmt.Sprintf(", signed with profile %q", p.profile)
+		}
+		fmt.Fprintf(out, "✓ Connection established (%dms%s)\n", result.LatencyMs, signedAs)
+	}
+
+	// --- Phase 2: handshake (start frame) ---
+	startFrame, err := wsproxy.EncodeStart(p.streamID, p.callID, p.accountID, mediaFormat)
+	if err != nil {
+		return result, clierr.Wrap(fmt.Errorf("encode start frame: %w", err))
+	}
+	writeCtx, writeCancel := context.WithTimeout(ctx, 2*time.Second)
+	err = conn.Write(writeCtx, websocket.MessageText, startFrame)
+	writeCancel()
+	if err != nil {
+		return result, clierr.NetworkError(p.url, fmt.Errorf("send start frame: %w", err))
+	}
+	result.HandshakeSent = true
+	if !quiet {
+		fmt.Fprintf(out, "✓ Sent Plivo handshake frame\n")
+	}
+
+	// --- Phase 3: stream synthetic audio ---
+	const frameMs = 20
+	totalFrames := p.duration * 1000 / frameMs
+	frames := wsproxy.SyntheticAudio(p.codec, totalFrames, frameMs, p.rate)
+
+	// The reader starts before the first media frame, so an answer is read,
+	// and timed, as it arrives rather than after the whole stream. It runs in
+	// every mode: it is also what sees the endpoint close the connection.
+	sendStart := time.Now()
+	rb := startStreamsReadBack(conn)
+	for i, audio := range frames {
+		if ctx.Err() != nil {
+			break
+		}
+		// A write that runs out of time closes the connection, so the
+		// bound only catches an endpoint that has stopped reading.
+		mediaCtx, mediaCancel := context.WithTimeout(ctx, 2*time.Second)
+		raw, _ := wsproxy.EncodeMedia(p.streamID, i+1, sendStart.UnixMilli()+int64(i*frameMs), audio)
+		err := conn.Write(mediaCtx, websocket.MessageText, raw)
+		mediaCancel()
+		if err != nil {
+			if ctx.Err() != nil {
+				break
+			}
+			// The socket is gone after any failed write: no point retrying.
+			_ = conn.CloseNow()
+			rb.stop()
+			if e := endpointClosed(p.url, rb, fmt.Sprintf("at frame %d of %d", i+1, totalFrames)); e != nil {
+				return result, e
+			}
+			return result, clierr.NetworkError(p.url, fmt.Errorf("send frame %d: %w", i+1, err))
+		}
+		result.FramesSent++
+		// 20ms-paced; if we're falling behind, send-as-fast-as-possible
+		// instead. The endpoint should drain.
+		nextSend := sendStart.Add(time.Duration(i+1) * time.Duration(frameMs) * time.Millisecond)
+		if d := time.Until(nextSend); d > 0 {
+			select {
+			case <-time.After(d):
+			case <-ctx.Done():
+			}
+		}
+	}
+	if !quiet {
+		fmt.Fprintf(out, "✓ Streamed %ds of synthetic %s %dHz audio (%d frames)\n",
+			p.duration, p.codec, p.rate, result.FramesSent)
+	}
+	if ctx.Err() != nil {
+		warn(fmt.Sprintf("Interrupted after %d of %d frames", result.FramesSent, totalFrames))
+	}
+
+	// --- Phase 4: give the endpoint time to answer ---
+	if p.readBack && ctx.Err() == nil {
+		rb.waitForAnswer(ctx, time.Duration(p.duration)*time.Second)
+	}
+
+	// --- Phase 5: stop, close, then stop reading ---
+	// In that order: coder/websocket drops the connection when a Read's
+	// context ends, which used to cut the socket before stop went out.
+	stop, _ := wsproxy.EncodeStop()
+	stopCtx, stopCancel := context.WithTimeout(context.WithoutCancel(ctx), 1*time.Second)
+	stopErr := conn.Write(stopCtx, websocket.MessageText, stop)
+	stopCancel()
+	if stopErr != nil {
+		// If the endpoint's close failed the write, the reader may still be
+		// taking that close in: give it a moment.
+		select {
+		case <-rb.done:
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	// Reading ended before our close: the endpoint hung up first, which on a
+	// real call drops the stream.
+	closedEarly := ctx.Err() == nil && rb.ended()
+	_ = conn.Close(websocket.StatusNormalClosure, "test complete")
+	rb.stop()
+	if closedEarly {
+		if e := endpointClosed(p.url, rb, "before the stop frame"); e != nil {
+			return result, e
+		}
+		return result, clierr.NetworkError(p.url, fmt.Errorf("%w before the stop frame", rb.err))
+	}
+
+	if p.readBack {
+		result.FramesReadBack = rb.frames
+		result.PlayAudioFrames = rb.playAudio
+		if !rb.firstAudio.IsZero() {
+			ms := rb.firstAudio.Sub(sendStart).Milliseconds()
+			result.FirstResponseMs = &ms
+		}
+		if rb.frames == 0 {
+			warn("No frames received back from endpoint: the bot→caller path may not be wired")
+		} else if !quiet {
+			fmt.Fprintf(out, "✓ Received %d frames back from endpoint (bot→caller path live)\n", rb.frames)
+		}
+		if rb.playAudio > 0 {
+			if !quiet {
+				fmt.Fprintf(out, "✓ First playAudio %dms after the first frame (%d playAudio frames)\n",
+					*result.FirstResponseMs, rb.playAudio)
+			}
+		} else if rb.frames > 0 {
+			warn(fmt.Sprintf("%d frames came back but none was playAudio carrying audio", rb.frames))
+		}
+	}
+	if stopErr != nil {
+		warn("Stop frame not sent: " + writeFailure(rb, stopErr).Error())
+	}
+	return result, nil
+}
+
+// streamSigner signs requests as Plivo signs its own (X-Plivo-Signature-V3),
+// keyed with the logged-in profile's auth token, so an endpoint that checks
+// the signature lets them in. Logged out, it is the zero value and signs
+// nothing.
+type streamSigner struct{ profile, authID, token string }
+
+func resolveStreamSigner() (streamSigner, error) {
 	p, profile, err := config.Resolve(profileFlag)
 	var ce *clierr.Error
 	if errors.As(err, &ce) && ce.Code == clierr.CodeAuthMissing {
-		return nil, "", nil
+		return streamSigner{}, nil
 	}
 	if err != nil {
-		return nil, "", err
+		return streamSigner{}, err
+	}
+	return streamSigner{profile: profile, authID: p.AuthID, token: p.AuthToken}, nil
+}
+
+// sign returns the signature headers for a request to rawURL carrying
+// params; none when logged out.
+func (s streamSigner) sign(rawURL, method string, params map[string]string) (http.Header, error) {
+	if s.token == "" {
+		return http.Header{}, nil
 	}
 	nonce := randomHex(10)
-	sig, err := plivosig.Compute(p.AuthToken, "http://"+u.Host+u.EscapedPath(), http.MethodGet, nonce, nil)
+	sig, err := plivosig.Compute(s.token, rawURL, method, nonce, params)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	return http.Header{plivosig.HeaderSignature: {sig}, plivosig.HeaderNonce: {nonce}}, profile, nil
+	return http.Header{plivosig.HeaderSignature: {sig}, plivosig.HeaderNonce: {nonce}}, nil
+}
+
+// upgrade signs a WebSocket upgrade as Plivo signs a stream: a GET over the
+// http:// form of the URL, without its query.
+func (s streamSigner) upgrade(u *url.URL) (http.Header, error) {
+	return s.sign("http://"+u.Host+u.EscapedPath(), http.MethodGet, nil)
 }
 
 // streamsTestRefused reports a 401 or 403 on the upgrade: the endpoint
 // refused it, most likely over the signature, so a network hint misleads.
-func streamsTestRefused(status int, profile string) *clierr.Error {
+func streamsTestRefused(target string, status int, profile string) *clierr.Error {
 	hint := "No profile is logged in, so the upgrade was unsigned and an endpoint that checks Plivo's signature refuses it. Run `plivo login`, then test again."
 	if profile != "" {
 		hint = fmt.Sprintf("The upgrade was signed like Plivo's, with profile %q's auth token. If the endpoint checks another account's token, test again with --profile set to that account's profile.", profile)
 	}
 	return &clierr.Error{
 		Code:       clierr.CodeAuthForbidden,
-		Message:    streamsTestTo + " refused the WebSocket upgrade",
+		Message:    target + " refused the WebSocket upgrade",
 		Hint:       hint,
 		StatusCode: status,
-		Context:    map[string]any{"target": streamsTestTo, "signed": profile != ""},
+		Context:    map[string]any{"target": target, "signed": profile != ""},
 	}
 }
 
@@ -492,19 +550,19 @@ func writeFailure(rb *streamsReadBack, err error) error {
 	return err
 }
 
-// endpointClosed is the error for an endpoint that hung up before the stop
-// frame, nil when it sent no close frame. The endpoint was reached, so the
-// error gives its close code and reason, not a connectivity hint.
-func endpointClosed(rb *streamsReadBack, when string) *clierr.Error {
+// endpointClosed is the error for an endpoint at target that hung up before
+// the stop frame, nil when it sent no close frame. The endpoint was reached,
+// so the error gives its close code and reason, not a connectivity hint.
+func endpointClosed(target string, rb *streamsReadBack, when string) *clierr.Error {
 	detail, ok := closeDetail(rb)
 	if !ok {
 		return nil
 	}
 	return &clierr.Error{
 		Code:      clierr.CodeNetworkError,
-		Message:   fmt.Sprintf("%s closed the stream %s (%s)", streamsTestTo, when, detail),
+		Message:   fmt.Sprintf("%s closed the stream %s (%s)", target, when, detail),
 		Hint:      "The endpoint accepted the stream, then hung up: on a real call that drops the audio. Its logs should say why.",
 		Retryable: true,
-		Context:   map[string]any{"target": streamsTestTo},
+		Context:   map[string]any{"target": target},
 	}
 }

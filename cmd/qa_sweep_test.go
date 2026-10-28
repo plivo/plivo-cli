@@ -31,6 +31,9 @@ import (
 var qaSweepReplies = map[string]string{
 	"GET Zentrunk/Trunk/{}/":      `{"api_id": "qa", "trunk_id": "21000000000001", "name": "qa", "trunk_direction": "inbound", "trunk_status": "enabled", "primary_uri_uuid": "d1e2f3a4-0000-4000-8000-000000000003"}`,
 	"GET Zentrunk/Credential/{}/": `{"api_id": "qa", "credential_uuid": "d1e2f3a4-0000-4000-8000-000000000001", "name": "qa", "username": "qauser01"}`,
+	// voice streams readiness's number, routed to an application on a flow runner's path.
+	"GET Number/14155550199/":            `{"api_id": "qa", "number": "14155550199", "voice_enabled": true, "application": "/v1/Account/CIFAKEPLACEHOLDER001/Application/31000000000000009/"}`,
+	"GET Application/31000000000000009/": `{"api_id": "qa", "app_id": "31000000000000009", "app_name": "qa", "answer_url": "https://flows.example.com/v1/account/CIFAKEPLACEHOLDER001/phlo/qa-flow"}`,
 	// The diagnose commands' assistant turn.
 	"POST /v1/cli/cx/v1/aiassist/buddy-ext/chat": okDiagnoseTurn,
 }

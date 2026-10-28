@@ -182,6 +182,9 @@ var qaSamples = map[string]string{
 	"voice recordings delete":             "{uuid}",
 	"voice recordings get":                "{uuid}",
 	"voice recordings list":               "",
+
+	// Its number is on a flow (qaSweepReplies), whose answer URL it never requests.
+	"voice streams readiness": "+14155550199",
 }
 
 // qaAfterFix holds the samples a pending fix changes, under the finding it
@@ -239,6 +242,7 @@ var qaLocalOnly = map[string]string{
 	"upgrade":                 "downloads a release",
 	"voice multiparty create": "retired: says how to start a multiparty call, sends nothing",
 	"voice streams forward":   "runs a tunnel and a local proxy",
+	"voice streams simulate":  "requests the given answer URL itself",
 	"voice streams test":      "dials the given WebSocket itself",
 }
 
@@ -246,22 +250,23 @@ var qaLocalOnly = map[string]string{
 // sweep: each must change nothing on disk. upgrade has none: it reads the
 // release from GitHub first, which the suite cannot reach.
 var qaLocalSamples = map[string]string{
-	"ask":                "-i",
-	"auth list":          "",
-	"auth remove":        "test",
-	"auth use":           "other",
-	"config get":         "telemetry",
-	"config set":         "telemetry false",
-	"config telemetry":   "off",
-	"docs list":          "",
-	"docs search":        "call",
-	"docs show":          "voice/api/calls",
-	"login":              "",
-	"logout":             "test",
-	"open":               "call {uuid}",
-	"skill install":      "cli",
-	"skill update":       "",
-	"voice streams test": "--to ws://127.0.0.1:9/ws",
+	"ask":                    "-i",
+	"auth list":              "",
+	"auth remove":            "test",
+	"auth use":               "other",
+	"config get":             "telemetry",
+	"config set":             "telemetry false",
+	"config telemetry":       "off",
+	"docs list":              "",
+	"docs search":            "call",
+	"docs show":              "voice/api/calls",
+	"login":                  "",
+	"logout":                 "test",
+	"open":                   "call {uuid}",
+	"skill install":          "cli",
+	"skill update":           "",
+	"voice streams simulate": "--answer-url http://127.0.0.1:9/answer",
+	"voice streams test":     "--to ws://127.0.0.1:9/ws",
 }
 
 // qaSampleIDs are the well-formed IDs the samples use.

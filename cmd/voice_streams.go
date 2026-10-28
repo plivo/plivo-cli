@@ -22,7 +22,11 @@ itself — they don't act on an existing call-bound stream.
             frames to verify it accepts the Plivo stream format.
   forward   Temporarily redirect an app's answer_url to a local tunnel
             so a real call's audio streams into your local WebSocket
-            handler. Restores the original answer_url on Ctrl+C.`,
+            handler. Restores the original answer_url on Ctrl+C.
+  simulate  Act as Plivo on one call: request an answer URL, check its
+            XML, then stream to the WebSocket in its <Stream>.
+  readiness Check a number (inbound), or a caller ID and answer URL
+            (outbound), is ready for a streamed call, then simulate it.`,
 	Args: cobra.NoArgs,
 	RunE: groupRunE,
 }

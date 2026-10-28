@@ -24,6 +24,7 @@ type streamServer struct {
 	*httptest.Server
 	mu     sync.Mutex
 	events []string
+	callID string // from the start frame
 	status websocket.StatusCode
 	done   chan struct{}
 }
@@ -48,6 +49,9 @@ func newStreamServer(t *testing.T, reply func(payload string) string) *streamSer
 			}
 			var ev struct {
 				Event string `json:"event"`
+				Start struct {
+					CallID string `json:"callId"`
+				} `json:"start"`
 				Media struct {
 					Payload string `json:"payload"`
 				} `json:"media"`
@@ -55,6 +59,9 @@ func newStreamServer(t *testing.T, reply func(payload string) string) *streamSer
 			_ = json.Unmarshal(data, &ev)
 			s.mu.Lock()
 			s.events = append(s.events, ev.Event)
+			if ev.Event == "start" {
+				s.callID = ev.Start.CallID
+			}
 			s.mu.Unlock()
 			if reply != nil && ev.Event == "media" {
 				if c.Write(r.Context(), websocket.MessageText, []byte(reply(ev.Media.Payload))) != nil {
