@@ -215,14 +215,14 @@ func TestVoiceStreamsSimulate_dryRunAndFlagsSendNothing(t *testing.T) {
 // plivoHosted matches Plivo's hosts and, on any host, a flow runner's path.
 func TestPlivoHosted(t *testing.T) {
 	for raw, want := range map[string]bool{
-		"https://phlorunner.plivo.com/v1/account/CIFAKEPLACEHOLDER001/phlo/f": true,
-		"https://AgentFlow.Plivo.com./answer":                                 true,
-		"https://runner.example.net//V2/Account/x/Flow/f/node":                true,
-		"https://agent.example.com/answer":                                    false,
-		"https://plivo.com.example.com/answer":                                false,
-		"https://myplivo.com/answer":                                          false,
-		"https://agent.example.com/app/v1/account/x/phlo/f":                   false,
-		"https://agent.example.com/v1/account/x/phloem":                       false,
+		"https://plivo.com/answer":                             true,
+		"https://Any-Host.Plivo.COM./answer":                   true,
+		"https://runner.example.net//V2/Account/x/Flow/f/node": true,
+		"https://agent.example.com/answer":                     false,
+		"https://plivo.com.example.com/answer":                 false,
+		"https://myplivo.com/answer":                           false,
+		"https://agent.example.com/app/v1/account/x/phlo/f":    false,
+		"https://agent.example.com/v1/account/x/phloem":        false,
 	} {
 		if u, _ := url.Parse(raw); plivoHosted(u) != want {
 			t.Errorf("plivoHosted(%s) = %v, want %v", raw, !want, want)
