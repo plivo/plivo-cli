@@ -204,6 +204,12 @@ func parsePages(body string) []Page {
 	return out
 }
 
+// mdEscape is a Markdown backslash escape. The export writes field names that
+// way (subaccount\_auth), so search compares text with the escapes removed.
+var mdEscape = regexp.MustCompile(`\\([[:punct:]])`)
+
+func unescape(s string) string { return mdEscape.ReplaceAllString(s, "$1") }
+
 // Search returns pages whose text contains every keyword, ranked by how often
 // the keywords appear. Case-insensitive, substring match, so partial words and
 // API field names both hit.
@@ -217,7 +223,7 @@ func (f *Fetcher) Search(keywords []string, limit int, refresh bool) ([]Match, e
 	}
 	lower := make([]string, len(keywords))
 	for i, k := range keywords {
-		lower[i] = strings.ToLower(k)
+		lower[i] = strings.ToLower(unescape(k))
 	}
 
 	type scored struct {
@@ -226,7 +232,7 @@ func (f *Fetcher) Search(keywords []string, limit int, refresh bool) ([]Match, e
 	}
 	var hits []scored
 	for _, p := range pages {
-		hay := strings.ToLower(p.Title + "\n" + p.Body)
+		hay := strings.ToLower(unescape(p.Title + "\n" + p.Body))
 		score := 0
 		ok := true
 		for _, k := range lower {
@@ -263,10 +269,10 @@ func (f *Fetcher) Search(keywords []string, limit int, refresh bool) ([]Match, e
 }
 
 // firstHit returns the 1-based line number and trimmed text of the first line
-// containing needle.
+// containing needle, ignoring Markdown escapes. The text is the line as written.
 func firstHit(body, needle string) (int, string) {
 	for i, line := range strings.Split(body, "\n") {
-		if strings.Contains(strings.ToLower(line), needle) {
+		if strings.Contains(strings.ToLower(unescape(line)), needle) {
 			s := strings.TrimSpace(line)
 			if len(s) > 240 {
 				s = s[:240] + "…"
