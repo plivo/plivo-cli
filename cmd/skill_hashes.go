@@ -6,6 +6,7 @@ package cmd
 // version that has been on main, plus the bundled one (CRLF read as LF).
 var shippedSkillHashes = map[string][]string{
 	"plivo-cx-agents": {
+		"0844f4fbc81b4a46c81b40613ffcf74879a35e7dc6d30a95733fdcc425325b44",
 		"14e448b7ca7d89a14450c623f8c75b6742007bb1d9924397da0384a54495ed23",
 		"2cede6679d95733ba008a5237430d22af3b3a76d687f92763c6586b8c8170c0e",
 		"4796511f42258d0ff1fde91e310796d8be42c33ace21b219092e48416ba3f939",

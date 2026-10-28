@@ -1,6 +1,7 @@
 ---
 name: plivo-cx-agents
 description: Build, update, test and publish Plivo CX Agents (conversation flows made of nodes) through the Agents API and the Plivo CLI. Trigger whenever the user wants to create, edit, wire, validate, test or publish a Plivo CX agent or flow, asks which Plivo nodes to use, or mentions AgentFlowNode / agent_uuid / the Agents API.
+license: Apache-2.0
 ---
 
 # Plivo CX Agents skill
