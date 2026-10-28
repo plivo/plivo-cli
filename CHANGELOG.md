@@ -5,10 +5,28 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.1] - 2026-10-28
+## [1.3.2] - 2026-10-28
+
+v1.3.1 was tagged but never released: its changes ship in this release.
 
 ### Added
 
+- `voice streams simulate --answer-url <url>` does what Plivo does when a
+  call reaches your answer URL, from this machine and without placing a
+  call: it requests the URL with the fields Plivo sends (signed with
+  X-Plivo-Signature-V3 when you are logged in), checks the reply and its
+  `<Stream>`, then streams a tone to that WebSocket as `voice streams test`
+  does. `--xml-only` stops after the XML.
+- `voice streams readiness <number>` checks that a number is ready for a
+  streamed call (voice enabled, India compliance, an application with an
+  answer URL), then simulates the call. `--from`, `--to` and `--answer-url`
+  check an outbound call instead: the caller ID, India rules and credit.
+  The result is `ready`, `not_ready` or `unknown`. It places no call and
+  changes nothing. Neither command requests a Plivo-hosted answer URL (a
+  console flow or an agent), where a request would run it for real.
+- `agents update --file flow.json --allow-node-deletion` removes the nodes
+  the file leaves out. Without the flag the API refuses such an update
+  (422), and the error now names the flag.
 - The five product skills install as a Claude Code plugin, kept current
   with this repository: `/plugin install plivo --marketplace plivo/plivo-cli`
   (Claude Code 2.1.275+; on older versions run
@@ -16,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/plugin install plivo@plivo`). Owners of a Claude organization can add
   `https://github.com/plivo/plivo-cli` under Organization settings > Plugins
   & skills to give every member the skills.
+- The same skills install as a Gemini CLI extension:
+  `gemini extensions install https://github.com/plivo/plivo-cli`.
 - `skill install agents` installs the CX agents skill, which builds, tests
   and publishes Plivo CX agents (AI conversation flows). `skill list` shows
   it first and `skill install all` includes it; a bare `skill install` still
@@ -186,6 +206,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `sip trunks update --direction` alone said "nothing to update" though a
   flag was passed; it now says `--direction` alone changes nothing and lists
   the flags that do.
+- `docs search` missed field names that the docs write with an escaped
+  underscore, such as `auth\_id`.
+- `sip test` warned about a SIP SRV record that names the host itself on
+  the port tested, where SRV and DNS reach the same address.
+- `voice streams test` on a `wss://` URL that reaches a server without TLS
+  showed only a scheme error; it now says to use `ws://` for a local server.
 
 ## [1.3.0] - 2026-10-19
 
