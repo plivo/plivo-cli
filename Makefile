@@ -93,9 +93,9 @@ docs: ## Regenerate the command reference (docs/COMMANDS.md)
 skill-hashes: ## Regenerate cmd/skill_hashes.go after a SKILL.md change (git fetch origin first)
 	go run ./tools/skillhashes -o cmd/skill_hashes.go
 
-plugin-skills: ## Copy the product skills into plugin/skills and skills (the Gemini CLI extension) after a SKILL.md change
+plugin-skills: ## Copy the product skills into plugin/skills, skills (the Gemini CLI extension) and antigravity/plivo/skills after a SKILL.md change
 	@for p in agents-skill:plivo-cx-agents cli-skill:plivo-cli audio-streaming-skill:plivo-audio-streaming sip-trunking-skill:plivo-sip-trunking voice-xml-skill:plivo-voice-xml; do \
-	  for d in plugin/skills skills; do mkdir -p $$d/$${p#*:} && cp $${p%%:*}/SKILL.md $$d/$${p#*:}/SKILL.md; done; done
+	  for d in plugin/skills skills antigravity/plivo/skills; do mkdir -p $$d/$${p#*:} && cp $${p%%:*}/SKILL.md $$d/$${p#*:}/SKILL.md; done; done
 
 clean: ## Remove build artefacts
 	rm -f $(BINARY)
