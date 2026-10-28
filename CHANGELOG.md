@@ -5,6 +5,188 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-10-28
+
+### Added
+
+- The five product skills install as a Claude Code plugin, kept current
+  with this repository: `/plugin install plivo --marketplace plivo/plivo-cli`
+  (Claude Code 2.1.275+; on older versions run
+  `/plugin marketplace add plivo/plivo-cli`, then
+  `/plugin install plivo@plivo`). Owners of a Claude organization can add
+  `https://github.com/plivo/plivo-cli` under Organization settings > Plugins
+  & skills to give every member the skills.
+- `skill install agents` installs the CX agents skill, which builds, tests
+  and publishes Plivo CX agents (AI conversation flows). `skill list` shows
+  it first and `skill install all` includes it; a bare `skill install` still
+  installs the CLI skill. Other agents can install it with
+  `npx skills add plivo/plivo-cli --skill plivo-cx-agents`.
+- `voice calls list --live` lists the calls in progress.
+- `--show-secrets` shows auth tokens and passwords in API responses. They
+  now read `[REDACTED]` by default (see Changed).
+- `PLIVO_API_URL` sends every API request to a server on this machine
+  (localhost, 127.0.0.0/8 or ::1), to see exactly what the CLI sends. Any
+  other host is refused.
+- `account applications delete --cascade=false
+  --new-endpoint-application <app_id>` moves the app's endpoints to another
+  app instead of leaving them detached.
+- `numbers compliance list --number-type national`.
+- `voice calls record --record-channel-type mono|stereo` (stereo puts each
+  leg on its own channel), and `--transcription-type` with
+  `--transcription-url` on `voice calls record` and
+  `voice conferences record`.
+- `--timeout` takes a duration such as `90s`, as well as seconds.
+- `--schema` describes the result that the diagnose commands, `sip test`,
+  `voice streams test` and `sip connect plan` print under `-o json`.
+- Deleting a SIP URI lists the trunks that went with it in `trunks_deleted`
+  and the ones still there in `trunks_kept`.
+
+### Changed
+
+- Auth tokens and passwords read `[REDACTED]` in every output format and in
+  `plivo api` output, unless you pass `--show-secrets`: a subaccount's
+  `auth_token` and `new_auth_token`, an endpoint's `password`. Keys and
+  their order are kept. `account subaccounts create` still shows the new
+  token once. Agent flows come back as sent: the server masks their secrets.
+- `sip uris create|update` send a `sip:` or `sips:` URI host first, the form
+  the API takes: `sip:` is dropped, `sips:` becomes `;transport=tls` (port
+  5061 when none is given), and `sips:` with another transport is refused.
+  The CLI prints the form it sent. The API rejects both schemes, so these
+  creates used to fail.
+- `messaging sms 10dlc brands create` registers a brand from a 10DLC
+  profile and requires `--profile-uuid`; the company's details live on the
+  profile. `--brand-type` (STANDARD or STARTER) is sent only when given, so
+  the API's default applies. `brands update` is gone from the help and
+  refuses: the API has no brand update.
+- `messaging sms 10dlc campaigns update` requires `--yes` (or `--dry-run`
+  to preview), as each update is charged.
+- `voice conferences stop-record` requires `--yes`, like `hangup`.
+- `voice endpoints create` requires `--alias`, as the API does.
+- `voice calls make --machine-detection` takes `true` or `hangup`; leave it
+  out for none. `none` used to be sent to the API.
+- `voice calls make` sends `answer_method` GET only for the built-in demo
+  answer URL. Your own answer URL gets the API's default, POST, unless you
+  pass `--answer-method`.
+- `lookup` names its price in its help (USD 0.004 per request) and notes
+  the charge on stderr on each run.
+- Refused before any request:
+  - an empty or blank value for a required flag; an empty, `.` or `..` ID;
+    a control character in a `plivo api` path;
+  - `--timeout` of 0 or less (it used to become 30 seconds);
+  - `voice calls make` with a `--from` that isn't an E.164 number, or a
+    `--to` part that is neither an E.164 number nor a `sip:` URI;
+  - `voice calls streams start --bidirectional` with an outbound or
+    both-ways audio track;
+  - a SIP URI with a user part (`sip:user@host`), which the API rejects; a
+    SIP trunk ID that isn't digits; a SIP call ID that isn't a UUID;
+  - private, loopback, link-local, carrier-grade NAT, benchmarking,
+    multicast and reserved addresses in `sip ip-acl create|update` and as a
+    SIP URI host, which Plivo can never reach (a range wider than its block
+    is still only warned about);
+  - an `account usage` window that holds no day.
+- `--dry-run` covers local changes too: `auth use|remove`, `logout`,
+  `config set`, `config telemetry`, `login`, `upgrade`, `voice streams test`
+  and `docs --refresh` print what they would do and change nothing.
+  `ask -i` refuses `--dry-run`.
+- `plivo api` and every other command no longer follow a redirect. A 3xx
+  exits 3 and names where it pointed (and a missing trailing slash, the
+  usual cause).
+- `plivo api` gives an HTTP error the code and exit code any other command
+  gives it: a 404 is `RESOURCE_NOT_FOUND` (exit 1), a 401 exit 2, a 429
+  exit 4. It used to report every one as `UPSTREAM_ERROR` (exit 3), though
+  its help promised the CLI's codes. The status is still in `status_code`
+  and the API's body in `context.upstream`.
+- `ask` and `diagnose` refuse an assistant URL (`PLIVO_BUDDY_URL` or
+  `[buddy].url`) that is plain http to another host.
+- Flags the API never read are hidden and print a note when used. They
+  still run, as before, and send nothing: `voice calls record --both-legs`
+  (both legs are always recorded) and `--transcribe` (nothing was
+  transcribed; use `--transcription-type`), the same `--transcribe` on
+  `voice conferences record`, `numbers masking sessions create --mode` and
+  `--virtual-number`, `verify sessions create --alpha-sender`, and
+  `--limit`, `--offset` and `--all` on `voice multiparty participant list`,
+  which returns every participant at once.
+- `numbers masking sessions list` rows are at `data.response.objects` and
+  `verify sessions list` rows at `data.sessions`, where the API puts them;
+  `--all`, `-o jsonl` and `-o csv` follow them.
+- The CLI, audio-streaming, Voice XML and SIP trunking skills describe
+  these changes, and keep the older behaviour for older installs. The CX
+  agents skill sets UUID v4 node ids, uses the current AI nodes, installs
+  the CLI when it's missing, and before an update replaces the nulls in a
+  fetched agent with values each node's schema takes.
+- Built with Go 1.26.10, which fixes GO-2026-6809.
+
+### Fixed
+
+- IDs went into request paths unescaped, so `#` and `?` cut the path short:
+  `voice conferences hangup 'team#2'` hung up conference "team", and
+  `voice conferences stop-record '#'` sent `DELETE /Conference/`, which hangs
+  up every conference. IDs are now escaped, and `--dry-run` shows the
+  escaped URL.
+- A redirect could carry a request's credentials and body to another port
+  or host.
+- `account applications delete --cascade=false` behaved like no flag, and
+  the API deleted the app's endpoints. It now keeps them, detached, and the
+  confirmation says which happens.
+- 10DLC brands and campaigns were read with the wrong shape and field names
+  (`get` printed blanks; lists showed empty status columns), campaign
+  create and update sent fields under names the API ignores, and number
+  links called an endpoint that doesn't exist. They now match the API:
+  sample messages, opt-in, opt-out and help fields, the required `vertical`,
+  and links through the campaign's Number endpoint.
+- `messaging sms tollfree submit` sent fields the API doesn't take and
+  printed a blank ID. It now sends the profile, use case, summary, message
+  sample, opt-in details, volume and number the API defines, and `get`
+  takes the request's `uuid`.
+- `voice multiparty` mute and hold called endpoints that don't exist; they
+  now set the participant's `mute` and `hold`.
+- `voice conferences member kick` hung the member's call up instead of
+  removing it from the conference, and `member play` sent `urls` where the
+  API takes one `url`.
+- `voice calls streams start` sent its status callback under a name the API
+  ignores (`status_callback_url` now).
+- `numbers masking sessions get` and `list` printed empty fields: the API
+  nests a session under `response`, with `created_time` and `expiry_time`.
+- `verify sessions validate` posted to an endpoint the API doesn't have;
+  it now posts to the session.
+- `voice multiparty get`, `list` and `participant list`, and
+  `voice calls streams get`, read fields under names the API doesn't send.
+- Endpoint, subaccount and application tables and `--schema` read field
+  names the API doesn't send (`application`, `created`, `modified`,
+  `default_app` are the real ones).
+- `--schema` listed fields the API doesn't send: `api_id` in list rows,
+  `total_count` on call, recording and message lists, a message's `text`,
+  a conference's `resource_uri`, a number's `app_id`.
+- `numbers search` printed nothing when the API declined a search; the
+  API's reason now goes to stderr.
+- `diagnose -o json`, and `diagnose` off a terminal, exited 3 on answers
+  with `//` or `/* */` comments, trailing commas, or a confidence given as
+  a number, as "moderate" or not at all. These are read now; with no
+  confidence, `confidence` is null.
+- `voice streams forward` killed outright left the app on the tunnel URL
+  and the tunnel running. The next run on that app restores the real answer
+  URL and, on macOS and Linux, stops the tunnel.
+- `docs --refresh` showed the old cached copy, exit 0, when the refresh
+  failed, without saying so. It now names the error and the copy's age.
+- A `--query` whose result grows on each step (`[@,@] | [@,@] | ...`) could
+  use all memory. A result over its size budget, or a search that runs too
+  long, is now an error.
+- Two CLI commands changing `~/.plivo/config.toml` at once could lose one
+  change. Changes now take a lock (waiting up to 10 seconds).
+- `auth remove --dry-run` removed the profile and deleted its keychain
+  token.
+- `skill install --project` followed a symlinked skill folder or SKILL.md
+  out of the repository and wrote there. A link that stays in the
+  repository still works.
+- `skill update` and `skill list` skipped the Codex skills folder.
+- `plivo login` offered the skills again in each new agent; it now asks once
+  per machine, as documented.
+- The `plivo feedback` scrubber let bearer tokens and Indian PAN and Aadhaar
+  numbers through; they are now redacted.
+- `sip trunks update --direction` alone said "nothing to update" though a
+  flag was passed; it now says `--direction` alone changes nothing and lists
+  the flags that do.
+
 ## [1.3.0] - 2026-10-19
 
 ### Added
