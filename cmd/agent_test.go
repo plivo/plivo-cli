@@ -71,3 +71,14 @@ func TestReadAgentFlowFile_validFileParses(t *testing.T) {
 		t.Errorf("parsed = %+v, want name Support with 1 node", f)
 	}
 }
+
+func TestAgentsUpdate_allowNodeDeletionNeedsFileAndIsSent(t *testing.T) {
+	setFakeCreds(t)
+	flow := filepath.Join(t.TempDir(), "flow.json")
+	_ = os.WriteFile(flow, []byte(`{"nodes":[]}`), 0o600)
+	errName, _, _ := execCmd(t, "agents", "update", "abc123", "--name", "x", "--allow-node-deletion")
+	errFile, _, stderr := execCmd(t, "agents", "update", "abc123", "--file", flow, "--allow-node-deletion", "--dry-run")
+	if errName == nil || !strings.Contains(errName.Error(), "needs --file") || errFile != nil || !strings.Contains(stderr, `"allow_node_deletion": true`) {
+		t.Errorf("--name: %v (want needs --file); --file: %v, dry-run body: %s", errName, errFile, stderr)
+	}
+}

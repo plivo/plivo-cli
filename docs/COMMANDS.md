@@ -850,6 +850,10 @@ replace (--file, or --description together with a graph) — mixing
 --description with --name but no graph is rejected by the server with a
 clear 400. Pass --file for any change beyond a plain rename.
 
+To remove nodes, leave them out of the --file graph and pass
+--allow-node-deletion; without it the server refuses the update (422).
+No connection may still point at a removed node.
+
 ```
 plivo agents update <agent_id> [flags]
 ```
@@ -859,14 +863,16 @@ Examples:
 ```
   plivo agents update abc123 --name "New Name"
   plivo agents update abc123 --file flow.json
+  plivo agents update abc123 --file flow.json --allow-node-deletion
 ```
 
 Flags:
 
 ```
-      --description string   new description (must be paired with --file — see above)
-      --file string          JSON file with the full flow graph ({name, description, nodes, connections}); flags win over its fields
-      --name string          rename the agent
+      --allow-node-deletion   allow the --file graph to remove the nodes it leaves out (no connection may still point at one)
+      --description string    new description (must be paired with --file — see above)
+      --file string           JSON file with the full flow graph ({name, description, nodes, connections}); flags win over its fields
+      --name string           rename the agent
 ```
 
 ---
