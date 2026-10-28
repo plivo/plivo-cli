@@ -20,6 +20,7 @@ The auth_id identifies the account.
 # Audio Streams
 Source: https://plivo.com/docs/voice/api/audio-streams
 | ` + "`bidirectional`" + ` | boolean | Whether stream supports two-way audio |
+` + "**audio\\_track** `string`" + `
 Streaming uses a WebSocket.
 
 # Messaging Overview
@@ -156,6 +157,14 @@ func TestSearch_matchesFieldNamesAndReportsLine(t *testing.T) {
 	}
 	if !strings.Contains(got[0].Snippet, "bidirectional") {
 		t.Errorf("snippet missing the match: %q", got[0].Snippet)
+	}
+}
+
+// The export escapes field names (audio\_track); the literal name must hit.
+func TestSearch_matchesEscapedFieldName(t *testing.T) {
+	got, err := newTestFetcher(t, nil).Search([]string{"audio_track"}, 10, false)
+	if err != nil || len(got) != 1 || got[0].Snippet != "**audio\\_track** `string`" {
+		t.Fatalf("got %+v, %v", got, err)
 	}
 }
 
