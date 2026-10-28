@@ -354,7 +354,7 @@ plivo agents update <agent_uuid> --file flow.json
 ```
 
 - A new node needs a new UUID v4 id. A node's `type` can't change: remove the node and add a replacement under a new id.
-- Removing a node needs `"allow_node_deletion": true` in the body, and no connection may still point at it. `plivo agents update` doesn't send that field, so use `plivo api POST /AgentFlow/<agent_uuid>/ --body @flow.json --yes`.
+- To remove a node, leave it out and repoint or drop every connection to it, then add `--allow-node-deletion` (v1.4.0+): `plivo agents update <agent_uuid> --file flow.json --allow-node-deletion`. Without the flag the update gets `422`. A connection left pointing at a removed node gets `500`, which retrying won't fix. Older binaries have no such flag: add `"allow_node_deletion": true` to flow.json and use `plivo api POST /AgentFlow/<agent_uuid>/ --body @flow.json --yes`.
 - `name` can change alone (`plivo agents update <agent_uuid> --name "..."`). A `description` change must include the full graph.
 - Reads mask secret fields (`token`, `password`, `secret`, `api_key`, `authorization`, `cookie`) as `***REDACTED***`, and the server restores them on write. It can't for a list under a secret-named key, or for list entries without a unique `id`, `uuid`, `key` or `name`: those updates return `400` until you send the real values.
 
