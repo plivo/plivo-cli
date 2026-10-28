@@ -9,13 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- The four product skills install as a Claude Code plugin, kept current
+- The five product skills install as a Claude Code plugin, kept current
   with this repository: `/plugin install plivo --marketplace plivo/plivo-cli`
   (Claude Code 2.1.275+; on older versions run
   `/plugin marketplace add plivo/plivo-cli`, then
   `/plugin install plivo@plivo`). Owners of a Claude organization can add
   `https://github.com/plivo/plivo-cli` under Organization settings > Plugins
   & skills to give every member the skills.
+- `skill install agents` installs the CX agents skill, which builds, tests
+  and publishes Plivo CX agents (AI conversation flows). `skill list` shows
+  it first and `skill install all` includes it; a bare `skill install` still
+  installs the CLI skill. Other agents can install it with
+  `npx skills add plivo/plivo-cli --skill plivo-cx-agents`.
 - `voice calls list --live` lists the calls in progress.
 - `--show-secrets` shows auth tokens and passwords in API responses. They
   now read `[REDACTED]` by default (see Changed).
@@ -106,7 +111,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--all`, `-o jsonl` and `-o csv` follow them.
 - The CLI, audio-streaming, Voice XML and SIP trunking skills describe
   these changes, and keep the older behaviour for older installs. The CX
-  agents skill sets UUID v4 node ids and uses the current AI nodes.
+  agents skill sets UUID v4 node ids, uses the current AI nodes, installs
+  the CLI when it's missing, and before an update replaces the nulls in a
+  fetched agent with values each node's schema takes.
 - Built with Go 1.26.10, which fixes GO-2026-6809.
 
 ### Fixed
