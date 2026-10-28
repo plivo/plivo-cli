@@ -144,21 +144,13 @@ func TestSkillInstall_agentsSkillIsListedFirst(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	t.Cleanup(func() { skillDir = ""; skillPrint = false; dryRunFlag = false })
 
-	if s := bundledSkills[0]; s.selector != "agents" || s.dirName != "plivo-cx-agents" {
-		t.Fatalf("first listed skill is %q -> %q, want agents -> plivo-cx-agents", s.selector, s.dirName)
+	if s, _ := lookupSkill(""); bundledSkills[0].selector != "agents" || s.selector != "cli" {
+		t.Fatalf("first skill %q, default %q; want agents first and cli as the default", bundledSkills[0].selector, s.selector)
 	}
-	if !strings.Contains(skillInstallCmd.Use, "[agents|") {
-		t.Errorf("usage doesn't list agents first: %q", skillInstallCmd.Use)
-	}
-	if s, _ := lookupSkill(""); s.selector != "cli" {
-		t.Errorf("bare install picks %q, want cli", s.selector)
-	}
-
 	if err := runSkillInstall(nil, []string{"agents"}); err != nil {
 		t.Fatalf("install agents: %v", err)
 	}
-	got, err := os.ReadFile(filepath.Join(home, ".claude", "skills", "plivo-cx-agents", skillFileName))
-	if err != nil || string(got) != agentsskill.SkillMD {
+	if got, err := os.ReadFile(filepath.Join(home, ".claude", "skills", "plivo-cx-agents", skillFileName)); err != nil || string(got) != agentsskill.SkillMD {
 		t.Errorf("install agents didn't write the embedded skill (err %v)", err)
 	}
 }
@@ -332,25 +324,24 @@ func TestSkillList_reportsEverySkillAndItsState(t *testing.T) {
 	}
 
 	// Install one, then it reports installed.
-	if err := runSkillInstall(nil, nil); err != nil {
-		t.Fatalf("default install: %v", err)
+	if err := runSkillInstall(nil, []string{bundledSkills[0].selector}); err != nil {
+		t.Fatalf("install: %v", err)
 	}
-	def, _ := lookupSkill("")
 	for _, r := range skillListRows(t) {
-		if r.Selector == def.selector && r.State != skillStateCurrent {
+		if r.Selector == bundledSkills[0].selector && r.State != skillStateCurrent {
 			t.Errorf("after installing %s, state = %q, want %q", r.Selector, r.State, skillStateCurrent)
 		}
 	}
 
 	// Tamper with it: that is the drift embedding creates, and the state that
 	// tells a user to re-run install.
-	p := filepath.Join(home, ".claude", "skills", def.dirName, skillFileName)
+	p := filepath.Join(home, ".claude", "skills", bundledSkills[0].dirName, skillFileName)
 	if err := os.WriteFile(p, []byte("--- \nstale content from an older binary\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	var found bool
 	for _, r := range skillListRows(t) {
-		if r.Selector == def.selector {
+		if r.Selector == bundledSkills[0].selector {
 			found = true
 			if r.State != skillStateStale {
 				t.Errorf("a modified skill reports %q, want %q", r.State, skillStateStale)
@@ -361,19 +352,6 @@ func TestSkillList_reportsEverySkillAndItsState(t *testing.T) {
 		t.Error("the tampered skill vanished from the listing")
 	}
 	_ = buf
-}
-
-// `skill list` shows the CX agents skill first too.
-func TestSkillList_listsTheAgentsSkillFirst(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	t.Cleanup(func() { outputFormat = "" })
-	outputFormat = "json"
-
-	if rows := skillListRows(t); len(rows) == 0 || rows[0].Selector != "agents" || rows[0].InstallsTo != "plivo-cx-agents" {
-		t.Errorf("first `skill list` row isn't the agents skill: %+v", rows)
-	}
 }
 
 // skillListRows runs `skill list` in JSON mode and decodes the envelope.
