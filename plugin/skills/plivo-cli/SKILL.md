@@ -66,7 +66,7 @@ If the user names a voice agent, an IVR or a SIP platform in "Other", route to t
 | Send a message | Which number to send from (header From, from `numbers list --services sms`), the recipient, the text; for WhatsApp, whether the recipient wrote in the last 24 hours | Credit check, preview `messaging <sms\|mms\|whatsapp> send … --dry-run`, ask (header Send) "Send this to <masked number>?", run with `--yes`, then `messaging get <message_uuid> -o json` for its status. |
 | A number | Country (header Country), local or toll-free, and what it is for: calls, SMS or both | `numbers search`, then the Buy number question above with up to three numbers as options. India: KYC first (`numbers compliance list --country IN --status accepted`); never add `--force` to get past a KYC refusal. Linking: the Link question above, then `numbers update <number> --app-id <app_id>`. |
 | Account | Nothing more for a read | `auth whoami`, `account get`, `account applications list`, `account subaccounts list`. Show the balance (`cash_credits`) when the user asks about their account status. |
-| A voice agent, an IVR or call XML, a SIP platform | Nothing; hand over | `plivo skill list`. If the matching skill is installed, follow it; if not, ask (header Install) "Install the Plivo <name> skill? It walks you through this step by step. Free, no network." · Install it (recommended) · Just use the CLI. Then `plivo skill install audio-streaming`, `voice-xml` or `sip-trunking`. |
+| A voice agent, a Plivo CX agent (an AI conversation flow), an IVR or call XML, a SIP platform | Nothing; hand over | `plivo skill list`. If the matching skill is installed, follow it; if not, ask (header Install) "Install the Plivo <name> skill? It walks you through this step by step. Free, no network." · Install it (recommended) · Just use the CLI. Then `plivo skill install agents`, `audio-streaming`, `voice-xml` or `sip-trunking`. |
 
 Pick the right command:
 
@@ -154,8 +154,9 @@ Pick a sending number: `plivo numbers list --services sms -o json | jq -r '.data
 
 ## Other Plivo skills
 
-Each is bundled in the binary and installed separately, with no network: `plivo skill install audio-streaming | sip-trunking | voice-xml`.
+Each is bundled in the binary and installed separately, with no network: `plivo skill install agents | audio-streaming | sip-trunking | voice-xml`. A CLI too old to offer `agents` gets it with `npx skills add plivo/plivo-cli --skill plivo-cx-agents`.
 
+- `plivo-cx-agents`: build, test and publish Plivo CX agents, the AI conversation flows of the console builder, through the Agents API.
 - `plivo-audio-streaming`: take a voice bot (a test bot or your own WebSocket bot) to real calls with `<Stream>`, from setup to go-live.
 - `plivo-sip-trunking`: connect LiveKit, ElevenLabs, Retell, Vapi or another SIP platform over SIP trunking.
 - `plivo-voice-xml`: write and fix the XML an answer URL returns.

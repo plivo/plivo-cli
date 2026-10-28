@@ -3,6 +3,11 @@
   "notGrouped": "bottom",
   "groupings": [
     {
+      "title": "CX agents",
+      "description": "Build, test and publish Plivo CX agents: AI conversation flows for calls and messages.",
+      "skills": ["plivo-cx-agents"]
+    },
+    {
       "title": "Plivo CLI",
       "description": "Run any Plivo task from the plivo command line.",
       "skills": ["plivo-cli"]

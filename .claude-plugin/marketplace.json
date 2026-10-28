@@ -6,7 +6,7 @@
     "email": "cx-tech@plivo.com"
   },
   "metadata": {
-    "description": "Official Plivo plugin: skills for voice agents, SIP trunking, Voice XML and the Plivo CLI."
+    "description": "Official Plivo plugin: skills for CX agents, voice agents, SIP trunking, Voice XML and the Plivo CLI."
   },
   "plugins": [
     {
@@ -14,7 +14,7 @@
       "source": "./plugin",
       "description": "Official Plivo skills for coding agents.",
       "category": "development",
-      "tags": ["voice", "voice-agents", "sip-trunking", "telephony"]
+      "tags": ["ai-agents", "voice", "voice-agents", "sip-trunking", "telephony"]
     }
   ]
 }
