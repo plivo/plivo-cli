@@ -1,8 +1,6 @@
 ---
 name: plivo-cx-agents
 description: Build, update, test and publish Plivo CX Agents (conversation flows made of nodes) through the Agents API and the Plivo CLI. Trigger whenever the user wants to create, edit, wire, validate, test or publish a Plivo CX agent or flow, asks which Plivo nodes to use, or mentions AgentFlowNode / agent_uuid / the Agents API.
-metadata:
-  internal: true
 ---
 
 # Plivo CX Agents skill
@@ -10,6 +8,8 @@ metadata:
 A Plivo CX **Agent** is a directed graph: `nodes` (what happens) plus `connections` (what happens next). You build one by sending that graph as JSON. A `201` only means the graph was stored. The agent is done when the [preflight](#preflight-check) passes, publish leaves it `ACTIVE`, and it opens cleanly in the console builder.
 
 The Agents API is for US data region accounts only. It isn't available to India data region accounts (a CLI profile with `region = "ap-south-1"` in `~/.plivo/config.toml`), and subaccounts aren't supported. With several CLI profiles, pass `--profile <name>` to every `plivo` command.
+
+Docs: [Agents API](https://plivo-agent-docs.mintlify.app/api/overview), [building agents with the CLI](https://plivo-agent-docs.mintlify.app/cli/overview).
 
 ## Rules that break flows
 
@@ -25,7 +25,7 @@ The Agents API is for US data region accounts only. It isn't available to India 
 
 ## Workflow
 
-Use the Plivo CLI (`brew install plivo/tap/plivo`, then `plivo login`). It handles auth and adds `/v1/Account/<auth_id>` to paths.
+Use the Plivo CLI. It handles auth and adds `/v1/Account/<auth_id>` to paths. Check it with `plivo --version`. Not on PATH: `brew install plivo/tap/plivo`. Without Homebrew, ask the user to install it from <https://github.com/plivo/plivo-cli#install> (the installer checks the release signature) rather than running an install script yourself. Then `plivo auth whoami`: if it exits 2, ask the user to run `plivo login` in their own terminal, which signs in through the browser. Don't run it yourself.
 
 1. `plivo api GET /AgentFlowNode/ > catalogue.json`: every node type and its handles. The preflight reads this file.
 2. `plivo agents nodes get <type>`: the JSON Schema, once per type you use.
@@ -325,17 +325,30 @@ for s in json.load(sys.stdin)["data"]["data"]["scenarios"]:
 
 ## Updating an agent
 
-Send the whole graph back, with every id exactly as it came back. Reads return unset fields as `null`, so drop those before you send:
+Send the whole graph back, with every id exactly as it came back. Reads return unset fields as `null`. Following rule 7, this turns a `null` list into `[]` and a `null` text field into `""`, by each type's schema, and leaves other `null` fields out:
 
 ```bash
-plivo agents get <agent_uuid> -o json | python3 -c '
-import json, sys
-def clean(o):
-    if isinstance(o, dict):
-        return {k: clean(v) for k, v in o.items() if v is not None}
-    return [clean(v) for v in o] if isinstance(o, list) else o
-a = clean(json.load(sys.stdin)["data"])
-json.dump({"nodes": a["nodes"], "connections": a["connections"]}, open("flow.json", "w"), indent=2)'
+plivo agents get <agent_uuid> -o json > agent.json
+for t in $(python3 -c 'import json; print(*{n["type"] for n in json.load(open("agent.json"))["data"]["nodes"]})'); do
+  plivo agents nodes get "$t" -o json > "schema_$t.json"
+done
+python3 - <<'PY'
+import json
+a = json.load(open("agent.json"))["data"]
+for n in a["nodes"]:
+    props = json.load(open(f"schema_{n['type']}.json"))["data"]["json_schema"].get("properties", {})
+    model = n.get("config", {}).get("model", {})
+    for k in [k for k, v in model.items() if v is None]:
+        s = props.get(k, {})
+        kinds = s.get("type") if isinstance(s.get("type"), list) else [s.get("type")]
+        if "array" in kinds:
+            model[k] = []
+        elif kinds == ["string"] and "enum" not in s:
+            model[k] = ""
+        else:
+            del model[k]
+json.dump({"nodes": a["nodes"], "connections": a["connections"]}, open("flow.json", "w"), indent=2)
+PY
 # edit flow.json, run the preflight, then:
 plivo agents update <agent_uuid> --file flow.json
 ```

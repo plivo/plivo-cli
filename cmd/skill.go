@@ -14,6 +14,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	agentsskill "github.com/plivo/plivo-cli/agents-skill"
 	audiostreamingskill "github.com/plivo/plivo-cli/audio-streaming-skill"
 	cliskill "github.com/plivo/plivo-cli/cli-skill"
 	"github.com/plivo/plivo-cli/internal/clierr"
@@ -34,9 +35,10 @@ type bundledSkill struct {
 	replaces []string // skill directories from earlier releases that this skill supersedes
 }
 
-// bundledSkills is ordered; the FIRST entry is the default when no selector is
-// given, which keeps bare `plivo skill install` behaving as it always has.
+// bundledSkills is listed in this order, the CX agents skill first. Bare
+// `plivo skill install` still installs defaultSkillSelector, as it always has.
 var bundledSkills = []bundledSkill{
+	{selector: "agents", dirName: "plivo-cx-agents", content: agentsskill.SkillMD, summary: "build, test and publish Plivo CX agents (AI conversation flows)"},
 	{
 		selector: "cli",
 		dirName:  "plivo-cli",
@@ -48,16 +50,14 @@ var bundledSkills = []bundledSkill{
 	{selector: "voice-xml", dirName: "plivo-voice-xml", content: voicexmlskill.SkillMD, summary: "write and fix Plivo Voice XML"},
 }
 
-// The CX agents skill (agents-skill/) stays in the repo, keeping its own
-// embed file and tests, but nothing imports it here. So it reaches neither
-// bundledSkills, ValidArgs and the help text, nor the binary itself, while
-// the feature isn't live. See TestSkillInstall_cxAgentsSkillIsNotOffered.
+// defaultSkillSelector is the skill bare `plivo skill install` writes.
+const defaultSkillSelector = "cli"
 
 // lookupSkill resolves a user-typed selector. An empty selector means the
-// default (first) skill.
+// default skill.
 func lookupSkill(selector string) (bundledSkill, error) {
 	if selector == "" {
-		return bundledSkills[0], nil
+		selector = defaultSkillSelector
 	}
 	for _, s := range bundledSkills {
 		if s.selector == selector {
@@ -103,13 +103,14 @@ var skillCmd = &cobra.Command{
 // skillInstallCmd writes the embedded SKILL.md into the agent skills directory
 // (default ~/.claude/skills/plivo-cli; override with --dir, or --print to stdout).
 var skillInstallCmd = &cobra.Command{
-	Use:   "install [cli|audio-streaming|sip-trunking|voice-xml|all]",
+	Use:   "install [agents|cli|audio-streaming|sip-trunking|voice-xml|all]",
 	Short: "Install an agent skill so coding agents auto-load the reference",
 	Long: `Install a Plivo agent skill.
 
 A skill is a single-file reference (SKILL.md) written for LLM coding agents.
 They are bundled in the binary, so this writes them out without a network call.
 
+  agents           build, test and publish Plivo CX agents (AI conversation flows)
   cli              the CLI reference — use ` + "`plivo`" + ` instead of raw curl
   audio-streaming  a voice bot on real calls with <Stream>, from setup to go-live
   sip-trunking     connect an AI voice platform over SIP trunking
@@ -131,6 +132,7 @@ An installed copy that matches no released version holds someone's edits, so
 it is kept unless you pass --force, as ` + "`plivo skill update`" + ` does. A retired
 skill that an install replaces keeps its file, renamed SKILL.md.retired.`,
 	Example: `  plivo skill install                    # CLI skill -> ~/.claude/skills/plivo-cli/
+  plivo skill install agents             # -> ~/.claude/skills/plivo-cx-agents/
   plivo skill install audio-streaming    # -> ~/.claude/skills/plivo-audio-streaming/
   plivo skill install voice-xml          # -> ~/.claude/skills/plivo-voice-xml/
   plivo skill install all                # every listed skill
@@ -138,7 +140,7 @@ skill that an install replaces keeps its file, renamed SKILL.md.retired.`,
   plivo skill install all --agent codex  # -> ~/.agents/skills/, where Codex reads them
   plivo skill install all --dry-run      # show destinations, write nothing`,
 	Args:      cobra.MaximumNArgs(1),
-	ValidArgs: []string{"cli", "audio-streaming", "sip-trunking", "voice-xml", "all"},
+	ValidArgs: []string{"agents", "cli", "audio-streaming", "sip-trunking", "voice-xml", "all"},
 	RunE:      runSkillInstall,
 }
 
