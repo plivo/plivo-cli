@@ -6,7 +6,9 @@ enabled; an Indian (+91) number has an accepted compliance application; it
 is routed to an application with an answer URL, which is then simulated with
 the application's method. A missing fallback answer URL or hangup URL, and a
 development tunnel, are warnings; a host Plivo cannot reach (this machine, a
-private address) fails.
+private address) fails. A Plivo-hosted answer URL (a console flow or an
+agent) is not simulated, in either direction: a request there would run it
+for real.
 
 Outbound, readiness --from <caller ID> --to <number> --answer-url <url>: the
 caller ID is a number on this account with voice enabled, or a verified

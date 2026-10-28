@@ -176,3 +176,27 @@ func TestVoiceStreamsReadiness_refusesBadInput(t *testing.T) {
 		}
 	}
 }
+
+// A Plivo-hosted answer URL is never requested: simulate refuses it, and
+// readiness, inbound or outbound, says the call was not simulated.
+func TestVoiceStreams_neverRequestAPlivoHostedAnswerURL(t *testing.T) {
+	setFakeCreds(t)
+	var hits atomic.Int64
+	flow := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits.Add(1) }))
+	t.Cleanup(flow.Close)
+	answer := flow.URL + "/v1/account/CIFAKEPLACEHOLDER001/phlo/flow-1" // a flow runner's path
+	if _, ce := simulateJSON(t, "--answer-url", answer); ce == nil || ce.Code != clierr.CodeBadFlag || ce.Context["flag"] != "answer-url" {
+		t.Errorf("simulate: err = %v, want BAD_FLAG --answer-url", ce)
+	}
+	readinessAPI(t, map[string]apiReply{usNumberPath: ok(usNumberRecord), accountPath: ok(fundedPaid),
+		usAppPath: ok(strings.Replace(streamApp, "https://agent.example.com/answer", answer, 1))})
+	for _, args := range [][]string{{"+14155551234"}, {"--from", "+14155551234", "--to", "+14155555678", "--answer-url", answer}} {
+		checks, sim, result, exit := readinessRun(t, args...)
+		if statusOf(checks, "simulate") != "unknown" || sim != nil || result != "unknown" || exit != 0 {
+			t.Errorf("%v: checks %+v, simulate %v, result %q, exit %d; want simulate unknown and exit 0", args, checks, sim, result, exit)
+		}
+	}
+	if n := hits.Load(); n != 0 {
+		t.Errorf("the Plivo-hosted answer URL got %d requests, want none", n)
+	}
+}

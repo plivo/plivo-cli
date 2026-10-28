@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -32,7 +33,9 @@ enabled; an Indian (+91) number has an accepted compliance application; it
 is routed to an application with an answer URL, which is then simulated with
 the application's method. A missing fallback answer URL or hangup URL, and a
 development tunnel, are warnings; a host Plivo cannot reach (this machine, a
-private address) fails.
+private address) fails. A Plivo-hosted answer URL (a console flow or an
+agent) is not simulated, in either direction: a request there would run it
+for real.
 
 Outbound, readiness --from <caller ID> --to <number> --answer-url <url>: the
 caller ID is a number on this account with voice enabled, or a verified
@@ -72,7 +75,7 @@ type readiness struct {
 	To        string         `json:"to,omitempty"`     // outbound: the number called
 	AppID     string         `json:"app_id,omitempty"` // inbound: the number's application
 	Checks    []streamsCheck `json:"checks"`
-	Simulate  *simulation    `json:"simulate"` // null when there was no answer URL, or under --dry-run
+	Simulate  *simulation    `json:"simulate"` // null when there was no answer URL to request, or under --dry-run
 	Result    string         `json:"result"`   // ready, not_ready or unknown
 
 	err *clierr.Error // the first failed check
@@ -142,6 +145,12 @@ func runVoiceStreamsReadiness(cmd *cobra.Command, args []string) error {
 		o = r.inbound(client)
 	} else {
 		o = r.outbound(client)
+	}
+	if o != nil {
+		if u, _ := url.Parse(o.answerURL); plivoHosted(u) {
+			r.add("simulate", "unknown", "not simulated: "+u.Hostname()+plivoHostedWhy, "")
+			o = nil
+		}
 	}
 	if o != nil {
 		o.simulateFlags, o.strict = readyFlags, true
@@ -333,7 +342,7 @@ func renderReadiness(r *readiness) error {
 	case err != nil:
 		r.Result = "not_ready"
 	case r.Simulate == nil:
-		r.Result = "unknown" // --dry-run: the call was not simulated
+		r.Result = "unknown" // the call was not simulated
 	}
 	if effectiveFormat() == output.FormatJSON {
 		if err != nil {

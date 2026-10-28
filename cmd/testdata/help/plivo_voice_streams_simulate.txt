@@ -8,7 +8,9 @@ of a 1 kHz tone in its contentType, as `voice streams test` does, reading back
 what the voice agent sends when the stream is bidirectional.
 
 --xml-only stops after the XML and opens no WebSocket. Only the answer
-document is read: no <Redirect> or action URL is followed.
+document is read: no <Redirect> or action URL is followed. A Plivo-hosted
+answer URL (a console flow or an agent) is refused with nothing sent: a
+request there would run it for real.
 
 A pass means your server answers this machine as Plivo needs, not that
 Plivo can reach it or that a caller hears the audio. Exit 0 on a pass; 1

@@ -4808,7 +4808,9 @@ enabled; an Indian (+91) number has an accepted compliance application; it
 is routed to an application with an answer URL, which is then simulated with
 the application's method. A missing fallback answer URL or hangup URL, and a
 development tunnel, are warnings; a host Plivo cannot reach (this machine, a
-private address) fails.
+private address) fails. A Plivo-hosted answer URL (a console flow or an
+agent) is not simulated, in either direction: a request there would run it
+for real.
 
 Outbound, readiness --from <caller ID> --to <number> --answer-url <url>: the
 caller ID is a number on this account with voice enabled, or a verified
@@ -4865,7 +4867,9 @@ of a 1 kHz tone in its contentType, as `voice streams test` does, reading back
 what the voice agent sends when the stream is bidirectional.
 
 --xml-only stops after the XML and opens no WebSocket. Only the answer
-document is read: no <Redirect> or action URL is followed.
+document is read: no <Redirect> or action URL is followed. A Plivo-hosted
+answer URL (a console flow or an agent) is refused with nothing sent: a
+request there would run it for real.
 
 A pass means your server answers this machine as Plivo needs, not that
 Plivo can reach it or that a caller hears the audio. Exit 0 on a pass; 1

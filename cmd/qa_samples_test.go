@@ -182,6 +182,9 @@ var qaSamples = map[string]string{
 	"voice recordings delete":             "{uuid}",
 	"voice recordings get":                "{uuid}",
 	"voice recordings list":               "",
+
+	// Its number is on a flow (qaSweepReplies), whose answer URL it never requests.
+	"voice streams readiness": "+14155550199",
 }
 
 // qaAfterFix holds the samples a pending fix changes, under the finding it

@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"regexp"
 	"sort"
 	"strings"
 	"syscall"
@@ -47,7 +48,9 @@ of a 1 kHz tone in its contentType, as ` + "`voice streams test`" + ` does, read
 what the voice agent sends when the stream is bidirectional.
 
 --xml-only stops after the XML and opens no WebSocket. Only the answer
-document is read: no <Redirect> or action URL is followed.
+document is read: no <Redirect> or action URL is followed. A Plivo-hosted
+answer URL (a console flow or an agent) is refused with nothing sent: a
+request there would run it for real.
 
 A pass means your server answers this machine as Plivo needs, not that
 Plivo can reach it or that a caller hears the audio. Exit 0 on a pass; 1
@@ -127,6 +130,11 @@ func checkAnswerFlags(urlFlag, answerURL, methodFlag string, method *string) err
 func runVoiceStreamsSimulate(cmd *cobra.Command, _ []string) error {
 	if err := checkAnswerFlags("answer-url", simAnswerURL, "answer-method", &simAnswerMethod); err != nil {
 		return err
+	}
+	if u, _ := url.Parse(simAnswerURL); plivoHosted(u) {
+		e := clierr.BadFlag("answer-url", u.Hostname()+plivoHostedWhy+", so nothing was sent to it")
+		e.Hint = "simulate tests an answer URL on your own server. To try a flow or an agent, call a number routed to it."
+		return e
 	}
 	if err := simFlags.validate(); err != nil {
 		return err
@@ -496,6 +504,22 @@ func (s *simulation) checkStream(doc answerXML, strict bool) (st streamVerb, cod
 
 // tunnelDomains are the development tunnels Plivo's docs and this CLI use.
 var tunnelDomains = []string{"ngrok.io", "ngrok.dev", "ngrok-free.app", "ngrok-free.dev", "trycloudflare.com", "lhr.life"}
+
+// flowRunnerPath is the path Plivo's console flows and agents answer calls
+// on, whatever the host: /v1/account/<auth_id>/phlo/<id>, or flow/<id>.
+var flowRunnerPath = regexp.MustCompile(`(?i)^/+v\d+/account/[^/]+/(phlo|flow)(/|$)`)
+
+// plivoHosted reports whether Plivo serves u: a plivo.com host, or a flow
+// runner's path. A request there runs the flow or agent for real, which can
+// cost money, so neither simulate nor readiness sends one.
+func plivoHosted(u *url.URL) bool {
+	h := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+	return h == "plivo.com" || strings.HasSuffix(h, ".plivo.com") || flowRunnerPath.MatchString(u.Path)
+}
+
+// plivoHostedWhy follows the host in what simulate and readiness say about
+// a Plivo-hosted answer URL.
+const plivoHostedWhy = " is Plivo-hosted (a console flow or an agent), where a request runs it for real and can cost money"
 
 // hostCheck is readiness's check that a real call can rely on u's host: it
 // fails when Plivo cannot reach it and warns on a development tunnel.
