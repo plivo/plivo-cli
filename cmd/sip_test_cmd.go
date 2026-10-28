@@ -35,8 +35,8 @@ expiry shown. UDP: resolve the host and send one SIP OPTIONS request.
 
 sips: and transport=tls are tested as TLS, on port 5061 unless the URI gives
 one; tcp and udp use 5060. With no transport, UDP is tested: SIP's default.
-A host given without a port that publishes a SIP SRV record gets a warning
-naming the record's target; the test probes the host itself.
+A host given without a port whose SIP SRV record names another host or port
+gets a warning naming it; the test probes the host itself.
 Quote a URI that has ;transport, or the shell cuts the command at the ;.
 
 A pass means the host answers, not that the platform will accept calls. Exit 0
@@ -222,11 +222,12 @@ func sipSRVQuery(u sipURI, transport string) (service, proto string, ok bool) {
 	return "sip", transport, true
 }
 
-// sipSRVWarnings names the target of the host's SIP SRV record, when it has
-// one. The test probes the host's own addresses and never follows SRV:
-// Plivo's docs do not say its calls do, so the target may be where the
-// platform listens while the host answers nothing. A failed lookup, or the
-// "." target that means no service, is not reported.
+// sipSRVWarnings names the first target of the host's SIP SRV record that is
+// not the address the test probes. The test never follows SRV: Plivo's docs
+// do not say its calls do, so the target may be where the platform listens
+// while the host answers nothing. A failed lookup, the "." target that means
+// no service, and a record naming the host itself on the tested port (where
+// SRV and A/AAAA reach the same address) are not reported.
 func sipSRVWarnings(ctx context.Context, u sipURI, transport string, step time.Duration) []string {
 	service, proto, ok := sipSRVQuery(u, transport)
 	if !ok {
@@ -235,12 +236,19 @@ func sipSRVWarnings(ctx context.Context, u sipURI, transport string, step time.D
 	ctx, cancel := context.WithTimeout(ctx, step)
 	defer cancel()
 	_, srvs, err := sipLookupSRV(ctx, service, proto, u.Host)
-	if err != nil || len(srvs) == 0 || srvs[0].Target == "." {
+	if err != nil {
 		return nil
 	}
-	target := net.JoinHostPort(strings.TrimSuffix(srvs[0].Target, "."), strconv.Itoa(int(srvs[0].Port)))
-	return []string{fmt.Sprintf("_%s._%s.%s points to %s; this test probes %s itself. To test that target: --uri \"%s;transport=%s\"",
-		service, proto, u.Host, target, u.Host, target, transport)}
+	for _, s := range srvs {
+		host, port := strings.TrimSuffix(s.Target, "."), int(s.Port)
+		if host == "" || (strings.EqualFold(host, u.Host) && port == u.testPort(transport)) {
+			continue
+		}
+		target := net.JoinHostPort(host, strconv.Itoa(port))
+		return []string{fmt.Sprintf("_%s._%s.%s points to %s; this test probes %s itself. To test that target: --uri \"%s;transport=%s\"",
+			service, proto, u.Host, target, u.Host, target, transport)}
+	}
+	return nil
 }
 
 // sipDialTCP connects to the first address that answers. What is left of the

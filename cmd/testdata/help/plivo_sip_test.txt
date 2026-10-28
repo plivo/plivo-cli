@@ -7,8 +7,8 @@ expiry shown. UDP: resolve the host and send one SIP OPTIONS request.
 
 sips: and transport=tls are tested as TLS, on port 5061 unless the URI gives
 one; tcp and udp use 5060. With no transport, UDP is tested: SIP's default.
-A host given without a port that publishes a SIP SRV record gets a warning
-naming the record's target; the test probes the host itself.
+A host given without a port whose SIP SRV record names another host or port
+gets a warning naming it; the test probes the host itself.
 Quote a URI that has ;transport, or the shell cuts the command at the ;.
 
 A pass means the host answers, not that the platform will accept calls. Exit 0
