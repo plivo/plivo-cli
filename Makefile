@@ -94,7 +94,7 @@ skill-hashes: ## Regenerate cmd/skill_hashes.go after a SKILL.md change (git fet
 	go run ./tools/skillhashes -o cmd/skill_hashes.go
 
 plugin-skills: ## Copy the product skills into plugin/skills after a SKILL.md change
-	@for p in cli-skill:plivo-cli audio-streaming-skill:plivo-audio-streaming sip-trunking-skill:plivo-sip-trunking voice-xml-skill:plivo-voice-xml; do \
+	@for p in agents-skill:plivo-cx-agents cli-skill:plivo-cli audio-streaming-skill:plivo-audio-streaming sip-trunking-skill:plivo-sip-trunking voice-xml-skill:plivo-voice-xml; do \
 	  mkdir -p plugin/skills/$${p#*:} && cp $${p%%:*}/SKILL.md plugin/skills/$${p#*:}/SKILL.md; done
 
 clean: ## Remove build artefacts

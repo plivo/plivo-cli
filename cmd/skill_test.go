@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	agentsskill "github.com/plivo/plivo-cli/agents-skill"
 	cliskill "github.com/plivo/plivo-cli/cli-skill"
 	"github.com/plivo/plivo-cli/internal/clierr"
 	voicexmlskill "github.com/plivo/plivo-cli/voice-xml-skill"
@@ -135,40 +136,22 @@ func TestSkillInstall_printToStdout(t *testing.T) {
 	}
 }
 
-// The CX agents skill is embedded but deliberately NOT listed: the code stays
-// in the repo while the feature is not live. This guards that decision, so
-// re-listing it has to be an intentional edit that updates this test too,
-// rather than a silent reappearance in a user-facing list.
-func TestSkillInstall_cxAgentsSkillIsNotOffered(t *testing.T) {
+// The CX agents skill is listed first, and bare `skill install` still writes
+// the CLI skill.
+func TestSkillInstall_agentsSkillIsListedFirst(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Cleanup(func() { skillDir = ""; skillPrint = false; dryRunFlag = false })
 
-	for _, s := range bundledSkills {
-		if s.selector == "agents" || s.dirName == "plivo-cx-agents" {
-			t.Fatalf("the CX agents skill is listed again (%q -> %q)", s.selector, s.dirName)
-		}
+	if s, _ := lookupSkill(""); bundledSkills[0].selector != "agents" || s.selector != "cli" {
+		t.Fatalf("first skill %q, default %q; want agents first and cli as the default", bundledSkills[0].selector, s.selector)
 	}
-
-	if err := runSkillInstall(nil, []string{"agents"}); err == nil {
-		t.Error("`skill install agents` succeeded; it must not install while unlisted")
+	if err := runSkillInstall(nil, []string{"agents"}); err != nil {
+		t.Fatalf("install agents: %v", err)
 	}
-
-	// `all` fans out over bundledSkills, so it must not reach the CX skill either.
-	if err := runSkillInstall(nil, []string{"all"}); err != nil {
-		t.Fatalf("install all: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "plivo-cx-agents", skillFileName)); err == nil {
-		t.Error("`skill install all` wrote the CX agents skill despite it being unlisted")
-	}
-
-	// Match the selector and install dir, not the bare word "agents" — that
-	// appears legitimately in "LLM coding agents".
-	for _, txt := range []string{skillInstallCmd.Use, skillInstallCmd.Long, skillInstallCmd.Example} {
-		if strings.Contains(txt, "install agents") || strings.Contains(txt, "plivo-cx-agents") {
-			t.Errorf("help text still advertises the CX agents skill: %q", txt)
-		}
+	if got, err := os.ReadFile(filepath.Join(home, ".claude", "skills", "plivo-cx-agents", skillFileName)); err != nil || string(got) != agentsskill.SkillMD {
+		t.Errorf("install agents didn't write the embedded skill (err %v)", err)
 	}
 }
 
@@ -341,8 +324,8 @@ func TestSkillList_reportsEverySkillAndItsState(t *testing.T) {
 	}
 
 	// Install one, then it reports installed.
-	if err := runSkillInstall(nil, nil); err != nil {
-		t.Fatalf("default install: %v", err)
+	if err := runSkillInstall(nil, []string{bundledSkills[0].selector}); err != nil {
+		t.Fatalf("install: %v", err)
 	}
 	for _, r := range skillListRows(t) {
 		if r.Selector == bundledSkills[0].selector && r.State != skillStateCurrent {
@@ -369,21 +352,6 @@ func TestSkillList_reportsEverySkillAndItsState(t *testing.T) {
 		t.Error("the tampered skill vanished from the listing")
 	}
 	_ = buf
-}
-
-// The CX agents skill must not appear in the listing either.
-func TestSkillList_omitsTheUnlistedCXAgentsSkill(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	t.Cleanup(func() { outputFormat = "" })
-	outputFormat = "json"
-
-	for _, r := range skillListRows(t) {
-		if r.Selector == "agents" || r.InstallsTo == "plivo-cx-agents" {
-			t.Errorf("the CX agents skill appeared in `skill list`: %+v", r)
-		}
-	}
 }
 
 // skillListRows runs `skill list` in JSON mode and decodes the envelope.

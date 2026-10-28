@@ -187,6 +187,18 @@ plivo voice calls make --from +1... --to +1... --yes        # actually call
 2. Branch on `error.code` (e.g. `AUTH_MISSING`, `DESTRUCTIVE_REFUSED`, `RATE_LIMITED`), never on `error.message` — message text drifts; codes are committed.
 3. For scripted use: set `PLIVO_FEEDBACK_PROMPT=0` and `PLIVO_NO_UPDATE_CHECK=1` so the post-success "rate the CLI?" prompt and update-check banner don't surprise stdin/stderr.
 
+**Plivo skills.** Each is a `SKILL.md` your coding agent loads when a request matches it:
+
+| Skill | `plivo skill install` | What it covers |
+|---|---|---|
+| [`plivo-cx-agents`](agents-skill/SKILL.md) | `agents` | Build, test and publish Plivo CX agents: AI conversation flows for calls and messages |
+| [`plivo-cli`](cli-skill/SKILL.md) | `cli` (the default) | Run any Plivo task with the CLI instead of raw API calls |
+| [`plivo-audio-streaming`](audio-streaming-skill/SKILL.md) | `audio-streaming` | A voice bot on real calls with `<Stream>`, from setup to go-live |
+| [`plivo-sip-trunking`](sip-trunking-skill/SKILL.md) | `sip-trunking` | Connect an AI voice platform over SIP trunking |
+| [`plivo-voice-xml`](voice-xml-skill/SKILL.md) | `voice-xml` | Write and fix Plivo Voice XML |
+
+`plivo skill install all` installs every one, and `npx skills add plivo/plivo-cli --skill <skill>` installs one without the CLI.
+
 **Install the skill once** so future agent sessions auto-load it — a few ways:
 
 ```bash
@@ -201,7 +213,7 @@ plivo skill install                 # → ~/.claude/skills/plivo-cli/SKILL.md
 curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/skills.sh | sh
 ```
 
-As a Claude Code plugin, with all four product skills kept current with this repository, type this inside Claude Code (2.1.275+; on older versions run `/plugin marketplace add plivo/plivo-cli`, then `/plugin install plivo@plivo`):
+As a Claude Code plugin, with all five product skills kept current with this repository, type this inside Claude Code (2.1.275+; on older versions run `/plugin marketplace add plivo/plivo-cli`, then `/plugin install plivo@plivo`):
 
 ```
 /plugin install plivo --marketplace plivo/plivo-cli

@@ -2,7 +2,7 @@
   "name": "plivo",
   "displayName": "Plivo",
   "version": "1.3.1",
-  "description": "Put voice agents on real phone calls and run Plivo tasks from your agent: skills for the Plivo CLI, SIP trunking, audio streaming and Voice XML.",
+  "description": "Build Plivo CX agents, put voice agents on real phone calls and run Plivo tasks from your agent: skills for CX agents, the Plivo CLI, SIP trunking, audio streaming and Voice XML.",
   "author": {
     "name": "Plivo",
     "email": "cx-tech@plivo.com",
@@ -11,7 +11,7 @@
   "homepage": "https://github.com/plivo/plivo-cli",
   "repository": "https://github.com/plivo/plivo-cli",
   "license": "Apache-2.0",
-  "keywords": ["plivo", "voice", "voice-agents", "sip-trunking", "voice-xml", "sms", "telephony"],
+  "keywords": ["plivo", "ai-agents", "voice", "voice-agents", "sip-trunking", "voice-xml", "sms", "telephony"],
   "icon": "./icon.png",
   "documentationUrl": "https://www.plivo.com/docs/",
   "supportUrl": "https://support.plivo.com/",
