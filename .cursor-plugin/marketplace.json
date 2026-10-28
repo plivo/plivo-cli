@@ -1,0 +1,17 @@
+{
+  "name": "plivo",
+  "owner": {
+    "name": "Plivo",
+    "email": "cx-tech@plivo.com"
+  },
+  "metadata": {
+    "description": "Official Plivo plugin: skills for CX agents, voice agents, SIP trunking, Voice XML and the Plivo CLI."
+  },
+  "plugins": [
+    {
+      "name": "plivo",
+      "source": "plugin",
+      "description": "Official Plivo skills for coding agents."
+    }
+  ]
+}
