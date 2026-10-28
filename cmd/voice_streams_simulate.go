@@ -52,8 +52,9 @@ document is read: no <Redirect> or action URL is followed.
 A pass means your server answers this machine as Plivo needs, not that
 Plivo can reach it or that a caller hears the audio. Exit 0 on a pass; 1
 when a check fails, 2 when the WebSocket refuses the upgrade, 3 when a host
-cannot be reached. -o json prints checks[] and the stream summary; when a
-check fails it prints only the error, with checks[] in error.context.`,
+cannot be reached or the WebSocket closes before the stop frame. -o json
+prints checks[] and the stream summary; when a check fails it prints only
+the error, with checks[] in error.context.`,
 	Example: `  plivo voice streams simulate --answer-url https://agent.example.com/answer
   plivo voice streams simulate --answer-url https://agent.example.com/answer --answer-method GET --to +14155551234 -o json
   plivo voice streams simulate --answer-url https://agent.example.com/answer --xml-only`,
