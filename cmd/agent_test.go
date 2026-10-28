@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/plivo/plivo-cli/internal/clierr"
 )
 
 // This file covers argument handling that runs BEFORE any request — no
@@ -72,7 +74,7 @@ func TestReadAgentFlowFile_validFileParses(t *testing.T) {
 	}
 }
 
-func TestAgentsUpdate_allowNodeDeletionNeedsFileAndIsSent(t *testing.T) {
+func TestAgentsUpdate_allowNodeDeletion(t *testing.T) {
 	setFakeCreds(t)
 	flow := filepath.Join(t.TempDir(), "flow.json")
 	_ = os.WriteFile(flow, []byte(`{"nodes":[]}`), 0o600)
@@ -80,5 +82,10 @@ func TestAgentsUpdate_allowNodeDeletionNeedsFileAndIsSent(t *testing.T) {
 	errFile, _, stderr := execCmd(t, "agents", "update", "abc123", "--file", flow, "--allow-node-deletion", "--dry-run")
 	if errName == nil || !strings.Contains(errName.Error(), "needs --file") || errFile != nil || !strings.Contains(stderr, `"allow_node_deletion": true`) {
 		t.Errorf("--name: %v (want needs --file); --file: %v, dry-run body: %s", errName, errFile, stderr)
+	}
+	sipServer(t, 422, `{"error": "resend with \"allow_node_deletion\": true"}`)
+	err, _, _ := execCmd(t, "agents", "update", "abc123", "--file", flow)
+	if e, ok := err.(*clierr.Error); !ok || !strings.Contains(e.Hint, "pass --allow-node-deletion") {
+		t.Errorf("a 422 asking for allow_node_deletion: %v, want a hint naming the flag", err)
 	}
 }

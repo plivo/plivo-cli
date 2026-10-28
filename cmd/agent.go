@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
@@ -414,6 +415,10 @@ func runAgentUpdate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if apiErr != nil {
+		// The API asks to resend with allow_node_deletion, which a --file can't carry.
+		if !agentUpdateAllowNodeDeletion && strings.Contains(apiErr.Message, "allow_node_deletion") {
+			apiErr.Hint = "If the removal is intended, pass --allow-node-deletion and drop any connection that still points at the removed nodes."
+		}
 		return apiErr
 	}
 	if dryRunFlag {
