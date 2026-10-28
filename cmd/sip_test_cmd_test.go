@@ -371,29 +371,33 @@ func TestSIPTest_timeoutTakesSecondsOrADuration(t *testing.T) {
 
 // A host with no port and a SIP SRV record gets a warning naming the target,
 // while the failing check still decides the error. No lookup with a port, for
-// an IP or under --dry-run, and a failed lookup warns nothing.
+// an IP or under --dry-run; a failed lookup, or a record naming the address
+// probed, warns nothing.
 func TestSIPTest_warnsAboutSRVRecords(t *testing.T) {
 	setEmptyHome(t)
 	stubLookup(t, errors.New("no such host")) // every probe stops at DNS
 	var asked []string
 	sipLookupSRV = func(_ context.Context, service, proto, name string) (string, []*net.SRV, error) {
 		asked = append(asked, service+"."+proto+"."+name)
-		if name != "sip.example.com" {
-			return "", nil, errors.New("no such host")
+		switch name {
+		case "sip.example.com": // the address probed, then another
+			return "", []*net.SRV{{Target: "SIP.example.com.", Port: 5061}, {Target: "edge.example.net.", Port: 5070}}, nil
+		case "self.example.com":
+			return "", []*net.SRV{{Target: "self.example.com.", Port: 5060}}, nil
 		}
-		return "", []*net.SRV{{Target: "edge.example.net.", Port: 5070}}, nil
+		return "", nil, errors.New("no such host")
 	}
 	err, stdout, _ := execCmd(t, "sip", "test", "--uri", "sips:sip.example.com", "-o", "json")
 	w := decodeSIPTest(t, stdout).Warnings
 	if _, ce := sipTestExit(t, err); ce.Context["check"] != "dns" || len(w) != 1 || w[0] != `_sips._tcp.sip.example.com points to edge.example.net:5070; this test probes sip.example.com itself. To test that target: --uri "edge.example.net:5070;transport=tls"` {
 		t.Errorf("warnings %v, error %v", w, err)
 	}
-	for _, uri := range []string{"nosrv.example.com", "sip.example.com:5060", "127.0.0.1;transport=tcp", "sip.example.com --dry-run"} {
+	for _, uri := range []string{"nosrv.example.com", "self.example.com", "sip.example.com:5060", "127.0.0.1;transport=tcp", "sip.example.com --dry-run"} {
 		if _, _, stderr := execCmd(t, append([]string{"sip", "test", "--timeout", "1", "--uri"}, strings.Fields(uri)...)...); strings.Contains(stderr, "points to") {
 			t.Errorf("%s warned: %s", uri, stderr)
 		}
 	}
-	if strings.Join(asked, " ") != "sips.tcp.sip.example.com sip.udp.nosrv.example.com" {
+	if strings.Join(asked, " ") != "sips.tcp.sip.example.com sip.udp.nosrv.example.com sip.udp.self.example.com" {
 		t.Errorf("SRV lookups: %v", asked)
 	}
 }
