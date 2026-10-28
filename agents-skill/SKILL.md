@@ -369,4 +369,4 @@ plivo agents update <agent_uuid> --file flow.json
 | a branch never fires | an invented source handle | run the preflight |
 | a node on the canvas has no parent | its only incoming edge uses a handle the builder doesn't draw | wire a real handle |
 | the builder shows "Cannot read properties of null" | a `null` list in `config.model` | send `[]` |
-| `202` on update, but a change didn't stick | a node's `type` changed (the old one is kept), or its id did | keep ids and types; replace the node under a new id |
+| `422` on update: "omits ... stored node(s)" or "A node's type cannot be changed" | a node was left out, or its id or `type` changed | send each node back with its id and type; to replace one, add the new node under a new id with `--allow-node-deletion` (v1.4.0+) |
