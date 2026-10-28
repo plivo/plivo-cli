@@ -25,7 +25,7 @@ Docs: [Agents API](https://plivo-agent-docs.mintlify.app/api/overview), [buildin
 
 ## Workflow
 
-Use the Plivo CLI. It handles auth and adds `/v1/Account/<auth_id>` to paths. Check it with `plivo --version`. Not on PATH: `brew install plivo/tap/plivo`. Without Homebrew, ask the user to install it from <https://github.com/plivo/plivo-cli#install> (the installer checks the release signature) rather than running an install script yourself. Then `plivo login`.
+Use the Plivo CLI. It handles auth and adds `/v1/Account/<auth_id>` to paths. Check it with `plivo --version`. Not on PATH: `brew install plivo/tap/plivo`. Without Homebrew, ask the user to install it from <https://github.com/plivo/plivo-cli#install> (the installer checks the release signature) rather than running an install script yourself. Then `plivo auth whoami`: if it exits 2, ask the user to run `plivo login` in their own terminal, which signs in through the browser. Don't run it yourself.
 
 1. `plivo api GET /AgentFlowNode/ > catalogue.json`: every node type and its handles. The preflight reads this file.
 2. `plivo agents nodes get <type>`: the JSON Schema, once per type you use.
