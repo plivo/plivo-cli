@@ -227,6 +227,13 @@ For Google Antigravity (app, IDE and CLI), install the same five skills as a plu
 agy plugin install https://github.com/plivo/plivo-cli/tree/main/antigravity/plivo
 ```
 
+For Codex, add this repository as a plugin marketplace, then install the plugin:
+
+```
+codex plugin marketplace add plivo/plivo-cli
+codex plugin add plivo@plivo
+```
+
 Both default to the Claude Code skills directory (`~/.claude/skills/plivo-cli`). For another agent, point it elsewhere — `plivo skill install --dir <path>` or `PLIVO_SKILL_DIR=<path>` for the installer. To capture the skill for an agent that loads it differently, `plivo skill install --print` writes it to stdout.
 
 Run `plivo login` inside Claude Code, Cursor or Codex and it offers, once per machine, to install every Plivo skill where that agent reads them. Codex reads `~/.agents/skills`, which `plivo skill install all --agent codex` installs into.
