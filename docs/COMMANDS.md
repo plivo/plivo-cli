@@ -850,6 +850,10 @@ replace (--file, or --description together with a graph) — mixing
 --description with --name but no graph is rejected by the server with a
 clear 400. Pass --file for any change beyond a plain rename.
 
+To remove nodes, leave them out of the --file graph and pass
+--allow-node-deletion; without it the server refuses the update (422).
+No connection may still point at a removed node.
+
 ```
 plivo agents update <agent_id> [flags]
 ```
@@ -859,14 +863,16 @@ Examples:
 ```
   plivo agents update abc123 --name "New Name"
   plivo agents update abc123 --file flow.json
+  plivo agents update abc123 --file flow.json --allow-node-deletion
 ```
 
 Flags:
 
 ```
-      --description string   new description (must be paired with --file — see above)
-      --file string          JSON file with the full flow graph ({name, description, nodes, connections}); flags win over its fields
-      --name string          rename the agent
+      --allow-node-deletion   allow the --file graph to remove the nodes it leaves out (no connection may still point at one)
+      --description string    new description (must be paired with --file — see above)
+      --file string           JSON file with the full flow graph ({name, description, nodes, connections}); flags win over its fields
+      --name string           rename the agent
 ```
 
 ---
@@ -3147,8 +3153,8 @@ expiry shown. UDP: resolve the host and send one SIP OPTIONS request.
 
 sips: and transport=tls are tested as TLS, on port 5061 unless the URI gives
 one; tcp and udp use 5060. With no transport, UDP is tested: SIP's default.
-A host given without a port that publishes a SIP SRV record gets a warning
-naming the record's target; the test probes the host itself.
+A host given without a port whose SIP SRV record names another host or port
+gets a warning naming it; the test probes the host itself.
 Quote a URI that has ;transport, or the shell cuts the command at the ;.
 
 A pass means the host answers, not that the platform will accept calls. Exit 0

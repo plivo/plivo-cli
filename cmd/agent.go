@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
@@ -84,9 +85,10 @@ var agentGetCmd = &cobra.Command{
 }
 
 var (
-	agentUpdateName        string
-	agentUpdateDescription string
-	agentUpdateFile        string
+	agentUpdateName              string
+	agentUpdateDescription       string
+	agentUpdateFile              string
+	agentUpdateAllowNodeDeletion bool
 )
 
 var agentUpdateCmd = &cobra.Command{
@@ -97,9 +99,14 @@ var agentUpdateCmd = &cobra.Command{
 The API accepts either a pure rename (--name alone) or a full graph
 replace (--file, or --description together with a graph) — mixing
 --description with --name but no graph is rejected by the server with a
-clear 400. Pass --file for any change beyond a plain rename.`,
+clear 400. Pass --file for any change beyond a plain rename.
+
+To remove nodes, leave them out of the --file graph and pass
+--allow-node-deletion; without it the server refuses the update (422).
+No connection may still point at a removed node.`,
 	Example: `  plivo agents update abc123 --name "New Name"
-  plivo agents update abc123 --file flow.json`,
+  plivo agents update abc123 --file flow.json
+  plivo agents update abc123 --file flow.json --allow-node-deletion`,
 	Args: cobra.ExactArgs(1),
 	RunE: runAgentUpdate,
 }
@@ -182,6 +189,7 @@ func init() {
 	agentUpdateCmd.Flags().StringVar(&agentUpdateName, "name", "", "rename the agent")
 	agentUpdateCmd.Flags().StringVar(&agentUpdateDescription, "description", "", "new description (must be paired with --file — see above)")
 	agentUpdateCmd.Flags().StringVar(&agentUpdateFile, "file", "", "JSON file with the full flow graph ({name, description, nodes, connections}); flags win over its fields")
+	agentUpdateCmd.Flags().BoolVar(&agentUpdateAllowNodeDeletion, "allow-node-deletion", false, "allow the --file graph to remove the nodes it leaves out (no connection may still point at one)")
 
 	agentCmd.AddCommand(agentCreateCmd, agentListCmd, agentGetCmd, agentUpdateCmd, agentDeleteCmd,
 		agentPublishCmd, agentPauseCmd, agentResumeCmd)
@@ -371,12 +379,21 @@ func runAgentUpdate(cmd *cobra.Command, args []string) error {
 	agentID := args[0]
 	body := map[string]any{}
 
+	// Only a full graph replace can remove nodes; a rename never does.
+	if agentUpdateAllowNodeDeletion && agentUpdateFile == "" {
+		e := clierr.BadInput("--allow-node-deletion needs --file: only a full graph replace removes nodes")
+		e.Hint = "Pass the whole graph with --file, leaving out the nodes to remove."
+		return e
+	}
 	if agentUpdateFile != "" {
 		f, err := readAgentFlowFile(agentUpdateFile)
 		if err != nil {
 			return err
 		}
 		mergeAgentFlowFile(body, f)
+	}
+	if agentUpdateAllowNodeDeletion {
+		body["allow_node_deletion"] = true
 	}
 	if agentUpdateName != "" {
 		body["name"] = agentUpdateName
@@ -398,6 +415,10 @@ func runAgentUpdate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if apiErr != nil {
+		// The API asks to resend with allow_node_deletion, which a --file can't carry.
+		if !agentUpdateAllowNodeDeletion && strings.Contains(apiErr.Message, "allow_node_deletion") {
+			apiErr.Hint = "If the removal is intended, pass --allow-node-deletion and drop any connection that still points at the removed nodes."
+		}
 		return apiErr
 	}
 	if dryRunFlag {
