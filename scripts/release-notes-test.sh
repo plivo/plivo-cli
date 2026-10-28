@@ -39,7 +39,12 @@ current=$(grep -m1 '^## \[' CHANGELOG.md | sed 's/^## \[\([^]]*\)\].*/\1/')
 ./scripts/release-notes.sh "$current" >/dev/null 2>&1
 check "real CHANGELOG top ($current)" "$?" "0"
 # Plugin installs stay on the manifest's version until it changes, so every manifest moves with each release.
-for manifest in plugin/.claude-plugin/plugin.json plugin/plugin.json plugin/.cursor-plugin/plugin.json gemini-extension.json; do
+for manifest in \
+  plugin/.claude-plugin/plugin.json \
+  plugin/plugin.json \
+  plugin/.cursor-plugin/plugin.json \
+  gemini-extension.json \
+  antigravity/plivo/plugin.json; do
   check "$manifest version is $current" "$(sed -n 's/^  "version": "\(.*\)",$/\1/p' "$manifest")" "$current"
 done
 
