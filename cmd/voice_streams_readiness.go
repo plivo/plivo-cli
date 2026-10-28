@@ -41,12 +41,13 @@ Outbound, readiness --from <caller ID> --to <number> --answer-url <url>: the
 caller ID is a number on this account with voice enabled, or a verified
 caller ID; an Indian caller ID has an accepted compliance application and
 calls only Indian numbers; the account has cash credits. Geo permissions and
-the concurrent call limit have no API, so they are unknown, never a pass.
+the concurrent call limit have no API: info lines say where to check them.
 --answer-method defaults to GET, as in ` + "`voice calls make`" + `.
 
 Each account check names the request it read. A number with no country
 check says so. result is ready, not_ready, or unknown when nothing failed
-but something could not be checked; the exit is 0 unless a check fails.
+but a check could not be made or the call was not simulated; the exit is 0
+unless a check fails.
 --dry-run makes the account reads but sends nothing to the answer URL. -o
 json prints checks[] and the simulation; when a check fails, only the error,
 with both in error.context.`,
@@ -261,9 +262,11 @@ func (r *readiness) outbound(client *api.Client) *simulateOpts {
 	if !india || e == nil { // an Indian caller ID not on this account already failed
 		r.country(client, from, "")
 	}
-	r.add("geo_permissions", "unknown", "no API reports them: Voice > Geo Permissions in the console, https://cx.plivo.com/geo-permissions/voice", "")
+	// No API reports these two: they are listed, so a ready call says what
+	// it could not check, and never pass.
+	r.add("geo_permissions", "info", "not checked, as no API reports them: Voice > Geo Permissions in the console, "+consoleBaseURL+"/geo-permissions/voice", "")
 	r.balance(client)
-	r.add("concurrency", "unknown", "no API reports the concurrent call limit: Organization settings > Account limits in the console, https://cx.plivo.com/organization-settings/limits", "")
+	r.add("concurrency", "info", "not checked, as no API reports the concurrent call limit: Organization settings > Account limits in the console, "+consoleBaseURL+"/organization-settings/limits", "")
 	return &simulateOpts{answerURL: readyAnswerURL, method: readyAnswerMethod, params: callParams(r.From, r.To, dirOutbound)}
 }
 

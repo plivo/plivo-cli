@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -106,7 +108,7 @@ func TestVoiceStreamsReadiness_accountChecks(t *testing.T) {
 		{"inbound, India KYC rejected", []string{"+910000000000"}, map[string]apiReply{"/Number/910000000000/": ok(indiaNumberWithApp), "/PhoneNumber/Compliance/" + placeholderComplianceID + "/": ok(appRejected)}, "compliance", "fail", 1, ""},
 		{"outbound, unknown caller ID", []string{"--from", "+14155551234", "--to", "+14155555678", "--answer-url", "https://agent.example.com/answer"}, map[string]apiReply{"/VerifiedCallerId/+14155551234/": noCaller, accountPath: ok(fundedPaid)}, "caller_id", "fail", 1, "3030"},
 		{"outbound, verified caller ID", []string{"--from", "+14155551234", "--to", "+14155555678", "--answer-url", "https://agent.example.com/answer"}, map[string]apiReply{"/VerifiedCallerId/+14155551234/": ok(`{"phone_number":"+14155551234"}`), accountPath: ok(fundedPaid)}, "caller_id", "pass", 0, ""},
-		{"outbound, geo permissions have no API", []string{"--from", "+14155551234", "--to", "+14155555678", "--answer-url", "https://agent.example.com/answer"}, map[string]apiReply{usNumberPath: ok(usNumberRecord), accountPath: ok(fundedPaid)}, "geo_permissions", "unknown", 0, ""},
+		{"outbound, geo permissions have no API", []string{"--from", "+14155551234", "--to", "+14155555678", "--answer-url", "https://agent.example.com/answer"}, map[string]apiReply{usNumberPath: ok(usNumberRecord), accountPath: ok(fundedPaid)}, "geo_permissions", "info", 0, ""},
 		{"outbound, India calls only India", []string{"--from", "+910000000000", "--to", "+14155555678", "--answer-url", "https://agent.example.com/answer"}, map[string]apiReply{"/Number/910000000000/": ok(indiaNumberWithApp), "/PhoneNumber/Compliance/" + placeholderComplianceID + "/": ok(`{"compliance":{"status":"accepted"}}`), accountPath: ok(fundedPaid)}, "country", "fail", 1, ""},
 		{"outbound, Indian caller ID not on this account", []string{"--from", "+910000000000", "--to", "+910000000001", "--answer-url", "https://agent.example.com/answer"}, map[string]apiReply{accountPath: ok(fundedPaid)}, "compliance", "", 1, ""},
 		{"outbound, no credit", []string{"--from", "+14155551234", "--to", "+14155555678", "--answer-url", "https://agent.example.com/answer"}, map[string]apiReply{usNumberPath: ok(usNumberRecord), accountPath: ok(`{"cash_credits":"0.00000","billing_mode":"prepaid"}`)}, "balance", "fail", 1, ""},
@@ -198,5 +200,33 @@ func TestVoiceStreams_neverRequestAPlivoHostedAnswerURL(t *testing.T) {
 	}
 	if n := hits.Load(); n != 0 {
 		t.Errorf("the Plivo-hosted answer URL got %d requests, want none", n)
+	}
+}
+
+// Outbound can be ready: geo permissions and the concurrent call limit, which
+// no API reports, are info lines, not unknowns.
+func TestVoiceStreamsReadiness_outboundCanBeReady(t *testing.T) {
+	setFakeCreds(t)
+	agent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		fmt.Fprint(w, `<Response><Stream bidirectional="true" keepCallAlive="true" contentType="audio/x-mulaw;rate=8000"
+			statusCallbackUrl="https://agent.example.com/s">wss://agent.example.com/ws</Stream></Response>`)
+	}))
+	t.Cleanup(agent.Close)
+	// agent.example.com, a host Plivo could reach, is served by the local agent.
+	orig := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = orig })
+	http.DefaultTransport = &http.Transport{DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+		if strings.HasPrefix(addr, "agent.example.com:") {
+			addr = agent.Listener.Addr().String()
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, addr)
+	}}
+	readinessAPI(t, map[string]apiReply{usNumberPath: ok(usNumberRecord), accountPath: ok(fundedPaid)})
+
+	checks, sim, result, exit := readinessRun(t, "--from", "+14155551234", "--to", "+14155555678",
+		"--answer-url", "http://agent.example.com/answer", "--xml-only")
+	if result != "ready" || exit != 0 || sim == nil || sim.Result != "pass" || statusOf(checks, "concurrency") != "info" {
+		t.Errorf("result %q, exit %d, simulate %+v, checks %+v; want ready", result, exit, sim, checks)
 	}
 }
