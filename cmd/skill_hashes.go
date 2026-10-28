@@ -5,6 +5,12 @@ package cmd
 // shippedSkillHashes lists, per install folder, the sha256 of every SKILL.md
 // version that has been on main, plus the bundled one (CRLF read as LF).
 var shippedSkillHashes = map[string][]string{
+	"plivo-cx-agents": {
+		"5d2280eeb14aa21bb41cbc0f2715212511db3d03461d2bdfd8078ee78b79f022",
+		"6643bd37e729a4181686eb88be3fdf54f4a478dabe2da05ef43013abf0801e37",
+		"b251bb930f542ab19d0e48db05b2fc7578d1f33328c2ca23a25f24fed15b0050",
+		"c48c610ffcfc67a8d392dcb9557adc1942162ea03d80809ab1293745e2620d98",
+	},
 	"plivo-cli": {
 		"096cf590b6c7ff9836e12ca1c4047d7d4731d724799846ab08f85c0f6b7c54f7",
 		"1419577d7bbe27adc65a6822c4e660a3bb987d0ed63c59b68e6f29ae6bba2c8a",
@@ -39,6 +45,7 @@ var shippedSkillHashes = map[string][]string{
 		"a04937072f8fdddb8edf7d619f510f33988b9df8d661b17f810f120724a9a783",
 		"a0ac56e306a29be751a70a4e618ee85d949123835e09778dc8448ba2829052d8",
 		"b2a13ce7afd6ef07818b49047d04c09b3099c06debacbb1479463ce70be6a284",
+		"bb67902421a5b126e84c9d03e08bdea3071e39c522257ec75f3cc634e72f0c09",
 		"bbfa5db95b34d5b0f240c9ec0a82b36daa7ff995f0396fbf9c6c4e4b379de938",
 		"bfbee35c1371190ac49b08cf55d9cf2b581f6bec3c3f7057b74c9b0174bd698e",
 		"c28bb4ef88173591d2a355137b71f191634db203b8f503707a5ce89c01081cd0",
