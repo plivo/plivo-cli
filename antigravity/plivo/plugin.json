@@ -1,0 +1,22 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "plivo",
+  "displayName": "Plivo",
+  "version": "1.3.2",
+  "description": "Build Plivo CX agents, put voice agents on real phone calls over SIP trunking or audio streaming, write Voice XML and run Plivo tasks with the Plivo CLI.",
+  "logo": "assets/logo.png",
+  "suggestedPrompts": [
+    "Build a Plivo CX agent that answers inbound calls and transfers callers to a human",
+    "Connect my LiveKit voice agent to a Plivo phone number over SIP trunking",
+    "List my Plivo phone numbers and the application each one points to"
+  ],
+  "author": {
+    "name": "Plivo",
+    "email": "cx-tech@plivo.com",
+    "url": "https://www.plivo.com"
+  },
+  "homepage": "https://github.com/plivo/plivo-cli",
+  "repository": "https://github.com/plivo/plivo-cli",
+  "license": "Apache-2.0",
+  "keywords": ["plivo", "ai-agents", "voice", "voice-agents", "sip-trunking", "voice-xml", "sms", "telephony"]
+}
