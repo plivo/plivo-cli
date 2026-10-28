@@ -158,13 +158,9 @@ func TestSearch_matchesFieldNamesAndReportsLine(t *testing.T) {
 	if !strings.Contains(got[0].Snippet, "bidirectional") {
 		t.Errorf("snippet missing the match: %q", got[0].Snippet)
 	}
-}
-
-// The export escapes field names (audio\_track); the literal name must hit.
-func TestSearch_matchesEscapedFieldName(t *testing.T) {
-	got, err := newTestFetcher(t, nil).Search([]string{"audio_track"}, 10, false)
-	if err != nil || len(got) != 1 || got[0].Snippet != "**audio\\_track** `string`" {
-		t.Fatalf("got %+v, %v", got, err)
+	// The export escapes field names (audio\_track); the literal name must hit.
+	if got, _ := newTestFetcher(t, nil).Search([]string{"audio_track"}, 10, false); len(got) != 1 || got[0].Snippet != "**audio\\_track** `string`" {
+		t.Errorf("escaped field name: %+v", got)
 	}
 }
 
