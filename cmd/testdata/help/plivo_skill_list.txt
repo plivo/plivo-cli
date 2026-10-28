@@ -3,11 +3,18 @@ Show bundled skills and whether each is installed
 Usage:
   plivo skill list [flags]
 
+Examples:
+  plivo skill list                # in ~/.claude/skills
+  plivo skill list --agent codex  # in ~/.agents/skills
+  plivo skill list --project      # in <repo>/.claude/skills
+
 Flags:
-  -h, --help   help for list
+      --agent string   coding agent whose skills to show: claude (~/.claude/skills) or codex (~/.agents/skills) (default: claude)
+  -h, --help           help for list
+      --project        show the skills installed in the current git repository's .claude/skills
 
 Global Flags:
-      --dry-run            print the HTTP request without sending
+      --dry-run            preview requests and local changes without sending or writing anything
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
   -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
@@ -15,5 +22,6 @@ Global Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
-      --timeout int        request timeout in seconds (default 30)
+      --show-secrets       show auth tokens and passwords in API responses instead of [REDACTED]
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts

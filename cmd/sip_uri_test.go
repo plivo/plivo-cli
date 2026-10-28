@@ -21,9 +21,10 @@ func TestParseSIPURI_acceptsEveryDocumentedShape(t *testing.T) {
 		{"sip.example.com:5061;transport=TLS", sipURI{Host: "sip.example.com", Port: 5061, Transport: "tls"}},
 		{"sip:user@sip.example.com", sipURI{Scheme: "sip", User: "user", Host: "sip.example.com"}},
 		{"sip:+14155551234@sip.example.com:5060", sipURI{Scheme: "sip", User: "+14155551234", Host: "sip.example.com", Port: 5060}},
+		{"user@sip.example.com", sipURI{User: "user", Host: "sip.example.com"}},
 		{"sip:sip.example.com;transport=tls", sipURI{Scheme: "sip", Host: "sip.example.com", Transport: "tls"}},
 		{"sips:sip.example.com", sipURI{Scheme: "sips", Host: "sip.example.com"}},
-		{"SIPS:sip.example.com;transport=tcp", sipURI{Scheme: "sips", Host: "sip.example.com", Transport: "tcp"}},
+		{"SIPS:sip.example.com;transport=TLS", sipURI{Scheme: "sips", Host: "sip.example.com", Transport: "tls"}},
 		{"203.0.113.4", sipURI{Host: "203.0.113.4"}},
 		{"203.0.113.4:5080;transport=udp", sipURI{Host: "203.0.113.4", Port: 5080, Transport: "udp"}},
 		{"[2001:db8::1]", sipURI{Host: "2001:db8::1"}},
@@ -63,7 +64,7 @@ func TestParseSIPURI_namesWhatIsWrong(t *testing.T) {
 		{":5060", "no host"},
 		{"sip:user@", "no host"},
 		{"sip:@sip.example.com", "empty user part"},
-		{"user@sip.example.com", "no scheme"},
+		{"sip:alice:s3cret@sip.example.com", "password in its user part"},
 		{"sip_trunk.example.com", `contains '_'`},
 		{"-sip.example.com", "not a valid hostname"},
 		{"sip..example.com", "not a valid hostname"},
@@ -76,14 +77,15 @@ func TestParseSIPURI_namesWhatIsWrong(t *testing.T) {
 		{"[2001:db8::1]x", "only :port"},
 		{"sip://sip.example.com", "without //"},
 		{"sips:sip.example.com;transport=udp", "sips:"},
+		{"sips:sip.example.com;transport=tcp", "transport=tcp"},
 	} {
 		t.Run(tc.in, func(t *testing.T) {
 			_, err := parseSIPURI(tc.in)
 			if err == nil {
 				t.Fatalf("%q was accepted", tc.in)
 			}
-			if !strings.Contains(err.Error(), tc.want) {
-				t.Errorf("parseSIPURI(%q) error %q should mention %q", tc.in, err, tc.want)
+			if !strings.Contains(err.Error(), tc.want) || strings.Contains(err.Error(), "s3cret") {
+				t.Errorf("parseSIPURI(%q) error %q should mention %q, and no password", tc.in, err, tc.want)
 			}
 		})
 	}
@@ -96,9 +98,24 @@ func TestCheckACLEntry(t *testing.T) {
 	}{
 		{"203.0.113.4", true},
 		{"198.51.100.0/24", true},
-		{"2001:db8::1", true},
-		{"2001:db8::/32", true},
+		{"2001:db8::1", false},
+		{"2001:db8::/32", false},
+		{"::ffff:203.0.113.4", false},
 		{"0.0.0.0/0", true},
+		{"0.0.0.0", false},
+		{"10.1.2.3/8", false},
+		{"192.168.1.10", false},
+		{"127.0.0.1", false},
+		{"169.254.169.254", false},
+		{"100.64.0.0/10", false},
+		{"100.128.0.1", true},
+		{"172.31.255.255", false},
+		{"172.32.0.0", true},
+		{"0.1.2.0/24", false},
+		{"198.19.255.255", false},
+		{"198.20.0.0", true},
+		{"239.255.255.250", false},
+		{"255.255.255.255", false},
 		{"203.0.113.4,198.51.100.7", false},
 		{"203.0.113.4, 198.51.100.7", false},
 		{"999.0.113.4", false},
@@ -122,11 +139,29 @@ func TestSIPWrites_refuseBadValuesWithoutARequest(t *testing.T) {
 	}{
 		{"uris create bad port", "uri", []string{"sip", "uris", "create", "--name", "n", "--uri", "sip.example.com:70000"}},
 		{"uris create unknown transport", "uri", []string{"sip", "uris", "create", "--name", "n", "--uri", "sip.example.com;transport=sctp"}},
-		{"uris update bad host", "uri", []string{"sip", "uris", "update", "U1", "--uri", "sip_example.com"}},
-		{"uris update empty", "uri", []string{"sip", "uris", "update", "U1", "--uri", " "}},
+		{"uris update bad host", "uri", []string{"sip", "uris", "update", uriU1, "--uri", "sip_example.com"}},
+		{"uris update empty", "uri", []string{"sip", "uris", "update", uriU1, "--uri", " "}},
 		{"ip-acl create comma list", "ip", []string{"sip", "ip-acl", "create", "--name", "a", "--ip", "203.0.113.4,198.51.100.7"}},
 		{"ip-acl create bad address", "ip", []string{"sip", "ip-acl", "create", "--name", "a", "--ip", "203.0.113.4", "--ip", "999.0.113.4"}},
-		{"ip-acl update bad range", "ip", []string{"sip", "ip-acl", "update", "A1", "--ip", "198.51.100.0/33"}},
+		{"ip-acl update bad range", "ip", []string{"sip", "ip-acl", "update", aclA1, "--ip", "198.51.100.0/33"}},
+		{"trunks create bad uuid", "credential", []string{"sip", "trunks", "create", "--name", "n", "--direction", "outbound", "--credential", "C1"}},
+		{"trunks update unknown status", "status", []string{"sip", "trunks", "update", "101", "--status", "disabld"}},
+		{"trunks update status case", "status", []string{"sip", "trunks", "update", "101", "--status", "Disabled"}},
+		{"trunks update empty status", "status", []string{"sip", "trunks", "update", "101", "--status", ""}},
+		{"trunks update bad direction", "direction", []string{"sip", "trunks", "update", "101", "--direction", "sideways"}},
+		{"numbers update trunk id", "trunk-id", []string{"numbers", "update", "14155551234", "--trunk-id", "../Number"}},
+		{"uris create ipv6", "uri", []string{"sip", "uris", "create", "--name", "n", "--uri", "[2001:db8::1]:5061;transport=tls"}},
+		{"uris update ipv6", "uri", []string{"sip", "uris", "update", uriU1, "--uri", "sip:[2001:db8::1]"}},
+		{"uris create sips with tcp", "uri", []string{"sip", "uris", "create", "--name", "n", "--uri", "sips:sip.example.com;transport=tcp"}},
+		{"uris create private host", "uri", []string{"sip", "uris", "create", "--name", "n", "--uri", "192.168.1.10:5060"}},
+		{"uris update loopback host", "uri", []string{"sip", "uris", "update", uriU1, "--uri", "sip:127.0.0.1"}},
+		{"uris create user part", "uri", []string{"sip", "uris", "create", "--name", "n", "--uri", "sip:alice@sip.example.com"}},
+		{"uris update user part", "uri", []string{"sip", "uris", "update", uriU1, "--uri", "+14155551234@sip.example.com"}},
+		{"ip-acl create ipv6", "ip", []string{"sip", "ip-acl", "create", "--name", "a", "--ip", "2001:db8::1"}},
+		{"ip-acl update ipv6 range", "ip", []string{"sip", "ip-acl", "update", aclA1, "--ip", "::/0"}},
+		{"credentials create short username", "username", []string{"sip", "credentials", "create", "--name", "c", "--username", "ab", "--password-stdin"}},
+		{"credentials create username symbols", "username", []string{"sip", "credentials", "create", "--name", "c", "--username", "sip_user.1", "--password-stdin"}},
+		{"credentials update long username", "username", []string{"sip", "credentials", "update", credC1, "--username", "abcdefghij0123456789x", "--password-stdin"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setFakeCreds(t)
@@ -144,13 +179,13 @@ func TestSIPWrites_refuseBadValuesWithoutARequest(t *testing.T) {
 	}
 }
 
-// Valid IPv6 addresses and ranges reach the API exactly as typed.
+// Valid addresses and ranges reach the API exactly as typed.
 func TestSIPACLCreate_sendsValidEntriesVerbatim(t *testing.T) {
 	setFakeCreds(t)
 	resetWriteFlags(t)
 	reqs := sipWriteServer(t, trunksUsingU1)
 
-	if err, _, _ := execCmd(t, "sip", "ip-acl", "create", "--name", "a", "--ip", "2001:db8::1", "--ip", "198.51.100.0/24"); err != nil {
+	if err, _, _ := execCmd(t, "sip", "ip-acl", "create", "--name", "a", "--ip", "203.0.113.4", "--ip", "198.51.100.0/24"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	p := post(reqs(), "/Zentrunk/IPAccessControlList/")
@@ -158,7 +193,7 @@ func TestSIPACLCreate_sendsValidEntriesVerbatim(t *testing.T) {
 		t.Fatal("no create request")
 	}
 	got, _ := p.body["ip_addresses"].([]any)
-	if len(got) != 2 || got[0] != "2001:db8::1" || got[1] != "198.51.100.0/24" {
+	if len(got) != 2 || got[0] != "203.0.113.4" || got[1] != "198.51.100.0/24" {
 		t.Errorf("entries not sent verbatim: %v", p.body["ip_addresses"])
 	}
 }

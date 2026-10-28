@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/plivo/plivo-cli/internal/api"
+	"github.com/plivo/plivo-cli/internal/clierr"
 )
 
 // Renderer tests exercise buddyRenderer.handle directly. The renderer's
@@ -364,5 +366,64 @@ func TestRunSupport_withAomUUID_reachesEscalationsEndpoint(t *testing.T) {
 	// Non-TTY test env resolves to JSON output; empty escalations -> "data":[].
 	if !strings.Contains(stdout, `"data": []`) {
 		t.Errorf("expected an empty data array, got stdout: %q", stdout)
+	}
+}
+
+// askStreamServer serves turn on the chat, then holds the stream up to 5s.
+func askStreamServer(t *testing.T, turn string) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/chat") {
+			_, _ = w.Write([]byte(turn))
+			w.(http.Flusher).Flush()
+			select {
+			case <-r.Context().Done():
+			case <-time.After(5 * time.Second):
+			}
+		}
+	}))
+	t.Cleanup(srv.Close)
+	clientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "MAFAKE1", AuthToken: "tok", HTTP: &http.Client{}}
+	t.Cleanup(func() { clientForTest = nil })
+}
+
+// --timeout bounds the stream, one-shot and in each -i turn: ask ignored it.
+func TestAsk_timeoutEndsTheStream(t *testing.T) {
+	setFakeCreds(t)
+	askStreamServer(t, sseTurn("token", `{"text":"Partial answer"}`))
+	err, stdout, _ := execCmd(t, "ask", "why?", "--timeout", "1", "-o", "table")
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeUpstreamTimeout || ce.ExitCode() != 3 {
+		t.Fatalf("err = %v, want UPSTREAM_TIMEOUT (exit 3)", err)
+	}
+	if stdout != "Partial answer\n" {
+		t.Errorf("stdout = %q, want the partial answer, its line closed", stdout)
+	}
+	var stderr string
+	stdinTokenFn(t, "", func() { _, _, stderr = execCmd(t, "ask", "-i", "--timeout", "1500ms", "why?") })
+	if !strings.Contains(stderr, "buddy error: the assistant had not finished after --timeout 1.5s") {
+		t.Errorf("-i stderr = %q, want the turn's timeout", stderr)
+	}
+}
+
+// Requests to the assistant carry the account's credentials, so an override
+// must be https, or http to this machine.
+func TestApplyBuddyURL_refusesPlainHTTPOffThisMachine(t *testing.T) {
+	home := setEmptyHome(t)
+	for u, ok := range map[string]bool{
+		"https://example.com": true, "http://127.0.0.1:8080": true, "http://[::1]:80": true, "http://localhost:3000": true, "HTTP://LocalHost:1": true,
+		"http://example.com": false, "http://127.0.0.1.example.com": false, "ftp://127.0.0.1": false, "https://": false, "localhost:3000": false,
+		"http://localhost.example.com": false, "http://u:SECRET@example.com": false,
+	} {
+		t.Setenv("PLIVO_BUDDY_URL", u)
+		c := &api.Client{BuddyBaseURL: api.DefaultBuddyBase}
+		if err := applyBuddyURL(c); (err == nil) != ok || (c.BuddyBaseURL == u) != ok || (err != nil && strings.Contains(err.Error(), "SECRET")) {
+			t.Errorf("%q: err %v, base %q", u, err, c.BuddyBaseURL)
+		}
+	}
+	t.Setenv("PLIVO_BUDDY_URL", "")
+	writeProfile(t, home, "[buddy]\nurl = \"http://example.com\"\n")
+	if err := applyBuddyURL(&api.Client{}); err == nil || !strings.Contains(err.Error(), "[buddy].url") {
+		t.Errorf("[buddy].url over plain http: got %v", err)
 	}
 }

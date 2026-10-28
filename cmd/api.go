@@ -72,6 +72,10 @@ the CLI). Use --dry-run to preview without sending. GET and HEAD pass through.
 Here --query adds URL query parameters (key=value). It is not the JMESPath
 --query filter other commands take; -o jsonl, yaml and csv still apply.
 
+Auth tokens and passwords in a response read [REDACTED], as on other
+commands; pass --show-secrets to see them. Agent flows (/AgentFlow paths)
+come back as sent, as agents get prints them: the server masks their secrets.
+
 Examples:
 
   plivo api GET /v1/Account/MA…/            # absolute: the account itself
@@ -238,10 +242,15 @@ func resolveAPIMethodAndPath(args []string, methodFlag string) (string, string, 
 // validateAPIPath rejects any path that looks like a full URL. `plivo api`
 // is intentionally limited to api.plivo.com (whatever the resolved BaseURL
 // points at) — letting users pass arbitrary hosts here would be a footgun
-// and a security boundary the rest of the CLI doesn't cross.
+// and a security boundary the rest of the CLI doesn't cross. A control
+// character is refused too: a newline would add a line to the --dry-run,
+// --explain and debug output, such as a forged [dry-run] one.
 func validateAPIPath(path string) error {
 	if strings.Contains(path, "://") {
 		return clierr.BadInput("path must not include a scheme — plivo api only talks to the configured Plivo API base URL")
+	}
+	if strings.ContainsFunc(path, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+		return clierr.BadInput(fmt.Sprintf("path %q has a control character", path))
 	}
 	return nil
 }
@@ -424,16 +433,25 @@ func looksLikeJSON(b []byte) bool {
 }
 
 // renderAPIResponse converts the upstream response into our standard envelope
-// shape — success path emits the upstream body verbatim (in a `data` wrapper
-// for JSON mode), error path emits the unified error envelope with the
-// upstream payload nested under `context.upstream` so agents can branch on it.
+// shape — success path emits the upstream body, credential values hidden
+// unless --show-secrets (in a `data` wrapper for JSON mode), error path emits
+// the unified error envelope with the upstream payload nested under
+// `context.upstream` so agents can branch on it.
 func renderAPIResponse(resp *http.Response, body []byte) error {
 	contentType := resp.Header.Get("Content-Type")
 	isJSON := strings.Contains(strings.ToLower(contentType), "application/json")
 	format := effectiveFormat()
 
-	if resp.StatusCode >= 400 {
-		return apiErrorFromUpstream(resp.StatusCode, resp.Header.Get("X-Request-ID"), body, isJSON)
+	if resp.StatusCode >= 300 { // a redirect too, as none is followed
+		err := apiErrorFromUpstream(resp.StatusCode, resp.Header.Get("X-Request-ID"), body, isJSON)
+		if e, ok := err.(*clierr.Error); ok && resp.StatusCode < 400 {
+			e.Hint = clierr.RedirectHint(resp.Header.Get("Location"), resp.Request.URL.Path)
+		}
+		return err
+	}
+	// An agent flow comes back as sent, as agents get does: see api.RawBodyWithSecrets.
+	if !strings.Contains(resp.Request.URL.Path, "/AgentFlow") {
+		body = api.Visible(body)
 	}
 
 	// Success — pretty-print JSON if upstream sent it; otherwise raw passthrough.
@@ -465,10 +483,11 @@ func renderAPIResponse(resp *http.Response, body []byte) error {
 	return nil
 }
 
-// apiErrorFromUpstream builds the unified UPSTREAM_ERROR envelope for a
-// non-2xx response. The upstream payload is preserved verbatim under
-// context.upstream so agents can branch on both the CLI code AND the raw
-// Plivo error shape.
+// apiErrorFromUpstream classifies a non-2xx response as typed commands do
+// (clierr.FromHTTP), so it carries their code and exit code: a 404 is
+// RESOURCE_NOT_FOUND, exit 1. The upstream payload is preserved verbatim
+// under context.upstream so agents can branch on both the CLI code AND the
+// raw Plivo error shape.
 func apiErrorFromUpstream(status int, requestID string, body []byte, isJSON bool) error {
 	upstream := map[string]any{"status": status}
 	if isJSON && len(body) > 0 {
@@ -482,13 +501,10 @@ func apiErrorFromUpstream(status int, requestID string, body []byte, isJSON bool
 		upstream["body"] = string(body)
 	}
 
-	return &clierr.Error{
-		Code:       clierr.CodeUpstreamError,
-		Message:    fmt.Sprintf("Plivo API returned %d %s", status, http.StatusText(status)),
-		Hint:       fmt.Sprintf("api.plivo.com returned %d. Inspect the upstream payload for details.", status),
-		StatusCode: status,
-		RequestID:  requestID,
-		Retryable:  status == http.StatusTooManyRequests || status >= 500,
-		Context:    map[string]any{"upstream": upstream},
+	e := clierr.FromHTTP(status, requestID, body)
+	if e.Message == "" {
+		e.Message = fmt.Sprintf("Plivo API returned %d %s", status, http.StatusText(status))
 	}
+	e.Context = map[string]any{"upstream": upstream}
+	return e
 }

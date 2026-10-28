@@ -1,6 +1,7 @@
 --authentication-needed takes a value so it reverses: --authentication-needed=false turns it off.
 
---uri is checked before sending, as on create.
+--uri is checked before sending, and a sip: or sips: scheme rewritten, as on
+create.
 
 Usage:
   plivo sip uris update <uri_uuid> [flags]
@@ -14,7 +15,7 @@ Flags:
       --username string         username
 
 Global Flags:
-      --dry-run            print the HTTP request without sending
+      --dry-run            preview requests and local changes without sending or writing anything
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
   -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
@@ -22,5 +23,6 @@ Global Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
-      --timeout int        request timeout in seconds (default 30)
+      --show-secrets       show auth tokens and passwords in API responses instead of [REDACTED]
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts

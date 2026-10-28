@@ -227,6 +227,16 @@ func TestFromHTTP_byStatusCode(t *testing.T) {
 	}
 }
 
+// A redirect reads as one, whatever its body: never the HTML link to the new
+// address, nor a phrase the fingerprints below would match.
+func TestFromHTTP_redirectWhateverItsBody(t *testing.T) {
+	for _, body := range []string{"", `<a href="/v1/Account/X/Message/">Moved Permanently</a>.`, `{"error":"invalid credentials"}`} {
+		if e := FromHTTP(301, "", []byte(body)); e.Code != CodeUpstreamError || e.Message != "Got a redirect (HTTP 301), which the CLI does not follow" {
+			t.Errorf("body %q: %s %q", body, e.Code, e.Message)
+		}
+	}
+}
+
 // ─── FromHTTP — body-text fingerprinting (these win over status-only) ────────
 
 func TestFromHTTP_geoPermission(t *testing.T) {
@@ -305,6 +315,24 @@ func TestFromHTTP_bodyOverridesStatus(t *testing.T) {
 	e := FromHTTP(403, "", []byte(`{"error":"Geo Permission Denied"}`))
 	if e.Code != CodeGeoPermissionDenied {
 		t.Errorf("body fingerprint should win over status: got %s", e.Code)
+	}
+}
+
+// Echoed ids and names must not override the status: a hex id can hold "2fa".
+func TestFromHTTP_echoedTextDoesNotOverrideTheStatus(t *testing.T) {
+	for msg, tc := range map[string]struct {
+		status int
+		want   Code
+	}{
+		"URI with uuid:0e2fa000-0000-4000-8000-000000000000 not found":       {404, CodeResourceNotFound},
+		"primary_uri_uuid 0e2fa000-0000-4000-8000-000000000000 is not valid": {400, CodeValidation},
+		"credential invalid credentials already exists":                      {409, CodeResourceConflict},
+		"geo permission lookup failed":                                       {503, CodeUpstreamUnavailable},
+		"2fa_required":                                                       {401, Code2FARequired},
+	} {
+		if got := FromHTTP(tc.status, "", []byte(`{"error":"`+msg+`"}`)).Code; got != tc.want {
+			t.Errorf("%d %q: Code = %s, want %s", tc.status, msg, got, tc.want)
+		}
 	}
 }
 

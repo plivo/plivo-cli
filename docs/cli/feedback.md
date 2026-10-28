@@ -34,8 +34,9 @@ plivo feedback --bug --message "..." --yes  # report the last failure
 When you submit feedback, the following is attached automatically:
 
 - **Your rating** (1-5)
-- **Your comment** — after client-side PII scrubbing (phone numbers,
-  auth tokens, emails, and Plivo auth IDs are replaced with
+- **Your comment** — after client-side PII scrubbing (phone, card, PAN
+  and Aadhaar numbers, IP addresses, SIP URIs, emails, auth and bearer
+  tokens and Plivo account and subaccount auth IDs are replaced with
   `[REDACTED-*]` placeholders)
 - **CLI version**, OS, architecture
 - **Anonymous machine ID** (one UUID per machine, persisted at
@@ -48,8 +49,13 @@ When you submit feedback, the following is attached automatically:
 
 We do NOT collect:
 
-- Phone numbers (any format)
-- Auth tokens or scoped tokens
+- Phone numbers in these shapes: a `+` and country code with spaces, dots,
+  dashes or brackets between the digits (`+1 (415) 555-1212`), a run of 10
+  to 19 digits, `415-555-1212`, `(415) 555-1212` and `98765 43210`. A number
+  written another way can get through, so leave numbers out of comments.
+- Card numbers (13 to 19 digits), IP addresses and SIP URIs
+- PAN numbers, and Aadhaar numbers (12 digits, maybe in groups of four)
+- Auth tokens, bearer tokens or scoped tokens
 - File paths or attachment paths
 - Free-text from `plivo ask` / `plivo support` message bodies
 - Argument values you passed to the CLI
@@ -90,6 +96,11 @@ feedback included — your rating, comment, and CLI version still send.
 submission entirely; `PLIVO_FEEDBACK_PROMPT=0` only silences the
 auto-prompt. The explicit `plivo feedback` command still works either
 way, unless you've set `PLIVO_FEEDBACK_TELEMETRY=0`.
+
+Each of these switches also silences the once-a-day auto-prompt, and the
+prompt never shows unless stdin, stdout and stderr are all terminals, so
+`plivo … | jq` never waits on it. The variables take `0`, `false`, `off`
+or `no`.
 
 ## How it's sent
 

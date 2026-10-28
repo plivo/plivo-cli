@@ -286,17 +286,13 @@ func (r *readiness) country(client *api.Client, digits, name string) {
 		return
 	}
 	src := readSource("PhoneNumber", "Compliance", "{compliance_application_id}")
-	warning, err := checkIndiaCompliance(client, digits)
-	switch e := clierr.Wrap(err); {
-	case e != nil:
+	if e := clierr.Wrap(checkIndiaCompliance(client, digits)); e != nil {
 		// The rule is worded for routing a number; keep only its reason.
 		e.Message = "+" + digits + ": " + strings.TrimPrefix(e.Message, "refusing to route "+digits+": ")
 		r.fail("compliance", src, e)
-	case warning != "": // none attached: only the number was read
-		r.add("compliance", "warn", warning, readSource("Number", digits))
-	default:
-		r.add("compliance", "pass", "its compliance application is accepted", src)
+		return
 	}
+	r.add("compliance", "pass", "its compliance application is accepted", src)
 }
 
 // balance reads cash_credits: unreadable is unknown, and so is 0 on an

@@ -4,17 +4,21 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 
+	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/cliupgrade"
 	"github.com/plivo/plivo-cli/internal/version"
 
@@ -25,6 +29,12 @@ import (
 // every outbound HTTP request carries the X-Plivo-CLI-Command header.
 // Used to attribute traffic per cobra command for usage analytics.
 var CLICommand string
+
+// WriteSent is set once a request other than a GET gets a 2xx answer: from
+// then on the run may have changed the account, so nothing after it may fail
+// in a way that invites a second send. Process-global like CLICommand; cmd
+// resets it before each command.
+var WriteSent atomic.Bool
 
 // addCLIHeaders injects the version + command + client-meta headers on
 // every request. Called once per request from Do / DoMultipart / StreamSSE.
@@ -148,6 +158,11 @@ type Client struct {
 	HTTP       *http.Client
 	DryRun     bool
 	LogRequest func(method, url string, body []byte)
+
+	// badPart is the first path part AccountURL or LookupURL refused. Do and
+	// DoMultipart return it instead of sending or printing anything, so the
+	// commands building those URLs need no check of their own.
+	badPart *clierr.Error
 }
 
 // IsScopedToken reports whether AuthToken is a scoped token (stk_ prefix).
@@ -166,23 +181,50 @@ func New(authID, authToken string, timeout time.Duration) *Client {
 		AuthID:           authID,
 		AuthToken:        authToken,
 		TelemetryEnabled: true,
-		HTTP:             &http.Client{Timeout: timeout},
+		HTTP:             &http.Client{Timeout: timeout, CheckRedirect: noRedirect},
 	}
 }
 
-// AccountURL returns BaseURL + "/v1/Account/{auth_id}/" + joined parts + "/".
+// noRedirect stops at a 3xx and returns it, which Do reports as an error.
+// Following one re-sent the Authorization header to another port of the same
+// host, and a 307's body to any host.
+func noRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+// AccountURL returns BaseURL + "/v1/Account/{auth_id}/" + parts + "/", each
+// part path-escaped, so an ID holding '/', '?', '#' or a newline stays one
+// segment: unescaped, `conferences hangup 'team#2'` ended conference team.
 func (c *Client) AccountURL(parts ...string) string {
-	u := c.BaseURL + "/v1/Account/" + c.AuthID + "/"
-	if len(parts) == 0 {
-		return u
+	u := c.BaseURL + "/v1/Account/" + url.PathEscape(c.AuthID) + "/"
+	for _, p := range parts {
+		u += c.pathPart(p) + "/"
 	}
-	return u + strings.Join(parts, "/") + "/"
+	return u
 }
 
-// LookupURL returns the Lookup API URL for a number.
-// No trailing slash; the caller appends ?type=carrier.
+// LookupURL returns the Lookup API URL for a number, escaped as AccountURL
+// escapes a part. No trailing slash; the caller appends ?type=carrier.
 func (c *Client) LookupURL(number string) string {
-	return c.BaseURL + "/v1/Lookup/Number/" + number
+	return c.BaseURL + "/v1/Lookup/Number/" + c.pathPart(number)
+}
+
+// pathPart escapes one path segment, all but its commas: member and
+// participant IDs take a comma list (1,2). A blank, "." or ".." one names
+// another resource (/Call//, /Conference/../), so the first is kept as badPart.
+func (c *Client) pathPart(p string) string {
+	if c.badPart == nil && (strings.TrimSpace(p) == "" || p == "." || p == "..") {
+		c.badPart = clierr.BadInput(fmt.Sprintf("%q is not an ID or name", p))
+		c.badPart.Hint = "IDs and names go into the request path, where a blank one, . or .. would reach a different resource."
+	}
+	return strings.ReplaceAll(url.PathEscape(p), "%2C", ",")
+}
+
+// Refused is the path part refused so far, or nil: for a caller that swallows
+// Do's error, as a best-effort read does, and must not go on regardless.
+func (c *Client) Refused() error {
+	if c.badPart == nil {
+		return nil
+	}
+	return c.badPart
 }
 
 // BuddyURL joins BuddyBaseURL with the given absolute path. AI surfaces
@@ -206,9 +248,13 @@ func (c *Client) BuddyURL(path string) string {
 // If body is non-nil it is marshalled to JSON.
 // queryParams (if non-nil and non-empty) are appended to the URL.
 // On success (2xx), response is unmarshalled into out (if non-nil).
-// On API error (>=400), returns an *APIError with no Go error.
-// On transport errors, returns a Go error with nil *APIError.
+// On API error (>=400) or a redirect, returns an *APIError with no Go error.
+// On transport errors (no answer, or a cut-off one), returns a nil *APIError
+// and, as the Go error, a NETWORK_ERROR or UPSTREAM_TIMEOUT *clierr.Error.
 func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, out any) (*APIError, error) {
+	if c.badPart != nil {
+		return nil, c.badPart
+	}
 	if len(queryParams) > 0 {
 		sep := "?"
 		if strings.Contains(fullURL, "?") {
@@ -272,7 +318,7 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("http: %w", err)
+		return nil, transportError(method, req.URL.Host, err)
 	}
 	defer resp.Body.Close()
 
@@ -280,11 +326,14 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
+		return nil, transportError(method, req.URL.Host, fmt.Errorf("read response: %w", err))
 	}
 
-	if resp.StatusCode >= 400 {
-		return parseError(resp.StatusCode, resp.Header, respBytes), nil
+	if resp.StatusCode >= 300 { // a redirect too, as none is followed
+		return parseError(resp, respBytes), nil
+	}
+	if method != http.MethodGet {
+		WriteSent.Store(true)
 	}
 
 	if resp.StatusCode == 204 || len(respBytes) == 0 {
@@ -295,7 +344,7 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 		if err := json.Unmarshal(respBytes, out); err != nil {
 			return nil, fmt.Errorf("decode response: %w (body: %s)", err, string(respBytes))
 		}
-		// Keep the bytes so -o json can echo them losslessly.
+		// Keep the bytes so -o json can echo them; SetRaw hides credentials.
 		if rc, ok := out.(RawCapturer); ok {
 			rc.SetRaw(respBytes)
 		}
@@ -308,6 +357,9 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 // e.g. "documents[0].file" -> "/path/passport.pdf"). Auth, headers, dry-run,
 // and error handling mirror Do; used by the compliance create/update verbs.
 func (c *Client) DoMultipart(method, fullURL string, dataJSON []byte, files map[string]string, out any) (*APIError, error) {
+	if c.badPart != nil {
+		return nil, c.badPart
+	}
 	if c.DryRun {
 		fmt.Fprintf(os.Stderr, "[dry-run] %s %s (multipart/form-data)\n", method, fullURL)
 		if len(dataJSON) > 0 {
@@ -371,7 +423,7 @@ func (c *Client) DoMultipart(method, fullURL string, dataJSON []byte, files map[
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("http: %w", err)
+		return nil, transportError(method, req.URL.Host, err)
 	}
 	defer resp.Body.Close()
 
@@ -379,10 +431,13 @@ func (c *Client) DoMultipart(method, fullURL string, dataJSON []byte, files map[
 
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
+		return nil, transportError(method, req.URL.Host, fmt.Errorf("read response: %w", err))
 	}
-	if resp.StatusCode >= 400 {
-		return parseError(resp.StatusCode, resp.Header, respBytes), nil
+	if resp.StatusCode >= 300 { // a redirect too, as none is followed
+		return parseError(resp, respBytes), nil
+	}
+	if method != http.MethodGet {
+		WriteSent.Store(true)
 	}
 	if resp.StatusCode == 204 || len(respBytes) == 0 {
 		return nil, nil
@@ -391,10 +446,33 @@ func (c *Client) DoMultipart(method, fullURL string, dataJSON []byte, files map[
 		if err := json.Unmarshal(respBytes, out); err != nil {
 			return nil, fmt.Errorf("decode response: %w (body: %s)", err, string(respBytes))
 		}
-		// Keep the bytes so -o json can echo them losslessly.
+		// Keep the bytes so -o json can echo them; SetRaw hides credentials.
 		if rc, ok := out.(RawCapturer); ok {
 			rc.SetRaw(respBytes)
 		}
 	}
 	return nil, nil
+}
+
+// transportError is a request that got no complete answer: UPSTREAM_TIMEOUT
+// when the time ran out, NETWORK_ERROR otherwise, both exit 3. Returned as a
+// plain error it read as a usage mistake, exit 1. Only a GET is retryable: any
+// other request may have reached Plivo and been carried out before the
+// connection failed.
+func transportError(method, host string, err error) *clierr.Error {
+	var ne net.Error
+	timedOut := errors.As(err, &ne) && ne.Timeout()
+	if ue, ok := err.(*url.Error); ok {
+		err = ue.Err // its method and URL repeat what the command already says
+	}
+	e := clierr.NetworkError(host, err)
+	if timedOut {
+		e.Code = clierr.CodeUpstreamTimeout
+		e.Message = fmt.Sprintf("No answer from %s in time: %v", host, err)
+		e.Hint = "On a slow network, pass a longer --timeout (in seconds; the default is 30)."
+	}
+	if e.Retryable = method == http.MethodGet; !e.Retryable {
+		e.Message += ". The request may have gone through: check before sending it again"
+	}
+	return e
 }

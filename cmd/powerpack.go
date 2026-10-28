@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -184,10 +185,21 @@ func runPowerpackGet(cmd *cobra.Command, args []string) error {
 		{"local_connect", fmt.Sprintf("%v", p.LocalConnect)},
 		{"application_type", p.ApplicationType},
 		{"application_id", p.ApplicationID},
-		{"number_priority", p.NumberPriority},
+		{"number_priority", jsonText(p.NumberPriority)},
 		{"number_pool", p.NumberPoolUUID},
 		{"created_on", p.CreatedOn},
 	})
+}
+
+// jsonText is a raw JSON value as table text: a string as is, null or
+// absent as empty, anything else as compact JSON.
+func jsonText(v json.RawMessage) string {
+	var s string
+	if len(v) == 0 || json.Unmarshal(v, &s) == nil {
+		return s
+	}
+	b, _ := output.Marshal(v)
+	return string(b)
 }
 
 func runPowerpackCreate(cmd *cobra.Command, args []string) error {
@@ -276,8 +288,7 @@ func runPowerpackUpdate(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Updated powerpack %s: %s\n", id, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Updated powerpack %s: %s", id, resp.Message), resp.Raw())
 }
 
 func runPowerpackDelete(cmd *cobra.Command, args []string) error {
@@ -299,8 +310,7 @@ func runPowerpackDelete(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Deleted powerpack %s\n", id)
-	return nil
+	return emitWrite(fmt.Sprintf("Deleted powerpack %s", id), map[string]any{"uuid": id, "deleted": true})
 }
 
 func runPowerpackNumberList(cmd *cobra.Command, args []string) error {
@@ -346,8 +356,7 @@ func runPowerpackNumberAdd(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Added %s to powerpack %s: %s\n", number, id, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Added %s to powerpack %s: %s", number, id, resp.Message), resp.Raw())
 }
 
 func runPowerpackNumberRemove(cmd *cobra.Command, args []string) error {
@@ -369,6 +378,6 @@ func runPowerpackNumberRemove(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Removed %s from powerpack %s\n", number, id)
-	return nil
+	return emitWrite(fmt.Sprintf("Removed %s from powerpack %s", number, id),
+		map[string]any{"uuid": id, "number": number, "removed": true})
 }

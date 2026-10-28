@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -266,30 +267,38 @@ func TestVoiceStreamsTest_expectAudioFailsInTableMode(t *testing.T) {
 	}
 }
 
-// When the endpoint hangs up mid-stream the error carries its close code and
-// reason, instead of writes retried on a dead socket.
+// An endpoint that hangs up before the stop frame, mid-stream or after the
+// last media frame, fails the test with its close code, in every mode.
 func TestVoiceStreamsTest_reportsEndpointClose(t *testing.T) {
-	setFakeCreds(t)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c, err := websocket.Accept(w, r, nil)
-		if err != nil {
-			return
-		}
-		if _, _, err := c.Read(r.Context()); err != nil { // the start frame
-			return
-		}
-		_ = c.Close(websocket.StatusPolicyViolation, "signature required")
-	}))
-	t.Cleanup(srv.Close)
+	for _, reads := range []int{1, 51} { // the start frame; it and all 50 of --duration 1
+		for _, mode := range []string{"--bidirectional", "--bidirectional=false"} {
+			t.Run(fmt.Sprint(reads, mode), func(t *testing.T) {
+				setFakeCreds(t)
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					conn, err := websocket.Accept(w, r, nil)
+					if err != nil {
+						return
+					}
+					for i := 0; i < reads; i++ {
+						if _, _, err := conn.Read(r.Context()); err != nil {
+							return
+						}
+					}
+					_ = conn.Close(websocket.StatusPolicyViolation, "signature required")
+				}))
+				t.Cleanup(srv.Close)
 
-	err, _, _ := execCmd(t, "voice", "streams", "test", "--to", "ws"+strings.TrimPrefix(srv.URL, "http"),
-		"--duration", "1", "--bidirectional", "-o", "json")
-	var ce *clierr.Error
-	if !errors.As(err, &ce) || ce.Code != clierr.CodeNetworkError {
-		t.Fatalf("err = %v, want NETWORK_ERROR", err)
-	}
-	if !strings.Contains(ce.Message, "1008") || !strings.Contains(ce.Message, "signature required") {
-		t.Errorf("message = %q, want the endpoint's close code and reason", ce.Message)
+				err, _, _ := execCmd(t, "voice", "streams", "test", "--to", "ws"+strings.TrimPrefix(srv.URL, "http"),
+					"--duration", "1", mode, "-o", "json")
+				var ce *clierr.Error
+				if !errors.As(err, &ce) || ce.Code != clierr.CodeNetworkError {
+					t.Fatalf("err = %v, want NETWORK_ERROR", err)
+				}
+				if !strings.Contains(ce.Message, `closed the stream`) || !strings.Contains(ce.Message, `code 1008, reason "signature required"`) || strings.Contains(ce.Hint, "internet") {
+					t.Errorf("message = %q, hint = %q, want the endpoint's close code and reason, not a reach failure", ce.Message, ce.Hint)
+				}
+			})
+		}
 	}
 }
 

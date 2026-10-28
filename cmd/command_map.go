@@ -67,7 +67,10 @@ type commandDetail struct {
 
 const (
 	outputFieldsNote = "Paths under data, so --query 'data.<path>'. The fields this CLI maps, a subset of the raw API response " +
-		"that -o json passes through whole: the response can hold more, and a listed field can be missing."
+		"that -o json prints, auth tokens and passwords as [REDACTED] without --show-secrets: the response can hold more, " +
+		"and a listed field can be missing."
+	resultFieldsNote = "Paths under data, so --query 'data.<path>'. The result this CLI builds, so -o json has these fields " +
+		"and no others; a field with no value is null or left out."
 	noOutputFieldsNote = "Not described for this command. Run it with -o json to see its output."
 )
 
@@ -120,13 +123,24 @@ func globalFlags() []flagSchema {
 	return flags
 }
 
+// requiredByHand marks a flag its command checks itself (its error says more
+// than cobra's), so --schema and --map list it as required. Cobra's own mark
+// would refuse first, with its plainer message.
+const requiredByHand = "plivo_required_by_hand"
+
+func markRequiredByHand(c *cobra.Command, names ...string) {
+	for _, n := range names {
+		_ = c.Flags().SetAnnotation(n, requiredByHand, []string{"true"})
+	}
+}
+
 func describeFlag(f *pflag.Flag) flagSchema {
 	return flagSchema{
 		Name:      f.Name,
 		Shorthand: f.Shorthand,
 		Type:      f.Value.Type(),
 		Default:   f.DefValue,
-		Required:  len(f.Annotations[cobra.BashCompOneRequiredFlag]) > 0,
+		Required:  len(f.Annotations[cobra.BashCompOneRequiredFlag]) > 0 || len(f.Annotations[requiredByHand]) > 0,
 		Usage:     f.Usage,
 	}
 }
@@ -173,6 +187,11 @@ func printSchema(c *cobra.Command) error {
 	d := commandDetail{commandSchema: describe(c), GlobalFlags: globalFlags(), OutputFieldsNote: noOutputFieldsNote}
 	if t, ok := outputTypes[d.Path]; ok {
 		d.OutputFields, d.OutputFieldsNote = outputFields(t), outputFieldsNote
+	} else if t, ok := resultTypes[d.Path]; ok {
+		d.OutputFields, d.OutputFieldsNote = outputFields(t), resultFieldsNote
+	}
+	if note := outputNotes[d.Path]; note != "" {
+		d.OutputFieldsNote += " " + note
 	}
 	if effectiveFormat() == output.FormatJSON {
 		return output.JSONSuccess(os.Stdout, d, nil)

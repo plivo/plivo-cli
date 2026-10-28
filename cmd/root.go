@@ -1,8 +1,12 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
+	"net/url"
 	"os"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,6 +18,7 @@ import (
 	"github.com/plivo/plivo-cli/internal/redact"
 	"github.com/plivo/plivo-cli/internal/version"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"golang.org/x/term"
 	"regexp"
 )
@@ -26,10 +31,12 @@ var (
 	logLevel     string
 	yesFlag      bool
 	dryRunFlag   bool
+	// showSecretsFlag backs --show-secrets; see api.ShowSecrets.
+	showSecretsFlag bool
 	// explainFlag backs --explain. Registered locally (not persistent) by
 	// registerExplainFlag, only on the commands that actually read it.
 	explainFlag bool
-	timeoutSec  int
+	timeoutFlag time.Duration // --timeout; see secondsOrDuration
 	adminServer string
 	// allFlag backs --all. Registered locally (not persistent) by
 	// registerAllFlag — see the removal note on that function for why this
@@ -152,10 +159,16 @@ func init() {
 	// directly see the same gate humans do.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		api.CLICommand = commandPath(cmd)
-		return configureOutput(cmd)
+		api.ShowSecrets = showSecretsFlag
+		if err := configureOutput(cmd); err != nil {
+			return err
+		}
+		return refuseBlankRequired(cmd)
 	}
 	// Set here, not in the literal: runRoot walks rootCmd itself.
 	rootCmd.RunE = runRoot
+	// A --query that fails after a write prints the result instead of an error.
+	output.Committed = api.WriteSent.Load
 
 	rootCmd.PersistentFlags().StringVar(&profileFlag, "profile", "", "named profile from ~/.plivo/config.toml")
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "", "output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)")
@@ -166,8 +179,10 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&noColorFlag, "no-color", false, "disable colored output")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "warn", "log level: debug|info|warn|error|none")
 	rootCmd.PersistentFlags().BoolVarP(&yesFlag, "yes", "y", false, "skip confirmation prompts")
-	rootCmd.PersistentFlags().BoolVar(&dryRunFlag, "dry-run", false, "print the HTTP request without sending")
-	rootCmd.PersistentFlags().IntVar(&timeoutSec, "timeout", 30, "request timeout in seconds")
+	rootCmd.PersistentFlags().BoolVar(&dryRunFlag, "dry-run", false, "preview requests and local changes without sending or writing anything")
+	rootCmd.PersistentFlags().BoolVar(&showSecretsFlag, "show-secrets", false, "show auth tokens and passwords in API responses instead of [REDACTED]")
+	timeoutFlag = 30 * time.Second
+	rootCmd.PersistentFlags().Var(secondsOrDuration{&timeoutFlag}, "timeout", "request timeout: seconds, or a duration such as 90s or 2m")
 	// Additional admin-only flags are registered in build-tag-gated files;
 	// the backing var (adminServer) lives above and stays "" in the public
 	// build.
@@ -178,6 +193,57 @@ func init() {
 	// call sites in api.go, application.go, auth.go, call.go, message.go,
 	// number.go, verify.go.
 }
+
+// refuseBlankRequired refuses a flag marked required that was given an empty
+// or all-space value: cobra checks only that it is there, so an empty --dst
+// built a request. Flags a command checks by hand keep their own messages.
+func refuseBlankRequired(cmd *cobra.Command) (err error) {
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if err != nil || !f.Changed || len(f.Annotations[cobra.BashCompOneRequiredFlag]) == 0 || strings.TrimSpace(f.Value.String()) != "" {
+			return
+		}
+		if with := f.Annotations[emptyWith]; len(with) > 0 && filled(cmd.Flags().Lookup(with[0])) {
+			return
+		}
+		err = clierr.BadFlag(f.Name, "is required and can't be empty")
+	})
+	return err
+}
+
+// emptyWith lets a required flag be empty once the flag it names is filled.
+const emptyWith = "plivo_empty_with"
+
+// filled reports whether f was given a value that is not blank, or for a list
+// flag, at least one.
+func filled(f *pflag.Flag) bool {
+	vals := []string{f.Value.String()}
+	if list, ok := f.Value.(pflag.SliceValue); ok {
+		vals = list.GetSlice()
+	}
+	return f.Changed && slices.ContainsFunc(vals, func(v string) bool { return strings.TrimSpace(v) != "" })
+}
+
+// secondsOrDuration is --timeout's value: a bare integer is seconds, the form
+// the flag always took, and anything else a Go duration such as 90s or 2m.
+// Zero or less is refused: the request client read it as its 30s default.
+type secondsOrDuration struct{ *time.Duration }
+
+func (d secondsOrDuration) Set(s string) error {
+	if _, err := strconv.Atoi(s); err == nil {
+		s += "s" // seconds, parsed as a duration so an overflow is refused
+	}
+	v, err := time.ParseDuration(s)
+	if err != nil {
+		return errors.New("want seconds, such as 30, or a duration, such as 90s or 2m")
+	}
+	if v <= 0 {
+		return errors.New("must be more than 0")
+	}
+	*d.Duration = v
+	return nil
+}
+
+func (secondsOrDuration) Type() string { return "duration" }
 
 // registerExplainFlag adds a local (non-persistent) --explain flag to cmd.
 // Call this only on commands whose RunE actually reads explainFlag —
@@ -192,6 +258,20 @@ func registerExplainFlag(cmd *cobra.Command) {
 // fetch goes through fetchList's page walk.
 func registerAllFlag(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&allFlag, "all", false, fmt.Sprintf("fetch every page (stops after %d pages)", maxListPages))
+}
+
+// ignoredFlag keeps a flag the API never read, so scripts that pass it keep
+// running: cobra hides it from help and --schema, and on use prints "Flag
+// --<name> has been deprecated, <note>", where note says what to use instead.
+// Nothing reads its value, so none is sent. bare is for a bool, passed
+// without a value.
+func ignoredFlag(cmd *cobra.Command, name string, bare bool, note string) {
+	if bare {
+		cmd.Flags().Bool(name, false, "")
+	} else {
+		cmd.Flags().String(name, "", "")
+	}
+	_ = cmd.Flags().MarkDeprecated(name, note)
 }
 
 // credSource records which source supplied the credentials ("env" or a profile
@@ -214,13 +294,18 @@ func getClient() (*api.Client, string, error) {
 	if clientForTest != nil {
 		return clientForTest, "test", nil
 	}
+	base, err := apiBaseURL()
+	if err != nil {
+		return nil, "", err
+	}
 	p, name, err := config.Resolve(profileFlag)
 	if err != nil {
 		return nil, "", err
 	}
 	credSource = name
 	credAuthID = p.AuthID
-	c := api.New(p.AuthID, p.AuthToken, time.Duration(timeoutSec)*time.Second)
+	c := api.New(p.AuthID, p.AuthToken, timeoutFlag)
+	c.BaseURL = base
 	c.AdminBaseURL = adminServer
 	c.Email = p.Email
 	c.Region = p.Region
@@ -238,6 +323,25 @@ func getClient() (*api.Client, string, error) {
 		}
 	}
 	return c, name, nil
+}
+
+// apiBaseURL is api.DefaultBaseURL, or PLIVO_API_URL when set, to point the CLI
+// at a local capture server. The requests carry the account's credentials, so
+// only an http or https URL on this machine is taken, and with no user, query
+// or fragment, as the request path is appended to it. Anything else is refused,
+// never ignored, and not echoed: it may hold a password.
+func apiBaseURL() (string, error) {
+	u := os.Getenv("PLIVO_API_URL")
+	if u == "" {
+		return api.DefaultBaseURL, nil
+	}
+	if p, err := url.Parse(u); err == nil && (p.Scheme == "http" || p.Scheme == "https") && onThisMachine(p) &&
+		p.User == nil && !strings.ContainsAny(u, "?#") {
+		return strings.TrimRight(u, "/"), nil
+	}
+	e := clierr.BadInput("PLIVO_API_URL must be an http or https URL on this machine, with no user, query or fragment")
+	e.Hint = "Use host 127.0.0.1, [::1] or localhost with any port, e.g. http://127.0.0.1:18555/v1/cli/api, or unset it to reach the Plivo API."
+	return "", e
 }
 
 // effectiveFormat returns the resolved output format for stdout.
@@ -367,6 +471,11 @@ func reportError(ran *cobra.Command, err error) int {
 			apiErr.Context,
 		)
 	} else {
+		// Context is JSON-only. A diagnose result that could not be built keeps
+		// the assistant's prose there, the only copy of the analysis.
+		if answer, _ := apiErr.Context["answer"].(string); answer != "" {
+			fmt.Fprintf(os.Stderr, "%s\n\n", output.SafeText(strings.TrimSpace(answer)))
+		}
 		output.PlainError(os.Stderr,
 			string(apiErr.Code),
 			apiErr.Message,

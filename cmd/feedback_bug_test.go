@@ -157,6 +157,23 @@ func TestReportError_recordsFlagErrors(t *testing.T) {
 	}
 }
 
+// A diagnose result that failed keeps its prose in context.answer, which only
+// the JSON error shows. On a terminal it is printed too: it is the only copy.
+func TestReportError_plainErrorShowsTheAnswer(t *testing.T) {
+	setEmptyHome(t)
+	outputFormat = "table"
+	t.Cleanup(func() { outputFormat = "" })
+	origErr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+	reportError(nil, &clierr.Error{Code: clierr.CodeUpstreamError, Message: "no result", Context: map[string]any{"answer": "The callee hung up."}})
+	os.Stderr = origErr
+	_ = w.Close()
+	if out, _ := io.ReadAll(r); !strings.Contains(string(out), "The callee hung up.") {
+		t.Errorf("stderr = %q, want the answer", out)
+	}
+}
+
 // bugCollector stands in for the feedback collector. The handler runs on the
 // server's goroutine, so everything it records is behind mu.
 type bugCollector struct {

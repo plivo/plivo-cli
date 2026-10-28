@@ -1,25 +1,28 @@
-Register a new brand (spends money — TCR registration fee, requires --yes)
+Register a new brand (spends money: the TCR registration fee; requires --yes,
+or --dry-run to preview).
+
+A brand is registered from a profile, which holds the company's details: legal
+name, EIN, address, website and authorized contact. A profile registers one
+brand. List your profiles with plivo api GET /Profile/, and create one in the
+Plivo console or with plivo api POST /Profile/
+(fields: plivo docs show messaging/api/10dlc/profile).
+
+Without --brand-type the API registers a STANDARD brand; Starter brands are
+paused. A STANDARD brand needs a profile with an EIN, and is also sent for
+secondary vetting, a separate one-time fee, unless --secondary-vetting=false.
 
 Usage:
   plivo messaging sms 10dlc brands create [flags]
 
 Flags:
-      --alias string                 human-friendly alias (required)
-      --brand-type string            STANDARD|LOW_VOLUME_STANDARD|SOLE_PROPRIETOR (default "STANDARD")
-      --ein string                   tax ID / EIN
-      --ein-issuing-country string   ISO-2 country issuing the EIN (default "US")
-      --email string                 support email
-      --entity-type string           PRIVATE_PROFIT|PUBLIC_PROFIT|NON_PROFIT|GOVERNMENT|SOLE_PROPRIETOR (default "PRIVATE_PROFIT")
-  -h, --help                         help for create
-      --legal-name string            legal entity name (required)
-      --phone string                 support phone E.164
-      --stock-exchange string        exchange code (PUBLIC_PROFIT only)
-      --stock-symbol string          ticker (PUBLIC_PROFIT only)
-      --vertical string              industry vertical (e.g. TECHNOLOGY, RETAIL)
-      --website string               primary website URL
+      --alias string          human-friendly alias (required)
+      --brand-type string     registration type, STANDARD|STARTER; sent only when given
+  -h, --help                  help for create
+      --profile-uuid string   the 10DLC profile holding the company's details (required)
+      --secondary-vetting     STANDARD only: send the brand for secondary vetting, a separate fee (default true)
 
 Global Flags:
-      --dry-run            print the HTTP request without sending
+      --dry-run            preview requests and local changes without sending or writing anything
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
   -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
@@ -27,5 +30,6 @@ Global Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
-      --timeout int        request timeout in seconds (default 30)
+      --show-secrets       show auth tokens and passwords in API responses instead of [REDACTED]
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts

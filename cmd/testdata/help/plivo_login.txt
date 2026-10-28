@@ -29,6 +29,14 @@ Headless / CI use:
   Not supported. Browser OAuth (PKCE) is the only credential source, so
   scripts and CI need a profile that was logged in on that machine already.
 
+Inside a coding agent:
+  Run inside Claude Code, Cursor or Codex, a login asks once per machine
+  whether to install the Plivo skills where that agent reads them, unless
+  current copies are there already. Without a terminal to ask on, and in
+  each other agent once it has asked, it prints that agent's install
+  command instead, once. --yes installs them without asking, and --quiet
+  skips the offer.
+
 By default the CLI validates credentials with GET /Account/ before
 saving. Pass --no-verify to skip (offline / mock use only).
 
@@ -45,7 +53,7 @@ Flags:
       --no-verify     skip the GET /Account/ validation hit (offline / mock use only)
 
 Global Flags:
-      --dry-run            print the HTTP request without sending
+      --dry-run            preview requests and local changes without sending or writing anything
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
   -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
@@ -53,5 +61,6 @@ Global Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
-      --timeout int        request timeout in seconds (default 30)
+      --show-secrets       show auth tokens and passwords in API responses instead of [REDACTED]
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts

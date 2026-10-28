@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -18,6 +19,7 @@ func execute(args []string) (*cobra.Command, error) {
 		return cmd, err
 	}
 	partialErr = nil
+	api.WriteSent.Store(false)
 	cmd, err := rootCmd.ExecuteC()
 	if err == nil {
 		err = partialErr // a list printed the rows it read before this stopped it

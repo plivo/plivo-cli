@@ -89,40 +89,53 @@ func runAuthList(cmd *cobra.Command, args []string) error {
 
 func runAuthUse(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	cfg, err := config.Load()
-	if err != nil {
+	if err := updateConfig(func(cfg *config.Config) error {
+		if _, ok := cfg.Profiles[name]; !ok {
+			return fmt.Errorf("profile %q not found", name)
+		}
+		cfg.Active = name
+		return nil
+	}); err != nil {
 		return err
 	}
-	if _, ok := cfg.Profiles[name]; !ok {
-		return fmt.Errorf("profile %q not found", name)
-	}
-	cfg.Active = name
-	if err := config.Save(cfg); err != nil {
-		return err
+	if dryRunFlag {
+		fmt.Fprintf(os.Stderr, "[dry-run] Would set the active profile to %s\n", name)
+		return nil
 	}
 	fmt.Fprintf(os.Stderr, "Active profile: %s\n", name)
 	return nil
 }
 
+// alsoKeychain names, for a dry run, the keychain token removing profile name
+// deletes too: only when the keychain holds one, not a token kept in the config.
+func alsoKeychain(name string) string {
+	if tok, err := config.GetToken(name); err != nil || tok == "" {
+		return ""
+	}
+	return " and delete its keychain token"
+}
+
 func runAuthRemove(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	cfg, err := config.Load()
-	if err != nil {
+	if err := updateConfig(func(cfg *config.Config) error {
+		if _, ok := cfg.Profiles[name]; !ok {
+			return fmt.Errorf("profile %q not found", name)
+		}
+		delete(cfg.Profiles, name)
+		if cfg.Active == name {
+			cfg.Active = ""
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
-	if _, ok := cfg.Profiles[name]; !ok {
-		return fmt.Errorf("profile %q not found", name)
+	if dryRunFlag {
+		fmt.Fprintf(os.Stderr, "[dry-run] Would remove profile %q%s\n", name, alsoKeychain(name))
+		return nil
 	}
-	delete(cfg.Profiles, name)
 	// Best-effort removal from the OS keychain (no-op if the token lived in
-	// the config file instead).
+	// the config file instead), once the profile is gone.
 	_ = config.DeleteToken(name)
-	if cfg.Active == name {
-		cfg.Active = ""
-	}
-	if err := config.Save(cfg); err != nil {
-		return err
-	}
 	fmt.Fprintf(os.Stderr, "Removed profile %q\n", name)
 	return nil
 }

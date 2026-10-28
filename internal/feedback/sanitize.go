@@ -9,11 +9,14 @@
 //   - Comment text                                       OK after sanitisation
 //   - CLI metadata (version, os, arch, command path)     always OK
 //   - Anonymous machine id + hashed auth_id              always OK
-//   - Phone numbers, auth tokens, raw auth_ids, emails   NEVER, regex-stripped
+//   - Phone and card numbers, IPs, SIP URIs              NEVER, regex-stripped
+//   - PAN and Aadhaar numbers                            NEVER, regex-stripped
+//   - Auth and bearer tokens, raw auth_ids, emails       NEVER, regex-stripped
 //
 // Sanitisation runs client-side, before anything is sent. It errs toward
 // over-matching because the cost of a PII leak via feedback (which is
 // user-typed free text) is higher than the cost of stripping a benign string.
+// It strips the shapes in redactionPatterns, not every way to write a number.
 package feedback
 
 import (
@@ -40,11 +43,30 @@ var redactionPatterns = []struct {
 	name        string
 	re          *regexp.Regexp
 	replacement string
+	keep        func(match string) bool // leaves a match that is not the shape after all
 }{
-	// Plivo auth_ids: MA + 18 uppercase alphanumerics.
+	// SIP URIs, first: they hold users, passwords, numbers and hosts.
+	{
+		name:        "sip-uri",
+		re:          regexp.MustCompile(`(?i)\bsips?:[^\s"'<>]+`),
+		replacement: "[REDACTED-SIP-URI]",
+	},
+	// Bearer tokens whole, before the patterns below cut a piece out of one.
+	// Eight characters or more, and not one lowercase word, so "the bearer
+	// of" and "bearer authentication" in prose stay.
+	{
+		name:        "bearer",
+		re:          regexp.MustCompile(`(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{8,}`),
+		replacement: "Bearer [REDACTED-TOKEN]",
+		keep: func(m string) bool {
+			return strings.Trim(strings.Fields(m)[1], "abcdefghijklmnopqrstuvwxyz") == ""
+		},
+	},
+	// Plivo auth_ids: MA (account) or SA (subaccount) + 18 uppercase
+	// alphanumerics.
 	{
 		name:        "auth-id",
-		re:          regexp.MustCompile(`\bMA[A-Z0-9]{18}\b`),
+		re:          regexp.MustCompile(`\b[MS]A[A-Z0-9]{18}\b`),
 		replacement: "[REDACTED-AUTH-ID]",
 	},
 	// Plivo scoped tokens: stk_ + alphanumerics.
@@ -53,22 +75,64 @@ var redactionPatterns = []struct {
 		re:          regexp.MustCompile(`\bstk_[A-Za-z0-9]+\b`),
 		replacement: "[REDACTED-TOKEN]",
 	},
-	// E.164 phone numbers and common dialled formats.
-	{
-		name:        "phone-e164",
-		re:          regexp.MustCompile(`\+\d{10,15}\b`),
-		replacement: "[REDACTED-PHONE]",
-	},
-	{
-		name:        "phone-dashed",
-		re:          regexp.MustCompile(`\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b`),
-		replacement: "[REDACTED-PHONE]",
-	},
 	// Email addresses.
 	{
 		name:        "email",
 		re:          regexp.MustCompile(`\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b`),
 		replacement: "[REDACTED-EMAIL]",
+	},
+	// IPv4, then IPv6 in full or with "::" (so a time like 10:58:00 stays).
+	{
+		name:        "ipv4",
+		re:          regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b`),
+		replacement: "[REDACTED-IP]",
+	},
+	{
+		name:        "ipv6",
+		re:          regexp.MustCompile(`\b(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}\b|\b(?:[0-9A-Fa-f]{1,4}:)+:(?:[0-9A-Fa-f]{1,4}\b(?::[0-9A-Fa-f]{1,4}\b)*)?`),
+		replacement: "[REDACTED-IP]",
+	},
+	// UUIDs whole, before phones and cards, which would cut out an all-digit
+	// group and leave the rest. Unanchored, so call_<uuid> goes too.
+	{
+		name:        "uuid",
+		re:          regexp.MustCompile(`[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}`),
+		replacement: "[REDACTED-TOKEN]",
+	},
+	// Phones with a + country code: 8-15 digits, spaces, dots, dashes or
+	// brackets between them (+1 415 555 1212, +1 (415) 555-1212).
+	{
+		name:        "phone-international",
+		re:          regexp.MustCompile(`\+\d(?:[\s.()-]{0,2}\d){7,14}\b`),
+		replacement: "[REDACTED-PHONE]",
+	},
+	// Card numbers: 13-19 digits, maybe in space or dash groups.
+	{
+		name:        "card",
+		re:          regexp.MustCompile(`\b\d(?:[ -]?\d){12,18}\b`),
+		replacement: "[REDACTED-CARD]",
+	},
+	// PAN (India's tax ID): five letters, four digits, a letter. The fourth
+	// letter is the holder type, one of ABCFGHLJPT, which keeps most words out.
+	{
+		name:        "pan",
+		re:          regexp.MustCompile(`(?i)\b[A-Z]{3}[ABCFGHLJPT][A-Z]\d{4}[A-Z]\b`),
+		replacement: "[REDACTED-PAN]",
+	},
+	// Aadhaar: 12 digits, maybe in groups of four split by spaces or dashes;
+	// dots are left to version numbers. After cards, whose first 12 digits it
+	// would take, and before national phones, which take a bare 12.
+	{
+		name:        "aadhaar",
+		re:          regexp.MustCompile(`\b[2-9]\d{3}[ -]?\d{4}[ -]?\d{4}\b`),
+		replacement: "[REDACTED-AADHAAR]",
+	},
+	// National phones: 415-555-1212, (415) 555-1212, 98765 43210, and a
+	// bare run of 10 to 12 digits (13 or more are cards, above).
+	{
+		name:        "phone-national",
+		re:          regexp.MustCompile(`(?:\(\d{3}\)\s?|\b\d{3}[-.\s])\d{3}[-.\s]\d{4}\b|\b\d{5}[-.\s]\d{5}\b|\b\d{10,12}\b`),
+		replacement: "[REDACTED-PHONE]",
 	},
 }
 
@@ -127,9 +191,13 @@ func Sanitize(comment string) (cleaned string, redactionCount int) {
 		return "", 0
 	}
 	for _, p := range redactionPatterns {
-		matches := p.re.FindAllStringIndex(cleaned, -1)
-		redactionCount += len(matches)
-		cleaned = p.re.ReplaceAllString(cleaned, p.replacement)
+		cleaned = p.re.ReplaceAllStringFunc(cleaned, func(m string) string {
+			if p.keep != nil && p.keep(m) {
+				return m
+			}
+			redactionCount++
+			return p.replacement
+		})
 	}
 	// Long opaque tokens: shape by regex, classes in code. See SA-06 above.
 	{

@@ -194,10 +194,25 @@ func FromHTTP(statusCode int, requestID string, body []byte) *Error {
 	if parsed != nil {
 		e.Context = map[string]any{"upstream": map[string]any{"status": statusCode, "body": parsed}}
 	}
+	if statusCode >= 300 && statusCode < 400 {
+		// The CLI follows no redirect, as one would take the credentials to
+		// another port, and a 307's body to another host. Whatever the body
+		// says (a link to the new address, as a rule), the redirect is the news.
+		e.Code = CodeUpstreamError
+		e.Message = fmt.Sprintf("Got a redirect (HTTP %d), which the CLI does not follow", statusCode)
+		e.Hint = RedirectHint("", "")
+		return e
+	}
 
-	// Body-text fingerprinting first — these win over status-code defaults.
+	// Body-text fingerprinting first — these win over status-code defaults,
+	// except where the status alone says what happened.
 	lower := strings.ToLower(msg)
 	switch {
+	case statusCode == http.StatusNotFound || statusCode == http.StatusConflict ||
+		statusCode == http.StatusRequestTimeout || statusCode == http.StatusTooManyRequests || statusCode >= 500:
+		// A missing or clashing record, a timeout, a rate limit or a server
+		// failure. Such a message can echo the id or name asked about, and
+		// that can hold any of the phrases below.
 	case strings.Contains(lower, "geo-permission") || strings.Contains(lower, "geo permission"):
 		e.Code = CodeGeoPermissionDenied
 		e.Hint = "Enable the destination country in Plivo Console → Messaging/Voice → Geo Permissions, then retry."
@@ -207,7 +222,7 @@ func FromHTTP(statusCode int, requestID string, body []byte) *Error {
 	case strings.Contains(lower, "recaptcha"):
 		e.Code = CodeRecaptchaRequired
 		e.Hint = "Use the browser-based login (`plivo login`) — this endpoint requires browser reCAPTCHA."
-	case strings.Contains(lower, "2fa") || strings.Contains(lower, "two_fa") || strings.Contains(lower, "two-factor"):
+	case twoFactor.MatchString(lower):
 		e.Code = Code2FARequired
 		e.Hint = "Account has 2FA enabled. Disable for the CLI account, or use a non-2FA path."
 	case strings.Contains(lower, "insufficient") && strings.Contains(lower, "fund"):
@@ -275,6 +290,26 @@ func FromHTTP(statusCode int, requestID string, body []byte) *Error {
 	}
 	return e
 }
+
+// RedirectHint is the hint on a redirect, which the CLI does not follow: where
+// it pointed, and the fix for a request path that lacks its trailing slash.
+// location and path are "" where not known.
+func RedirectHint(location, path string) string {
+	h := "Nothing was sent to the new address"
+	if location != "" {
+		h += fmt.Sprintf(", %q", location)
+	}
+	h += "."
+	if path != "" && !strings.HasSuffix(path, "/") {
+		h += " Plivo API paths end in a slash: add one."
+	}
+	return h + " If PLIVO_API_URL, PLIVO_BUDDY_URL or [buddy].url is set, check it."
+}
+
+// twoFactor finds a 2FA message. "2fa" counts only where no letter or digit
+// touches it: an echoed hex id can hold it (0e2fa000-…), and a substring match
+// read that as the account's 2FA setting.
+var twoFactor = regexp.MustCompile(`(?:^|[^a-z0-9])2fa(?:[^a-z0-9]|$)|two_fa|two-factor`)
 
 // Wrap turns any plain error into a generic USER_ERROR-coded Error so the
 // renderer can still output a structured envelope.

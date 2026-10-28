@@ -3,8 +3,9 @@ Send a message to Plivo's AI assistant and stream the response.
 The assistant uses Server-Sent Events: token text streams to stdout as it
 arrives, live status appears on stderr and is overwritten in place, and the
 final summary lands on stdout. Long flows (voice-debug can run 2–5 minutes)
-work fine — there is no overall HTTP timeout. Ctrl-C cancels and exits 130;
-no auto-retry (debugger runs are not idempotent).
+work fine: the stream has no time limit unless you pass --timeout, which ends
+it with exit 3. An answer the stream cuts off before its end also exits 3.
+Ctrl-C cancels and exits 130; no auto-retry (debugger runs are not idempotent).
 
 Use -i for an interactive chat that keeps context across follow-ups: each
 turn replays the recent conversation as history (a one-shot ask sends none,
@@ -13,8 +14,9 @@ fresh conversation, /help lists commands, and /exit or Ctrl-D leaves.
 
 Pass --call-uuid for voice-debug context; --verbose to show the assistant's
 tool calls; -o json or -o jsonl to emit each SSE event as one JSON line
-(handy for scripts and AI agents). A stream has no single result, so -o yaml,
--o csv and --query are refused.
+(handy for scripts and AI agents). Either way the output is JSON Lines, one
+object per line, not one JSON document: read it a line at a time. A stream
+has no single result, so -o yaml, -o csv and --query are refused.
 
 Usage:
   plivo ask [message] [flags]
@@ -34,7 +36,7 @@ Flags:
       --verbose            show the assistant's tool_call / tool_output events on stderr
 
 Global Flags:
-      --dry-run            print the HTTP request without sending
+      --dry-run            preview requests and local changes without sending or writing anything
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
   -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
@@ -42,5 +44,6 @@ Global Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
-      --timeout int        request timeout in seconds (default 30)
+      --show-secrets       show auth tokens and passwords in API responses instead of [REDACTED]
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts

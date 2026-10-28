@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -9,6 +11,8 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -16,6 +20,7 @@ import (
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
+	"github.com/plivo/plivo-cli/internal/config"
 	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/plivo/plivo-cli/internal/tunnel"
 	"github.com/plivo/plivo-cli/internal/wsproxy"
@@ -57,11 +62,17 @@ var voiceStreamsForwardCmd = &cobra.Command{
 Saves the app's current answer_url, starts a tunnel + a local
 HTTP/WebSocket server, points the app at the tunnel, and forwards
 incoming call audio to your local WebSocket handler. Restores the
-original answer_url on Ctrl+C.
+original answer_url on Ctrl+C, or when the tunnel stops (then exits 3).
+The original is saved in ~/.plivo first, so after a killed run the next
+one restores it and, on macOS and Linux, stops the tunnel it left running;
+a second forward on the app is refused while one runs.
+A localhost.run or trycloudflare.com answer_url is never taken as the
+original. An ngrok one is, with a warning: ngrok also gives fixed domains.
 
 No setup required: defaults to localhost.run over ssh, which needs no
 install and no account. Uses ngrok instead when it is already on PATH
-(or at ~/.plivo/bin/ngrok). Force either with --tunnel.
+(or at ~/.plivo/bin/ngrok), and localhost.run when ngrok can't start.
+Force either with --tunnel.
 
 Nothing is purchased, created, or deleted — the only mutation is one
 field on one app, restored on exit.`,
@@ -133,24 +144,60 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	apiErr, err := client.Do("GET", client.AccountURL("Application", streamsFwdAppID), nil, nil, &app)
 	client.DryRun = wasDryRun
 	if err != nil {
-		return clierr.NetworkError(client.AccountURL("Application", streamsFwdAppID), err)
+		return err
 	}
 	if apiErr != nil {
 		return apiErr
 	}
-	originalAnswerURL := app.AnswerURL
+
+	// --- The answer URL to restore on exit ---
+	// A forward saves its state before it points the app at its tunnel, so
+	// while the app is still on that tunnel the state is the original: from a
+	// killed run, or a live one, which is refused. Without such a state, a
+	// throwaway tunnel URL is never restored to; an ngrok one may be a fixed
+	// domain, so it is.
+	statePath, err := forwardStatePath(streamsFwdAppID)
+	if err != nil {
+		return clierr.Wrap(err)
+	}
+	original := &forwardState{AnswerURL: app.AnswerURL, AnswerMethod: app.AnswerMethod}
+	manualRestore := restoreCommand(streamsFwdAppID, "<url>", "")
+	onTunnel, throwaway := tunnel.IsTunnelURL(app.AnswerURL)
+	saved := readForwardState(statePath)
+	switch {
+	case saved != nil && saved.TunnelAnswerURL == app.AnswerURL:
+		if processAlive(saved.PID) {
+			return &clierr.Error{
+				Code:    clierr.CodeResourceConflict,
+				Message: fmt.Sprintf("another forward (pid %d) is running on app %s", saved.PID, streamsFwdAppID),
+				Hint:    "Stop that one first: Ctrl+C in its terminal restores the app.",
+			}
+		}
+		original = saved
+		fmt.Fprintf(os.Stderr, "⚠ An earlier forward left this app on its stopped tunnel; %s is restored on exit.\n", saved.AnswerURL)
+	case throwaway:
+		original = nil
+		fmt.Fprintf(os.Stderr, "⚠ answer_url %s is a tunnel URL, so it is not restored on exit. Set the app's own after: %s\n",
+			app.AnswerURL, manualRestore)
+	case onTunnel:
+		fmt.Fprintf(os.Stderr, "⚠ answer_url %s is an ngrok URL. It is restored on exit, but if a killed run left it there, set the app's own after: %s\n",
+			app.AnswerURL, manualRestore)
+	}
+	if original != nil {
+		manualRestore = restoreCommand(streamsFwdAppID, original.AnswerURL, original.AnswerMethod)
+	}
 
 	if dryRunFlag {
 		if jsonOut {
 			return output.JSONSuccess(os.Stdout, map[string]any{
 				"dry_run":         true,
 				"app_id":          streamsFwdAppID,
-				"from_answer_url": originalAnswerURL,
+				"from_answer_url": app.AnswerURL,
 				"to":              streamsFwdTo,
 			}, nil)
 		}
 		fmt.Fprintf(out, "[dry-run] Would redirect app %q (%s) answer_url:\n", app.AppName, streamsFwdAppID)
-		fmt.Fprintf(out, "  from: %s\n", originalAnswerURL)
+		fmt.Fprintf(out, "  from: %s\n", app.AnswerURL)
 		fmt.Fprintf(out, "  to:   https://<ngrok-tunnel>/answer (via local server)\n")
 		fmt.Fprintf(out, "  Tunnel would forward call audio to: %s\n", streamsFwdTo)
 		return nil
@@ -159,12 +206,21 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	// --- Confirm (unless --yes) ---
 	if !streamsFwdYes {
 		fmt.Fprintf(out, "⚠  About to modify app %q (%s):\n", app.AppName, streamsFwdAppID)
-		fmt.Fprintf(out, "   - answer_url: %s\n     → https://<ngrok-tunnel>/answer (your local handler)\n", originalAnswerURL)
+		fmt.Fprintf(out, "   - answer_url: %s\n     → https://<ngrok-tunnel>/answer (your local handler)\n", app.AnswerURL)
 		fmt.Fprintf(out, "   - %s\n", numbersAffectedWarning(client, streamsFwdAppID))
-		fmt.Fprintf(out, "   - Restored on Ctrl+C (use --keep to skip restore)\n\n")
+		restoreNote := "Restored on Ctrl+C (use --keep to skip restore)"
+		if original == nil {
+			restoreNote = "Not restored on exit: there is no original to restore"
+		}
+		fmt.Fprintf(out, "   - %s\n\n", restoreNote)
 		if !confirmInteractive(out, "Continue? [y/N] ") {
 			return clierr.BadInput("aborted by user")
 		}
+	}
+
+	// A forward killed before its teardown leaves its tunnel process running.
+	if saved != nil && !processAlive(saved.PID) && tunnel.StopLeftover(saved.TunnelPID, saved.TunnelArgs) {
+		fmt.Fprintf(os.Stderr, "Stopped the tunnel an earlier forward left running (pid %d).\n", saved.TunnelPID)
 	}
 
 	// --- Bind local server on random port ---
@@ -201,14 +257,24 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	}
 
 	// --- PATCH app's answer_url to the tunnel ---
+	// Saved first, so a run that dies before restoring leaves it for the next.
 	tunnelAnswerURL := tn.PublicURL + "/answer"
+	if original != nil {
+		state := *original
+		state.TunnelAnswerURL, state.PID = tunnelAnswerURL, os.Getpid()
+		state.TunnelPID, state.TunnelArgs = tn.PID, tn.Args
+		if err := writeForwardState(statePath, state); err != nil {
+			listener.Close()
+			return clierr.Wrap(fmt.Errorf("save the app's answer URL before changing it: %w", err))
+		}
+	}
 	patchBody := map[string]interface{}{
 		"answer_url":    tunnelAnswerURL,
 		"answer_method": "POST",
 	}
 	if apiErr, err := client.Do("POST", client.AccountURL("Application", streamsFwdAppID), patchBody, nil, nil); err != nil {
 		listener.Close()
-		return clierr.NetworkError(client.AccountURL("Application", streamsFwdAppID), err)
+		return err
 	} else if apiErr != nil {
 		listener.Close()
 		return apiErr
@@ -235,15 +301,29 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 		close(srvErrCh)
 	}()
 
-	// --- Wait for SIGINT or fatal server error ---
+	// --- Wait for SIGINT, a fatal server error or the tunnel stopping ---
+	var tunnelErr *clierr.Error
 	select {
 	case <-ctx.Done():
-		if !jsonOut {
-			fmt.Fprintf(out, "\n^C — tearing down...\n")
-		}
 	case err := <-srvErrCh:
 		if !jsonOut {
 			fmt.Fprintf(out, "\nlocal server error: %v\n", err)
+		}
+	case <-tn.Done:
+		// Ctrl-C reaches the tunnel process too: give that signal a moment to
+		// land here before calling the tunnel dead.
+		select {
+		case <-ctx.Done():
+		case <-time.After(time.Second):
+			tunnelErr = tunnelStopped(tn.Err())
+		}
+	}
+	if !jsonOut {
+		switch {
+		case tunnelErr != nil:
+			fmt.Fprintf(out, "\n✗ %s. Tearing down...\n", tunnelErr.Message)
+		case ctx.Err() != nil:
+			fmt.Fprintf(out, "\n^C — tearing down...\n")
 		}
 	}
 
@@ -252,36 +332,63 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 	_ = srv.Shutdown(shutdownCtx)
 	shutdownCancel()
 
-	if streamsFwdKeep {
+	restored := false
+	switch {
+	case streamsFwdKeep:
 		if !jsonOut {
 			fmt.Fprintf(out, "  --keep set; answer_url left at %s\n", tunnelAnswerURL)
-			fmt.Fprintf(out, "  Manual restore: %s\n", restoreCommand(streamsFwdAppID, originalAnswerURL, app.AnswerMethod))
+			fmt.Fprintf(out, "  Manual restore: %s\n", manualRestore)
 		}
-	} else {
+	case original == nil:
+		if !jsonOut {
+			fmt.Fprintf(out, "  No original answer_url to restore; set it: %s\n", manualRestore)
+		}
+	default:
 		if !jsonOut {
 			fmt.Fprintf(out, "  Restoring answer_url on %q...", app.AppName)
 		}
-		if err := restoreAnswerURL(client, streamsFwdAppID, originalAnswerURL, app.AnswerMethod); err != nil {
+		if err := restoreAnswerURL(client, streamsFwdAppID, original.AnswerURL, original.AnswerMethod); err != nil {
 			if !jsonOut {
 				fmt.Fprintln(out, " ✗ failed.")
 			}
 			return err
 		}
+		_ = os.Remove(statePath)
+		restored = true
 		if !jsonOut {
 			fmt.Fprintln(out, " done.")
 		}
 	}
 
+	if tunnelErr != nil {
+		tunnelErr.Context = map[string]any{"restored": restored}
+		return tunnelErr
+	}
 	if jsonOut {
 		return output.JSONSuccess(os.Stdout, streamsFwdResult{
 			AppID:          streamsFwdAppID,
 			TunnelURL:      tn.PublicURL,
-			Restored:       !streamsFwdKeep,
+			Restored:       restored,
 			EventsObserved: events.Load(),
 		}, nil)
 	}
 	fmt.Fprintf(out, "✓ All cleaned up.\n")
 	return nil
+}
+
+// tunnelStopped is the error for a tunnel process that exited on its own: its
+// URL is gone, so calls to the app could not reach the handler.
+func tunnelStopped(reason error) *clierr.Error {
+	msg := "the tunnel stopped"
+	if reason != nil {
+		msg += " (" + reason.Error() + ")"
+	}
+	return &clierr.Error{
+		Code:      clierr.CodeNetworkError,
+		Message:   msg,
+		Hint:      "Run the command again to open a new tunnel.",
+		Retryable: true,
+	}
 }
 
 // restoreAnswerURL puts the app's original answer URL and method back. If it
@@ -292,7 +399,7 @@ func restoreAnswerURL(client *api.Client, appID, answerURL, method string) error
 	body := map[string]interface{}{"answer_url": answerURL, "answer_method": method}
 	apiErr, err := client.Do("POST", target, body, nil, nil)
 	if err != nil {
-		apiErr = clierr.NetworkError(target, err)
+		apiErr = clierr.Wrap(err) // already the client's own error when the POST got no answer
 	}
 	if apiErr == nil {
 		return nil
@@ -301,6 +408,68 @@ func restoreAnswerURL(client *api.Client, appID, answerURL, method string) error
 	apiErr.Hint = "Every number on the app still points at the stopped tunnel. Restore it: " +
 		restoreCommand(appID, answerURL, method)
 	return apiErr
+}
+
+// forwardState is the app's own answer URL and method, saved with the tunnel
+// URL and pid of the run before it points the app at that tunnel, and removed
+// once they are restored. A run killed in between leaves it, so the next run
+// restores them, not the dead tunnel, and stops that tunnel's process.
+type forwardState struct {
+	AnswerURL       string   `json:"answer_url"`
+	AnswerMethod    string   `json:"answer_method"`
+	TunnelAnswerURL string   `json:"tunnel_answer_url"` // what that run pointed the app at
+	PID             int      `json:"pid"`               // that run's process
+	TunnelPID       int      `json:"tunnel_pid,omitempty"`
+	TunnelArgs      []string `json:"tunnel_args,omitempty"` // its command line, checked before it is stopped
+}
+
+// forwardStatePath is the app's state file in the CLI's config directory.
+func forwardStatePath(appID string) (string, error) {
+	p, err := config.Path()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(p), "streams-forward", url.PathEscape(appID)+".json"), nil
+}
+
+// readForwardState returns the saved state, or nil when there is none.
+func readForwardState(path string) *forwardState {
+	var s forwardState
+	data, err := os.ReadFile(path)
+	if err != nil || json.Unmarshal(data, &s) != nil || s.TunnelAnswerURL == "" {
+		return nil
+	}
+	return &s
+}
+
+// processAlive reports whether pid is a running process other than this one.
+func processAlive(pid int) bool {
+	if pid <= 0 || pid == os.Getpid() {
+		return false
+	}
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = p.Release() }()
+	if runtime.GOOS == "windows" {
+		return true // FindProcess could open it, so it is still there
+	}
+	err = p.Signal(syscall.Signal(0))
+	return err == nil || errors.Is(err, syscall.EPERM)
+}
+
+// writeForwardState saves s where only the user can read it: an answer URL
+// can carry credentials.
+func writeForwardState(path string, s forwardState) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	data, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
 }
 
 // restoreCommand is the CLI command that sets the app's answer URL and method

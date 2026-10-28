@@ -96,7 +96,7 @@ Only SIP Trunking calls. For a Voice call use ` + "`plivo voice calls diagnose`"
 the two read different stores, so neither can answer for the other.` + diagnoseOutputHelp,
 	Example: `  plivo sip calls diagnose 8f3c1a2e-0d44-4a6f-9c31-2b7e5a90d1f7`,
 	Args:    cobra.ExactArgs(1),
-	RunE:    runSIPCallsDiagnose,
+	RunE:    sipObjectArg(runSIPCallsDiagnose),
 }
 
 var sipCallsGetCmd = &cobra.Command{
@@ -109,7 +109,7 @@ source, then the platform's final SIP response. No API returns that response,
 so it shows as not available; the console's SIP logs have it.`,
 	Example: `  plivo sip calls get 8f3c1a2e-0d44-4a6f-9c31-2b7e5a90d1f7`,
 	Args:    cobra.ExactArgs(1),
-	RunE:    runSIPCallsGet,
+	RunE:    sipObjectArg(runSIPCallsGet),
 }
 
 var sipCallsInsightsCmd = &cobra.Command{
@@ -125,7 +125,7 @@ The table ends with which side ended the call, as in ` + "`sip calls get`" + `.
 -o json returns the API response unchanged.`,
 	Example: `  plivo sip calls insights 8f3c1a2e-0d44-4a6f-9c31-2b7e5a90d1f7`,
 	Args:    cobra.ExactArgs(1),
-	RunE:    runSIPCallsInsights,
+	RunE:    sipObjectArg(runSIPCallsInsights),
 }
 
 var sipTrunksListCmd = &cobra.Command{
@@ -140,7 +140,7 @@ var sipTrunksGetCmd = &cobra.Command{
 	Use:   "get <trunk_id>",
 	Short: "Get one trunk by ID",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runSIPTrunksGet,
+	RunE:  sipTrunkArg(runSIPTrunksGet),
 }
 
 var sipACLListCmd = &cobra.Command{
@@ -154,7 +154,7 @@ var sipACLGetCmd = &cobra.Command{
 	Use:   "get <ipacl_uuid>",
 	Short: "Get one IP access control list by UUID",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runSIPACLGet,
+	RunE:  sipObjectArg(runSIPACLGet),
 }
 
 func init() {
@@ -165,6 +165,7 @@ func init() {
 	f.StringVar(&sipCallsDirection, "direction", "", oneOf(directionValues))
 	// No local 90-day check: this API's limit is 3 months, and its 400 says so.
 	registerTimeRangeFlags(sipCallsListCmd, &sipCallsRange, "calls ending", rangeLimits{})
+	f.Lookup("until").Usage += "; defaults to now when --since is given"
 	f.IntVar(&sipCallsCauseCode, "hangup-cause-code", 0, "filter by numeric hangup cause code")
 	f.StringVar(&sipCallsSource, "hangup-source", "", "who ended the call: "+oneOf(sipHangupSources))
 	f.StringVar(&sipCallsSTIR, "stir-verification", "", oneOf(stirValues))
@@ -187,6 +188,12 @@ func trimPlus(number string) string {
 	return strings.TrimPrefix(strings.TrimSpace(number), "+")
 }
 
+// isE164Digits reports whether digits, a number without its "+", is 1 to 15
+// digits: an E.164 number or, as a list filter, the start of one.
+func isE164Digits(digits string) bool {
+	return digits != "" && len(digits) <= 15 && strings.Trim(digits, "0123456789") == ""
+}
+
 func runSIPCallsList(cmd *cobra.Command, args []string) error {
 	if err := validateEnum("direction", &sipCallsDirection, directionValues...); err != nil {
 		return err
@@ -197,9 +204,21 @@ func runSIPCallsList(cmd *cobra.Command, args []string) error {
 	if err := validateEnum("stir-verification", &sipCallsSTIR, stirValues...); err != nil {
 		return err
 	}
+	// The API matches a number filter exactly or as a prefix, so any run of
+	// digits can match; a letter, space or dash never does.
+	for _, f := range [][2]string{{"from-number", sipCallsFrom}, {"to-number", sipCallsTo}} {
+		if v := trimPlus(f[1]); v != "" && !isE164Digits(v) {
+			return clierr.BadFlag(f[0], fmt.Sprintf("%q is not a number in E.164, or the start of one", f[1]))
+		}
+	}
 	since, until, err := sipCallsRange.bounds(cmd)
 	if err != nil {
 		return err
+	}
+	// Given a start and no end, the API searches only the 30 days after the
+	// start, so --since alone runs to now. A start still to come gets no end.
+	if now := listTimeNow().UTC(); until.IsZero() && !since.IsZero() && since.Before(now) {
+		until = now
 	}
 
 	client, _, err := getClient()
@@ -553,9 +572,10 @@ func runSIPCallsDiagnose(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	// Read under --dry-run too (a GET is not a write), and keep the record:
-	// -o json takes the hangup facts from it.
+	// -o json takes the hangup facts from it. Only a 404 is "not found": a read
+	// that got no answer goes on to the assistant, as voice calls diagnose does.
 	record, status := readRecord(client, "Zentrunk", "Call", callUUID)
-	if status == 0 || status == http.StatusNotFound {
+	if status == http.StatusNotFound {
 		if resourceExists(client, "Call", callUUID) {
 			return &clierr.Error{
 				Code:       clierr.CodeBadInput,
@@ -614,8 +634,8 @@ func analysisIncomplete(answer string) (string, bool) {
 // It judges both output modes alike. askErr is runAsk's result; label and uuid
 // name the record, and getCmd is the command that reads it directly.
 func diagnoseOutcome(askErr error, label, uuid, getCmd string) error {
-	if askErr != nil && !lastAsk.errored {
-		return askErr // the turn never ran: auth, HTTP or network trouble
+	if askErr != nil && !lastAsk.ran {
+		return askErr // the turn never ran its course: auth, HTTP, network trouble or --timeout
 	}
 	if dryRunFlag {
 		return nil // nothing was sent, so there is no analysis to judge

@@ -1,12 +1,12 @@
 Update every installed Plivo skill to the version bundled in this binary.
 
-It looks in ~/.claude/skills and, inside a git repository, in
-<repo>/.claude/skills. A copy is replaced only when it matches a version a
+It looks in each agent's skills folder, ~/.claude/skills (Claude Code and
+Cursor) and ~/.agents/skills (Codex), and inside a git repository in the same
+two folders under <repo>. A copy is replaced only when it matches a version a
 release shipped; anything else is treated as your own edit and kept, and
 --force replaces it too. Skills that are not installed stay that way: add them
-with `plivo skill install`. A retired skill still installed next to the one
-that replaced it is reported with the command that removes it; update itself
-deletes nothing.
+with `plivo skill install`. A retired skill still in a .claude/skills folder
+is reported with the command that retires it; update itself deletes nothing.
 
 Usage:
   plivo skill update [flags]
@@ -21,7 +21,7 @@ Flags:
   -h, --help    help for update
 
 Global Flags:
-      --dry-run            print the HTTP request without sending
+      --dry-run            preview requests and local changes without sending or writing anything
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
   -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
@@ -29,5 +29,6 @@ Global Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
-      --timeout int        request timeout in seconds (default 30)
+      --show-secrets       show auth tokens and passwords in API responses instead of [REDACTED]
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts

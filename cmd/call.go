@@ -5,11 +5,13 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var callCmd = &cobra.Command{
@@ -27,6 +29,7 @@ var (
 	callListTo        string
 	callListDirection string
 	callListRange     listTimeRange
+	callListLive      bool
 )
 
 var callListCmd = &cobra.Command{
@@ -37,12 +40,20 @@ var callListCmd = &cobra.Command{
 --since and --until (or --from-date and --to-date) filter on when a call ended,
 in UTC, and a bare --until date includes that day. --until needs --since. Plivo
 searches only the last 90 days, at most 31 days per request; a range past
-either is refused before any request, and the error says what to run instead.`,
+either is refused before any request, and the error says what to run instead.
+
+--live lists the calls in progress instead, which have no record until they
+end. Plivo returns their UUIDs alone, with no filter or page, so --live takes
+no other list flag; -o json has api_id and calls[], the UUIDs.
+` + "`plivo voice calls get <call_uuid> --live`" + ` reads one.`,
 	Example: `  plivo voice calls list --since 2026-10-01
-  plivo voice calls list --from-date 2026-09-15 --to-date 2026-10-14 -o json`,
+  plivo voice calls list --from-date 2026-09-15 --to-date 2026-10-14 -o json
+  plivo voice calls list --live`,
 	Args: cobra.NoArgs,
 	RunE: runCallList,
 }
+
+var callGetLive bool
 
 var callGetCmd = &cobra.Command{
 	Use:   "get <call_uuid>",
@@ -61,6 +72,10 @@ var (
 	callMakeMachineDetect string
 )
 
+// demoAnswerURL is Plivo's hello-world answer XML, the --answer-url default: a
+// static file, so it is fetched with GET.
+const demoAnswerURL = "https://s3.amazonaws.com/static.plivo.com/answer.xml"
+
 var callMakeCmd = &cobra.Command{
 	Use:   "make",
 	Short: "Make an outbound call (requires --yes; spends money — use --dry-run to preview)",
@@ -74,17 +89,19 @@ func init() {
 	callListCmd.Flags().StringVar(&callListTo, "to", "", "filter by to_number")
 	callListCmd.Flags().StringVar(&callListDirection, "direction", "", oneOf(directionValues))
 	registerTimeRangeFlags(callListCmd, &callListRange, "calls ending", rangeLimits{retainDays: listRetainDays, spanDays: listSpanDays})
+	callListCmd.Flags().BoolVar(&callListLive, "live", false, "list the UUIDs of the calls in progress, not call records (takes no other list flag)")
+	callGetCmd.Flags().BoolVar(&callGetLive, "live", false, "get a call in progress, not its record (written once the call ends)")
 
 	callMakeCmd.Flags().StringVar(&callMakeFrom, "from", "", "source number (E.164) — must be on your account (required)")
 	_ = callMakeCmd.MarkFlagRequired("from")
-	callMakeCmd.Flags().StringVar(&callMakeTo, "to", "", "destination number (E.164) (required)")
+	callMakeCmd.Flags().StringVar(&callMakeTo, "to", "", "destination: an E.164 number or a sip: URI, or several joined with < (required)")
 	_ = callMakeCmd.MarkFlagRequired("to")
-	callMakeCmd.Flags().StringVar(&callMakeAnswerURL, "answer-url", "https://s3.amazonaws.com/static.plivo.com/answer.xml",
+	callMakeCmd.Flags().StringVar(&callMakeAnswerURL, "answer-url", demoAnswerURL,
 		"URL returning PlivoXML to play on answer (default: Plivo's hello demo)")
-	callMakeCmd.Flags().StringVar(&callMakeAnswerMethod, "answer-method", "GET", "GET|POST")
+	callMakeCmd.Flags().StringVar(&callMakeAnswerMethod, "answer-method", "", "GET|POST (default: GET for the hello demo, else Plivo's POST)")
 	callMakeCmd.Flags().StringVar(&callMakeHangupURL, "hangup-url", "", "URL hit when call ends")
 	callMakeCmd.Flags().StringVar(&callMakeRingURL, "ring-url", "", "URL hit when call starts ringing")
-	callMakeCmd.Flags().StringVar(&callMakeMachineDetect, "machine-detection", "", "none|true|hangup")
+	callMakeCmd.Flags().StringVar(&callMakeMachineDetect, "machine-detection", "", "answering-machine detection: true|hangup (off when omitted)")
 	registerExplainFlag(callMakeCmd)
 
 	callTransferCmd.Flags().StringVar(&callTransferLegs, "legs", "aleg", "which leg(s) to act on: aleg|bleg|both")
@@ -115,8 +132,11 @@ func init() {
 	callRecordCmd.Flags().StringVar(&callRecordFileFormat, "file-format", "mp3", "mp3|wav")
 	callRecordCmd.Flags().StringVar(&callRecordCallbackURL, "callback-url", "", "URL hit when recording finishes")
 	callRecordCmd.Flags().StringVar(&callRecordCallbackMethod, "callback-method", "POST", "GET|POST")
-	callRecordCmd.Flags().BoolVar(&callRecordTranscribe, "transcribe", false, "request transcription")
-	callRecordCmd.Flags().BoolVar(&callRecordBothLegs, "both-legs", false, "record both legs (default: just A-leg)")
+	callRecordCmd.Flags().StringVar(&callRecordChannelType, "record-channel-type", "", "mono|stereo (stereo puts each leg on its own channel)")
+	callRecordCmd.Flags().StringVar(&callRecordTransType, "transcription-type", "", "transcription type: auto|hybrid|manual (results go to --transcription-url)")
+	callRecordCmd.Flags().StringVar(&callRecordTransURL, "transcription-url", "", "URL the transcription is sent to")
+	ignoredFlag(callRecordCmd, "both-legs", true, "the API always records both legs; --record-channel-type stereo puts each on its own channel")
+	ignoredFlag(callRecordCmd, "transcribe", true, transcribeNote)
 
 	callCmd.AddCommand(callListCmd, callGetCmd, callMakeCmd, callHangupCmd, callTransferCmd,
 		callPlayCmd, callStopPlayCmd, callSpeakCmd, callStopSpeakCmd, callDTMFCmd,
@@ -165,8 +185,7 @@ func runCallHangup(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Hung up %s\n", uuidStr)
-	return nil
+	return emitWrite(fmt.Sprintf("Hung up %s", uuidStr), map[string]any{"call_uuid": uuidStr, "hung_up": true})
 }
 
 func runCallTransfer(cmd *cobra.Command, args []string) error {
@@ -198,8 +217,7 @@ func runCallTransfer(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Transferred %s: %s\n", uuidStr, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Transferred %s: %s", uuidStr, resp.Message), resp.Raw())
 }
 
 var (
@@ -272,8 +290,7 @@ func runCallPlay(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Playing on %s: %s\n", uuidStr, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Playing on %s: %s", uuidStr, resp.Message), resp.Raw())
 }
 
 func runCallStopPlay(cmd *cobra.Command, args []string) error {
@@ -304,8 +321,7 @@ func runCallSpeak(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Speaking on %s: %s\n", uuidStr, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Speaking on %s: %s", uuidStr, resp.Message), resp.Raw())
 }
 
 func runCallStopSpeak(cmd *cobra.Command, args []string) error {
@@ -329,9 +345,13 @@ var (
 	callRecordFileFormat     string
 	callRecordCallbackURL    string
 	callRecordCallbackMethod string
-	callRecordTranscribe     bool
-	callRecordBothLegs       bool
+	callRecordChannelType    string
+	callRecordTransType      string
+	callRecordTransURL       string
 )
+
+// transcribeNote is what --transcribe, which the Record APIs never read, says.
+const transcribeNote = "the API never read it, so nothing was transcribed; use --transcription-type auto with --transcription-url"
 
 var callRecordCmd = &cobra.Command{
 	Use:   "record <call_uuid>",
@@ -368,8 +388,7 @@ func runCallDTMF(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Sent DTMF on %s: %s\n", uuidStr, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Sent DTMF on %s: %s", uuidStr, resp.Message), resp.Raw())
 }
 
 func runCallRecord(cmd *cobra.Command, args []string) error {
@@ -381,9 +400,9 @@ func runCallRecord(cmd *cobra.Command, args []string) error {
 	body := map[string]any{
 		"time_limit":  callRecordTimeLimit,
 		"file_format": callRecordFileFormat,
-		"transcribe":  callRecordTranscribe,
-		"both_legs":   callRecordBothLegs,
 	}
+	putSet(body, map[string]string{"record_channel_type": callRecordChannelType,
+		"transcription_type": callRecordTransType, "transcription_url": callRecordTransURL})
 	if callRecordCallbackURL != "" {
 		body["callback_url"] = callRecordCallbackURL
 		body["callback_method"] = callRecordCallbackMethod
@@ -415,6 +434,15 @@ func runCallRecord(cmd *cobra.Command, args []string) error {
 	})
 }
 
+// putSet adds to body each of fields that is set.
+func putSet(body map[string]any, fields map[string]string) {
+	for key, v := range fields {
+		if v != "" {
+			body[key] = v
+		}
+	}
+}
+
 func runCallStopRecord(cmd *cobra.Command, args []string) error {
 	return runSubresourceDelete(cmd, args[0], "Record", "stopped recording")
 }
@@ -436,21 +464,35 @@ func runSubresourceDelete(cmd *cobra.Command, uuidStr, sub, doneLabel string) er
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "%s on %s\n", doneLabel, uuidStr)
-	return nil
+	return emitWrite(fmt.Sprintf("%s on %s", doneLabel, uuidStr),
+		map[string]any{"call_uuid": uuidStr, "resource": sub, "stopped": true})
 }
 
 func runCallMake(cmd *cobra.Command, args []string) error {
+	if err := validateCallParties(callMakeFrom, callMakeTo); err != nil {
+		return err
+	}
+	if err := validateEnum("machine-detection", &callMakeMachineDetect, "true", "hangup"); err != nil {
+		return err
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
 	}
 
 	body := map[string]any{
-		"from":          callMakeFrom,
-		"to":            callMakeTo,
-		"answer_url":    callMakeAnswerURL,
-		"answer_method": callMakeAnswerMethod,
+		"from":       callMakeFrom,
+		"to":         callMakeTo,
+		"answer_url": callMakeAnswerURL,
+	}
+	// GET is for the demo's static XML. Any other URL gets Plivo's default,
+	// POST, unless --answer-method is given.
+	method := callMakeAnswerMethod
+	if method == "" && callMakeAnswerURL == demoAnswerURL {
+		method = "GET"
+	}
+	if method != "" {
+		body["answer_method"] = method
 	}
 	if callMakeHangupURL != "" {
 		body["hangup_url"] = callMakeHangupURL
@@ -498,7 +540,26 @@ func runCallMake(cmd *cobra.Command, args []string) error {
 	})
 }
 
+// validateCallParties refuses what the call API cannot dial, before anything is
+// sent: from is an E.164 number, to one or more joined by <, each an E.164
+// number or a sip: URI.
+func validateCallParties(from, to string) error {
+	if !isE164Digits(strings.TrimPrefix(from, "+")) {
+		return clierr.BadFlag("from", fmt.Sprintf("%q is not an E.164 number", from))
+	}
+	for _, part := range strings.Split(to, "<") {
+		sip := len(part) > len("sip:") && strings.EqualFold(part[:len("sip:")], "sip:")
+		if !sip && !isE164Digits(strings.TrimPrefix(part, "+")) {
+			return clierr.BadFlag("to", fmt.Sprintf("%q is not an E.164 number or a sip: URI", part))
+		}
+	}
+	return nil
+}
+
 func runCallList(cmd *cobra.Command, args []string) error {
+	if callListLive {
+		return runCallListLive(cmd)
+	}
 	if err := validateEnum("direction", &callListDirection, directionValues...); err != nil {
 		return err
 	}
@@ -541,11 +602,54 @@ func runCallList(cmd *cobra.Command, args []string) error {
 	return output.Table(os.Stdout, rows)
 }
 
+// runCallListLive lists the calls in progress: the Call API with status=live,
+// which takes no filter or page and answers with UUIDs alone. A list flag
+// given with it is refused, not left unsent.
+func runCallListLive(cmd *cobra.Command) error {
+	var given []string
+	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
+		if f.Changed && f.Name != "live" {
+			given = append(given, "--"+f.Name)
+		}
+	})
+	if len(given) > 0 {
+		e := clierr.BadFlag("live", "can't be combined with "+strings.Join(given, ", "))
+		e.Hint = "Plivo lists the calls in progress without filters or pages. Drop --live to filter the call records."
+		return e
+	}
+	client, _, err := getClient()
+	if err != nil {
+		return err
+	}
+	var resp api.LiveCallList
+	apiErr, err := client.Do("GET", client.AccountURL("Call"), nil, url.Values{"status": {"live"}}, &resp)
+	if err != nil {
+		return err
+	}
+	if apiErr != nil {
+		return apiErr
+	}
+	if dryRunFlag {
+		return nil
+	}
+	if effectiveFormat() == output.FormatJSON {
+		return listJSON(os.Stdout, resp.Raw(), "calls")
+	}
+	rows := [][]string{{"UUID"}}
+	for _, uuid := range resp.Calls {
+		rows = append(rows, []string{uuid})
+	}
+	return output.Table(os.Stdout, rows)
+}
+
 func runCallGet(cmd *cobra.Command, args []string) error {
 	uuid := args[0]
 	client, _, err := getClient()
 	if err != nil {
 		return err
+	}
+	if callGetLive {
+		return runCallGetLive(client, uuid)
 	}
 	var c api.Call
 	apiErr, err := client.Do("GET", client.AccountURL("Call", uuid), nil, nil, &c)
@@ -574,5 +678,36 @@ func runCallGet(cmd *cobra.Command, args []string) error {
 		{"hangup_cause", c.HangupCause},
 		{"hangup_source", c.HangupSource},
 		{"total_amount", c.TotalAmount},
+	})
+}
+
+// runCallGetLive reads a call in progress: the same URL with status=live,
+// answered in another shape (from and to, not from_number and to_number).
+func runCallGetLive(client *api.Client, uuid string) error {
+	var c api.LiveCall
+	apiErr, err := client.Do("GET", client.AccountURL("Call", uuid), nil, url.Values{"status": {"live"}}, &c)
+	if err != nil {
+		return err
+	}
+	if apiErr != nil {
+		if apiErr.Code == clierr.CodeResourceNotFound {
+			apiErr.Hint = "No call in progress has this UUID. If the call has ended, drop --live to get its record."
+		}
+		return apiErr
+	}
+	if dryRunFlag {
+		return nil
+	}
+	if effectiveFormat() == output.FormatJSON {
+		return output.JSONRaw(os.Stdout, c.Raw())
+	}
+	return output.KV(os.Stdout, [][2]string{
+		{"uuid", c.CallUUID},
+		{"status", c.CallStatus},
+		{"from", c.From},
+		{"to", c.To},
+		{"direction", c.Direction},
+		{"caller_name", c.CallerName},
+		{"session_start", c.SessionStart},
 	})
 }

@@ -167,8 +167,7 @@ func runAgentLifecycle(verb, segment, agentID string) error {
 	if msg == "" {
 		msg = verb + "d"
 	}
-	fmt.Fprintf(os.Stderr, "Agent %s: %s\n", agentID, msg)
-	return nil
+	return emitResponse(fmt.Sprintf("Agent %s: %s", agentID, msg), resp.Raw())
 }
 
 func init() {
@@ -404,8 +403,7 @@ func runAgentUpdate(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Updated agent %s: %s\n", agentID, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Updated agent %s: %s", agentID, resp.Message), resp.Raw())
 }
 
 func runAgentDelete(cmd *cobra.Command, args []string) error {
@@ -427,6 +425,5 @@ func runAgentDelete(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Deleted agent %s\n", agentID)
-	return nil
+	return emitWrite(fmt.Sprintf("Deleted agent %s", agentID), map[string]any{"agent_id": agentID, "deleted": true})
 }

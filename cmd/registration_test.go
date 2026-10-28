@@ -63,7 +63,7 @@ func TestSubcommands_registered(t *testing.T) {
 		path  string // space-separated grammar path to the group
 		verbs []string
 	}{
-		{"account", []string{"get", "update"}},
+		{"account", []string{"get", "update", "usage"}},
 		{"auth", []string{"list", "use", "remove", "whoami"}}, // `token` is not registered in this build; login/logout are top-level
 		{"account subaccounts", []string{"list", "get", "create", "update", "delete"}},
 		{"account applications", []string{"create", "list", "get", "update", "delete"}},
@@ -198,7 +198,7 @@ func TestRequiredFlags(t *testing.T) {
 		{[]string{"voice", "calls", "speak"}, []string{"text"}},
 		{[]string{"voice", "calls", "dtmf"}, []string{"digits"}},
 		{[]string{"account", "applications", "create"}, []string{"app-name", "answer-url"}},
-		{[]string{"voice", "endpoints", "create"}, []string{"username", "password"}},
+		{[]string{"voice", "endpoints", "create"}, []string{"username", "password", "alias"}},
 		{[]string{"account", "subaccounts", "create"}, []string{"name"}},
 		{[]string{"numbers", "search"}, []string{"country"}},
 		{[]string{"numbers", "compliance", "requirements"}, []string{"country", "number-type", "user-type"}},
@@ -207,12 +207,15 @@ func TestRequiredFlags(t *testing.T) {
 		{[]string{"verify", "sessions", "create"}, []string{"recipient", "app-uuid"}},
 		{[]string{"verify", "sessions", "validate"}, []string{"otp"}},
 		{[]string{"numbers", "masking", "sessions", "create"}, []string{"first-party", "second-party"}},
-		{[]string{"messaging", "sms", "10dlc", "brands", "create"}, []string{"alias", "legal-name"}},
-		{[]string{"messaging", "sms", "10dlc", "campaigns", "create"}, []string{"alias", "brand-id", "usecase", "description", "message-flow", "sample-message-1"}},
+		{[]string{"messaging", "sms", "10dlc", "brands", "create"}, []string{"alias", "profile-uuid"}},
+		{[]string{"messaging", "sms", "10dlc", "campaigns", "create"}, []string{"alias", "brand-id", "vertical", "usecase", "description", "message-flow",
+			"sample-message-1", "sample-message-2", "help-message", "opt-out-message", "subscriber-optin", "subscriber-optout", "subscriber-help"}},
 		{[]string{"messaging", "sms", "10dlc", "links", "create"}, []string{"number", "campaign-id"}},
-		{[]string{"messaging", "sms", "tollfree", "submit"}, []string{"business-name", "use-case"}},
+		{[]string{"messaging", "sms", "10dlc", "links", "list"}, []string{"campaign-id"}},
+		{[]string{"messaging", "sms", "tollfree", "submit"}, []string{"profile-uuid", "number", "use-case", "use-case-summary", "production-message-content",
+			"opt-in-type", "opt-in-image-url", "message-volume", "terms-and-conditions-link", "privacy-policy-link"}},
 		{[]string{"voice", "multiparty", "participant", "add"}, []string{"from", "to"}},
-		{[]string{"voice", "conferences", "member", "play"}, []string{"urls"}},
+		{[]string{"voice", "conferences", "member", "play"}, []string{"url"}},
 		{[]string{"voice", "conferences", "member", "speak"}, []string{"text"}},
 		{[]string{"voice", "calls", "streams", "start"}, []string{"url"}},
 		{[]string{"messaging", "sms", "powerpacks", "create"}, []string{"name"}},

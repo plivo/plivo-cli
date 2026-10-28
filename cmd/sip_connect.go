@@ -49,6 +49,7 @@ func init() {
 	f := sipConnectPlanCmd.Flags()
 	f.StringVar(&sipConnectNumber, "number", "", "number to connect, e.g. +14155551234 (required)")
 	f.StringVar(&sipConnectPlatform, "platform", "", "livekit|elevenlabs|retell|vapi (required)")
+	markRequiredByHand(sipConnectPlanCmd, "number", "platform")
 	sipConnectCmd.AddCommand(sipConnectPlanCmd)
 	sipCmd.AddCommand(sipConnectCmd)
 }
@@ -87,7 +88,7 @@ func runSIPConnectPlan(cmd *cobra.Command, _ []string) error {
 	if digits == "" {
 		return clierr.BadFlag("number", "required: the number to connect, e.g. +14155551234")
 	}
-	if strings.Trim(digits, "0123456789") != "" || len(digits) > 15 {
+	if !isE164Digits(digits) {
 		return clierr.BadFlag("number", fmt.Sprintf("%q is not an E.164 number such as +14155551234", sipConnectNumber))
 	}
 	if sipConnectPlatform == "" {
@@ -192,8 +193,7 @@ func (c *connectPlan) check(client *api.Client, p *sipPlatform, digits string) e
 	}
 	c.add("platform", "warn", "Indian numbers on "+p.label+" "+p.india)
 
-	warning, err := checkIndiaCompliance(client, digits)
-	if err != nil {
+	if err := checkIndiaCompliance(client, digits); err != nil {
 		msg := err.Error()
 		var ce *clierr.Error
 		if errors.As(err, &ce) {
@@ -202,11 +202,7 @@ func (c *connectPlan) check(client *api.Client, p *sipPlatform, digits string) e
 		c.add("compliance", "fail", msg)
 		return err
 	}
-	if warning != "" {
-		c.add("compliance", "warn", warning)
-	} else {
-		c.add("compliance", "pass", "its compliance application is accepted")
-	}
+	c.add("compliance", "pass", "its compliance application is accepted")
 	return nil
 }
 

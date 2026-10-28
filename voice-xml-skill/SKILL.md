@@ -1,6 +1,6 @@
 ---
 name: plivo-voice-xml
-description: "Writes and debugs Plivo Voice XML, the document an answer URL returns to control a call: Speak, Play, GetDigits/GetInput IVRs, Dial forwarding, Record and voicemail, Conference, MultiPartyCall. Use for Plivo XML, answer or action URLs, 8011/8012 invalid XML, 7011 URL errors, X-Plivo-Signature-V3 checks. Not for WebSocket voice bots (plivo-audio-streaming) or SIP trunks (plivo-sip-trunking)."
+description: "Writes, checks and tests Plivo Voice XML, the document an answer URL returns to control a call, as a short conversation: asks what the call should do, writes and checks the XML, creates the app, links the number, places a test call and debugs it. Covers Speak, Play, GetDigits/GetInput IVRs, Dial forwarding, Record and voicemail, Conference, MultiPartyCall. Use for Plivo XML, answer or action URLs, 8011/8012 invalid XML, 7011 URL errors, X-Plivo-Signature-V3 checks. Not for WebSocket voice bots (plivo-audio-streaming) or SIP trunks (plivo-sip-trunking)."
 license: Apache-2.0
 ---
 
@@ -12,9 +12,55 @@ When this file runs out: `plivo docs search "<terms>"` and `plivo docs show <pat
 
 Install another skill when the task leaves XML: `plivo skill install audio-streaming` for WebSocket voice bots and `<Stream>`, `plivo skill install sip-trunking` for SIP trunks (no answer URL, no XML). For CLI flags run `plivo <cmd> --help`.
 
-Before writing, pin down: inbound or outbound, what the caller hears first, keypad or speech input, where the call goes, whether it is recorded (and the caller told), and how it ends.
+## Rules for every step
 
-## Validate, fix, repeat
+- Use the CLI for every Plivo step and `-o json` to read values. `plivo <command> --help` wins on which commands and flags exist; never invent one.
+- Every write is two commands: first with `--dry-run` (prints the request, sends nothing), then, after you show the preview and the user agrees, the same command for real, with `--yes` where it asks for one. `account applications create|update` and `numbers update` act at once without `--dry-run`, so the preview is their only check.
+- Check the credit before a call: `cash_credits` in `plivo auth whoami -o json`. At 0 or less, send the user to <https://cx.plivo.com/home> to add credits and go on with the free steps. Writing and checking XML is free; only calls and renting a number cost money.
+- Before you link a number to another application, record its current `application` (`plivo numbers get <number> -o json`). Rollback: `plivo numbers update <number> --app-id <previous_app_id>`, or `--trunk-id <trunk_id>` when it ended `/Zentrunk/Trunk/<trunk_id>/`. `numbers update` cannot put back an empty `application`: tell the user before you link.
+- For more than one step, track the steps below in your agent's task or todo tool (TaskCreate and TaskUpdate in Claude Code, the plan tool in Codex CLI). Mark a step done only when its check passes.
+- Report each step as observed, not assumed. A parser pass, an HTTP 200 or a `request_uuid` is not a working call: only the call record and someone who heard the audio confirm it.
+
+## Talking to the user
+
+- Ask every question with your agent's structured question tool (AskUserQuestion in Claude Code: 1 to 4 questions per call, 2 to 4 options, the recommended one first, no "Other" option because the tool adds one). Without one, ask a numbered list with an "Other" choice.
+- Describe the call, not the XML: "callers hear a menu", "the call goes to your mobile", not `GetDigits` or `Dial`. Keep CLI words (dry-run, E.164, answer URL, `redirect`) out of questions; commands and XML stay as they are.
+- Say "voice agent", not "bot". Name apps by their names, not their IDs.
+- Mask phone numbers as `+91 AB CDXX XEFG` (country code, first four digits, X for the next three, last three). Show a number in full only where the user must dial it, and inside commands and XML.
+- Show prices only for a number the user rents, never for calls.
+- One or two short sentences per question: what happens, and what it changes. Question headers: Call flow, Direction, Number, Hosting, Create app, Link, Test call, Call, Result, Debug, Finish.
+
+## Start here: ask what the call should do
+
+When the user pastes XML or a failing call, skip to step 2 (fix) or step 6 (debug). Otherwise list the account's voice numbers (`plivo numbers list --services voice -o json`) and ask in one question-tool call:
+
+| Header | Question | Options |
+|---|---|---|
+| Call flow | What should happen on the call? | Menu: "Callers press a key, or say a word, to pick an option." · Forward: "The call rings another phone, then voicemail if nobody answers." · Record: "Voicemail, or record the whole call." · Fix my XML: "You already have call instructions that don't work." |
+| Direction | Who starts the call? | Callers dial my number (recommended) · I call people from my number |
+| Number | Which number should run this? Its calls will follow these instructions until you switch it back. | Up to two of the account's numbers, each "<masked number>: now used by <app name>" · "I'll pick one later." |
+| Hosting | Where should the call instructions live? | On my server: "You have a public HTTPS address." · On this computer, for a test: "I'll serve the file here and open a temporary link." |
+
+"Other" answers such as a conference, a message read out, or a multiparty call map to the patterns below. Then ask in plain text only what the flow needs: the menu options and what each key does, the phone to forward to and how long it rings, whether calls are recorded and how callers are told, and what callers hear first. For a voice agent on the call, hand over to `plivo skill install audio-streaming`.
+
+## Steps 1 to 6: from the idea to a tested call
+
+Create these tasks, then run them in order. Steps 1 and 2 change nothing on the account.
+
+1. Write the XML
+2. Check it
+3. Create or update the application
+4. Link the number
+5. Make a test call
+6. Debug and finish
+
+An outbound test needs no application or link: `calls make` takes the answer URL directly, so skip steps 3 and 4.
+
+### Step 1: write the XML
+
+Start from the closest of "Three patterns", with the elements and defaults below. Write every document the flow needs: the answer document and each document an `action` or `<Redirect>` URL returns. Use the user's real numbers in the XML and mask them only in what you tell the user. Show the finished flow in plain words ("Callers hear the menu; 1 rings sales for 20 seconds, then voicemail") and ask them to confirm before you check it.
+
+### Step 2: check it
 
 Run this loop on every document you write or change, including every document an `action` or `<Redirect>` URL returns:
 
@@ -26,14 +72,68 @@ Run this loop on every document you write or change, including every document an
    ```
    Repeat for each `action` URL with that element's parameters (`Digits=1`, `DialStatus=no-answer`, and so on).
 3. **Review the flow.** Something after every element that can yield nothing, an exit on every redirect loop, `log="false"` on anything that collects a secret, a Fallback Answer URL on the application.
-4. **Place one call, preview first.** A call costs money and rings a real phone.
-   ```bash
-   plivo voice calls make --from <number> --to <phone> --answer-url https://YOUR-HOST/plivo/answer --answer-method POST --dry-run
-   plivo voice calls make --from <number> --to <phone> --answer-url https://YOUR-HOST/plivo/answer --answer-method POST --yes  # only after the user agrees
-   plivo voice calls diagnose <call_uuid>
-   ```
-   `--answer-method` defaults to `GET`. Set `POST` explicitly, or Plivo fetches a route your handler may not serve.
-5. **Fix what failed and go back to step 1.** Well-formed XML is not a working call: only the call record and someone who heard the audio confirm it.
+
+Fix what failed and run the loop again. Well-formed XML is not a working call.
+
+**On this computer, for a test.** Save the documents in a new folder that holds nothing else (`xml/answer.xml`, `xml/menu.xml`, ...) and serve only that folder with this script, which answers GET and POST with the file's bytes. Never serve a project folder: anyone with the tunnel link can read every file in the served folder, `.env` and `.git` included.
+
+```python
+# serve_xml.py: python3 serve_xml.py 8080 xml   (serves only the folder named last)
+import functools, http.server, sys
+
+class H(http.server.SimpleHTTPRequestHandler):
+    def do_POST(self):
+        self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        self.do_GET()
+
+handler = functools.partial(H, directory=sys.argv[2])
+http.server.ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), handler).serve_forever()
+```
+
+Then open a tunnel: `cloudflared tunnel --config /dev/null --url http://127.0.0.1:8080` (free, no account; the link is in its output as `https://<name>.trycloudflare.com`), or `ngrok http 8080`. Ask before you install either. Point `action` and `<Redirect>` URLs at the tunnel link plus the file name. Static files cannot branch on `Digits` or `DialStatus`: every key gets the same next document, which is enough to test the flow, not to ship it. Tell the user the link changes each time the tunnel restarts, and that anyone with it can read the files.
+
+### Step 3: create or update the application
+
+An application holds the answer URL Plivo fetches for an incoming call. Reuse one only when no other number is on it, because an update reroutes every number on the app. Preview, then ask (header Create app) "Create a Plivo app called <app name>? It tells Plivo where to find the call instructions. Free, and nothing changes on your number yet." · Create it · Stop:
+
+```bash
+plivo account applications create --app-name <name> --answer-url https://YOUR-HOST/plivo/answer --answer-method POST --fallback-answer-url https://YOUR-HOST/plivo/fallback --dry-run
+```
+
+Run it again without `--dry-run`. Check: `plivo account applications get <app_id> -o json` shows that answer URL and method. To change an app instead, preview `plivo account applications update <app_id> --answer-url <url> --answer-method <method> --dry-run`, and record its old answer URL first.
+
+### Step 4: link the number
+
+Show the preview, then ask (header Link) "Send calls on <masked number> to <app name>? They stop going to <old app name> until you switch back. I'll do that at the end if you want." · Yes, switch it · Keep it as it is. For a number on no app, replace the second and third sentences with "It can move to another app later, but it can't go back to having none."
+
+```bash
+plivo numbers update <number> --app-id <app_id> --dry-run
+```
+
+Run it again without `--dry-run`. Check: `application` in `plivo numbers get <number> -o json` ends with `/Application/<app_id>/`.
+
+### Step 5: make a test call
+
+Check the credit, then ask (header Test call) "How do you want to test it?" · I'll call the number (recommended): "Dial it from a phone in the same country." · Call my phone: "Plivo rings you." An outbound flow is always "Call my phone".
+
+- **The user calls in:** give them the number in full and tell them what to try ("press 1, then let it ring out").
+- **Plivo calls the user:** ask in plain text for the phone, preview, then ask (header Call) "Call <masked phone> now? Answer and follow the menu." · Call me · Not now. Run it with `--yes`; the `request_uuid` it returns is also the call's UUID.
+
+```bash
+plivo voice calls make --from <number> --to <phone> --answer-url https://YOUR-HOST/plivo/answer --answer-method POST --dry-run
+```
+
+Set `--answer-method POST` explicitly: before v1.3.1 it defaults to `GET`, a route your handler may not serve (from v1.3.1, to POST, except for the demo answer URL). For a call in, find its UUID with `plivo voice calls list --to <number> --direction inbound --limit 5 -o json` (completed calls only: retry after a few seconds). After the call ends, read `plivo voice calls get <call_uuid> -o json` for `call_duration`, `hangup_cause_code`, `hangup_cause_name` and `hangup_source`. The record is written at hangup, so a call still up reads as not found; from v1.2.1, `--live` reads it in progress.
+
+Then ask (header Result) "Did the call do what you expected?" · Yes, all of it · Partly: "Something was skipped or wrong." · No: "Silence, or it hung up." · The call didn't come.
+
+### Step 6: debug and finish
+
+On anything but "Yes, all of it", ask (header Debug) "Want me to find out why? Plivo's call debugger takes about a minute." · Yes, debug it (recommended) · Not now. On yes, run `plivo voice calls diagnose <call_uuid>` once, retell its answer in plain words, and use "When the call fails" to fix it; then go back to step 2.
+
+If the number came from another app, ask (header Finish) "Done testing. What should happen to <masked number>?" · Keep it on <app name> (recommended when the test passed) · Switch it back to <old app name>. To switch back, preview and run the rollback.
+
+Report, short: what the call does in one line, what the test call showed (observed), the number and app names, a moved number's rollback command, and for a test on this computer: "The number works only while the file server and the tunnel run. To go live, serve the same files from your own HTTPS host and update the app's answer URL."
 
 ## The answer-URL contract
 
@@ -181,11 +281,11 @@ The docs recommend `GetInput` for new work.
 | 7011 (7012 action, 7013 transfer, 7014 redirect URL) | non-2xx or no response | a GET or POST mismatch; a 401 from Basic auth or a token on the URL (Plivo has no documented way to send credentials, so validate the signature instead); a missing route; a slow host. 7012 fails the call only when `redirect="true"` |
 | 7022 to 7024, 7032 to 7034 | the action, transfer or redirect URL is not `http(s)`, or its method is not GET or POST | the attribute value |
 | 8011 | the answer URL replied, but not with a Plivo document | the number is attached to a console flow application, which answers with JSON you never wrote (*observed*; check this first); a framework JSON or HTML error page; a Twilio element (`<Reject/>` *observed* as 8011; `<Say>`, `<Gather>`, `<Pause>`, `<Parameter>` are not Plivo elements); a raw `&` in an attribute; bytes before `<?xml`; an empty body; an empty `<Number>` from a template; a non-table `<Speak language>` (untested) |
-| 8012 (8013 transfer, 8014 redirect) | a later document was bad; 8012 fails the call only when `redirect="true"` | the action document nobody tested: it returns `OK`, JSON, or handles only the happy branch. Run step 2 of the loop on that URL |
+| 8012 (8013 transfer, 8014 redirect) | a later document was bad; 8012 fails the call only when `redirect="true"` | the action document nobody tested: it returns `OK`, JSON, or handles only the happy branch. Run the fetch in step 2 on that URL |
 | 4010 | the document ran out of elements | nothing, if the call was meant to end |
 | 3020 or 3010 with hangup source Answer XML | *observed* for `<Hangup reason="rejected"/>` and `reason="busy"`; the docs describe these codes as the called party rejecting or busy | deliberate screening, or a forgotten placeholder |
 
-**8011 from a console flow application.** Confirm: `plivo numbers get <number> -o json` (the `application` URI ends in the app id), `plivo account applications get <app_id> -o json` (its `answer_url`), then the step 2 `curl` to it: JSON back is the cause. Fix: attach an XML application.
+**8011 from a console flow application.** Confirm: `plivo numbers get <number> -o json` (the `application` URI ends in the app id), `plivo account applications get <app_id> -o json` (its `answer_url`), then the step 2 fetch with `curl`: JSON back is the cause. Fix: attach an XML application.
 
 ```bash
 plivo account applications create --app-name <name> --answer-url https://YOUR-HOST/plivo/answer --answer-method POST --fallback-answer-url https://YOUR-HOST/plivo/fallback --dry-run

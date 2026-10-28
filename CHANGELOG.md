@@ -5,6 +5,332 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-10-28
+
+### Added
+
+- The five product skills install as a Claude Code plugin, kept current
+  with this repository: `/plugin install plivo --marketplace plivo/plivo-cli`
+  (Claude Code 2.1.275+; on older versions run
+  `/plugin marketplace add plivo/plivo-cli`, then
+  `/plugin install plivo@plivo`). Owners of a Claude organization can add
+  `https://github.com/plivo/plivo-cli` under Organization settings > Plugins
+  & skills to give every member the skills.
+- `skill install agents` installs the CX agents skill, which builds, tests
+  and publishes Plivo CX agents (AI conversation flows). `skill list` shows
+  it first and `skill install all` includes it; a bare `skill install` still
+  installs the CLI skill. Other agents can install it with
+  `npx skills add plivo/plivo-cli --skill plivo-cx-agents`.
+- `voice calls list --live` lists the calls in progress.
+- `--show-secrets` shows auth tokens and passwords in API responses. They
+  now read `[REDACTED]` by default (see Changed).
+- `PLIVO_API_URL` sends every API request to a server on this machine
+  (localhost, 127.0.0.0/8 or ::1), to see exactly what the CLI sends. Any
+  other host is refused.
+- `account applications delete --cascade=false
+  --new-endpoint-application <app_id>` moves the app's endpoints to another
+  app instead of leaving them detached.
+- `numbers compliance list --number-type national`.
+- `voice calls record --record-channel-type mono|stereo` (stereo puts each
+  leg on its own channel), and `--transcription-type` with
+  `--transcription-url` on `voice calls record` and
+  `voice conferences record`.
+- `--timeout` takes a duration such as `90s`, as well as seconds.
+- `--schema` describes the result that the diagnose commands, `sip test`,
+  `voice streams test` and `sip connect plan` print under `-o json`.
+- Deleting a SIP URI lists the trunks that went with it in `trunks_deleted`
+  and the ones still there in `trunks_kept`.
+
+### Changed
+
+- Auth tokens and passwords read `[REDACTED]` in every output format and in
+  `plivo api` output, unless you pass `--show-secrets`: a subaccount's
+  `auth_token` and `new_auth_token`, an endpoint's `password`. Keys and
+  their order are kept. `account subaccounts create` still shows the new
+  token once. Agent flows come back as sent: the server masks their secrets.
+- `sip uris create|update` send a `sip:` or `sips:` URI host first, the form
+  the API takes: `sip:` is dropped, `sips:` becomes `;transport=tls` (port
+  5061 when none is given), and `sips:` with another transport is refused.
+  The CLI prints the form it sent. The API rejects both schemes, so these
+  creates used to fail.
+- `messaging sms 10dlc brands create` registers a brand from a 10DLC
+  profile and requires `--profile-uuid`; the company's details live on the
+  profile. `--brand-type` (STANDARD or STARTER) is sent only when given, so
+  the API's default applies. `brands update` is gone from the help and
+  refuses: the API has no brand update.
+- `messaging sms 10dlc campaigns update` requires `--yes` (or `--dry-run`
+  to preview), as each update is charged.
+- `voice conferences stop-record` requires `--yes`, like `hangup`.
+- `voice endpoints create` requires `--alias`, as the API does.
+- `voice calls make --machine-detection` takes `true` or `hangup`; leave it
+  out for none. `none` used to be sent to the API.
+- `voice calls make` sends `answer_method` GET only for the built-in demo
+  answer URL. Your own answer URL gets the API's default, POST, unless you
+  pass `--answer-method`.
+- `lookup` names its price in its help (USD 0.004 per request) and notes
+  the charge on stderr on each run.
+- Refused before any request:
+  - an empty or blank value for a required flag; an empty, `.` or `..` ID;
+    a control character in a `plivo api` path;
+  - `--timeout` of 0 or less (it used to become 30 seconds);
+  - `voice calls make` with a `--from` that isn't an E.164 number, or a
+    `--to` part that is neither an E.164 number nor a `sip:` URI;
+  - `voice calls streams start --bidirectional` with an outbound or
+    both-ways audio track;
+  - a SIP URI with a user part (`sip:user@host`), which the API rejects; a
+    SIP trunk ID that isn't digits; a SIP call ID that isn't a UUID;
+  - private, loopback, link-local, carrier-grade NAT, benchmarking,
+    multicast and reserved addresses in `sip ip-acl create|update` and as a
+    SIP URI host, which Plivo can never reach (a range wider than its block
+    is still only warned about);
+  - an `account usage` window that holds no day.
+- `--dry-run` covers local changes too: `auth use|remove`, `logout`,
+  `config set`, `config telemetry`, `login`, `upgrade`, `voice streams test`
+  and `docs --refresh` print what they would do and change nothing.
+  `ask -i` refuses `--dry-run`.
+- `plivo api` and every other command no longer follow a redirect. A 3xx
+  exits 3 and names where it pointed (and a missing trailing slash, the
+  usual cause).
+- `plivo api` gives an HTTP error the code and exit code any other command
+  gives it: a 404 is `RESOURCE_NOT_FOUND` (exit 1), a 401 exit 2, a 429
+  exit 4. It used to report every one as `UPSTREAM_ERROR` (exit 3), though
+  its help promised the CLI's codes. The status is still in `status_code`
+  and the API's body in `context.upstream`.
+- `ask` and `diagnose` refuse an assistant URL (`PLIVO_BUDDY_URL` or
+  `[buddy].url`) that is plain http to another host.
+- Flags the API never read are hidden and print a note when used. They
+  still run, as before, and send nothing: `voice calls record --both-legs`
+  (both legs are always recorded) and `--transcribe` (nothing was
+  transcribed; use `--transcription-type`), the same `--transcribe` on
+  `voice conferences record`, `numbers masking sessions create --mode` and
+  `--virtual-number`, `verify sessions create --alpha-sender`, and
+  `--limit`, `--offset` and `--all` on `voice multiparty participant list`,
+  which returns every participant at once.
+- `numbers masking sessions list` rows are at `data.response.objects` and
+  `verify sessions list` rows at `data.sessions`, where the API puts them;
+  `--all`, `-o jsonl` and `-o csv` follow them.
+- The CLI, audio-streaming, Voice XML and SIP trunking skills describe
+  these changes, and keep the older behaviour for older installs. The CX
+  agents skill sets UUID v4 node ids, uses the current AI nodes, installs
+  the CLI when it's missing, and before an update replaces the nulls in a
+  fetched agent with values each node's schema takes.
+- Built with Go 1.26.10, which fixes GO-2026-6809.
+
+### Fixed
+
+- IDs went into request paths unescaped, so `#` and `?` cut the path short:
+  `voice conferences hangup 'team#2'` hung up conference "team", and
+  `voice conferences stop-record '#'` sent `DELETE /Conference/`, which hangs
+  up every conference. IDs are now escaped, and `--dry-run` shows the
+  escaped URL.
+- A redirect could carry a request's credentials and body to another port
+  or host.
+- `account applications delete --cascade=false` behaved like no flag, and
+  the API deleted the app's endpoints. It now keeps them, detached, and the
+  confirmation says which happens.
+- 10DLC brands and campaigns were read with the wrong shape and field names
+  (`get` printed blanks; lists showed empty status columns), campaign
+  create and update sent fields under names the API ignores, and number
+  links called an endpoint that doesn't exist. They now match the API:
+  sample messages, opt-in, opt-out and help fields, the required `vertical`,
+  and links through the campaign's Number endpoint.
+- `messaging sms tollfree submit` sent fields the API doesn't take and
+  printed a blank ID. It now sends the profile, use case, summary, message
+  sample, opt-in details, volume and number the API defines, and `get`
+  takes the request's `uuid`.
+- `voice multiparty` mute and hold called endpoints that don't exist; they
+  now set the participant's `mute` and `hold`.
+- `voice conferences member kick` hung the member's call up instead of
+  removing it from the conference, and `member play` sent `urls` where the
+  API takes one `url`.
+- `voice calls streams start` sent its status callback under a name the API
+  ignores (`status_callback_url` now).
+- `numbers masking sessions get` and `list` printed empty fields: the API
+  nests a session under `response`, with `created_time` and `expiry_time`.
+- `verify sessions validate` posted to an endpoint the API doesn't have;
+  it now posts to the session.
+- `voice multiparty get`, `list` and `participant list`, and
+  `voice calls streams get`, read fields under names the API doesn't send.
+- Endpoint, subaccount and application tables and `--schema` read field
+  names the API doesn't send (`application`, `created`, `modified`,
+  `default_app` are the real ones).
+- `--schema` listed fields the API doesn't send: `api_id` in list rows,
+  `total_count` on call, recording and message lists, a message's `text`,
+  a conference's `resource_uri`, a number's `app_id`.
+- `numbers search` printed nothing when the API declined a search; the
+  API's reason now goes to stderr.
+- `diagnose -o json`, and `diagnose` off a terminal, exited 3 on answers
+  with `//` or `/* */` comments, trailing commas, or a confidence given as
+  a number, as "moderate" or not at all. These are read now; with no
+  confidence, `confidence` is null.
+- `voice streams forward` killed outright left the app on the tunnel URL
+  and the tunnel running. The next run on that app restores the real answer
+  URL and, on macOS and Linux, stops the tunnel.
+- `docs --refresh` showed the old cached copy, exit 0, when the refresh
+  failed, without saying so. It now names the error and the copy's age.
+- A `--query` whose result grows on each step (`[@,@] | [@,@] | ...`) could
+  use all memory. A result over its size budget, or a search that runs too
+  long, is now an error.
+- Two CLI commands changing `~/.plivo/config.toml` at once could lose one
+  change. Changes now take a lock (waiting up to 10 seconds).
+- `auth remove --dry-run` removed the profile and deleted its keychain
+  token.
+- `skill install --project` followed a symlinked skill folder or SKILL.md
+  out of the repository and wrote there. A link that stays in the
+  repository still works.
+- `skill update` and `skill list` skipped the Codex skills folder.
+- `plivo login` offered the skills again in each new agent; it now asks once
+  per machine, as documented.
+- The `plivo feedback` scrubber let bearer tokens and Indian PAN and Aadhaar
+  numbers through; they are now redacted.
+- `sip trunks update --direction` alone said "nothing to update" though a
+  flag was passed; it now says `--direction` alone changes nothing and lists
+  the flags that do.
+
+## [1.3.0] - 2026-10-19
+
+### Added
+
+- `plivo account usage` shows what the account used and spent over a date
+  window, from Plivo's usage summary: a row per period, product, type,
+  country and direction, then other charges (number rentals, lookups, fees,
+  taxes), then the total spend. Narrow it with `--product`, `--direction`,
+  `--country`, `--subaccount`, `--hangup-cause` and `--error-code`, and set
+  the row period with `--granularity`. `--since` and `--until` are UTC dates,
+  and `--until` is exclusive: `--until 2026-11-01` ends with October 31.
+  `--all` reads every page; the totals come with the first page and cover the
+  whole window.
+- Run inside Claude Code, Cursor or Codex, `plivo login` offers once per
+  machine to install the Plivo skills where that agent reads them, unless
+  current copies are there already. Without a terminal to ask on, it prints
+  the install command instead. `--yes` installs them without asking, and
+  `--quiet` skips the offer.
+- `skill install --agent codex` installs into `~/.agents/skills`, where Codex
+  reads skills. `--agent claude` is the default, `~/.claude/skills`, which
+  Claude Code and Cursor read.
+- `skill list --project` shows the skills installed in the git repository
+  you are in.
+- The CLI skill gains a "pick the right command" list, and sends spend
+  questions to `account usage` instead of adding up call or message records.
+
+### Changed
+
+- Routing an India (+91) number with `numbers update --app-id|--trunk-id` is
+  refused when the number has no KYC (compliance application) attached. It
+  used to go ahead with a warning. The error links the console page where
+  KYC is filed and lists the steps as CLI commands. `sip connect plan` fails
+  its compliance check the same way. `--force` still skips the check, and
+  Plivo still enforces KYC.
+
+## [1.2.1] - 2026-10-17
+
+### Added
+
+- `voice calls get --live` reads a call that is still in progress. Without
+  it, `get` reads the call record, which is written when the call ends.
+- `sip test` warns when a host given without a port has a SIP SRV record,
+  and names the target to test with `--uri`. It still probes the host
+  itself: Plivo's docs don't say calls follow SRV.
+- `numbers update --trunk-id` warns when the trunk is disabled.
+
+### Changed
+
+- A network failure is `NETWORK_ERROR` (refused, DNS, cut off) or
+  `UPSTREAM_TIMEOUT`, both exit 3; they used to exit 1 as a usage mistake.
+  Only a GET is marked `retryable`: after a failed write, check before
+  sending it again.
+- The HTTP status decides the error code. An ID or name inside an error
+  message (a UUID containing "2fa", say) no longer turns a 404 into an auth
+  error.
+- With `-o json`, about 50 action commands print a result on stdout:
+  hangups, transfers, play/speak/DTMF, stream and recording stops,
+  conference and multiparty actions, number release and update, application,
+  endpoint and subaccount updates and deletes, and agent operations. It is
+  the API's response, or the ID and what was done, such as
+  `{"data": {"call_uuid": "<id>", "hung_up": true}}`. They used to print
+  only a line on stderr.
+- Deletes, hangups and kicks preview with `--dry-run` alone, like the spend
+  commands; an in-use SIP delete previews with `--dry-run --force`. They
+  used to refuse `--dry-run` without `--yes`.
+- Refused before any request, each where the API would reject or ignore it:
+  no `--name` on `sip uris|trunks|ip-acl create`; a SIP credential username
+  that isn't 5 to 20 letters and digits, or a password that isn't 5 to 20
+  characters with at least one of `~!@#$%^&*()_+`; IPv6 in SIP URIs and IP
+  access control lists; a SIP URI, credential or IP ACL ID that isn't a
+  UUID; a malformed number in `numbers update` and in
+  `sip calls list --from-number|--to-number`; trunk flags that don't fit the
+  direction, and a bad `--status`; an `--until` not after `--since`; and
+  `--from`/`--to` on `messaging sms|mms|whatsapp list`, which the Message API
+  doesn't filter on (the error shows a `--query` that does).
+- `voice streams test` signs its WebSocket upgrade like Plivo signs a stream
+  (`X-Plivo-Signature-V3`) when you are logged in, so an endpoint that checks
+  the signature accepts it. A 401 or 403 on the upgrade is now
+  `AUTH_FORBIDDEN` (exit 2, was `NETWORK_ERROR` exit 3), and `-o json` adds
+  `signed`.
+- `skill install` keeps a SKILL.md you edited (one that matches no released
+  version) unless you add `--force`, and renames a retired skill's file to
+  `SKILL.md.retired` instead of deleting it.
+- The feedback prompt never blocks a pipe, stays off while telemetry or
+  feedback sending is off, and its off switches take `0`, `false`, `off` or
+  `no`. The bug-report scrubber also catches spaced and bare phone numbers,
+  card numbers, IP addresses, subaccount IDs and SIP URIs.
+- The SIP trunking, CLI and Voice XML skills run as guided conversations,
+  like the audio-streaming skill, and say what changed in v1.2.1. The Voice
+  XML skill's local test server serves only the folder you name.
+
+### Fixed
+
+- An upper-case SIP URI, credential or IP ACL ID skipped the in-use check on
+  delete, so `--yes` deleted an object a trunk used, and the API deleted the
+  trunk with it. IDs are now trimmed and lower-cased everywhere.
+- `sip trunks update` dropped an inbound trunk's fallback URI on a rename,
+  `--status` or `--secure`, because the API clears a field an update leaves
+  out. It now sends the stored fallback again; `--fallback-uri ""` removes
+  it.
+- A `--query` that failed at run time exited 1 after a send, buy or create
+  had already gone through, inviting a retry that duplicated it. It now
+  prints the unfiltered result with a warning and exits 0.
+- `sip:user:password@host` is refused. The password used to be stored with
+  the URI, printed by reads and `--dry-run`, and sent by `sip test`.
+- `diagnose -o json` (and piped) exited 3 on good answers with small format
+  slips: an extra code block, an empty field, a confidence like
+  "High (90%)".
+- `ask` and `diagnose` ignored `--timeout` once the answer was streaming, so
+  a stalled answer hung. A `--timeout` you pass now ends it with exit 3
+  (`UPSTREAM_TIMEOUT`), and an `ask` answer cut off before its end exits 3.
+- `voice streams forward` didn't notice its tunnel dying and left the app on
+  a dead URL. It now restores the answer URL and exits 3, and `auto` falls
+  back to localhost.run when ngrok can't start.
+- `voice streams test` passed against an endpoint that closed early. A close
+  before the stop frame now fails with the endpoint's close code and reason,
+  and the `start` and `media` frames match Plivo's.
+- `sip calls list --since` without `--until` searched only the 30 days after
+  the start. It now runs to now.
+- `--all` left `meta.next` set after reading every page; it is now null. A
+  rate-limited page is retried for up to 61 seconds (the Message API allows
+  20 requests a minute and sends no Retry-After); if it still fails, the
+  rows read so far print with `meta.truncated: true` and exit 4.
+- `-o jsonl` and `-o csv` gave one record holding the whole response for
+  compliance, 10DLC brand and campaign, and conference lists. They now give
+  one per row.
+- CSV cells a spreadsheet would run as a formula are neutralised (`+E.164`
+  numbers and negative numbers are kept), and `--query` keeps the response's
+  key order.
+- `sip calls diagnose` reported a failed read as "call not found", and the
+  India compliance check showed KYC steps for any failed read.
+- SIP URI and credential auth updates failed under `--dry-run`, checked a
+  missing username against the flags instead of what is sent, and accepted
+  contradictory auth flags.
+- `sips:` URIs with `--platform` got the guide's 5060/TCP values instead of
+  its TLS ones.
+- `upgrade` told a script install inside a Homebrew bin folder to use
+  `brew upgrade`; only a binary in a Homebrew Cellar is told that now.
+- `--schema` showed flags that a command requires by its own check as
+  optional.
+- `powerpacks list` and `get` failed to decode `number_priority`.
+- The `sip ip-acl create` example and `--ip` hints used addresses the API
+  rejects.
+
 ## [1.2.0] - 2026-10-15
 
 ### Added

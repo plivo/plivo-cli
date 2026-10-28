@@ -104,7 +104,7 @@ func runSubList(cmd *cobra.Command, args []string) error {
 	}
 	rows := [][]string{{"AUTH_ID", "NAME", "ENABLED", "CREATED"}}
 	for _, s := range resp.Objects {
-		rows = append(rows, []string{s.AuthID, s.Name, fmt.Sprintf("%v", s.Enabled), s.CreatedOn})
+		rows = append(rows, []string{s.AuthID, s.Name, fmt.Sprintf("%v", s.Enabled), s.Created})
 	}
 	return output.Table(os.Stdout, rows)
 }
@@ -133,8 +133,8 @@ func runSubGet(cmd *cobra.Command, args []string) error {
 		{"auth_id", s.AuthID},
 		{"name", s.Name},
 		{"enabled", fmt.Sprintf("%v", s.Enabled)},
-		{"created_on", s.CreatedOn},
-		{"modified_on", s.ModifiedOn},
+		{"created", s.Created},
+		{"modified", s.Modified},
 	})
 }
 
@@ -148,7 +148,7 @@ func runSubCreate(cmd *cobra.Command, args []string) error {
 		"enabled": subCreateEnabled,
 	}
 	var resp struct {
-		api.RawBody
+		api.RawBodyWithSecrets
 		APIID     string `json:"api_id"`
 		AuthID    string `json:"auth_id"`
 		AuthToken string `json:"auth_token"`
@@ -207,8 +207,7 @@ func runSubUpdate(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Updated subaccount %s: %s\n", id, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Updated subaccount %s: %s", id, resp.Message), resp.Raw())
 }
 
 func runSubDelete(cmd *cobra.Command, args []string) error {
@@ -230,6 +229,5 @@ func runSubDelete(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Deleted subaccount %s\n", id)
-	return nil
+	return emitWrite(fmt.Sprintf("Deleted subaccount %s", id), map[string]any{"subauth_id": id, "deleted": true})
 }

@@ -10,7 +10,8 @@ import (
 
 // outputTypes maps each get and list command to the api type its response
 // decodes into, so --schema can list the fields the CLI maps. -o json passes
-// the raw response through, so they are a subset of what comes back.
+// the raw response through, so they are a subset of what comes back; sip calls
+// insights passes its response through too, so it is here as well.
 // TestOutputTypes_coverEveryGetAndList names the get/list commands left out,
 // among them numbers compliance get: its response nests the application under
 // "compliance", which ComplianceApplication does not describe.
@@ -20,6 +21,7 @@ var outputTypes = map[string]reflect.Type{
 	"plivo account get":                           reflect.TypeFor[api.Account](),
 	"plivo account subaccounts get":               reflect.TypeFor[api.Subaccount](),
 	"plivo account subaccounts list":              reflect.TypeFor[api.SubaccountList](),
+	"plivo account usage":                         reflect.TypeFor[api.UsageSummary](),
 	"plivo agents get":                            reflect.TypeFor[api.Agent](),
 	"plivo agents list":                           reflect.TypeFor[api.AgentList](),
 	"plivo agents nodes get":                      reflect.TypeFor[api.AgentFlowNode](),
@@ -28,11 +30,11 @@ var outputTypes = map[string]reflect.Type{
 	"plivo agents runs list":                      reflect.TypeFor[api.AgentRunList](),
 	"plivo messaging get":                         reflect.TypeFor[api.Message](),
 	"plivo messaging mms list":                    reflect.TypeFor[api.MessageList](),
-	"plivo messaging sms 10dlc brands get":        reflect.TypeFor[api.Brand10DLC](),
+	"plivo messaging sms 10dlc brands get":        reflect.TypeFor[api.Brand10DLCResponse](),
 	"plivo messaging sms 10dlc brands list":       reflect.TypeFor[api.Brand10DLCList](),
-	"plivo messaging sms 10dlc campaigns get":     reflect.TypeFor[api.Campaign10DLC](),
+	"plivo messaging sms 10dlc campaigns get":     reflect.TypeFor[api.Campaign10DLCResponse](),
 	"plivo messaging sms 10dlc campaigns list":    reflect.TypeFor[api.Campaign10DLCList](),
-	"plivo messaging sms 10dlc links list":        reflect.TypeFor[api.NumberLink10DLCList](),
+	"plivo messaging sms 10dlc links list":        reflect.TypeFor[api.CampaignNumbers10DLC](),
 	"plivo messaging sms list":                    reflect.TypeFor[api.MessageList](),
 	"plivo messaging sms powerpacks get":          reflect.TypeFor[api.Powerpack](),
 	"plivo messaging sms powerpacks list":         reflect.TypeFor[api.PowerpackList](),
@@ -43,9 +45,10 @@ var outputTypes = map[string]reflect.Type{
 	"plivo numbers compliance list":               reflect.TypeFor[api.ComplianceApplicationList](),
 	"plivo numbers get":                           reflect.TypeFor[api.Number](),
 	"plivo numbers list":                          reflect.TypeFor[api.NumberList](),
-	"plivo numbers masking sessions get":          reflect.TypeFor[api.MaskingSession](),
+	"plivo numbers masking sessions get":          reflect.TypeFor[api.MaskingSessionResponse](),
 	"plivo numbers masking sessions list":         reflect.TypeFor[api.MaskingSessionList](),
 	"plivo sip calls get":                         reflect.TypeFor[api.SIPTrunkCall](),
+	"plivo sip calls insights":                    reflect.TypeFor[api.SIPCallInsights](),
 	"plivo sip calls list":                        reflect.TypeFor[api.SIPTrunkCallList](),
 	"plivo sip credentials get":                   reflect.TypeFor[api.SIPTrunkCredential](),
 	"plivo sip credentials list":                  reflect.TypeFor[api.SIPTrunkCredentialList](),
@@ -72,17 +75,41 @@ var outputTypes = map[string]reflect.Type{
 	"plivo voice recordings list":                 reflect.TypeFor[api.RecordingList](),
 }
 
+// outputNotes adds to the --schema note of a command whose flag changes what
+// -o json prints.
+var outputNotes = map[string]string{
+	"plivo voice calls list": "With --live, data is api_id and calls[], the UUIDs of the calls in progress.",
+}
+
+// resultTypes maps each command whose -o json prints a result the CLI builds,
+// not an API response, to that result's type, so --schema lists every field.
+var resultTypes = map[string]reflect.Type{
+	"plivo messaging mms diagnose":      reflect.TypeFor[diagnoseResult](),
+	"plivo messaging sms diagnose":      reflect.TypeFor[diagnoseResult](),
+	"plivo messaging whatsapp diagnose": reflect.TypeFor[diagnoseResult](),
+	"plivo sip calls diagnose":          reflect.TypeFor[diagnoseResult](),
+	"plivo sip connect plan":            reflect.TypeFor[connectPlan](),
+	"plivo sip test":                    reflect.TypeFor[sipTestResult](),
+	"plivo voice calls diagnose":        reflect.TypeFor[diagnoseResult](),
+	"plivo voice streams test":          reflect.TypeFor[streamsTestResult](),
+}
+
 // fieldSchema is one field of a command's output, as a path under data.
 type fieldSchema struct {
 	Path string `json:"path"`
 	Type string `json:"type"`
 }
 
-var rawMessageType = reflect.TypeFor[json.RawMessage]()
+var (
+	rawMessageType = reflect.TypeFor[json.RawMessage]()
+	flexStringType = reflect.TypeFor[api.FlexString]() // any scalar, kept as the API sent it
+)
 
 // outputFields lists t's JSON fields the way encoding/json reads them: by
 // json tag, embedded structs flattened. Nested objects add "parent.child",
-// arrays "parent[]" (and "parent[].child" for arrays of objects).
+// arrays "parent[]" (and "parent[].child" for arrays of objects). An api_id
+// in an array is left out: a list row shares its type with get, but api_id
+// is the response's, never a row's.
 func outputFields(t reflect.Type) []fieldSchema {
 	fields := []fieldSchema{}
 	var walk func(t reflect.Type, prefix string, seen map[reflect.Type]bool)
@@ -108,6 +135,9 @@ func outputFields(t reflect.Type) []fieldSchema {
 			}
 			if name == "" {
 				name = f.Name
+			}
+			if name == "api_id" && strings.HasSuffix(prefix, "[].") {
+				continue
 			}
 			path := prefix + name
 			for {
@@ -136,7 +166,7 @@ func derefType(t reflect.Type) reflect.Type {
 // jsonType names a Go type by the JSON value encoding/json writes for it.
 func jsonType(t reflect.Type) string {
 	switch {
-	case t == rawMessageType || t.Kind() == reflect.Interface:
+	case t == rawMessageType || t == flexStringType || t.Kind() == reflect.Interface:
 		return "any"
 	case t.Kind() == reflect.String:
 		return "string"

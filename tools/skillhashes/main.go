@@ -28,6 +28,7 @@ import (
 // into, which is what `skill update` finds on disk. Keep in step with
 // bundledSkills in cmd/skill.go; TestSkillHashes catches a missing entry.
 var skills = []struct{ src, dir string }{
+	{"agents-skill/SKILL.md", "plivo-cx-agents"},
 	{"cli-skill/SKILL.md", "plivo-cli"},
 	{"audio-streaming-skill/SKILL.md", "plivo-audio-streaming"},
 	{"sip-trunking-skill/SKILL.md", "plivo-sip-trunking"},

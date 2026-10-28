@@ -432,8 +432,8 @@ func runComplianceDelete(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Deleted compliance application %s\n", id)
-	return nil
+	return emitWrite(fmt.Sprintf("Deleted compliance application %s", id),
+		map[string]any{"compliance_id": id, "deleted": true})
 }
 
 func runComplianceLink(cmd *cobra.Command, args []string) error {

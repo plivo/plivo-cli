@@ -2,7 +2,8 @@ Update a trunk.
 
 Boolean and state flags take an explicit value so they can be reversed:
 --secure=false and --status disabled both turn something off. A flag you do not
-pass is left untouched.
+pass is left untouched, the fallback URI included. --fallback-uri "" removes
+the fallback URI.
 
 Usage:
   plivo sip trunks update <trunk_id> [flags]
@@ -10,11 +11,12 @@ Usage:
 Examples:
   plivo sip trunks update <id> --status disabled
   plivo sip trunks update <id> --secure=false
+  plivo sip trunks update <id> --fallback-uri ""   # remove the fallback URI
 
 Flags:
       --credential string     credential uuid
       --direction string      inbound|outbound (read from the trunk when omitted)
-      --fallback-uri string   fallback origination URI uuid
+      --fallback-uri string   fallback origination URI uuid ("" removes it)
   -h, --help                  help for update
       --ip-acl string         IP access control list uuid
       --name string           trunk name
@@ -23,7 +25,7 @@ Flags:
       --uri string            primary origination URI uuid
 
 Global Flags:
-      --dry-run            print the HTTP request without sending
+      --dry-run            preview requests and local changes without sending or writing anything
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
   -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
@@ -31,5 +33,6 @@ Global Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
-      --timeout int        request timeout in seconds (default 30)
+      --show-secrets       show auth tokens and passwords in API responses instead of [REDACTED]
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts

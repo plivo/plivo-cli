@@ -10,10 +10,11 @@
 #
 # Fetches SKILL.md — a single-file reference written for LLM coding agents — and
 # drops it where the agent auto-loads it. If you already have the binary,
-# `plivo skill install [cli|audio-streaming|sip-trunking|voice-xml|all]` does
-# the same thing offline.
+# `plivo skill install [agents|cli|audio-streaming|sip-trunking|voice-xml|all]`
+# does the same thing offline.
 #
 # Available skills:
+#   agents            build, test and publish Plivo CX agents (AI conversation flows)
 #   cli               use the `plivo` CLI instead of raw curl
 #   audio-streaming   a voice bot on real calls with <Stream>, from setup to go-live
 #   sip-trunking      connect an AI voice platform over SIP trunking
@@ -34,20 +35,22 @@ RAW="https://raw.githubusercontent.com/${REPO}/main"
 
 # ─── Resolve which skill(s) ──────────────────────────────────────────────────
 # Each entry is "selector:source-dir:install-dir".
+AGENTS_SKILL="agents:agents-skill:plivo-cx-agents"
 CLI_SKILL="cli:cli-skill:plivo-cli"
 STREAM_SKILL="audio-streaming:audio-streaming-skill:plivo-audio-streaming"
 SIP_SKILL="sip-trunking:sip-trunking-skill:plivo-sip-trunking"
 XML_SKILL="voice-xml:voice-xml-skill:plivo-voice-xml"
 
 case "${1:-cli}" in
+  agents)          WANTED="$AGENTS_SKILL" ;;
   cli)             WANTED="$CLI_SKILL" ;;
   audio-streaming) WANTED="$STREAM_SKILL" ;;
   sip-trunking)    WANTED="$SIP_SKILL" ;;
   voice-xml)       WANTED="$XML_SKILL" ;;
-  all)             WANTED="$CLI_SKILL $STREAM_SKILL $SIP_SKILL $XML_SKILL" ;;
+  all)             WANTED="$AGENTS_SKILL $CLI_SKILL $STREAM_SKILL $SIP_SKILL $XML_SKILL" ;;
   *)
     echo "✗ Unknown skill: $1" >&2
-    echo "  Available: cli, audio-streaming, sip-trunking, voice-xml, all" >&2
+    echo "  Available: agents, cli, audio-streaming, sip-trunking, voice-xml, all" >&2
     exit 1
     ;;
 esac

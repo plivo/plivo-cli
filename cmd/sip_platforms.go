@@ -244,7 +244,10 @@ func (p *sipPlatform) transports() []string {
 // presetURI fills what --platform and --transport leave out of --uri: the
 // host, port and transport the guide gives. What the user typed always wins
 // and stays as typed; a host or transport the guide does not list is used as
-// given, with a warning. Returns "" when there is nothing to send.
+// given, with a warning. With a platform the URI comes back host first
+// (hostFirstURI), so the preset line names what is sent; sips: then gets the
+// port of the guide's TLS entry, if it has one, and no other, as --transport
+// tls does. Returns "" when there is nothing to send.
 func presetURI(p *sipPlatform, raw, transport string) (string, error) {
 	s := normalizeSIPURI(raw)
 	var u sipURI
@@ -256,6 +259,9 @@ func presetURI(p *sipPlatform, raw, transport string) (string, error) {
 	}
 	if transport != "" && u.Transport != "" && transport != u.Transport {
 		return "", clierr.BadFlag("transport", fmt.Sprintf("%s conflicts with transport=%s in --uri", transport, u.Transport))
+	}
+	if u.Scheme == "sips" && transport != "" && transport != "tls" {
+		return "", clierr.BadFlag("transport", fmt.Sprintf("%s conflicts with sips: in --uri, which means TLS", transport))
 	}
 	want := transport
 	if want == "" {
@@ -275,6 +281,11 @@ func presetURI(p *sipPlatform, raw, transport string) (string, error) {
 			return "", e
 		}
 		s, u.Host = p.uris[0].host, p.uris[0].host
+	}
+	// sips: means TLS: it takes the guide's TLS entry, and its port when the
+	// guide gives one.
+	if u.Scheme == "sips" && want == "" {
+		want = "tls"
 	}
 	var m *sipPlatformURI
 	if p.knowsHost(u.Host) {
@@ -299,7 +310,10 @@ func presetURI(p *sipPlatform, raw, transport string) (string, error) {
 	if u.Transport == "" {
 		addTransport = want
 	}
-	out := fillSIPURI(s, addPort, addTransport)
+	out, err := hostFirstURI(fillSIPURI(s, addPort, addTransport), 0)
+	if err != nil {
+		return "", err
+	}
 	if !quietFlag {
 		fmt.Fprintf(os.Stderr, "%s preset (verified %s): --uri %s\n", p.label, p.verified, out)
 	}

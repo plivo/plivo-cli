@@ -119,7 +119,7 @@ func JSONSuccess(w io.Writer, data any, meta any) error {
 	if query == nil && encoding == "json" {
 		return newEncoder(w).Encode(env)
 	}
-	return encode(w, env)
+	return encode(w, env, "objects")
 }
 
 // JSONRaw writes the upstream response verbatim under "data". json.RawMessage
@@ -131,6 +131,16 @@ func JSONRaw(w io.Writer, raw json.RawMessage) error {
 		return JSONSuccess(w, map[string]any{}, nil)
 	}
 	return JSONSuccess(w, raw, nil)
+}
+
+// JSONList is JSONRaw for a list response whose rows are under key, for -o
+// jsonl and -o csv to write one line per row: JSONRaw looks for them under
+// "objects", the key most lists use.
+func JSONList(w io.Writer, raw json.RawMessage, key string) error {
+	if len(raw) == 0 || (query == nil && encoding == "json") {
+		return JSONRaw(w, raw)
+	}
+	return encode(w, map[string]any{"data": raw}, key)
 }
 
 // JSONError writes a structured error envelope. Designed for AI / script

@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/plivo/plivo-cli/internal/api"
+	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -28,7 +29,7 @@ var (
 
 var linkListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List number→campaign links",
+	Short: "List the numbers linked to a campaign, with each link's status",
 	Args:  cobra.NoArgs,
 	RunE:  runLinkList,
 }
@@ -46,18 +47,19 @@ var linkCreateCmd = &cobra.Command{
 }
 
 var linkDeleteCmd = &cobra.Command{
-	Use:   "delete <link_id>",
-	Short: "Unlink a number (requires --yes)",
-	Args:  cobra.ExactArgs(1),
+	Use:   "delete <campaign_id> <number>",
+	Short: "Unlink a number from a campaign (requires --yes)",
+	Args:  cobra.ExactArgs(2),
 	RunE:  runLinkDelete,
 }
 
 func init() {
 	registerListFlags(linkListCmd, &linkListLimit, &linkListOffset)
-	linkListCmd.Flags().StringVar(&linkListCampaign, "campaign-id", "", "filter by campaign_id")
-	linkListCmd.Flags().StringVar(&linkListNumber, "number", "", "filter by number")
+	linkListCmd.Flags().StringVar(&linkListCampaign, "campaign-id", "", "the campaign whose numbers to list (required)")
+	_ = linkListCmd.MarkFlagRequired("campaign-id")
+	linkListCmd.Flags().StringVar(&linkListNumber, "number", "", "only this number's link (no --limit, --offset or --all)")
 
-	linkCreateCmd.Flags().StringVar(&linkCreateNumber, "number", "", "E.164 number (required)")
+	linkCreateCmd.Flags().StringVar(&linkCreateNumber, "number", "", "the number: digits with the country code, e.g. 14155550100 (required)")
 	_ = linkCreateCmd.MarkFlagRequired("number")
 	linkCreateCmd.Flags().StringVar(&linkCreateCampaign, "campaign-id", "", "10DLC campaign id (required)")
 	_ = linkCreateCmd.MarkFlagRequired("campaign-id")
@@ -67,6 +69,11 @@ func init() {
 }
 
 func runLinkList(cmd *cobra.Command, args []string) error {
+	for _, f := range []string{"limit", "offset", "all"} {
+		if linkListNumber != "" && cmd.Flags().Changed(f) {
+			return clierr.BadFlag(f, "cannot be combined with --number: one number's link has no pages")
+		}
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -74,25 +81,23 @@ func runLinkList(cmd *cobra.Command, args []string) error {
 	q := url.Values{}
 	q.Set("limit", strconv.Itoa(linkListLimit))
 	q.Set("offset", strconv.Itoa(linkListOffset))
-	if linkListCampaign != "" {
-		q.Set("campaign_id", linkListCampaign)
-	}
+	parts := []string{"10dlc", "Campaign", linkListCampaign, "Number"}
 	if linkListNumber != "" {
-		q.Set("number", linkListNumber)
+		parts, q = append(parts, linkListNumber), nil
 	}
-	var resp api.NumberLink10DLCList
-	if err := fetchList(client, client.AccountURL("10dlc", "NumberLinking"), q, "objects", &resp); err != nil {
+	var resp api.CampaignNumbers10DLC
+	if err := fetchList(client, client.AccountURL(parts...), q, "phone_numbers", &resp); err != nil {
 		return err
 	}
 	if dryRunFlag {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return listJSON(os.Stdout, resp.Raw(), "objects")
+		return listJSON(os.Stdout, resp.Raw(), "phone_numbers")
 	}
-	rows := [][]string{{"LINK_ID", "NUMBER", "CAMPAIGN_ID", "STATUS", "CREATED"}}
-	for _, l := range resp.Objects {
-		rows = append(rows, []string{l.LinkID, l.Number, l.CampaignID, l.Status, l.CreatedAt})
+	rows := [][]string{{"NUMBER", "CAMPAIGN_ID", "STATUS"}}
+	for _, n := range resp.PhoneNumbers {
+		rows = append(rows, []string{n.Number, resp.CampaignID, n.Status})
 	}
 	return output.Table(os.Stdout, rows)
 }
@@ -102,17 +107,9 @@ func runLinkCreate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	body := map[string]any{
-		"number":      linkCreateNumber,
-		"campaign_id": linkCreateCampaign,
-	}
-	var resp struct {
-		api.RawBody
-		APIID   string `json:"api_id"`
-		LinkID  string `json:"link_id"`
-		Message string `json:"message"`
-	}
-	apiErr, err := client.Do("POST", client.AccountURL("10dlc", "NumberLinking"), body, nil, &resp)
+	body := map[string]any{"numbers": []string{linkCreateNumber}}
+	var resp api.GenericResponse
+	apiErr, err := client.Do("POST", client.AccountURL("10dlc", "Campaign", linkCreateCampaign, "Number"), body, nil, &resp)
 	if err != nil {
 		return err
 	}
@@ -126,21 +123,22 @@ func runLinkCreate(cmd *cobra.Command, args []string) error {
 		return output.JSONRaw(os.Stdout, resp.Raw())
 	}
 	return output.KV(os.Stdout, [][2]string{
-		{"link_id", resp.LinkID},
+		{"campaign_id", linkCreateCampaign},
+		{"number", linkCreateNumber},
 		{"message", resp.Message},
 	})
 }
 
 func runLinkDelete(cmd *cobra.Command, args []string) error {
-	id := args[0]
-	if err := confirmDestructive("unlink " + id); err != nil {
+	campaign, number := args[0], args[1]
+	if err := confirmDestructive(fmt.Sprintf("unlink %s from campaign %s", number, campaign)); err != nil {
 		return err
 	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
 	}
-	apiErr, err := client.Do("DELETE", client.AccountURL("10dlc", "NumberLinking", id), nil, nil, nil)
+	apiErr, err := client.Do("DELETE", client.AccountURL("10dlc", "Campaign", campaign, "Number", number), nil, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -150,6 +148,6 @@ func runLinkDelete(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Unlinked %s\n", id)
-	return nil
+	return emitWrite(fmt.Sprintf("Unlinked %s from campaign %s", number, campaign),
+		map[string]any{"campaign_id": campaign, "number": number, "unlinked": true})
 }

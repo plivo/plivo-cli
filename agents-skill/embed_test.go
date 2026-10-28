@@ -21,7 +21,7 @@ func TestSkillMDEmbedded(t *testing.T) {
 		"output_states",   // where source handles come from
 		"Preflight check", // the validator section
 		"agent_uuid",      // the resource key
-		"send_message_1",  // the server-minted node id rule
+		"new UUID v4",     // the caller sets every node id
 	} {
 		if !strings.Contains(SkillMD, must) {
 			t.Errorf("embedded skill is missing %q", must)

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 
@@ -11,11 +12,18 @@ import (
 
 var lookupType string
 
+// lookupPrice is what one Lookup API request costs.
+const lookupPrice = "USD 0.004"
+
 var lookupCmd = &cobra.Command{
 	Use:   "lookup <number>",
 	Short: "Carrier + format lookup for an E.164 number (lookup.plivo.com)",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runLookup,
+	Long: `Carrier + format lookup for an E.164 number (lookup.plivo.com).
+
+Each lookup is billed: ` + lookupPrice + ` per request. It takes no --yes;
+--dry-run prints the request without sending it.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runLookup,
 }
 
 func init() {
@@ -41,6 +49,9 @@ func runLookup(cmd *cobra.Command, args []string) error {
 	}
 	if dryRunFlag {
 		return nil
+	}
+	if !quietFlag {
+		fmt.Fprintf(os.Stderr, "Lookup is billed: %s per request.\n", lookupPrice)
 	}
 	if effectiveFormat() == output.FormatJSON {
 		return output.JSONRaw(os.Stdout, n.Raw())

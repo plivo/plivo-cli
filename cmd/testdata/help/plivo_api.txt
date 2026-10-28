@@ -17,6 +17,10 @@ the CLI). Use --dry-run to preview without sending. GET and HEAD pass through.
 Here --query adds URL query parameters (key=value). It is not the JMESPath
 --query filter other commands take; -o jsonl, yaml and csv still apply.
 
+Auth tokens and passwords in a response read [REDACTED], as on other
+commands; pass --show-secrets to see them. Agent flows (/AgentFlow paths)
+come back as sent, as agents get prints them: the server masks their secrets.
+
 Examples:
 
   plivo api GET /v1/Account/MA…/            # absolute: the account itself
@@ -37,12 +41,13 @@ Flags:
       --query stringArray    URL query param as key=value (repeatable; not a JMESPath filter here)
 
 Global Flags:
-      --dry-run            print the HTTP request without sending
+      --dry-run            preview requests and local changes without sending or writing anything
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
   -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
       --profile string     named profile from ~/.plivo/config.toml
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
-      --timeout int        request timeout in seconds (default 30)
+      --show-secrets       show auth tokens and passwords in API responses instead of [REDACTED]
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts

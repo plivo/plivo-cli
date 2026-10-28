@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/plivo/plivo-cli/internal/config"
 	"github.com/plivo/plivo-cli/internal/feedback"
 	"golang.org/x/term"
 )
@@ -67,7 +68,7 @@ func isMetadataInvocation(firstCmd string, args []string) bool {
 // who haven't yet hit the first-prompt activity floor.
 func maybePromptFeedback(firstCmd string, args []string) {
 	// A dry run sends nothing, feedback included, so it never prompts.
-	if dryRunFlag || !isInteractiveFeedbackSession() {
+	if dryRunFlag || !isInteractiveFeedbackSession() || !feedbackPromptAllowed() {
 		return
 	}
 	if skipPromptCommands[firstCmd] {
@@ -122,15 +123,31 @@ func maybePromptFeedback(firstCmd string, args []string) {
 	_ = feedback.SaveState(state)
 }
 
+// isTerminal is term.IsTerminal; tests stand in a terminal.
+var isTerminal = term.IsTerminal
+
 // isInteractiveFeedbackSession gates the auto-prompt on a real terminal.
 // Non-TTY (piped / scripted) + CI environments never get prompted —
 // otherwise a script running `plivo voice calls list | jq …` would hang
-// on the y/N read.
+// on the y/N read. stdout counts too: in that pipe it is the only one
+// that is not a terminal.
 func isInteractiveFeedbackSession() bool {
 	if os.Getenv("CI") != "" {
 		return false
 	}
-	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stderr.Fd()))
+	for _, f := range []*os.File{os.Stdin, os.Stdout, os.Stderr} {
+		if !isTerminal(int(f.Fd())) {
+			return false
+		}
+	}
+	return true
+}
+
+// feedbackPromptAllowed is false while telemetry or feedback sending is off:
+// someone who opted out is not asked for a rating, least of all one that
+// would not send. The prompt's own switch is ShouldPrompt's.
+func feedbackPromptAllowed() bool {
+	return config.TelemetryEnabled() && !config.EnvOff(feedback.TelemetryOptOutEnvVar)
 }
 
 // runInlineFeedback drives the rating + optional comment prompts then

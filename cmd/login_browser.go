@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/plivo/plivo-cli/internal/api"
@@ -82,7 +83,9 @@ func runLoginBrowser(nameExplicit bool) error {
 	// env, config, default. The CLI's --buddy-url override applies here too
 	// since both surfaces share the same edge.
 	client := api.New("", "", 30*time.Second) // creds-less; auth happens in /token
-	applyBuddyURL(client)
+	if err := applyBuddyURL(client); err != nil {
+		return err
+	}
 
 	// Send only the loopback port (see buildAuthorizeURL — dodges the WAF SSRF block).
 	authURL := buildAuthorizeURL(client.BuddyBaseURL, port, state, challenge, deviceHint())
@@ -91,7 +94,7 @@ func runLoginBrowser(nameExplicit bool) error {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "If the browser didn't open, copy-paste that URL above.")
 	fmt.Fprintln(os.Stderr)
-	if err := openBrowser(authURL); err != nil {
+	if err := browserOpener(authURL); err != nil {
 		// Non-fatal — the URL is printed above so the user can paste it.
 		fmt.Fprintf(os.Stderr, "(could not auto-open the browser: %v)\n", err)
 	}
@@ -102,7 +105,7 @@ func runLoginBrowser(nameExplicit bool) error {
 	// giving up first.
 	cbCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	code, err := awaitCallback(cbCtx, listener, state, pasteSource(os.Stdin), os.Stderr)
+	code, err := awaitCallback(cbCtx, listener, state, pasteSource(), os.Stderr)
 	if err != nil {
 		return err
 	}
@@ -147,11 +150,7 @@ func redeemAndPersist(client *api.Client, state, code, verifier, requestedName s
 
 	// Shared persistence — same code path as the manual + email flows so
 	// storage layer changes don't drift between methods.
-	cfg, err := config.Load()
-	if err != nil {
-		return err
-	}
-	return persistProfile(cfg, requestedName, nameExplicit, loginBundle{
+	b := loginBundle{
 		AuthID:    resp.Data.PlivoAuthID,
 		AuthToken: resp.Data.PlivoAuthToken,
 		Email:     resp.Data.Email,
@@ -160,7 +159,17 @@ func redeemAndPersist(client *api.Client, state, code, verifier, requestedName s
 		Region:    resp.Data.Region,
 		OrgName:   resp.Data.OrgName,
 		OrgUUID:   resp.Data.OrgUUID,
-	})
+	}
+	var name string
+	var inKeychain bool
+	if err := config.Update(func(cfg *config.Config) (err error) {
+		name, inKeychain, err = persistProfile(cfg, requestedName, nameExplicit, b)
+		return err
+	}); err != nil {
+		return err
+	}
+	printProfileSaved(name, inKeychain, b)
+	return nil
 }
 
 // pkcePair generates a PKCE (RFC 7636) verifier + S256 challenge pair.
@@ -280,43 +289,57 @@ func pastedCallbackCode(pasted, addr, expectedState string) (string, error) {
 	return code, err
 }
 
-// readPastedCallback reads lines until one is this login's callback URL,
-// saying what's wrong with anything else. It stops once ctx is done.
-func readPastedCallback(ctx context.Context, paste io.Reader, out io.Writer, addr, expectedState string, finish func(string, error)) {
-	lines := bufio.NewScanner(paste)
-	for lines.Scan() && ctx.Err() == nil {
-		line := strings.TrimSpace(lines.Text())
-		if line == "" {
-			continue
-		}
-		code, err := pastedCallbackCode(line, addr, expectedState)
-		if errors.Is(err, errNotThisCallback) {
-			fmt.Fprintf(out, "That isn't this login's callback URL. Paste the full URL from the browser's address bar; it starts with http://%s/?\n", addr)
-			continue
-		}
-		finish(code, err)
-		return
+// readPastedLine checks one line typed while waiting. ended reports that it
+// was this login's callback URL; anything else is passed over, saying what's
+// wrong with it unless it is blank.
+func readPastedLine(line string, out io.Writer, addr, expectedState string) (code string, ended bool, err error) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return "", false, nil
 	}
+	code, err = pastedCallbackCode(line, addr, expectedState)
+	if errors.Is(err, errNotThisCallback) {
+		fmt.Fprintf(out, "That isn't this login's callback URL. Paste the full URL from the browser's address bar; it starts with http://%s/?\n", addr)
+		return "", false, nil
+	}
+	return code, true, err
 }
 
-// pasteSource returns stdin if the callback URL can be pasted into it: a
-// terminal this process can read without being stopped. Otherwise nil, and
+// pasteSource returns stdinLines if the callback URL can be pasted into stdin:
+// a terminal this process can read without being stopped. Otherwise nil, and
 // stdin is never read.
-func pasteSource(stdin *os.File) io.Reader {
-	if isTTY(stdin) && inForeground(stdin) {
-		return stdin
+func pasteSource() <-chan string {
+	if isTTY(os.Stdin) && inForeground(os.Stdin) {
+		return stdinLines()
 	}
 	return nil
 }
 
-// awaitCallback returns the code from whichever arrives first: the browser's
-// redirect to listener or the same URL pasted into paste (nil turns pasting
-// off). Times out via the context. The browser tab sees a tiny "you can close
-// this" confirmation page on success.
-func awaitCallback(ctx context.Context, listener net.Listener, expectedState string, paste io.Reader, out io.Writer) (string, error) {
-	ctx, stop := context.WithCancel(ctx)
-	defer stop()
+// stdinLines is stdin read a line at a time, shared by every question one run
+// asks. Each line goes to whoever is waiting for one, so the first line typed
+// after the login stopped waiting for a pasted URL reaches the question after
+// it instead of a reader nobody listens to.
+var stdinLines = sync.OnceValue(func() <-chan string { return lineFeed(os.Stdin) })
 
+// lineFeed reads r a line at a time on its own goroutine, handing each line to
+// the next receiver. The channel closes at the end of r.
+func lineFeed(r io.Reader) <-chan string {
+	lines := make(chan string)
+	go func() {
+		defer close(lines)
+		s := bufio.NewScanner(r)
+		for s.Scan() {
+			lines <- s.Text()
+		}
+	}()
+	return lines
+}
+
+// awaitCallback returns the code from whichever arrives first: the browser's
+// redirect to listener or the same URL pasted as a line of paste (nil turns
+// pasting off). Times out via the context. The browser tab sees a tiny "you
+// can close this" confirmation page on success.
+func awaitCallback(ctx context.Context, listener net.Listener, expectedState string, paste <-chan string, out io.Writer) (string, error) {
 	type result struct {
 		code string
 		err  error
@@ -359,22 +382,31 @@ func awaitCallback(ctx context.Context, listener net.Listener, expectedState str
 		_ = srv.Shutdown(shutCtx)
 	}()
 
-	// A blocked terminal read can't be interrupted; if the browser wins, the
-	// reader just exits with the process.
-	if paste != nil {
+	// Lines are taken only while this waits, so once the browser wins the
+	// next one is left for whatever asks next.
+	canPaste := paste != nil
+	if canPaste {
 		fmt.Fprintln(out, "If the browser can't reach this terminal (SSH, WSL, containers), copy the full URL from its address bar after approving and paste it here.")
-		go readPastedCallback(ctx, paste, out, listener.Addr().String(), expectedState, finish)
 	}
-
-	select {
-	case r := <-done:
-		return r.code, r.err
-	case <-ctx.Done():
-		msg := "timed out waiting for browser callback (5m); finish signing in and approving access in the browser, then run `plivo login` again"
-		if paste != nil {
-			msg += ". If the browser can't connect back after you approve, paste the full URL from its address bar into the terminal"
+	for {
+		select {
+		case r := <-done:
+			return r.code, r.err
+		case line, ok := <-paste:
+			if !ok {
+				paste = nil // stdin closed; the browser can still finish
+				continue
+			}
+			if code, ended, err := readPastedLine(line, out, listener.Addr().String(), expectedState); ended {
+				return code, err
+			}
+		case <-ctx.Done():
+			msg := "timed out waiting for browser callback (5m); finish signing in and approving access in the browser, then run `plivo login` again"
+			if canPaste {
+				msg += ". If the browser can't connect back after you approve, paste the full URL from its address bar into the terminal"
+			}
+			return "", errors.New(msg)
 		}
-		return "", errors.New(msg)
 	}
 }
 

@@ -7,6 +7,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -37,6 +40,42 @@ func TestDescribe_autoNamesAProviderEitherWay(t *testing.T) {
 		}
 	} else if !strings.Contains(got, "localhost.run") {
 		t.Errorf("ngrok absent, so auto should fall back to localhost.run; got %q", got)
+	}
+}
+
+// auto falls back to localhost.run as soon as ngrok exits, not after ngrok's
+// wait for a tunnel, and Done closes once the tunnel process exits.
+func TestStart_autoFallsBackAndNoticesTheExit(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fakes are shell scripts")
+	}
+	dir := t.TempDir()
+	for name, script := range map[string]string{
+		"ngrok": "exit 1", // e.g. another agent already holds the session
+		"ssh":   "echo 'abc.lhr.life tunneled with tls termination, https://abc.lhr.life'; exec sleep 1",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"+script+"\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("HOME", t.TempDir())
+	defer func(d time.Duration) { ngrokTimeout = d }(ngrokTimeout)
+	ngrokTimeout = time.Minute // room for a loaded machine; a missed exit waits it out and fails below
+
+	began := time.Now()
+	tn, err := Start(context.Background(), 1234, ProviderAuto)
+	if err != nil {
+		t.Fatalf("auto did not fall back to localhost.run: %v", err)
+	}
+	defer func() { _ = tn.Close() }()
+	if d := time.Since(began); tn.PublicURL != "https://abc.lhr.life" || d > 30*time.Second {
+		t.Errorf("fell back to %q after %v, want the localhost.run URL at once: a dead ngrok is noticed, not waited out", tn.PublicURL, d)
+	}
+	select {
+	case <-tn.Done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("Done never closed after the tunnel process exited")
 	}
 }
 
@@ -101,4 +140,40 @@ func TestLocalhostRun_E2E_carriesTraffic(t *testing.T) {
 		}
 	}
 	t.Fatalf("tunnel never carried traffic; last body: %q", body)
+}
+
+func TestIsTunnelURL(t *testing.T) {
+	for u, want := range map[string][2]bool{ // tunnel, throwaway
+		"https://abc123.lhr.life/answer":        {true, true},
+		"https://quick-fox.trycloudflare.com/a": {true, true},
+		"https://ab-12.ngrok-free.app/answer":   {true, false},
+		"https://x.NGROK.io":                    {true, false},
+		"https://notngrok.io/answer":            {false, false},
+		"https://example.com/x.lhr.life":        {false, false},
+		"":                                      {false, false},
+	} {
+		if tn, throwaway := IsTunnelURL(u); tn != want[0] || throwaway != want[1] {
+			t.Errorf("IsTunnelURL(%q) = %v, %v, want %v", u, tn, throwaway, want)
+		}
+	}
+}
+
+// A leftover tunnel is stopped only while its pid runs the recorded command line.
+func TestStopLeftover_onlyTheRecordedCommandLine(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("reads another process's command line on linux and darwin only")
+	}
+	cmd := exec.Command("sleep", "30")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	tn := watch(cmd)
+	t.Cleanup(func() { _ = tn.Close() })
+	if StopLeftover(tn.PID, []string{"sleep", "31"}) || !StopLeftover(tn.PID, tn.Args) {
+		t.Fatal("want only the recorded command line stopped")
+	}
+	<-tn.Done
+	if tn.Err() == nil {
+		t.Error("the tunnel process outlived the stop")
+	}
 }

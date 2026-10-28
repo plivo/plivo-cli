@@ -80,10 +80,26 @@ func docsFetcher() *docs.Fetcher {
 	if docsFetcherForTest != nil {
 		return docsFetcherForTest
 	}
-	return docs.New()
+	f := docs.New()
+	if quietFlag {
+		f.Warn = nil
+	}
+	return f
+}
+
+// docsDryRun reports whether --dry-run is set, after printing the export the
+// command would read: it fetches nothing and leaves the cache alone.
+func docsDryRun(url string) bool {
+	if dryRunFlag {
+		fmt.Fprintf(os.Stderr, "[dry-run] GET %s\n", url)
+	}
+	return dryRunFlag
 }
 
 func runDocsSearch(cmd *cobra.Command, args []string) error {
+	if docsDryRun(docsFetcher().BaseFull) {
+		return nil
+	}
 	matches, err := docsFetcher().Search(args, docsLimit, docsRefresh)
 	if err != nil {
 		return err
@@ -106,6 +122,9 @@ func runDocsSearch(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsList(cmd *cobra.Command, args []string) error {
+	if docsDryRun(docsFetcher().BaseIndex) {
+		return nil
+	}
 	pages, err := docsFetcher().Index(docsRefresh)
 	if err != nil {
 		return err
@@ -124,6 +143,9 @@ func runDocsList(cmd *cobra.Command, args []string) error {
 }
 
 func runDocsShow(cmd *cobra.Command, args []string) error {
+	if docsDryRun(docsFetcher().BaseFull) {
+		return nil
+	}
 	page, err := docsFetcher().Get(args[0], docsRefresh)
 	if err != nil {
 		return err

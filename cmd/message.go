@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/plivo/plivo-cli/internal/api"
+	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -163,6 +164,8 @@ func init() {
 	registerSendFlags(messagingWhatsappSendCmd, &whatsappSendSrc, &whatsappSendDst, &whatsappSendText, &whatsappSendURL, &whatsappSendMethod)
 	registerSendFlags(messagingMmsSendCmd, &mmsSendSrc, &mmsSendDst, &mmsSendText, &mmsSendURL, &mmsSendMethod)
 	messagingMmsSendCmd.Flags().StringArrayVar(&mmsSendMediaURLs, "media-url", nil, "URL of a hosted image/media file to attach (repeatable, up to 10)")
+	// An MMS that carries media needs no text.
+	_ = messagingMmsSendCmd.Flags().SetAnnotation("text", emptyWith, []string{"media-url"})
 	registerExplainFlag(messagingSmsSendCmd)
 	registerExplainFlag(messagingWhatsappSendCmd)
 	registerExplainFlag(messagingMmsSendCmd)
@@ -204,8 +207,11 @@ func registerMessageListFlags(cmd *cobra.Command, limit, offset *int, state, dir
 	registerListFlags(cmd, limit, offset)
 	cmd.Flags().StringVar(state, "state", "", oneOf(messageStateValues))
 	cmd.Flags().StringVar(direction, "direction", "", oneOf(directionValues))
-	cmd.Flags().StringVar(fromN, "from", "", "filter by from_number")
-	cmd.Flags().StringVar(toN, "to", "", "filter by to_number")
+	// Hidden: the API has no number filter. Kept to refuse with a hint.
+	cmd.Flags().StringVar(fromN, "from", "", "refused: filter by number with --query")
+	cmd.Flags().StringVar(toN, "to", "", "refused: filter by number with --query")
+	_ = cmd.Flags().MarkHidden("from")
+	_ = cmd.Flags().MarkHidden("to")
 	registerTimeRangeFlags(cmd, r, "messages sent or received", rangeLimits{retainDays: listRetainDays})
 }
 
@@ -274,6 +280,12 @@ func runMessageSendForChannel(cmd *cobra.Command, channel, src, dst, text, urlFl
 func runMessageListForChannel(cmd *cobra.Command, channel string,
 	limit, offset int, state, direction, fromN, toN string, r *listTimeRange,
 ) error {
+	if fromN != "" {
+		return noNumberFilter("from", fromN)
+	}
+	if toN != "" {
+		return noNumberFilter("to", toN)
+	}
 	if err := validateEnum("state", &state, messageStateValues...); err != nil {
 		return err
 	}
@@ -298,12 +310,6 @@ func runMessageListForChannel(cmd *cobra.Command, channel string,
 	if direction != "" {
 		q.Set("message_direction", direction)
 	}
-	if fromN != "" {
-		q.Set("from", fromN)
-	}
-	if toN != "" {
-		q.Set("to", toN)
-	}
 	setTimeRange(q, "message_time", since, until)
 
 	var resp api.MessageList
@@ -321,6 +327,21 @@ func runMessageListForChannel(cmd *cobra.Command, channel string,
 		rows = append(rows, []string{m.MessageUUID, m.From, m.To, m.State, m.Type, m.MessageTime})
 	}
 	return output.Table(os.Stdout, rows)
+}
+
+// noNumberFilter refuses --from or --to on a message list. The Message API
+// has no such filter: it took the value, ignored it and sent back every
+// message. The hint filters with --query instead, matching a number with or
+// without its +, since the API's own examples write it without.
+func noNumberFilter(flag, value string) error {
+	e := clierr.BadFlag(flag, "the Message API cannot filter by number, so every message would come back")
+	field, n := flag+"_number", strings.TrimPrefix(value, "+")
+	match := fmt.Sprintf("%s=='%s'", field, value)
+	if n != "" && strings.Trim(n, "0123456789") == "" {
+		match = fmt.Sprintf("%s=='%s' || %s=='+%s'", field, n, field, n)
+	}
+	e.Hint = fmt.Sprintf(`Filter with --query instead (--all reads every page): --query "data.objects[?%s]"`, match)
+	return e
 }
 
 func runMessageGet(cmd *cobra.Command, args []string) error {
@@ -347,7 +368,6 @@ func runMessageGet(cmd *cobra.Command, args []string) error {
 		{"uuid", m.MessageUUID},
 		{"from", m.From},
 		{"to", m.To},
-		{"text", m.Text},
 		{"type", m.Type},
 		{"direction", m.Direction},
 		{"state", m.State},

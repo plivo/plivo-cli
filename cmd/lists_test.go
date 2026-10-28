@@ -99,8 +99,22 @@ func TestListFilters_unknownValueFailsBeforeAnyRequest(t *testing.T) {
 		{"status", []string{"verify", "sessions", "list", "--status", "pending"}},
 		{"state", []string{"agents", "list", "--state", "draft"}},
 		{"status", []string{"numbers", "compliance", "list", "--status", "approved"}},
-		{"number-type", []string{"numbers", "compliance", "list", "--number-type", "national"}},
+		{"number-type", []string{"numbers", "compliance", "list", "--number-type", "toll-free"}},
 		{"user-type", []string{"numbers", "compliance", "list", "--user-type", "company"}},
+		{"granularity", []string{"account", "usage", "--granularity", "Day"}},
+		{"product", []string{"account", "usage", "--product", "voice", "--product", "sms"}},
+		{"direction", []string{"account", "usage", "--direction", "in"}},
+		{"country", []string{"account", "usage", "--country", "USA"}},
+		{"limit", []string{"account", "usage", "--limit", "1001"}},
+		{"limit", []string{"account", "usage", "--limit", "0"}},
+		{"subaccount", []string{"account", "usage", "--subaccount", " "}},
+		// The Message API has no number filter: every message came back.
+		{"from", []string{"messaging", "sms", "list", "--from", "+14155551234"}},
+		{"to", []string{"messaging", "sms", "list", "--to", "+14155551234", "--dry-run"}},
+		{"from", []string{"messaging", "mms", "list", "--from", "+14155551234"}},
+		{"to", []string{"messaging", "mms", "list", "--to", "+14155551234"}},
+		{"from", []string{"messaging", "whatsapp", "list", "--from", "+14155551234"}},
+		{"to", []string{"messaging", "whatsapp", "list", "--to", "+14155551234"}},
 	}
 	for _, tc := range cases {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
@@ -119,6 +133,26 @@ func TestListFilters_unknownValueFailsBeforeAnyRequest(t *testing.T) {
 				t.Fatalf("%d request(s) went out before validation", n)
 			}
 		})
+	}
+}
+
+// The --query in the hint for a refused --from/--to finds the number on a
+// page, written with or without its +.
+func TestMessageList_numberFilterHintFindsTheNumber(t *testing.T) {
+	setFakeCreds(t)
+	sipServer(t, http.StatusOK, `{"meta":{},"objects":[{"from_number":"14155551234","to_number":"1"},`+
+		`{"from_number":"+14155551234","to_number":"2"},{"from_number":"3","to_number":"14155551234"}]}`)
+	for flag, want := range map[string]int{"from": 2, "to": 1} {
+		err, _, _ := execCmd(t, "messaging", "whatsapp", "list", "--"+flag, "+14155551234")
+		var ce *clierr.Error
+		if !errors.As(err, &ce) || strings.Count(ce.Hint, `"`) != 2 {
+			t.Fatalf("--%s: want a hint with one quoted --query, got %v", flag, err)
+		}
+		err, stdout, _ := execCmd(t, "messaging", "whatsapp", "list", "-o", "json", "--query", strings.Split(ce.Hint, `"`)[1])
+		var rows []any
+		if err != nil || json.Unmarshal([]byte(stdout), &rows) != nil || len(rows) != want {
+			t.Errorf("--%s: the hint's query gave %q (%v), want %d rows", flag, stdout, err, want)
+		}
 	}
 }
 
@@ -142,8 +176,8 @@ func TestListFilters_documentedValuesReachTheQuery(t *testing.T) {
 		{[]string{"messaging", "sms", "tollfree", "list", "--status", "UPDATE_REQUIRED"}, []string{"status=UPDATE_REQUIRED"}},
 		{[]string{"verify", "sessions", "list", "--status", "in-progress"}, []string{"status=in-progress"}},
 		{[]string{"agents", "list", "--state", "PAUSED"}, []string{"state=PAUSED"}},
-		{[]string{"numbers", "compliance", "list", "--status", "accepted", "--number-type", "mobile", "--user-type", "individual"},
-			[]string{"status=accepted", "number_type=mobile", "user_type=individual"}},
+		{[]string{"numbers", "compliance", "list", "--status", "accepted", "--number-type", "national", "--user-type", "individual"},
+			[]string{"status=accepted", "number_type=national", "user_type=individual"}},
 	}
 	for _, tc := range cases {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
@@ -325,11 +359,12 @@ func TestListTimeFlags_refusedBeforeAnyRequest(t *testing.T) {
 	lists := 0
 	walkOwnCommands(func(c *cobra.Command, path []string) {
 		since := c.Flags().Lookup("since")
-		if since == nil {
+		name := strings.Join(path, " ")
+		// account usage sends its dates as given: Plivo reads a lone --until.
+		if since == nil || name == "account usage" {
 			return
 		}
 		lists++
-		name := strings.Join(path, " ")
 		if got := strings.Contains(since.Usage, "within the last 90 days"); got != retains[name] {
 			t.Errorf("%s: --since help names the 90 days = %v, want %v", name, got, retains[name])
 		}
@@ -507,7 +542,9 @@ func TestListFlags_everyPagedListChecksThePageFirst(t *testing.T) {
 	var walk func(c *cobra.Command)
 	walk = func(c *cobra.Command) {
 		// docs search is local: its --limit caps search hits, not an API page.
-		if c.Flags().Lookup("limit") != nil && c.CommandPath() != "plivo docs search" {
+		// account usage pages by token, up to 1000 rows: its own case is above.
+		// A deprecated --limit is ignored, so there is no page to check.
+		if f := c.Flags().Lookup("limit"); f != nil && f.Deprecated == "" && c.CommandPath() != "plivo docs search" && c.CommandPath() != "plivo account usage" {
 			lists = append(lists, c)
 		}
 		for _, sub := range c.Commands() {
@@ -683,7 +720,11 @@ func pagedServer(t *testing.T, key string, rows, total int, fail func(n int) (in
 		if total < 0 {
 			meta = fmt.Sprintf(`{"limit":%d,"next":%s,"offset":%d}`, limit, next, offset)
 		}
-		_, _ = fmt.Fprintf(w, `{"api_id":"x","meta":%s,%q:[%s]}`, meta, key, strings.Join(page, ","))
+		body := fmt.Sprintf(`"meta":%s,%q:[%s]`, meta, key, strings.Join(page, ","))
+		if outer, inner, nested := strings.Cut(key, "."); nested {
+			body = fmt.Sprintf(`%q:{"meta":%s,%q:[%s]}`, outer, meta, inner, strings.Join(page, ","))
+		}
+		_, _ = fmt.Fprintf(w, `{"api_id":"x",%s}`, body)
 	}))
 	t.Cleanup(srv.Close)
 	clientForTest = &api.Client{BaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
@@ -704,7 +745,8 @@ func recordWaits(t *testing.T) *[]time.Duration {
 	return &waits
 }
 
-// dataRows decodes the rows and meta out of -o json's {"data": {...}}.
+// dataRows decodes the rows and meta out of -o json's {"data": {...}}, from
+// the object a dotted key such as "response.objects" names.
 func dataRows(t *testing.T, stdout, key string) ([]map[string]any, map[string]any) {
 	t.Helper()
 	var out struct {
@@ -713,10 +755,15 @@ func dataRows(t *testing.T, stdout, key string) ([]map[string]any, map[string]an
 	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
 		t.Fatalf("stdout is not JSON: %v\n%s", err, stdout)
 	}
+	data := out.Data
+	if outer, inner, nested := strings.Cut(key, "."); nested {
+		data, key = nil, inner
+		_ = json.Unmarshal(out.Data[outer], &data)
+	}
 	var rows []map[string]any
 	var meta map[string]any
-	_ = json.Unmarshal(out.Data[key], &rows)
-	_ = json.Unmarshal(out.Data["meta"], &meta)
+	_ = json.Unmarshal(data[key], &rows)
+	_ = json.Unmarshal(data["meta"], &meta)
 	return rows, meta
 }
 
@@ -983,6 +1030,7 @@ func TestListAll_mergesUnderEachListsKey(t *testing.T) {
 		{"brands", []string{"messaging", "sms", "10dlc", "brands", "list"}},
 		{"campaigns", []string{"messaging", "sms", "10dlc", "campaigns", "list"}},
 		{"compliances", []string{"numbers", "compliance", "list"}},
+		{"sessions", []string{"verify", "sessions", "list"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.key, func(t *testing.T) {
@@ -1000,6 +1048,22 @@ func TestListAll_mergesUnderEachListsKey(t *testing.T) {
 				t.Errorf("an objects key appeared:\n%s", stdout)
 			}
 		})
+	}
+}
+
+// Masking sessions nest their rows and meta under response: --all merges every
+// page there, and -o jsonl still writes a line per session.
+func TestListAll_mergesNestedRows(t *testing.T) {
+	setFakeCreds(t)
+	pagedServer(t, "response.objects", 25, 25, nil)
+	args := []string{"numbers", "masking", "sessions", "list", "--all"}
+	err, stdout, _ := execCmd(t, append(args, "-o", "json")...)
+	if rows, meta := dataRows(t, stdout, "response.objects"); err != nil || len(rows) != 25 || meta["next"] != nil ||
+		strings.Count(stdout, `"objects"`) != 1 {
+		t.Fatalf("err %v; want 25 rows in data.response.objects and meta.next null there, and no others:\n%s", err, stdout)
+	}
+	if err, stdout, _ := execCmd(t, append(args, "-o", "jsonl")...); err != nil || strings.Count(stdout, "\n") != 25 {
+		t.Errorf("-o jsonl: err %v, %d lines, want 25", err, strings.Count(stdout, "\n"))
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
@@ -75,14 +76,17 @@ func TestSIPCallsList_untilIncludesTheNamedDay(t *testing.T) {
 	}
 }
 
+// --since alone runs to now, in UTC; a start still to come gets no end.
 func TestSIPCallsList_mapsEveryFilterToItsQueryParam(t *testing.T) {
 	setFakeCreds(t)
 	resetSIPFlags(t)
+	listTimeNow = func() time.Time { return time.Date(2026, 10, 16, 8, 30, 0, 0, time.FixedZone("UTC+5:30", 19800)) }
+	t.Cleanup(func() { listTimeNow = time.Now })
 	urls, _ := sipServer(t, http.StatusOK, `{"meta":{},"objects":[]}`)
 
 	err, _, _ := execCmd(t, "sip", "calls", "list",
 		"--limit", "5", "--offset", "10",
-		"--from-number", "+14155551234", "--to-number", "+13125551234",
+		"--from-number", "+14155551234", "--to-number", "+1312",
 		"--direction", "outbound", "--since", "2026-09-01",
 		"--hangup-cause-code", "3000", "--hangup-source", "carrier",
 		"--stir-verification", "Verified")
@@ -92,14 +96,17 @@ func TestSIPCallsList_mapsEveryFilterToItsQueryParam(t *testing.T) {
 	got := urls()[0]
 	for _, want := range []string{
 		"limit=5", "offset=10",
-		"from_number=14155551234", "to_number=13125551234",
-		"call_direction=outbound", "end_time__gte=2026-09-01+00%3A00%3A00",
+		"from_number=14155551234", "to_number=1312", // a prefix is a valid filter
+		"call_direction=outbound", "end_time__gte=2026-09-01+00%3A00%3A00", "end_time__lte=2026-10-16+03%3A00%3A00",
 		"hangup_cause_code=3000", "hangup_source=carrier",
 		"stir_verification=Verified",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("query missing %s\n  got: %s", want, got)
 		}
+	}
+	if err, _, _ := execCmd(t, "sip", "calls", "list", "--from-date", "2026-10-17"); err != nil || strings.Contains(urls()[1], "end_time__lte") {
+		t.Errorf("a start still to come got an end: %v %v", err, urls())
 	}
 }
 
@@ -136,6 +143,8 @@ func TestSIPCallsList_localValidationMakesNoRequest(t *testing.T) {
 		{"limit below one", []string{"sip", "calls", "list", "--limit", "0"}},
 		{"unparseable since", []string{"sip", "calls", "list", "--since", "yesterday"}},
 		{"unparseable until", []string{"sip", "calls", "list", "--until", "01/09/2026"}},
+		{"from-number with a space", []string{"sip", "calls", "list", "--from-number", "+1 415"}},
+		{"to-number with a letter", []string{"sip", "calls", "list", "--to-number", "1415555O"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -196,7 +205,7 @@ func TestSIPCallsGet_jsonPassesThroughUnmodelledFields(t *testing.T) {
 	resetSIPFlags(t)
 	sipServer(t, http.StatusOK, `{"call_uuid":"8f3c1a2e","a_field_we_do_not_model":"keep me"}`)
 
-	err, stdout, _ := execCmd(t, "sip", "calls", "get", "8f3c1a2e", "-o", "json")
+	err, stdout, _ := execCmd(t, "sip", "calls", "get", placeholderUUID, "-o", "json")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -277,7 +286,7 @@ func TestSIPCallsGet_decodesARealResponse(t *testing.T) {
 	resetSIPFlags(t)
 	sipServer(t, http.StatusOK, realSIPTrunkCDR)
 
-	err, stdout, _ := execCmd(t, "sip", "calls", "get", "f3f74402", "-o", "table")
+	err, stdout, _ := execCmd(t, "sip", "calls", "get", "f3f74402-59af-40b3-909c-80c50a4b063f", "-o", "table")
 	if err != nil {
 		t.Fatalf("real response failed to decode: %v", err)
 	}
@@ -362,7 +371,7 @@ func TestSIPCallsGet_pointsAtHangupCodesNotVoiceDiagnose(t *testing.T) {
 	resetSIPFlags(t)
 	sipServer(t, http.StatusOK, realSIPTrunkCDR)
 
-	err, stdout, _ := execCmd(t, "sip", "calls", "get", "f3f74402", "-o", "table")
+	err, stdout, _ := execCmd(t, "sip", "calls", "get", "f3f74402-59af-40b3-909c-80c50a4b063f", "-o", "table")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -440,7 +449,7 @@ func TestDiagnose_eachCommandRefusesTheOtherCallType(t *testing.T) {
 		resetSIPFlags(t)
 		paths := diagnoseRouter(t, false, true)
 
-		err, _, _ := execCmd(t, "sip", "calls", "diagnose", "8f3c1a2e")
+		err, _, _ := execCmd(t, "sip", "calls", "diagnose", placeholderUUID)
 		if err == nil {
 			t.Fatal("expected a refusal")
 		}
@@ -461,7 +470,7 @@ func TestDiagnose_eachCommandRefusesTheOtherCallType(t *testing.T) {
 		resetSIPFlags(t)
 		paths := diagnoseRouter(t, true, false)
 
-		if err, _, _ := execCmd(t, "sip", "calls", "diagnose", "8f3c1a2e"); err != nil {
+		if err, _, _ := execCmd(t, "sip", "calls", "diagnose", placeholderUUID); err != nil {
 			t.Fatalf("a genuine trunk call must reach the assistant: %v", err)
 		}
 		if !hitChat(paths()) {

@@ -6,8 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"reflect"
+	"regexp"
+	"runtime/metrics"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jmespath/go-jmespath"
 	"gopkg.in/yaml.v3"
@@ -21,8 +27,14 @@ var (
 	queryExpr string
 )
 
-// QueryError is a --query expression that does not compile, or fails while
-// it runs (an unknown function, a function given the wrong type).
+// Committed reports whether the run has already changed something on the
+// account; cmd points it at the API client's record of sent writes. nil
+// means nothing has.
+var Committed func() bool
+
+// QueryError is a --query expression that does not compile, calls a function
+// JMESPath does not have, or fails while it runs (a function given the wrong
+// type).
 type QueryError struct {
 	Expr string
 	Err  error
@@ -48,11 +60,71 @@ func Configure(format, expr string) error {
 		return nil
 	}
 	q, err := compileQuery(expr)
+	if err == nil {
+		err = unknownFunction(expr)
+	}
 	if err != nil {
 		return &QueryError{Expr: expr, Err: err}
 	}
 	query, queryExpr = q, expr
 	return nil
+}
+
+// unknownFunction refuses a call to a function JMESPath does not have. The
+// parser takes any name, and the search finds out only once it reaches the
+// call: after a write, the request has gone by then. Each name is checked by
+// calling it with no arguments, which fails on the name before the arguments.
+func unknownFunction(expr string) error {
+	for _, name := range calledFunctions(expr) {
+		if _, err := jmespath.Search(name+"()", nil); err != nil && strings.HasPrefix(err.Error(), "unknown function") {
+			return err
+		}
+	}
+	return nil
+}
+
+// calledFunctions lists the names expr calls: an identifier followed by "(".
+func calledFunctions(expr string) []string {
+	return namesBefore(expr, '(')
+}
+
+// namesBefore lists, in order, the identifiers in expr followed (after any
+// whitespace) by next: with "(" the functions it calls, with ":" the keys of
+// its multiselect hashes ({key: ...}), the only names JMESPath puts before a
+// colon. String and JSON literals are skipped. A quoted identifier counts as a
+// key, unquoted, never as a function. expr has compiled, so its quotes are
+// balanced.
+func namesBefore(expr string, next byte) []string {
+	var names []string
+	for i := 0; i < len(expr); i++ {
+		start, name := i, ""
+		switch c := expr[i]; {
+		case c == '\'' || c == '`' || c == '"':
+			for i++; i < len(expr) && expr[i] != c; i++ {
+				if expr[i] == '\\' {
+					i++
+				}
+			}
+			if c != '"' || next == '(' || i >= len(expr) || json.Unmarshal([]byte(expr[start:i+1]), &name) != nil {
+				continue
+			}
+		case identByte(c):
+			for i+1 < len(expr) && identByte(expr[i+1]) {
+				i++
+			}
+			name = expr[start : i+1]
+		default:
+			continue
+		}
+		if rest := strings.TrimLeft(expr[i+1:], " \t\r\n"); rest != "" && rest[0] == next {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+func identByte(c byte) bool {
+	return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }
 
 // compileQuery turns a parser panic into an error: the expression is user
@@ -68,27 +140,40 @@ func compileQuery(expr string) (q *jmespath.JMESPath, err error) {
 
 // encode is the slow path of JSONSuccess: --query on the envelope, then the
 // configured encoding. Everything is built in memory first, so a failing
-// query leaves stdout empty.
-func encode(w io.Writer, env map[string]any) error {
+// query leaves stdout empty, unless the run already changed something: then
+// the unfiltered result is written instead, with a warning. rowsKey names the
+// array of a list's rows under data, for jsonl and csv.
+func encode(w io.Writer, env map[string]any, rowsKey string) error {
 	doc, err := Marshal(env)
 	if err != nil {
 		return err
 	}
-	if query != nil {
-		if doc, err = runQuery(doc); err != nil {
-			return err
+	queried := query != nil
+	if queried {
+		filtered, qerr := runQuery(doc)
+		switch {
+		case qerr == nil:
+			doc = filtered
+		case Committed != nil && Committed():
+			// The request went through: an error here would read as "nothing
+			// happened" and invite a second send, so the result goes out whole.
+			fmt.Fprintf(os.Stderr, "Warning: --query failed (%s), so this is the unfiltered result. "+
+				"The request was sent: do not run it again.\n", SafeText(qerr.Error()))
+			queried = false
+		default:
+			return qerr
 		}
 	}
 	var out []byte
 	switch encoding {
 	case "jsonl":
-		out = jsonLines(records(doc, query != nil))
+		out = jsonLines(records(doc, queried, rowsKey))
 	case "yaml":
 		if out, err = yamlDoc(doc); err != nil {
 			return err
 		}
 	case "csv":
-		if out, err = csvTable(records(doc, query != nil)); err != nil {
+		if out, err = csvTable(records(doc, queried, rowsKey)); err != nil {
 			return err
 		}
 	default:
@@ -103,7 +188,8 @@ func encode(w io.Writer, env map[string]any) error {
 }
 
 // runQuery evaluates --query against the envelope and returns the result as
-// compact JSON.
+// compact JSON. Objects keep their keys in order (see marshalOrdered): decoded
+// into Go maps they had none, and encoding sorted every column.
 func runQuery(doc []byte) (out []byte, err error) {
 	dec := json.NewDecoder(bytes.NewReader(doc))
 	dec.UseNumber()
@@ -111,16 +197,154 @@ func runQuery(doc []byte) (out []byte, err error) {
 	if err := dec.Decode(&v); err != nil {
 		return nil, err
 	}
+	order := map[uintptr][]string{}
+	keyOrders(v, doc, order)
+	rank := map[string]int{}
+	for _, k := range namesBefore(queryExpr, ':') {
+		if _, ok := rank[k]; !ok {
+			rank[k] = len(rank)
+		}
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			out, err = nil, &QueryError{Expr: queryExpr, Err: fmt.Errorf("%v", r)}
 		}
 	}()
-	res, err := query.Search(queryNumbers(v))
+	q := query
+	res, err := watchedSearch(func() (any, error) { return q.Search(queryNumbers(v)) })
 	if err != nil {
 		return nil, &QueryError{Expr: queryExpr, Err: err}
 	}
-	return Marshal(res)
+	// The search shares the parts it repeats, so [@,@] | [@,@] | ... stays
+	// cheap there while the result doubles at each step: it gets a budget.
+	var buf bytes.Buffer
+	if err := marshalOrdered(&buf, res, order, rank, 32*len(doc)+1<<20); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// A --query search may run for searchTime and grow the heap by searchHeap:
+// to_string(@) over [@,@] | [@,@] | ... writes out every copy the search
+// shares. go-jmespath can't be stopped, so a search past either limit is left
+// to the exiting process and the query fails.
+var searchTime, searchHeap = 10 * time.Second, uint64(256 << 20)
+
+func watchedSearch(search func() (any, error)) (any, error) {
+	type result struct {
+		v   any
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				done <- result{err: fmt.Errorf("%v", r)}
+			}
+		}()
+		v, err := search()
+		done <- result{v, err}
+	}()
+	// The heap is measured from its lowest point, as a collection can free
+	// what was there before the search.
+	heap := []metrics.Sample{{Name: "/memory/classes/heap/objects:bytes"}}
+	metrics.Read(heap)
+	low := heap[0].Value.Uint64()
+	tick, deadline := time.NewTicker(10*time.Millisecond), time.After(searchTime)
+	defer tick.Stop()
+	for {
+		select {
+		case r := <-done:
+			return r.v, r.err
+		case <-deadline:
+			return nil, fmt.Errorf("the expression ran for more than %s", searchTime)
+		case <-tick.C:
+			metrics.Read(heap)
+			now := heap[0].Value.Uint64()
+			if low = min(low, now); now-low > searchHeap {
+				return nil, fmt.Errorf("the expression took more than %d MiB of memory", searchHeap>>20)
+			}
+		}
+	}
+}
+
+// keyOrders records each decoded object's keys, in the order raw has them,
+// under the map's identity: the search hands back the document's own maps.
+func keyOrders(v any, raw json.RawMessage, order map[uintptr][]string) {
+	switch t := v.(type) {
+	case map[string]any:
+		if keys, fields, ok := objectFields(raw); ok {
+			order[reflect.ValueOf(t).Pointer()] = keys
+			for _, k := range keys {
+				keyOrders(t[k], fields[k], order)
+			}
+		}
+	case []any:
+		var items []json.RawMessage
+		_ = json.Unmarshal(raw, &items)
+		for i := range min(len(t), len(items)) {
+			keyOrders(t[i], items[i], order)
+		}
+	}
+}
+
+// marshalOrdered appends v to buf as Marshal would, with each object's keys in
+// order: an object from the document as it has them, one the query built (a
+// multiselect hash) in rank order, the order the expression names them;
+// unranked keys go last, sorted. Past limit bytes it stops with a QueryError.
+func marshalOrdered(buf *bytes.Buffer, v any, order map[uintptr][]string, rank map[string]int, limit int) error {
+	switch t := v.(type) {
+	case []any:
+		buf.WriteByte('[')
+		for i, e := range t {
+			if i > 0 {
+				buf.WriteByte(',')
+			}
+			if err := marshalOrdered(buf, e, order, rank, limit); err != nil {
+				return err
+			}
+		}
+		buf.WriteByte(']')
+	case map[string]any:
+		keys, ok := order[reflect.ValueOf(t).Pointer()]
+		if !ok {
+			for k := range t {
+				keys = append(keys, k)
+			}
+			sort.Slice(keys, func(i, j int) bool {
+				ri, iok := rank[keys[i]]
+				rj, jok := rank[keys[j]]
+				if iok && jok {
+					return ri < rj
+				}
+				return iok || (!jok && keys[i] < keys[j])
+			})
+		}
+		buf.WriteByte('{')
+		for i, k := range keys {
+			if i > 0 {
+				buf.WriteByte(',')
+			}
+			key, _ := Marshal(k)
+			buf.Write(key)
+			buf.WriteByte(':')
+			if err := marshalOrdered(buf, t[k], order, rank, limit); err != nil {
+				return err
+			}
+		}
+		buf.WriteByte('}')
+	default:
+		b, err := Marshal(v)
+		if err != nil {
+			return err
+		}
+		buf.Write(b)
+	}
+	if buf.Len() > limit {
+		return &QueryError{Expr: queryExpr, Err: fmt.Errorf(
+			"the result is larger than %d bytes, 32 times the response plus 1 MiB: the expression repeats parts of it", limit)}
+	}
+	return nil
 }
 
 // queryNumbers turns decoded numbers into float64, the only number type
@@ -152,20 +376,27 @@ func queryNumbers(v any) any {
 }
 
 // records picks what jsonl and csv write one line per: the query result's
-// elements (or the result itself), otherwise the envelope's data.objects[]
-// (a list response), the elements of data, or data itself. A null result or
-// a null objects list has no records.
-func records(doc []byte, queried bool) []json.RawMessage {
+// elements (or the result itself), otherwise the envelope's data.<key>[] (a
+// list response's rows: key is "objects" on most lists, and a dotted key such
+// as "response.objects" names rows nested in an object), the elements of
+// data, or data itself. A null result or a null list of rows has no records.
+func records(doc []byte, queried bool, key string) []json.RawMessage {
 	if !queried {
 		var env map[string]json.RawMessage
 		if json.Unmarshal(doc, &env) == nil {
 			doc = env["data"]
 		}
-		var page map[string]json.RawMessage
-		if json.Unmarshal(doc, &page) == nil {
-			if objects, ok := page["objects"]; ok && (isArray(objects) || string(objects) == "null") {
-				doc = objects
+		rows := doc
+		for _, name := range strings.Split(key, ".") {
+			var page map[string]json.RawMessage
+			if json.Unmarshal(rows, &page) != nil {
+				rows = nil
+				break
 			}
+			rows = page[name]
+		}
+		if rows != nil && (isArray(rows) || string(rows) == "null") {
+			doc = rows
 		}
 	}
 	if len(doc) == 0 || string(doc) == "null" {
@@ -199,6 +430,9 @@ func csvTable(rows []json.RawMessage) ([]byte, error) {
 	var buf bytes.Buffer
 	cw := csv.NewWriter(&buf)
 	if header, table, ok := objectTable(rows); ok {
+		for i, h := range header {
+			header[i] = csvText(h)
+		}
 		_ = cw.Write(header)
 		_ = cw.WriteAll(table)
 	} else {
@@ -278,13 +512,14 @@ func objectFields(raw json.RawMessage) (keys []string, fields map[string]json.Ra
 	return keys, fields, true
 }
 
-// csvCell is one JSON value as CSV text: a string without its quotes, null
-// as empty, and numbers, booleans, arrays and objects as their compact JSON.
+// csvCell is one JSON value as CSV text: a string without its quotes (and
+// through csvText), null as empty, and numbers, booleans, arrays and objects
+// as their compact JSON.
 func csvCell(v json.RawMessage) string {
 	if len(v) > 0 && v[0] == '"' {
 		var s string
 		if json.Unmarshal(v, &s) == nil {
-			return s
+			return csvText(s)
 		}
 	}
 	if string(v) == "null" {
@@ -292,6 +527,20 @@ func csvCell(v json.RawMessage) string {
 	}
 	return string(v)
 }
+
+// csvText keeps a spreadsheet from running a string: one that starts with =,
+// +, -, @, a tab or a CR is read there as a formula, so it gets a leading '.
+// A plain number keeps its sign (+14155551234, -0.05): it is no formula, and
+// scripts read the value as sent.
+func csvText(s string) string {
+	if s != "" && strings.IndexByte("=+-@\t\r", s[0]) >= 0 && !plainNumber.MatchString(s) {
+		return "'" + s
+	}
+	return s
+}
+
+// plainNumber is a signed integer or decimal.
+var plainNumber = regexp.MustCompile(`^[+-]?[0-9]+(\.[0-9]+)?$`)
 
 // yamlDoc re-encodes a JSON document as block-style YAML with the same key
 // order and two-space indent.

@@ -187,6 +187,18 @@ plivo voice calls make --from +1... --to +1... --yes        # actually call
 2. Branch on `error.code` (e.g. `AUTH_MISSING`, `DESTRUCTIVE_REFUSED`, `RATE_LIMITED`), never on `error.message` — message text drifts; codes are committed.
 3. For scripted use: set `PLIVO_FEEDBACK_PROMPT=0` and `PLIVO_NO_UPDATE_CHECK=1` so the post-success "rate the CLI?" prompt and update-check banner don't surprise stdin/stderr.
 
+**Plivo skills.** Each is a `SKILL.md` your coding agent loads when a request matches it:
+
+| Skill | `plivo skill install` | What it covers |
+|---|---|---|
+| [`plivo-cx-agents`](agents-skill/SKILL.md) | `agents` | Build, test and publish Plivo CX agents: AI conversation flows for calls and messages |
+| [`plivo-cli`](cli-skill/SKILL.md) | `cli` (the default) | Run any Plivo task with the CLI instead of raw API calls |
+| [`plivo-audio-streaming`](audio-streaming-skill/SKILL.md) | `audio-streaming` | A voice bot on real calls with `<Stream>`, from setup to go-live |
+| [`plivo-sip-trunking`](sip-trunking-skill/SKILL.md) | `sip-trunking` | Connect an AI voice platform over SIP trunking |
+| [`plivo-voice-xml`](voice-xml-skill/SKILL.md) | `voice-xml` | Write and fix Plivo Voice XML |
+
+`plivo skill install all` installs every one, and `npx skills add plivo/plivo-cli --skill <skill>` installs one without the CLI.
+
 **Install the skill once** so future agent sessions auto-load it — a few ways:
 
 ```bash
@@ -201,7 +213,17 @@ plivo skill install                 # → ~/.claude/skills/plivo-cli/SKILL.md
 curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/skills.sh | sh
 ```
 
+As a Claude Code plugin, with all five product skills kept current with this repository, type this inside Claude Code (2.1.275+; on older versions run `/plugin marketplace add plivo/plivo-cli`, then `/plugin install plivo@plivo`):
+
+```
+/plugin install plivo --marketplace plivo/plivo-cli
+```
+
+Owners of a Claude organization can add `https://github.com/plivo/plivo-cli` under Organization settings > Plugins & skills to give every member the skills.
+
 Both default to the Claude Code skills directory (`~/.claude/skills/plivo-cli`). For another agent, point it elsewhere — `plivo skill install --dir <path>` or `PLIVO_SKILL_DIR=<path>` for the installer. To capture the skill for an agent that loads it differently, `plivo skill install --print` writes it to stdout.
+
+Run `plivo login` inside Claude Code, Cursor or Codex and it offers, once per machine, to install every Plivo skill where that agent reads them. Codex reads `~/.agents/skills`, which `plivo skill install all --agent codex` installs into.
 
 The skill file lazy-loads on relevance — it only enters your context window when the user mentions Plivo / `auth_id`, etc.
 
@@ -221,6 +243,8 @@ when you're logged in, identity headers (email, auth ID, region, AOM
 UUID) so Plivo can attribute usage per account. These headers never
 carry flag values, argument values, or free-text bodies — those only
 travel in the actual Plivo API request you asked the CLI to make.
+
+To see exactly what the CLI sends, point it at a capture server on this machine with `PLIVO_API_URL=http://127.0.0.1:18555/v1/cli/api` (any port; host localhost, 127.0.0.0/8 or ::1, http or https only, with no user, query or fragment; anything else is refused).
 
 Turn the identity headers off entirely:
 

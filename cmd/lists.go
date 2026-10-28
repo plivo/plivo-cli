@@ -154,16 +154,8 @@ func (r *listTimeRange) deprecatedNames(cmd *cobra.Command, since, until string)
 // matches nothing); an end not after the start (SIP Trunking blames that on
 // its 3-month limit); and a range past the list's API limits.
 func (r *listTimeRange) bounds(cmd *cobra.Command) (since, until time.Time, err error) {
-	for _, names := range r.names {
-		var given []string
-		for _, n := range names {
-			if cmd.Flags().Changed(n) {
-				given = append(given, "--"+n)
-			}
-		}
-		if len(given) > 1 {
-			return time.Time{}, time.Time{}, clierr.BadInput(strings.Join(given, " and ") + " are the same filter; pass one of them")
-		}
+	if err = oneFlagPerEnd(cmd, r.names); err != nil {
+		return time.Time{}, time.Time{}, err
 	}
 	if since, err = parseListTime(r.since, false); err != nil {
 		return time.Time{}, time.Time{}, err
@@ -194,6 +186,23 @@ func (r *listTimeRange) bounds(cmd *cobra.Command) (since, until time.Time, err 
 		}
 	}
 	return since, until, nil
+}
+
+// oneFlagPerEnd refuses two names for one end of a range given together: only
+// the last would count. names holds every flag for each end.
+func oneFlagPerEnd(cmd *cobra.Command, names [2][]string) error {
+	for _, end := range names {
+		var given []string
+		for _, n := range end {
+			if cmd.Flags().Changed(n) {
+				given = append(given, "--"+n)
+			}
+		}
+		if len(given) > 1 {
+			return clierr.BadInput(strings.Join(given, " and ") + " are the same filter; pass one of them")
+		}
+	}
+	return nil
 }
 
 // checkRetention refuses a start more than days back.
@@ -314,18 +323,50 @@ func parseListTime(v string, endOfDay bool) (time.Time, error) {
 // listJSON writes a list response for -o json with its rows array never null.
 // A few endpoints send null, or nothing, for an empty list where the rest send
 // [], and a script reading the rows should not need a case for that. key names
-// the array: "objects" on most lists.
+// the array (see listPage): "objects" on most lists. -o jsonl and -o csv write
+// one line per row of it.
 func listJSON(w io.Writer, raw json.RawMessage, key string) error {
 	var env map[string]json.RawMessage
 	if json.Unmarshal(raw, &env) == nil && env != nil {
-		if rows, ok := env[key]; !ok || bytes.Equal(bytes.TrimSpace(rows), []byte("null")) {
-			env[key] = json.RawMessage("[]")
-			if b, err := output.Marshal(env); err == nil {
-				raw = b
+		page, rowsKey := listPage(env, key)
+		if rows, ok := page[rowsKey]; !ok || bytes.Equal(bytes.TrimSpace(rows), []byte("null")) {
+			page[rowsKey] = json.RawMessage("[]")
+			if putListPage(env, page, key) == nil {
+				if b, err := output.Marshal(env); err == nil {
+					raw = b
+				}
 			}
 		}
 	}
-	return output.JSONRaw(w, raw)
+	return output.JSONList(w, raw, key)
+}
+
+// listPage finds the object of a list response that holds its rows and meta,
+// and the rows' key in it. Most lists keep both at the top, under a key such
+// as "objects"; "response.objects" names the object a masking session list
+// nests them in.
+func listPage(env map[string]json.RawMessage, key string) (page map[string]json.RawMessage, rows string) {
+	outer, inner, nested := strings.Cut(key, ".")
+	if !nested {
+		return env, key
+	}
+	if json.Unmarshal(env[outer], &page) != nil || page == nil {
+		page = map[string]json.RawMessage{}
+	}
+	return page, inner
+}
+
+// putListPage puts a page listPage returned back where it was nested.
+func putListPage(env, page map[string]json.RawMessage, key string) error {
+	outer, _, nested := strings.Cut(key, ".")
+	if !nested {
+		return nil
+	}
+	b, err := output.Marshal(page)
+	if err == nil {
+		env[outer] = b
+	}
+	return err
 }
 
 // fetchList reads one page of a list into out or, with --all, every page: their
@@ -356,15 +397,6 @@ func fetchList(client *api.Client, endpoint string, q url.Values, key string, ou
 	if env == nil {
 		return werr // the first page failed: nothing was read
 	}
-	if rows == nil {
-		rows = []json.RawMessage{}
-	}
-	merged, err := output.Marshal(rows)
-	if err != nil {
-		return err
-	}
-	env[key] = merged
-	env["meta"] = walkMeta(env["meta"], next, capped || werr != nil)
 	switch {
 	case werr != nil:
 		partialErr = werr
@@ -373,6 +405,27 @@ func fetchList(client *api.Client, endpoint string, q url.Values, key string, ou
 	case capped:
 		fmt.Fprintf(os.Stderr, "Warning: --all stopped after %d pages (%d rows) and the list has more. "+
 			"Narrow the filters to read the rest.\n", maxListPages, len(rows))
+	}
+	return mergePages(env, key, rows, "next", next, capped || werr != nil, out)
+}
+
+// mergePages decodes a walk into out as one page would read: rows under key in
+// the first page's envelope, and its meta from walkMeta.
+func mergePages(env map[string]json.RawMessage, key string, rows []json.RawMessage,
+	nextKey string, next json.RawMessage, truncated bool, out api.RawCapturer,
+) error {
+	if rows == nil {
+		rows = []json.RawMessage{}
+	}
+	merged, err := output.Marshal(rows)
+	if err != nil {
+		return err
+	}
+	page, rowsKey := listPage(env, key)
+	page[rowsKey] = merged
+	page["meta"] = walkMeta(page["meta"], nextKey, next, truncated)
+	if err := putListPage(env, page, key); err != nil {
+		return err
 	}
 	body, err := output.Marshal(env)
 	if err != nil {
@@ -468,12 +521,13 @@ func getPage(client *api.Client, endpoint string, q url.Values, key string,
 	if json.Unmarshal(raw, &env) != nil || env == nil {
 		return nil, nil, pageMeta{}, clierr.Upstream("a page of the list was not a JSON object")
 	}
-	if v := env[key]; len(v) > 0 {
+	page, rowsKey := listPage(env, key)
+	if v := page[rowsKey]; len(v) > 0 {
 		if json.Unmarshal(v, &rows) != nil {
 			return nil, nil, pageMeta{}, clierr.Upstream(fmt.Sprintf("a page of the list had no %q array", key))
 		}
 	}
-	_ = json.Unmarshal(env["meta"], &meta) // absent or odd: the short page ends the walk
+	_ = json.Unmarshal(page["meta"], &meta) // absent or odd: the short page ends the walk
 	return env, rows, meta, nil
 }
 
@@ -492,15 +546,15 @@ func retryWait(attempt int, retryAfter, timeout time.Duration) time.Duration {
 	return wait
 }
 
-// walkMeta is a merged list's meta: the first page's, with next where a script
-// reads on from (null once every row is read) and, when the walk stopped
-// early, truncated: true so a script can tell.
-func walkMeta(meta, next json.RawMessage, truncated bool) json.RawMessage {
+// walkMeta is a merged list's meta: the first page's, with key (next on most
+// lists) where a script reads on from (null once every row is read) and, when
+// the walk stopped early, truncated: true so a script can tell.
+func walkMeta(meta json.RawMessage, key string, next json.RawMessage, truncated bool) json.RawMessage {
 	m := map[string]json.RawMessage{}
 	if json.Unmarshal(meta, &m) != nil || m == nil {
 		m = map[string]json.RawMessage{}
 	}
-	m["next"] = next // a nil next encodes as null
+	m[key] = next // a nil next encodes as null
 	if truncated {
 		m["truncated"] = json.RawMessage("true")
 	}
@@ -527,7 +581,7 @@ var (
 	verifyStatusValues  = []string{"in-progress", "verified", "expired"}
 	agentStateValues    = []string{"DRAFT", "ACTIVE", "PAUSED"}
 	complianceStatuses  = []string{"draft", "submitted", "accepted", "rejected", "suspended", "expired"}
-	complianceNumTypes  = []string{"local", "mobile", "tollfree"}
+	complianceNumTypes  = []string{"local", "mobile", "tollfree", "national"} // national: accepted, not in the docs
 	complianceUserTypes = []string{"individual", "business"}
 )
 

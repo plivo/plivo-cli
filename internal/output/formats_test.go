@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
+	"time"
 )
 
 // listPage is a list response as the API sends it: keys in the server's
@@ -151,12 +153,21 @@ func TestQuery_runsOnTheWholeEnvelope(t *testing.T) {
 		{"json", "data.meta.total_count", "2\n"},
 		// A filter compares numbers, so decoded numbers must be float64.
 		{"json", "length(data.objects[?sms_rate < `0.01`])", "1\n"},
+		// A name before "(" in a literal is not a call to an unknown function.
+		{"json", "data.objects[?contains(number, 'x(')].number", "[]\n"},
+		{"json", `data."lenght("`, "null\n"},
 		{"jsonl", "data.objects[].number", "\"+14155551234\"\n\"+14155556789\"\n"},
 		// A list of values is one bare value per line: no header, no quotes.
 		{"csv", "data.objects[].number", "+14155551234\n+14155556789\n"},
 		{"csv", "data.objects[].[number, voice_enabled]", "+14155551234,true\n+14155556789,false\n"},
 		{"csv", "data.meta", "limit,next,offset,total_count\n20,,0,2\n"},
 		{"yaml", "data.objects[0].application", "app_id: \"1\"\nname: a\n"},
+		// Objects keep the response's key order, or the order a hash asks for.
+		{"csv", "data.objects[1]", "number,sms_rate,voice_enabled,tags\n+14155556789,0.0075,false,\"[\"\"x\"\",\"\"y\"\"]\"\n"},
+		{"csv", "data.objects[].{z: number, a: voice_enabled}", "z,a\n+14155551234,true\n+14155556789,false\n"},
+		{"jsonl", "data.objects[].{z: number, a: voice_enabled}", "{\"z\":\"+14155551234\",\"a\":true}\n{\"z\":\"+14155556789\",\"a\":false}\n"},
+		{"yaml", "data.objects[0].{z: number, a: alias}", "z: \"+14155551234\"\na: null\n"},
+		{"json", `data.objects[0].{"b c": join(',', ['x', number]), a: alias}`, "{\n  \"b c\": \"x,+14155551234\",\n  \"a\": null\n}\n"},
 		// No match is null, which has no records to write.
 		{"json", "data.nope", "null\n"},
 		{"csv", "data.nope", ""},
@@ -174,6 +185,14 @@ func TestQuery_runsOnTheWholeEnvelope(t *testing.T) {
 	}
 }
 
+// A cell a spreadsheet would run as a formula gets a leading '; a number keeps its sign.
+func TestCSV_neutralisesFormulaCells(t *testing.T) {
+	got, err := render(t, "csv", "", `{"objects":[{"=h":"=1+2","b":"@SUM(1)","c":"+SUM(1)","d":"-2+3","e":"+14155551234","f":"-0.05","g":"\tx","h":-5}]}`)
+	if want := "'=h,b,c,d,e,f,g,h\n'=1+2,'@SUM(1),'+SUM(1),'-2+3,+14155551234,-0.05,'\tx,-5\n"; err != nil || got != want {
+		t.Errorf("got %q (%v), want %q", got, err, want)
+	}
+}
+
 // JMESPath works on float64, which holds integers exactly only up to 2^53.
 // Larger ones must come out digit for digit, not rounded.
 func TestQuery_keepsLargeIntegersExact(t *testing.T) {
@@ -187,9 +206,11 @@ func TestQuery_keepsLargeIntegersExact(t *testing.T) {
 	}
 }
 
-func TestConfigure_rejectsAnExpressionThatDoesNotParse(t *testing.T) {
+// An expression that does not parse is refused up front, and so is a call to
+// an unknown function, which the search meets only after a write's request.
+func TestConfigure_rejectsABadExpression(t *testing.T) {
 	t.Cleanup(func() { _ = Configure("", "") })
-	for _, expr := range []string{"data.objects[", "data..x", "[?", "`"} {
+	for _, expr := range []string{"data.objects[", "data..x", "[?", "`", "lenght(data.objects)", "data.objects[?lenght (tags) > `1`].id"} {
 		err := Configure("json", expr)
 		var qe *QueryError
 		if !errors.As(err, &qe) {
@@ -202,10 +223,10 @@ func TestConfigure_rejectsAnExpressionThatDoesNotParse(t *testing.T) {
 	}
 }
 
-// A query can parse yet fail on the data (an unknown function, a wrong
+// A query can parse yet fail on the data (a sum of objects, a wrong
 // argument type). That is still the flag's fault, and nothing is written.
 func TestQuery_runtimeFailureWritesNothing(t *testing.T) {
-	for _, expr := range []string{"lenght(data.objects)", "abs(data.api_id)"} {
+	for _, expr := range []string{"sum(data.objects)", "abs(data.api_id)"} {
 		got, err := render(t, "json", expr, listPage)
 		var qe *QueryError
 		if !errors.As(err, &qe) {
@@ -213,6 +234,34 @@ func TestQuery_runtimeFailureWritesNothing(t *testing.T) {
 		}
 		if got != "" {
 			t.Errorf("%s: wrote %q before failing", expr, got)
+		}
+	}
+}
+
+// [@,@] doubles the result at each step while the search stays cheap: past
+// its budget the query fails, instead of writing 2^n copies of the response.
+func TestQuery_refusesAResultThatOutgrowsItsBudget(t *testing.T) {
+	got, err := render(t, "json", "data"+strings.Repeat(" | [@,@]", 12), listPage)
+	var qe *QueryError
+	if !errors.As(err, &qe) || got != "" {
+		t.Errorf("wrote %d bytes, err %v; want a *QueryError and nothing written", len(got), err)
+	}
+}
+
+// to_string(@) writes out every copy [@,@] shares while it searches: a search
+// past its time or memory limit fails as a query error instead of running on.
+func TestQuery_stopsARunawaySearch(t *testing.T) {
+	defer func(d time.Duration, h uint64) { searchTime, searchHeap = d, h }(searchTime, searchHeap)
+	for _, c := range []struct {
+		time time.Duration
+		heap uint64
+		want string
+	}{{time.Millisecond, 1 << 40, "ran for more than"}, {time.Minute, 1, "MiB of memory"}} {
+		searchTime, searchHeap = c.time, c.heap
+		_, err := render(t, "json", "data"+strings.Repeat(" | [@,@]", 16)+" | to_string(@)", listPage)
+		var qe *QueryError
+		if !errors.As(err, &qe) || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("err = %v; want a *QueryError saying %q", err, c.want)
 		}
 	}
 }

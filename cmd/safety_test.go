@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -66,10 +67,11 @@ func execCmd(t *testing.T, args ...string) (err error, stdout, stderr string) {
 	profileFlag = ""
 	outputFormat = ""
 	queryFlag = ""
+	showSecretsFlag = false
 	mapFlag = false
 	schemaFlag = false
 	logLevel = "warn"
-	timeoutSec = 30
+	timeoutFlag = 30 * time.Second
 	adminServer = ""
 
 	// Capture stdout via os.Stdout redirection (cobra writes to os.Stderr/Stdout
@@ -183,6 +185,46 @@ func startCapturingHTTPServer(t *testing.T, respStatus int, respBody string) (sr
 	return srv, get
 }
 
+// No answer is exit 3, here a timed-out GET, never exit 1 as a usage mistake.
+func TestNoAnswer_isATimeoutNotAUsageError(t *testing.T) {
+	hung := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { <-r.Context().Done() }))
+	t.Cleanup(hung.Close)
+	setFakeCreds(t)
+	clientForTest = &api.Client{BaseURL: hung.URL, AuthID: "CIFAKEPLACEHOLDER001", HTTP: &http.Client{Timeout: 200 * time.Millisecond}}
+	t.Cleanup(func() { clientForTest = nil })
+	err, _, _ := execCmd(t, "voice", "calls", "get", "abc")
+	if e, ok := err.(*clierr.Error); !ok || e.Code != clierr.CodeUpstreamTimeout || !e.Retryable || e.ExitCode() != 3 {
+		t.Errorf("got %#v, want a retryable UPSTREAM_TIMEOUT, exit 3", err)
+	}
+}
+
+// PLIVO_API_URL sends the requests to a server on this machine, and naming
+// anything else is refused before any request.
+func TestAPIURLOverride_isLoopbackOnly(t *testing.T) {
+	setFakeCreds(t)
+	srv, hits := startCapturingHTTPServer(t, 200, `{}`)
+	t.Setenv("PLIVO_API_URL", srv.URL+"/v1/cli/api/")
+	if err, _, _ := execCmd(t, "voice", "calls", "get", "abc"); err != nil {
+		t.Fatalf("loopback override: %v", err)
+	}
+	for _, u := range []string{"https://example.com/v1/cli/api", "http://127.0.0.1.example.com", "ftp://127.0.0.1", "localhost:18555"} {
+		t.Setenv("PLIVO_API_URL", u)
+		if err, _, _ := execCmd(t, "voice", "calls", "get", "abc"); !strings.Contains(fmt.Sprint(err), "BAD_INPUT") {
+			t.Errorf("%q: got %v, want BAD_INPUT", u, err)
+		}
+	}
+	if got := hits(); len(got) != 1 || got[0] != "GET /v1/cli/api/v1/Account/CIFAKEPLACEHOLDER001/Call/abc/" {
+		t.Errorf("sent %q, want the one GET to the loopback server", got)
+	}
+	for u, ok := range map[string]bool{"HTTP://LocalHost:1": true, "http://127.0.0.2:1/": true, "http://localhost.example.com": false,
+		"http://u:SECRET@127.0.0.1:1": false, "http://127.0.0.1:1/?": false, "http://127.0.0.1:1/#": false} {
+		t.Setenv("PLIVO_API_URL", u)
+		if _, err := apiBaseURL(); (err == nil) != ok || strings.Contains(fmt.Sprint(err), "SECRET") {
+			t.Errorf("%q: got %v", u, err)
+		}
+	}
+}
+
 // ─── Destructive verbs refuse without --yes ──────────────────────────────────
 
 // destructiveVerbCases are the deletes, hangups and kicks. Every one must
@@ -206,13 +248,14 @@ func destructiveVerbCases() []struct {
 		{"numbers compliance delete", []string{"numbers", "compliance", "delete", "DOC-ID"}},
 		{"numbers masking sessions delete", []string{"numbers", "masking", "sessions", "delete", "SESS-UUID"}},
 		{"voice conferences hangup", []string{"voice", "conferences", "hangup", "room-1"}},
+		{"voice conferences stop-record", []string{"voice", "conferences", "stop-record", "room-1"}},
 		{"voice conferences member kick", []string{"voice", "conferences", "member", "kick", "room-1", "member-id"}},
 		{"voice multiparty end", []string{"voice", "multiparty", "end", "MPC-UUID"}},
 		{"voice multiparty participant kick", []string{"voice", "multiparty", "participant", "kick", "MPC-UUID", "PART-ID"}},
 		{"voice calls streams stop", []string{"voice", "calls", "streams", "stop", "CALL-UUID"}},
 		{"messaging sms powerpacks delete", []string{"messaging", "sms", "powerpacks", "delete", "PP-UUID"}},
 		{"messaging sms powerpacks numbers remove", []string{"messaging", "sms", "powerpacks", "numbers", "remove", "PP-UUID", "+14155551234"}},
-		{"messaging sms 10dlc links delete", []string{"messaging", "sms", "10dlc", "links", "delete", "LINK-ID"}},
+		{"messaging sms 10dlc links delete", []string{"messaging", "sms", "10dlc", "links", "delete", "CAMPAIGN-ID", "+14155551234"}},
 		{"agents delete", []string{"agents", "delete", "AGENT-ID"}},
 		// `plivo api` escape hatch: mutating methods share the spend-verb gate
 		// so an agent can't accidentally POST/PUT/PATCH/DELETE without --yes.
@@ -310,7 +353,7 @@ func spendVerbCases() []struct {
 		{"numbers buy", []string{"numbers", "buy", "+14155551234"}},
 		{"numbers buy --compliance-application-id", []string{"numbers", "buy", "+14155551234", "--compliance-application-id", "00000000-0000-0000-0000-000000000000"}},
 		{"numbers masking sessions create", []string{"numbers", "masking", "sessions", "create", "--first-party", "+1", "--second-party", "+2"}},
-		{"messaging sms 10dlc brands create", []string{"messaging", "sms", "10dlc", "brands", "create", "--alias", "ci", "--legal-name", "ACME Inc"}},
+		{"messaging sms 10dlc brands create", []string{"messaging", "sms", "10dlc", "brands", "create", "--alias", "ci", "--profile-uuid", "p1"}},
 		{"messaging sms 10dlc campaigns create", []string{
 			"messaging", "sms", "10dlc", "campaigns", "create",
 			"--alias", "ci",
@@ -318,8 +361,10 @@ func spendVerbCases() []struct {
 			"--usecase", "MARKETING",
 			"--description", "x",
 			"--message-flow", "x",
-			"--sample-message-1", "x",
+			"--sample-message-1", "x", "--sample-message-2", "x", "--vertical", "TECHNOLOGY", "--help-message", "x",
+			"--opt-out-message", "x", "--subscriber-optin", "--subscriber-optout", "--subscriber-help",
 		}},
+		{"messaging sms 10dlc campaigns update", []string{"messaging", "sms", "10dlc", "campaigns", "update", "c1", "--description", "x"}},
 	}
 }
 
@@ -473,5 +518,24 @@ func TestNew_clientPicksAuthMode(t *testing.T) {
 	// Cross-check the clierr surface tests still see the same code constant.
 	if clierr.CodeDestructiveRefused == "" {
 		t.Error("DESTRUCTIVE_REFUSED code constant unexpectedly empty")
+	}
+}
+
+// --cascade=false must reach the API, whose default deletes the app's endpoints.
+func TestAppDelete_sendsCascadeWhenGiven(t *testing.T) {
+	setFakeCreds(t)
+	del := []string{"account", "applications", "delete", "31000000000000001", "--yes", "--dry-run"}
+	for args, query := range map[string]string{"": "", "--cascade=false": "?cascade=false",
+		"--cascade=false --new-endpoint-application 31000000000000002": "?cascade=false&new_endpoint_application=31000000000000002"} {
+		if err, _, stderr := execCmd(t, append(del, strings.Fields(args)...)...); err != nil || !strings.HasSuffix(stderr, "/Application/31000000000000001/"+query+"\n") {
+			t.Errorf("%q: %v, %q; want query %q", args, err, stderr, query)
+		}
+	}
+	err, _, _ := execCmd(t, append(del, "--new-endpoint-application", "31000000000000002")...)
+	if e, ok := err.(*clierr.Error); !ok || e.Code != clierr.CodeBadFlag {
+		t.Errorf("--new-endpoint-application without --cascade=false: %v, want BAD_FLAG", err)
+	}
+	if err, _, _ := execCmd(t, "account", "applications", "delete", "31000000000000001"); err == nil || !strings.Contains(err.Error(), "and its endpoints") {
+		t.Errorf("the refusal should say the endpoints go too: %v", err)
 	}
 }

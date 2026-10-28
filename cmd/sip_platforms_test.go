@@ -57,8 +57,11 @@ func TestSIPURIsCreate_platformFillsThePublishedValues(t *testing.T) {
 		{"retell", "sip.retellai.com;transport=tcp", []string{"--platform", "retell"}},
 		{"vapi us", "sip.vapi.ai;transport=udp", []string{"--platform", "vapi"}},
 		{"vapi eu", "sip.eu.vapi.ai;transport=udp", []string{"--platform", "vapi", "--uri", "sip.eu.vapi.ai"}},
-		{"typed values win", "sip:+14155551234@sip.rtc.elevenlabs.io:5080;transport=tcp", []string{"--platform", "elevenlabs", "--uri", "sip:+14155551234@sip.rtc.elevenlabs.io:5080;transport=tcp"}},
+		{"typed values win", "sip.rtc.elevenlabs.io:5080;transport=tcp", []string{"--platform", "elevenlabs", "--uri", "sip:sip.rtc.elevenlabs.io:5080;transport=tcp"}},
 		{"transport without a platform", "sip.example.com;transport=tls", []string{"--uri", "sip.example.com", "--transport", "tls"}},
+		{"elevenlabs sips", "sip.rtc.elevenlabs.io:5061;transport=tls", []string{"--platform", "elevenlabs", "--uri", "sips:sip.rtc.elevenlabs.io"}},
+		{"livekit sips", "abc123.sip.livekit.cloud;transport=tls", []string{"--platform", "livekit", "--uri", "sips:abc123.sip.livekit.cloud"}},
+		{"retell sips", "sip.retellai.com;transport=tls", []string{"--platform", "retell", "--uri", "sips:sip.retellai.com"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setFakeCreds(t)
@@ -88,6 +91,7 @@ func TestSIPURIsCreate_platformWarnsOnValuesTheGuideDoesNotList(t *testing.T) {
 		{"foreign host", "sip.example.com;transport=udp", "not a Vapi SIP host", []string{"--platform", "vapi", "--uri", "sip.example.com"}},
 		{"unlisted transport", "sip.rtc.elevenlabs.io;transport=udp", "does not list transport=udp", []string{"--platform", "elevenlabs", "--transport", "udp"}},
 		{"bare livekit domain", "sip.livekit.cloud;transport=tcp", "not a LiveKit SIP host", []string{"--platform", "livekit", "--uri", "sip.livekit.cloud"}},
+		{"vapi sips", "sip.vapi.ai;transport=tls", "does not list transport=tls", []string{"--platform", "vapi", "--uri", "sips:sip.vapi.ai"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setFakeCreds(t)
@@ -120,6 +124,8 @@ func TestSIPCreates_platformRefusalsSpendNoRequest(t *testing.T) {
 			[]string{"sip", "uris", "create", "--name", "n", "--uri", "sip.example.com", "--transport", "sctp"}},
 		{"conflicting transports", string(clierr.CodeBadFlag), "conflicts with transport=tcp",
 			[]string{"sip", "uris", "create", "--name", "n", "--uri", "sip.example.com;transport=tcp", "--transport", "tls"}},
+		{"sips: with tcp", string(clierr.CodeBadFlag), "conflicts with sips:",
+			[]string{"sip", "uris", "create", "--name", "n", "--uri", "sips:sip.example.com", "--transport", "tcp"}},
 		{"inbound trunk without a URI", string(clierr.CodeBadInput), "sip uris create --name livekit --platform livekit --uri <project>.sip.livekit.cloud",
 			[]string{"sip", "trunks", "create", "--name", "n", "--direction", "inbound", "--platform", "livekit"}},
 		{"inbound trunk hint names the plan", string(clierr.CodeBadInput), "`plivo sip connect plan --number <number> --platform livekit` prints every step",
@@ -160,9 +166,9 @@ func TestSIPTrunksCreate_platformNeverSetsSecure(t *testing.T) {
 				reqs := sipWriteServer(t, trunksUsingU1)
 				args := []string{"sip", "trunks", "create", "--name", "n", "--direction", dir, "--platform", p.name, "-o", "json"}
 				if dir == dirInbound {
-					args = append(args, "--uri", "U1")
+					args = append(args, "--uri", uriU1)
 				} else {
-					args = append(args, "--credential", "C1", "--ip-acl", "A1")
+					args = append(args, "--credential", credC1, "--ip-acl", aclA1)
 				}
 				err, _, stderr := execCmd(t, args...)
 				if err != nil {
@@ -188,7 +194,7 @@ func TestSIPTrunksCreate_platformNeverSetsSecure(t *testing.T) {
 		resetWriteFlags(t)
 		reqs := sipWriteServer(t, trunksUsingU1)
 		err, _, stderr := execCmd(t, "sip", "trunks", "create", "--name", "n", "--direction", "outbound",
-			"--platform", "livekit", "--credential", "C1", "--secure")
+			"--platform", "livekit", "--credential", credC1, "--secure")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -207,11 +213,11 @@ func TestSIPTrunksCreate_platformChecksTheAuthAndPrintsNotes(t *testing.T) {
 		args       []string
 	}{
 		{"vapi with a credential", "authenticates its outbound calls with an IP access control list",
-			[]string{"--direction", "outbound", "--platform", "vapi", "--credential", "C1"}},
+			[]string{"--direction", "outbound", "--platform", "vapi", "--credential", credC1}},
 		{"livekit with an ip acl", "authenticates its outbound calls with a credential",
-			[]string{"--direction", "outbound", "--platform", "livekit", "--ip-acl", "A1"}},
+			[]string{"--direction", "outbound", "--platform", "livekit", "--ip-acl", aclA1}},
 		{"retell inbound", "even for inbound-only use",
-			[]string{"--direction", "inbound", "--platform", "retell", "--uri", "U1"}},
+			[]string{"--direction", "inbound", "--platform", "retell", "--uri", uriU1}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setFakeCreds(t)

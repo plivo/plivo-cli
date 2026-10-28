@@ -1,9 +1,12 @@
 Create an IP access control list.
 
---ip is repeatable and takes one IPv4 or IPv6 address or CIDR range each. A
-comma-separated list is refused rather than split. A range that allows the
-whole internet is reported but not blocked: it is occasionally deliberate, and
-refusing it outright would push people to the console instead.
+--ip is repeatable and takes one IPv4 address or CIDR range each (no IPv6). A
+comma-separated list is refused rather than split, and so is a private,
+loopback, link-local, carrier-grade NAT, multicast, benchmarking, reserved or
+0.0.0.0 address, or a range inside one of those blocks: Plivo never sees a
+call come from one. A range that allows the whole internet is reported but
+not blocked: it is occasionally deliberate, and refusing it outright would
+push people to the console instead.
 
 --platform vapi fills --ip with the addresses Plivo's Vapi guide allows. The
 other platforms authenticate with a credential, so they have none to fill.
@@ -19,11 +22,11 @@ Examples:
 Flags:
   -h, --help              help for create
       --ip stringArray    IP or CIDR (repeatable)
-      --name string       list name
+      --name string       list name (required)
       --platform string   fill --ip with a platform's published addresses: vapi
 
 Global Flags:
-      --dry-run            print the HTTP request without sending
+      --dry-run            preview requests and local changes without sending or writing anything
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
   -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
@@ -31,5 +34,6 @@ Global Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
-      --timeout int        request timeout in seconds (default 30)
+      --show-secrets       show auth tokens and passwords in API responses instead of [REDACTED]
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts

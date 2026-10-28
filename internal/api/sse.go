@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/plivo/plivo-cli/internal/version"
 )
@@ -25,8 +24,9 @@ type SSEEvent struct {
 type SSEHandler func(SSEEvent) bool
 
 // SSEHTTPError is returned by StreamSSE when the endpoint responds with an HTTP
-// error status (>=400) instead of an event stream — distinct from a transport
-// failure. Carries the status + body so callers can classify it accurately.
+// error status (>=400), or a redirect, instead of an event stream — distinct
+// from a transport failure. Carries the status + body so callers can classify
+// it accurately.
 type SSEHTTPError struct {
 	StatusCode int
 	Body       []byte
@@ -68,12 +68,10 @@ func (c *Client) StreamSSE(ctx context.Context, method, fullURL string, body any
 	req.Header.Set("User-Agent", version.UserAgent())
 	c.addCLIHeaders(req)
 
-	// SSE needs an unbounded timeout — clone the client to avoid mutating it.
-	streamClient := &http.Client{
-		Transport: c.HTTP.Transport,
-		Timeout:   0,
-	}
-	_ = time.Now() // keep time import if reused later
+	// SSE needs an unbounded timeout. A copy of the client, so it keeps the
+	// rest, such as the refusal to follow a redirect.
+	streamClient := *c.HTTP
+	streamClient.Timeout = 0
 
 	resp, err := streamClient.Do(req)
 	if err != nil {
@@ -83,7 +81,7 @@ func (c *Client) StreamSSE(ctx context.Context, method, fullURL string, body any
 
 	checkUpgradeWarn(resp)
 
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= 300 { // a redirect too, as none is followed
 		b, _ := io.ReadAll(resp.Body)
 		return &SSEHTTPError{StatusCode: resp.StatusCode, Body: b}
 	}

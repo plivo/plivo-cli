@@ -40,7 +40,7 @@ Available Commands:
   voice       Voice — calls, conferences, multiparty, recordings, endpoints
 
 Flags:
-      --dry-run            print the HTTP request without sending
+      --dry-run            preview requests and local changes without sending or writing anything
   -h, --help               help for plivo
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --map                print every command with its arguments and flags
@@ -50,7 +50,8 @@ Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
-      --timeout int        request timeout in seconds (default 30)
+      --show-secrets       show auth tokens and passwords in API responses instead of [REDACTED]
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -v, --version            version for plivo
   -y, --yes                skip confirmation prompts
 

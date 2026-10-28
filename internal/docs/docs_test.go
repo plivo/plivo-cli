@@ -282,6 +282,12 @@ func TestFetch_fallsBackToStaleCacheWhenOffline(t *testing.T) {
 	if len(pages) != 3 {
 		t.Errorf("stale cache returned %d pages", len(pages))
 	}
+	// A --refresh that fetched nothing says the cache is what is shown.
+	var warn strings.Builder
+	f.Warn = &warn
+	if _, err := f.Pages(true); err != nil || !strings.Contains(warn.String(), "refresh failed (") || !strings.Contains(warn.String(), "showing the copy cached") {
+		t.Errorf("--refresh offline: %v, warning %q", err, warn.String())
+	}
 }
 
 func TestFetch_httpErrorIsReported(t *testing.T) {

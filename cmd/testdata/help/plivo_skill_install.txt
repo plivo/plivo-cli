@@ -3,6 +3,7 @@ Install a Plivo agent skill.
 A skill is a single-file reference (SKILL.md) written for LLM coding agents.
 They are bundled in the binary, so this writes them out without a network call.
 
+  agents           build, test and publish Plivo CX agents (AI conversation flows)
   cli              the CLI reference — use `plivo` instead of raw curl
   audio-streaming  a voice bot on real calls with <Stream>, from setup to go-live
   sip-trunking     connect an AI voice platform over SIP trunking
@@ -10,35 +11,43 @@ They are bundled in the binary, so this writes them out without a network call.
   all              every listed skill
 
 With no argument, installs the CLI skill (unchanged from previous releases).
-Each skill lands at ~/.claude/skills/<skill>/SKILL.md by default. Use --dir to
-target another agent's skills directory, or --print to write the content to
-stdout so any other tool can capture it; both act on a single skill.
+Each skill lands at ~/.claude/skills/<skill>/SKILL.md by default, where Claude
+Code and Cursor read skills; --agent codex installs into ~/.agents/skills, where
+Codex reads them. Use --dir to target another agent's skills directory, or
+--print to write the content to stdout so any other tool can capture it; both
+act on a single skill.
 
 --project installs into the git repository you are in instead, at
 <repo>/.claude/skills/<skill>/SKILL.md, so everyone who clones it gets the
-skill. A project copy that differs from the bundled one may hold your team's
-edits, so it is kept unless you pass --force.
+skill.
+
+An installed copy that matches no released version holds someone's edits, so
+it is kept unless you pass --force, as `plivo skill update` does. A retired
+skill that an install replaces keeps its file, renamed SKILL.md.retired.
 
 Usage:
-  plivo skill install [cli|audio-streaming|sip-trunking|voice-xml|all] [flags]
+  plivo skill install [agents|cli|audio-streaming|sip-trunking|voice-xml|all] [flags]
 
 Examples:
   plivo skill install                    # CLI skill -> ~/.claude/skills/plivo-cli/
+  plivo skill install agents             # -> ~/.claude/skills/plivo-cx-agents/
   plivo skill install audio-streaming    # -> ~/.claude/skills/plivo-audio-streaming/
   plivo skill install voice-xml          # -> ~/.claude/skills/plivo-voice-xml/
   plivo skill install all                # every listed skill
   plivo skill install all --project      # -> <repo>/.claude/skills/, for the whole team
+  plivo skill install all --agent codex  # -> ~/.agents/skills/, where Codex reads them
   plivo skill install all --dry-run      # show destinations, write nothing
 
 Flags:
-      --dir string   destination directory (default: ~/.claude/skills/<skill>)
-      --force        with --project, overwrite a skill file that differs from the bundled one
-  -h, --help         help for install
-      --print        write the skill content to stdout instead of installing
-      --project      install into the current git repository's .claude/skills
+      --agent string   coding agent to install for: claude (~/.claude/skills) or codex (~/.agents/skills) (default: claude)
+      --dir string     destination directory (default: ~/.claude/skills/<skill>)
+      --force          also overwrite a copy that matches no released version (its edits are lost)
+  -h, --help           help for install
+      --print          write the skill content to stdout instead of installing
+      --project        install into the current git repository's .claude/skills
 
 Global Flags:
-      --dry-run            print the HTTP request without sending
+      --dry-run            preview requests and local changes without sending or writing anything
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
   -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
@@ -46,5 +55,6 @@ Global Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
-      --timeout int        request timeout in seconds (default 30)
+      --show-secrets       show auth tokens and passwords in API responses instead of [REDACTED]
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts

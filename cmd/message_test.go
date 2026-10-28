@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/plivo/plivo-cli/internal/api"
+	"github.com/plivo/plivo-cli/internal/clierr"
 )
 
 // captureOneRequest returns an httptest server that records the last
@@ -76,6 +78,29 @@ func TestMmsSend_noMediaURL_keyOmitted(t *testing.T) {
 	}
 }
 
+// A required flag given an empty or all-space value is refused before any
+// request, except an MMS's --text when it carries media.
+func TestSend_refusesABlankRequiredFlag(t *testing.T) {
+	setFakeCreds(t)
+	srv, getBody := captureOneRequest(t)
+	messageClientForTest = &api.Client{BaseURL: srv.URL, AuthID: "MAFAKE", AuthToken: "tok", HTTP: &http.Client{}}
+	defer func() { messageClientForTest = nil }()
+
+	err, _, _ := execCmd(t, "messaging", "sms", "send", "--src", " ", "--dst", "+14155550101", "--text", "", "--yes")
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeBadFlag || getBody() != nil {
+		t.Errorf("err = %v, body %v; want BAD_FLAG and no request", err, getBody())
+	}
+	if err, _, _ := execCmd(t, "messaging", "mms", "send", "--src", "+14155550100", "--dst", "+14155550101",
+		"--text", "", "--media-url", " ", "--yes"); !errors.As(err, &ce) || ce.Code != clierr.CodeBadFlag || getBody() != nil {
+		t.Errorf("an MMS with a blank --media-url and no text: %v, want BAD_FLAG", err)
+	}
+	if err, _, _ := execCmd(t, "messaging", "mms", "send", "--src", "+14155550100", "--dst", "+14155550101",
+		"--text", "", "--media-url", "https://example.com/a.jpg", "--yes"); err != nil || getBody() == nil {
+		t.Errorf("an MMS with media and no text: %v, want it sent", err)
+	}
+}
+
 // --media-url must not exist on sms/whatsapp send — MMS is the only channel
 // the ticket asked for, and Plivo's SMS API doesn't take media.
 func TestSmsWhatsappSend_noMediaURLFlag(t *testing.T) {
@@ -103,5 +128,26 @@ func TestMmsSend_dstHelpText_notMalformed(t *testing.T) {
 	}
 	if !strings.Contains(out, "--dst string") {
 		t.Errorf("--dst should render as a string flag, got:\n%s", out)
+	}
+}
+
+// number_priority is an array of objects in the API reference: decoded as a
+// string, it failed every powerpack list and get. get shows it compact.
+func TestPowerpacks_numberPriorityInAnyShape(t *testing.T) {
+	setFakeCreds(t)
+	docs := `[{"country_iso":"US","priority":{"priority1":"shortcode","priority2":"tollfree"},"service_type":"SMS"}]`
+	for raw, want := range map[string]string{docs: docs, `"local,tollfree"`: "local,tollfree", "null": ""} {
+		sipServer(t, http.StatusOK, `{"uuid":"p","number_priority":`+raw+`,"objects":[{"uuid":"p","number_priority":`+raw+`}]}`)
+		errList, _, _ := execCmd(t, "messaging", "sms", "powerpacks", "list")
+		err, stdout, _ := execCmd(t, "messaging", "sms", "powerpacks", "get", "p", "-o", "table")
+		got := "(no line)"
+		for _, line := range strings.Split(stdout, "\n") {
+			if v, ok := strings.CutPrefix(line, "number_priority:"); ok {
+				got = strings.TrimSpace(v)
+			}
+		}
+		if errList != nil || err != nil || got != want {
+			t.Errorf("%s: list: %v, get: %v, number_priority %q, want %q", raw, errList, err, got, want)
+		}
 	}
 }

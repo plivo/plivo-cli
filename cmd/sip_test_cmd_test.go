@@ -54,7 +54,8 @@ func stubLookup(t *testing.T, err error) *int {
 		}
 		return []net.IPAddr{{IP: net.IPv4(127, 0, 0, 1)}}, nil
 	}
-	t.Cleanup(func() { sipLookup = net.DefaultResolver.LookupIPAddr })
+	sipLookupSRV = func(context.Context, string, string, string) (string, []*net.SRV, error) { return "", nil, nil } // no SRV record
+	t.Cleanup(func() { sipLookup, sipLookupSRV = net.DefaultResolver.LookupIPAddr, net.DefaultResolver.LookupSRV })
 	return &calls
 }
 
@@ -323,9 +324,10 @@ func TestSIPTest_dryRunOnlyPrintsThePlan(t *testing.T) {
 		uri  string
 		want []string
 	}{
-		{"sips:sip.example.com", []string{"[dry-run]", "dns  resolve sip.example.com", "tcp  connect to port 5061", "tls  handshake"}},
+		{"sips:sip.example.com", []string{"[dry-run]", "dns  resolve sip.example.com", "srv  look up _sips._tcp.sip.example.com", "tcp  connect to port 5061", "tls  handshake"}},
 		{"sip.example.com", []string{"dns  resolve sip.example.com", "udp  send one SIP OPTIONS to port 5060"}},
 		{"203.0.113.4:5080;transport=tcp", []string{"dns  skip", "tcp  connect to port 5080"}},
+		{"[2001:db8::1]:5080;transport=tcp", []string{"dns  skip", "tcp  connect to port 5080"}}, // IPv6 is refused only where the API stores a URI
 	} {
 		t.Run(tc.uri, func(t *testing.T) {
 			setEmptyHome(t)
@@ -346,6 +348,56 @@ func TestSIPTest_dryRunOnlyPrintsThePlan(t *testing.T) {
 	}
 }
 
+// --timeout takes whole seconds, as it always did, or a duration.
+func TestSIPTest_timeoutTakesSecondsOrADuration(t *testing.T) {
+	for _, v := range []string{"90", "90s", "1m30s"} {
+		setEmptyHome(t)
+		stubLookup(t, nil)
+		err, _, stderr := execCmd(t, "sip", "test", "--uri", "sip.example.com", "--timeout", v, "--dry-run")
+		if err != nil || !strings.Contains(stderr, "within 1m30s") {
+			t.Errorf("--timeout %s: %v, plan:\n%s", v, err, stderr)
+		}
+	}
+	if err, _, _ := execCmd(t, "sip", "test", "--uri", "sip.example.com", "--timeout", "9999999999999", "--dry-run"); err == nil {
+		t.Error("--timeout 9999999999999 overflows a duration and must be refused")
+	}
+	// Zero or less went to the request client, which read it as 30s.
+	for _, v := range []string{"0", "0s", "-5", "-1m"} {
+		if err := (secondsOrDuration{new(time.Duration)}).Set(v); err == nil {
+			t.Errorf("--timeout %s was accepted", v)
+		}
+	}
+}
+
+// A host with no port and a SIP SRV record gets a warning naming the target,
+// while the failing check still decides the error. No lookup with a port, for
+// an IP or under --dry-run, and a failed lookup warns nothing.
+func TestSIPTest_warnsAboutSRVRecords(t *testing.T) {
+	setEmptyHome(t)
+	stubLookup(t, errors.New("no such host")) // every probe stops at DNS
+	var asked []string
+	sipLookupSRV = func(_ context.Context, service, proto, name string) (string, []*net.SRV, error) {
+		asked = append(asked, service+"."+proto+"."+name)
+		if name != "sip.example.com" {
+			return "", nil, errors.New("no such host")
+		}
+		return "", []*net.SRV{{Target: "edge.example.net.", Port: 5070}}, nil
+	}
+	err, stdout, _ := execCmd(t, "sip", "test", "--uri", "sips:sip.example.com", "-o", "json")
+	w := decodeSIPTest(t, stdout).Warnings
+	if _, ce := sipTestExit(t, err); ce.Context["check"] != "dns" || len(w) != 1 || w[0] != `_sips._tcp.sip.example.com points to edge.example.net:5070; this test probes sip.example.com itself. To test that target: --uri "edge.example.net:5070;transport=tls"` {
+		t.Errorf("warnings %v, error %v", w, err)
+	}
+	for _, uri := range []string{"nosrv.example.com", "sip.example.com:5060", "127.0.0.1;transport=tcp", "sip.example.com --dry-run"} {
+		if _, _, stderr := execCmd(t, append([]string{"sip", "test", "--timeout", "1", "--uri"}, strings.Fields(uri)...)...); strings.Contains(stderr, "points to") {
+			t.Errorf("%s warned: %s", uri, stderr)
+		}
+	}
+	if strings.Join(asked, " ") != "sips.tcp.sip.example.com sip.udp.nosrv.example.com" {
+		t.Errorf("SRV lookups: %v", asked)
+	}
+}
+
 func TestSIPTest_badInputIsRefusedBeforeAnyNetwork(t *testing.T) {
 	for _, tc := range []struct {
 		flag string
@@ -354,7 +406,7 @@ func TestSIPTest_badInputIsRefusedBeforeAnyNetwork(t *testing.T) {
 		{"uri", []string{"sip", "test"}},
 		{"uri", []string{"sip", "test", "--uri", "sip.example.com:0"}},
 		{"uri", []string{"sip", "test", "--uri", "sips:sip.example.com;transport=udp"}},
-		{"timeout", []string{"sip", "test", "--uri", "sip.example.com", "--timeout", "0"}},
+		{"timeout", []string{"sip", "test", "--uri", "sip.example.com", "--timeout", "500ms"}},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			setEmptyHome(t)
@@ -381,7 +433,6 @@ func TestSIPTest_transportAndPortDefaults(t *testing.T) {
 		{"sip.example.com;transport=tcp", "tcp", 5060, false},
 		{"sip.example.com;transport=tls", "tls", 5061, false},
 		{"sips:sip.example.com", "tls", 5061, false},
-		{"sips:sip.example.com;transport=tcp", "tls", 5061, false},
 		{"sip.example.com:5080;transport=tls", "tls", 5080, false},
 	} {
 		u, err := parseSIPURI(tc.uri)

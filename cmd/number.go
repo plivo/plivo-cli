@@ -61,9 +61,9 @@ var numberUpdateCmd = &cobra.Command{
 	Long: `Update settings on a rented number.
 
 Routing an India (+91) number with --app-id or --trunk-id first reads its
-compliance application. The update is refused when that application is not
-accepted or cannot be read, and goes ahead with a warning when none is
-attached. --force skips only this check; Plivo still enforces KYC.`,
+compliance application. The update is refused when none is attached, or when
+that application is not accepted or cannot be read. --force skips only this
+check; Plivo still enforces KYC.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runNumberUpdate,
 }
@@ -155,8 +155,7 @@ func runNumberRelease(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Released %s\n", number)
-	return nil
+	return emitWrite(fmt.Sprintf("Released %s", number), map[string]any{"number": number, "released": true})
 }
 
 func runNumberList(cmd *cobra.Command, args []string) error {
@@ -246,6 +245,18 @@ func runNumberGet(cmd *cobra.Command, args []string) error {
 
 func runNumberUpdate(cmd *cobra.Command, args []string) error {
 	number := args[0]
+	if !isE164Digits(strings.TrimPrefix(number, "+")) {
+		return clierr.BadInput(fmt.Sprintf("%q is not a phone number in E.164, such as +14155551234", number))
+	}
+	if numberUpdateTrunkID != "" {
+		id, ok := canonTrunkID(numberUpdateTrunkID)
+		if !ok {
+			e := clierr.BadFlag("trunk-id", notTrunkID(numberUpdateTrunkID))
+			e.Hint = trunkIDHint
+			return e
+		}
+		numberUpdateTrunkID = id
+	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
@@ -275,12 +286,8 @@ func runNumberUpdate(cmd *cobra.Command, args []string) error {
 		return clierr.BadInput("pass at least one of --app-id, --trunk-id, --alias, --subaccount")
 	}
 	if _, routing := body["app_id"]; routing && !numberUpdateForce {
-		warning, err := checkIndiaCompliance(client, number)
-		if err != nil {
+		if err := checkIndiaCompliance(client, number); err != nil {
 			return err
-		}
-		if warning != "" {
-			fmt.Fprintf(os.Stderr, "Warning: %s\n", warning)
 		}
 	}
 	var resp api.GenericResponse
@@ -294,8 +301,7 @@ func runNumberUpdate(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Updated %s: %s\n", number, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Updated %s: %s", number, resp.Message), resp.Raw())
 }
 
 func runNumberBuy(cmd *cobra.Command, args []string) error {
@@ -391,12 +397,22 @@ func runNumberSearch(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
+	// A 2xx can carry why nothing came back, such as "We are currently unable
+	// to offer your requested numbers", in "error" ("" on success).
+	var reason struct {
+		Error string `json:"error"`
+	}
+	if json.Unmarshal(resp.Raw(), &reason) == nil && reason.Error != "" && !quietFlag {
+		fmt.Fprintf(os.Stderr, "Plivo: %s\n", reason.Error)
+	}
 	return renderNumberList(resp)
 }
 
 // requireInboundTrunk refuses an outbound trunk. Numbers receive calls, and an
 // outbound trunk has no origination URI to send them to, so the attach would
-// succeed and the number would simply stop answering.
+// succeed and the number would simply stop answering. A disabled trunk is
+// routed to with a warning: the route is right, but no call comes through
+// until the trunk is enabled.
 func requireInboundTrunk(client *api.Client, trunkID string) error {
 	var t api.SIPTrunk
 	var apiErr *api.APIError
@@ -424,6 +440,10 @@ func requireInboundTrunk(client *api.Client, trunkID string) error {
 		return clierr.BadInput(fmt.Sprintf(
 			"trunk %s is outbound; a number can only be routed to an inbound trunk", trunkID))
 	}
+	if strings.EqualFold(t.TrunkStatus, "disabled") {
+		fmt.Fprintf(os.Stderr, "Warning: trunk %s is disabled, so no call to this number comes through it until "+
+			"`plivo sip trunks update %s --status enabled`.\n", trunkID, trunkID)
+	}
 	return nil
 }
 
@@ -438,17 +458,20 @@ const indiaKYCDocsURL = "https://www.plivo.com/docs/numbers/rent-india-numbers"
 // Numbers outside +91 pass without a request. For an India number it reads the
 // number and, when one is attached, its compliance application:
 //
-//   - accepted: no warning, no error
-//   - none attached: a warning for the caller to print; routing goes ahead
+//   - accepted: no error
+//   - none attached: a refusal that links the console page KYC is filed on,
+//     with the KYC steps in its hint
 //   - not on this account: a refusal pointing at `plivo numbers list`
-//   - any other status, or any read failing: a refusal whose hint lists the
-//     KYC steps
+//   - any other status, or a read the API refused: a refusal whose hint lists
+//     the KYC steps
+//   - a read that failed on its own (no answer, login, rate limit, server
+//     error): a refusal that keeps that error's code and hint
 //
 // Both reads go through readThrough, so --dry-run runs the same check.
-func checkIndiaCompliance(client *api.Client, number string) (warning string, err error) {
+func checkIndiaCompliance(client *api.Client, number string) error {
 	// E.164 digits; no other country code starts with 91.
 	if !strings.HasPrefix(strings.TrimPrefix(strings.TrimSpace(number), "+"), "91") {
-		return "", nil
+		return nil
 	}
 	var n struct {
 		// Not in the API docs, but on every number record: null when no
@@ -459,20 +482,19 @@ func checkIndiaCompliance(client *api.Client, number string) (warning string, er
 		if e.Code == clierr.CodeResourceNotFound {
 			e.Message = fmt.Sprintf("refusing to route %s: it is not a number on this account", number)
 			e.Hint = "`plivo numbers list` shows the numbers on this account."
-			return "", e
+			return e
 		}
 		e.Message = "could not read the number to check its compliance application: " + e.Message
-		return "", kycRefusal(e, number, "")
+		return kycRefusal(e, number, "")
 	}
 	var id string
 	if json.Unmarshal(n.ComplianceID, &id) != nil {
-		return "", kycRefusal(&clierr.Error{Code: clierr.CodeValidation,
+		return kycRefusal(&clierr.Error{Code: clierr.CodeValidation,
 			Message: "the number's record has no readable compliance_application_id"}, number, "")
 	}
 	if id == "" {
-		return fmt.Sprintf("%s has no compliance application attached; Plivo needs an accepted one before an India number can place calls. "+
-			"`plivo numbers compliance list --country IN --status accepted` lists yours, and "+
-			"`plivo numbers compliance link --link %s=<compliance_id>` attaches one.", number, number), nil
+		return kycRefusal(&clierr.Error{Code: clierr.CodeValidation,
+			Message: "This number has no KYC. File KYC first at " + consoleBaseURL + "/phone-numbers?tab=compliance"}, number, "")
 	}
 	var app struct {
 		Status string `json:"status"`
@@ -483,7 +505,7 @@ func checkIndiaCompliance(client *api.Client, number string) (warning string, er
 	}
 	if e := getForCheck(client, client.AccountURL("PhoneNumber", "Compliance", id), &app); e != nil {
 		e.Message = fmt.Sprintf("could not read its compliance application %s: %s", id, e.Message)
-		return "", kycRefusal(e, number, id)
+		return kycRefusal(e, number, id)
 	}
 	status := app.Compliance.Status
 	if status == "" {
@@ -491,13 +513,13 @@ func checkIndiaCompliance(client *api.Client, number string) (warning string, er
 	}
 	switch {
 	case status == "":
-		return "", kycRefusal(&clierr.Error{Code: clierr.CodeValidation,
+		return kycRefusal(&clierr.Error{Code: clierr.CodeValidation,
 			Message: fmt.Sprintf("its compliance application %s came back without a status", id)}, number, id)
 	case !strings.EqualFold(status, "accepted"):
-		return "", kycRefusal(&clierr.Error{Code: clierr.CodeValidation,
+		return kycRefusal(&clierr.Error{Code: clierr.CodeValidation,
 			Message: fmt.Sprintf("its compliance application %s is %q, not \"accepted\"", id, status)}, number, id)
 	}
-	return "", nil
+	return nil
 }
 
 // getForCheck reads endpoint into out, even under --dry-run, and returns a
@@ -515,9 +537,15 @@ func getForCheck(client *api.Client, endpoint string, out any) *clierr.Error {
 }
 
 // kycRefusal turns e into the refusal of a routing change: the reason in the
-// message, and the India KYC steps, as CLI commands, in the hint.
+// message, and the India KYC steps, as CLI commands, in the hint. A read that
+// failed on its own (any exit code but 1: no answer, login, rate limit, server
+// error) keeps its own hint: KYC steps would send the user to fix the wrong
+// thing.
 func kycRefusal(e *clierr.Error, number, appID string) *clierr.Error {
 	e.Message = fmt.Sprintf("refusing to route %s: %s", number, e.Message)
+	if e.ExitCode() != ExitUserError {
+		return e
+	}
 	see := "`plivo numbers compliance list --country IN` lists your applications"
 	if appID != "" {
 		see = fmt.Sprintf("`plivo numbers compliance get %s` shows its status and any rejection reason", appID)

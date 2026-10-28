@@ -3,11 +3,17 @@ One-command local-dev experience for voice streaming.
 Saves the app's current answer_url, starts a tunnel + a local
 HTTP/WebSocket server, points the app at the tunnel, and forwards
 incoming call audio to your local WebSocket handler. Restores the
-original answer_url on Ctrl+C.
+original answer_url on Ctrl+C, or when the tunnel stops (then exits 3).
+The original is saved in ~/.plivo first, so after a killed run the next
+one restores it and, on macOS and Linux, stops the tunnel it left running;
+a second forward on the app is refused while one runs.
+A localhost.run or trycloudflare.com answer_url is never taken as the
+original. An ngrok one is, with a warning: ngrok also gives fixed domains.
 
 No setup required: defaults to localhost.run over ssh, which needs no
 install and no account. Uses ngrok instead when it is already on PATH
-(or at ~/.plivo/bin/ngrok). Force either with --tunnel.
+(or at ~/.plivo/bin/ngrok), and localhost.run when ngrok can't start.
+Force either with --tunnel.
 
 Nothing is purchased, created, or deleted — the only mutation is one
 field on one app, restored on exit.
@@ -39,7 +45,7 @@ Flags:
   -y, --yes                       skip the confirmation prompt
 
 Global Flags:
-      --dry-run            print the HTTP request without sending
+      --dry-run            preview requests and local changes without sending or writing anything
       --log-level string   log level: debug|info|warn|error|none (default "warn")
       --no-color           disable colored output
   -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
@@ -47,4 +53,5 @@ Global Flags:
       --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
   -q, --quiet              suppress non-data output
       --schema             describe the command (arguments, flags, output fields) instead of running it
-      --timeout int        request timeout in seconds (default 30)
+      --show-secrets       show auth tokens and passwords in API responses instead of [REDACTED]
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)

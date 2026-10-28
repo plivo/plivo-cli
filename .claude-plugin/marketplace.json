@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-marketplace.json",
+  "name": "plivo",
+  "owner": {
+    "name": "Plivo",
+    "email": "cx-tech@plivo.com"
+  },
+  "metadata": {
+    "description": "Official Plivo plugin: skills for CX agents, voice agents, SIP trunking, Voice XML and the Plivo CLI."
+  },
+  "plugins": [
+    {
+      "name": "plivo",
+      "source": "./plugin",
+      "description": "Official Plivo skills for coding agents.",
+      "category": "development",
+      "tags": ["ai-agents", "voice", "voice-agents", "sip-trunking", "telephony"]
+    }
+  ]
+}

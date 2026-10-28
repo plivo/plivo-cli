@@ -1,21 +1,78 @@
 package cmd
 
 import (
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"sync"
 	"testing"
+
+	"github.com/plivo/plivo-cli/internal/clierr"
+	"github.com/plivo/plivo-cli/internal/docs"
+	"golang.org/x/term"
 )
+
+// --dry-run previews what a command would do outside the API and does none of
+// it: no browser, download, connection, docs fetch or update check, and nothing
+// written in ~/.plivo. ask -i has nothing to preview, so it refuses the flag.
+func TestDryRun_previewsActionsOutsideTheAPI(t *testing.T) {
+	setFakeCreds(t)
+	home, _ := os.UserHomeDir()
+	t.Setenv("PLIVO_NO_UPDATE_CHECK", "")
+	asset := "plivo_" + runtime.GOOS + "_" + runtime.GOARCH
+	if runtime.GOOS == "windows" {
+		asset += ".exe"
+	}
+	var mu sync.Mutex
+	var hits []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		hits = append(hits, r.URL.Path)
+		mu.Unlock()
+		fmt.Fprintf(w, `{"tag_name":"v99.0.0","assets":[{"name":%q,"browser_download_url":"http://%s/asset","size":3}]}`, asset, r.Host)
+	}))
+	defer srv.Close()
+	opened := fakeBrowser(t, nil)
+	releaseAPIBase, isTerminal = srv.URL, func(int) bool { return true }
+	docsFetcherForTest = &docs.Fetcher{HTTP: srv.Client(), CacheDir: filepath.Join(home, ".plivo", "cache"),
+		BaseIndex: srv.URL + "/llms.txt", BaseFull: srv.URL + "/llms-full.txt"}
+	t.Cleanup(func() { releaseAPIBase, isTerminal, docsFetcherForTest, dryRunFlag = "", term.IsTerminal, nil, false })
+
+	for _, args := range [][]string{{"login"}, {"upgrade"}, {"docs", "list"}, {"docs", "search", "sms"}, {"docs", "show", "sms"},
+		{"voice", "streams", "test", "--to", "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws"}} {
+		if err, _, stderr := execCmd(t, append(args, "--dry-run")...); err != nil || !strings.Contains(stderr, "[dry-run] ") {
+			t.Errorf("%v --dry-run: %v, stderr %q", args, err, stderr)
+		}
+	}
+	dryRunFlag = true
+	maybePrintUpdateHint("docs")
+	mu.Lock()
+	defer mu.Unlock()
+	if entries, _ := os.ReadDir(filepath.Join(home, ".plivo")); len(opened()) > 0 || len(hits) != 1 || len(entries) != 1 {
+		t.Errorf("opened %v, requested %v (want the release lookup alone), ~/.plivo holds %d entries (want the config)", opened(), hits, len(entries))
+	}
+	var ce *clierr.Error
+	if err, _, _ := execCmd(t, "ask", "-i", "--dry-run"); !errors.As(err, &ce) || ce.Code != clierr.CodeBadFlag {
+		t.Errorf("ask -i --dry-run: %v, want BAD_FLAG", err)
+	}
+}
 
 func TestHomebrewInstallHint(t *testing.T) {
 	cases := []struct {
 		name, path string
 		wantHint   bool
 	}{
-		{"apple-silicon-brew", "/opt/homebrew/bin/plivo", true},
 		{"apple-silicon-cellar", "/opt/homebrew/Cellar/plivo/0.1.0/bin/plivo", true},
 		{"intel-brew-cellar", "/usr/local/Cellar/plivo/0.1.0/bin/plivo", true},
-		{"linuxbrew", "/home/linuxbrew/.linuxbrew/bin/plivo", true},
+		{"linuxbrew-cellar", "/home/linuxbrew/.linuxbrew/Cellar/plivo/0.1.0/bin/plivo", true},
+		// install.sh can drop a plain binary in a brew bin directory: not brew's.
+		{"install.sh-in-brew-bin", "/opt/homebrew/bin/plivo", false},
+		{"install.sh-in-linuxbrew-bin", "/home/linuxbrew/.linuxbrew/bin/plivo", false},
 		{"manual-install", "/usr/local/bin/plivo", false},
 		{"user-home", "/Users/alice/go/bin/plivo", false},
 		{"system-path", "/usr/bin/plivo", false},

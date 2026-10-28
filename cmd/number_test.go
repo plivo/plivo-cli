@@ -15,6 +15,15 @@ import (
 
 const placeholderComplianceID = "00000000-0000-0000-0000-000000000000"
 
+// A lookup is billed and takes no --yes, so each run notes the charge.
+func TestLookup_notesTheCharge(t *testing.T) {
+	setFakeCreds(t)
+	sipServer(t, http.StatusOK, `{"phone_number":"+14155552671"}`)
+	if err, _, stderr := execCmd(t, "lookup", "+14155552671"); err != nil || strings.Count(stderr, "USD 0.004 per request") != 1 {
+		t.Errorf("%v, stderr %q: want one note of the charge", err, stderr)
+	}
+}
+
 // Resellers hold one compliance application per end customer, so renting an
 // Indian number for one of them means naming that customer's application.
 func TestNumbersBuy_complianceApplicationID(t *testing.T) {
@@ -140,8 +149,7 @@ func hit(reqs []string, method, pathPart string) bool {
 
 // An India number is routed only when its attached compliance application is
 // accepted, and any read the check needs refuses when it fails. A number with
-// no application attached gets a warning, not a refusal: live, routed India
-// numbers exist without one.
+// no application attached is refused too, and sent to file KYC.
 func TestNumbersUpdate_indiaComplianceRule(t *testing.T) {
 	cases := []struct {
 		name            string
@@ -154,7 +162,8 @@ func TestNumbersUpdate_indiaComplianceRule(t *testing.T) {
 		{"accepted, flat body", indiaNumber, complianceFixture{app: `{"status":"accepted"}`, number: numberWithApp}, false, false, ""},
 		{"rejected", "+" + indiaNumber, complianceFixture{app: appRejected, number: numberWithApp}, true, false, `"rejected"`},
 		{"submitted", indiaNumber, complianceFixture{app: `{"compliance":{"status":"submitted"}}`, number: numberWithApp}, true, false, `"submitted"`},
-		{"no application attached", indiaNumber, complianceFixture{number: numberNoApp}, false, true, ""},
+		{"no application attached", indiaNumber, complianceFixture{number: numberNoApp}, true, false,
+			"This number has no KYC. File KYC first at https://cx.plivo.com/phone-numbers?tab=compliance"},
 		{"application unreadable", indiaNumber, complianceFixture{appStatus: 404, app: `{"error":"application gone"}`, number: numberWithApp}, true, false, "application gone"},
 		{"application without a status", indiaNumber, complianceFixture{app: `{"api_id":"x"}`, number: numberWithApp}, true, false, "status"},
 		{"number unreadable", indiaNumber, complianceFixture{numberStatus: 500, number: `{"error":"number lookup broke"}`}, true, false, "number lookup broke"},
@@ -187,8 +196,9 @@ func TestNumbersUpdate_indiaComplianceRule(t *testing.T) {
 			if !strings.Contains(ce.Message, tc.msg) {
 				t.Errorf("refusal should say why (%q), got: %s", tc.msg, ce.Message)
 			}
-			if !strings.Contains(ce.Hint, "plivo numbers compliance link") {
-				t.Errorf("hint should carry the KYC steps, got: %s", ce.Hint)
+			// KYC steps only when the API answered about the record (exit 1).
+			if kyc := strings.Contains(ce.Hint, "plivo numbers compliance link"); kyc != (ce.ExitCode() == ExitUserError) {
+				t.Errorf("KYC steps in the hint = %v for %s: %s", kyc, ce.Code, ce.Hint)
 			}
 			// --force skips the check, so the refusal must not offer it as the way round.
 			if strings.Contains(ce.Hint, "--force") {
@@ -226,7 +236,7 @@ func TestNumbersUpdate_complianceCheckScope(t *testing.T) {
 		args            []string
 		checked, posted bool
 	}{
-		{"routing to a trunk", []string{indiaNumber, "--trunk-id", "T1"}, true, false},
+		{"routing to a trunk", []string{indiaNumber, "--trunk-id", "101"}, true, false},
 		{"--force skips it", []string{indiaNumber, "--app-id", "A1", "--force"}, false, true},
 		{"not a routing change", []string{indiaNumber, "--alias", "x"}, false, true},
 		{"not an India number", []string{"+14155551234", "--app-id", "A1"}, false, true},
@@ -249,32 +259,16 @@ func TestNumbersUpdate_complianceCheckScope(t *testing.T) {
 	}
 }
 
-// --dry-run sends no writes but still reads, so the preview refuses and warns
-// exactly as the real run would.
+// --dry-run sends no writes but still reads, so the preview refuses exactly as
+// the real run would.
 func TestNumbersUpdate_dryRunRunsTheComplianceCheck(t *testing.T) {
 	t.Run("refuses", func(t *testing.T) {
 		setFakeCreds(t)
-		reqs := complianceServer(t, complianceFixture{number: numberWithApp, app: appRejected})
+		reqs := complianceServer(t, complianceFixture{number: numberNoApp})
 		clientForTest.DryRun = true // as getClient sets it under --dry-run
 		err, _, _ := execCmd(t, "numbers", "update", indiaNumber, "--app-id", "A1", "--dry-run")
-		if err == nil || !strings.Contains(err.Error(), "rejected") {
+		if err == nil || !strings.Contains(err.Error(), "has no KYC") {
 			t.Fatalf("--dry-run skipped the check: %v", err)
-		}
-		if hit(reqs(), "POST", "/") {
-			t.Error("dry-run sent a write")
-		}
-	})
-
-	t.Run("warns", func(t *testing.T) {
-		setFakeCreds(t)
-		reqs := complianceServer(t, complianceFixture{number: numberNoApp})
-		clientForTest.DryRun = true
-		err, _, stderr := execCmd(t, "numbers", "update", indiaNumber, "--app-id", "A1", "--dry-run")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !strings.Contains(stderr, "Warning:") || !strings.Contains(stderr, "[dry-run] POST") {
-			t.Errorf("want the warning and the previewed update, stderr:\n%s", stderr)
 		}
 		if hit(reqs(), "POST", "/") {
 			t.Error("dry-run sent a write")
@@ -283,17 +277,30 @@ func TestNumbersUpdate_dryRunRunsTheComplianceCheck(t *testing.T) {
 }
 
 // A transport failure is a failed read too. The trunk guard lets one through to
-// the API; the compliance check must not.
-func TestNumbersUpdate_complianceCheckRefusesWhenUnreachable(t *testing.T) {
+// the API; the compliance check must not. Neither it nor sip calls diagnose
+// may report it as missing KYC or a missing call.
+func TestUnreachable_isANetworkErrorNotKYCOrNotFound(t *testing.T) {
 	setFakeCreds(t)
 	srv := httptest.NewServer(http.NotFoundHandler())
 	srv.Close()
-	clientForTest = &api.Client{BaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
+	clientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "CIFAKEPLACEHOLDER001", AuthToken: "tok", HTTP: &http.Client{}}
 	t.Cleanup(func() { clientForTest = nil })
 
-	err, _, _ := execCmd(t, "numbers", "update", indiaNumber, "--app-id", "A1")
-	var ce *clierr.Error
-	if !errors.As(err, &ce) || !strings.Contains(ce.Hint, "plivo numbers compliance link") {
-		t.Fatalf("want the compliance refusal, got: %v", err)
+	for _, args := range [][]string{{"numbers", "update", indiaNumber, "--app-id", "A1"}, {"sip", "calls", "diagnose", placeholderUUID}} {
+		err, _, _ := execCmd(t, args...)
+		var ce *clierr.Error
+		if !errors.As(err, &ce) || ce.Code != clierr.CodeNetworkError || strings.Contains(ce.Hint, "KYC") {
+			t.Errorf("%v: want a NETWORK_ERROR without the KYC steps, got: %v", args, err)
+		}
+	}
+}
+
+// A search Plivo cannot fill answers 200 with the reason in "error", which was
+// dropped: an empty table and exit 0 were all anyone saw.
+func TestNumberSearch_printsTheReasonInA2xxBody(t *testing.T) {
+	setFakeCreds(t)
+	pointCommandsAtTestServer(t, `{"api_id":"x","meta":{"total_count":0},"objects":[],"error":"We are currently unable to offer your requested numbers"}`)
+	if err, _, stderr := execCmd(t, "numbers", "search", "--country", "US"); err != nil || !strings.Contains(stderr, "unable to offer your requested numbers") {
+		t.Errorf("%v, stderr %q: want the API's reason", err, stderr)
 	}
 }

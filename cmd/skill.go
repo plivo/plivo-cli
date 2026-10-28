@@ -7,12 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"text/tabwriter"
 
+	agentsskill "github.com/plivo/plivo-cli/agents-skill"
 	audiostreamingskill "github.com/plivo/plivo-cli/audio-streaming-skill"
 	cliskill "github.com/plivo/plivo-cli/cli-skill"
 	"github.com/plivo/plivo-cli/internal/clierr"
@@ -33,9 +35,10 @@ type bundledSkill struct {
 	replaces []string // skill directories from earlier releases that this skill supersedes
 }
 
-// bundledSkills is ordered; the FIRST entry is the default when no selector is
-// given, which keeps bare `plivo skill install` behaving as it always has.
+// bundledSkills is listed in this order, the CX agents skill first. Bare
+// `plivo skill install` still installs defaultSkillSelector, as it always has.
 var bundledSkills = []bundledSkill{
+	{selector: "agents", dirName: "plivo-cx-agents", content: agentsskill.SkillMD, summary: "build, test and publish Plivo CX agents (AI conversation flows)"},
 	{
 		selector: "cli",
 		dirName:  "plivo-cli",
@@ -47,16 +50,14 @@ var bundledSkills = []bundledSkill{
 	{selector: "voice-xml", dirName: "plivo-voice-xml", content: voicexmlskill.SkillMD, summary: "write and fix Plivo Voice XML"},
 }
 
-// The CX agents skill (agents-skill/) stays in the repo, keeping its own
-// embed file and tests, but nothing imports it here. So it reaches neither
-// bundledSkills, ValidArgs and the help text, nor the binary itself, while
-// the feature isn't live. See TestSkillInstall_cxAgentsSkillIsNotOffered.
+// defaultSkillSelector is the skill bare `plivo skill install` writes.
+const defaultSkillSelector = "cli"
 
 // lookupSkill resolves a user-typed selector. An empty selector means the
-// default (first) skill.
+// default skill.
 func lookupSkill(selector string) (bundledSkill, error) {
 	if selector == "" {
-		return bundledSkills[0], nil
+		selector = defaultSkillSelector
 	}
 	for _, s := range bundledSkills {
 		if s.selector == selector {
@@ -78,7 +79,15 @@ var (
 	skillPrint   bool
 	skillProject bool
 	skillForce   bool
+	skillAgent   string
 )
+
+// agentSkillsDirs maps each --agent value to the user skills directory that
+// coding agent reads, under the home directory.
+var agentSkillsDirs = map[string]string{
+	"claude": filepath.Join(".claude", "skills"),
+	"codex":  filepath.Join(".agents", "skills"),
+}
 
 // skillFileName is the on-disk name of the skill file inside the target dir.
 const skillFileName = "SKILL.md"
@@ -94,13 +103,14 @@ var skillCmd = &cobra.Command{
 // skillInstallCmd writes the embedded SKILL.md into the agent skills directory
 // (default ~/.claude/skills/plivo-cli; override with --dir, or --print to stdout).
 var skillInstallCmd = &cobra.Command{
-	Use:   "install [cli|audio-streaming|sip-trunking|voice-xml|all]",
+	Use:   "install [agents|cli|audio-streaming|sip-trunking|voice-xml|all]",
 	Short: "Install an agent skill so coding agents auto-load the reference",
 	Long: `Install a Plivo agent skill.
 
 A skill is a single-file reference (SKILL.md) written for LLM coding agents.
 They are bundled in the binary, so this writes them out without a network call.
 
+  agents           build, test and publish Plivo CX agents (AI conversation flows)
   cli              the CLI reference — use ` + "`plivo`" + ` instead of raw curl
   audio-streaming  a voice bot on real calls with <Stream>, from setup to go-live
   sip-trunking     connect an AI voice platform over SIP trunking
@@ -108,22 +118,29 @@ They are bundled in the binary, so this writes them out without a network call.
   all              every listed skill
 
 With no argument, installs the CLI skill (unchanged from previous releases).
-Each skill lands at ~/.claude/skills/<skill>/SKILL.md by default. Use --dir to
-target another agent's skills directory, or --print to write the content to
-stdout so any other tool can capture it; both act on a single skill.
+Each skill lands at ~/.claude/skills/<skill>/SKILL.md by default, where Claude
+Code and Cursor read skills; --agent codex installs into ~/.agents/skills, where
+Codex reads them. Use --dir to target another agent's skills directory, or
+--print to write the content to stdout so any other tool can capture it; both
+act on a single skill.
 
 --project installs into the git repository you are in instead, at
 <repo>/.claude/skills/<skill>/SKILL.md, so everyone who clones it gets the
-skill. A project copy that differs from the bundled one may hold your team's
-edits, so it is kept unless you pass --force.`,
+skill.
+
+An installed copy that matches no released version holds someone's edits, so
+it is kept unless you pass --force, as ` + "`plivo skill update`" + ` does. A retired
+skill that an install replaces keeps its file, renamed SKILL.md.retired.`,
 	Example: `  plivo skill install                    # CLI skill -> ~/.claude/skills/plivo-cli/
+  plivo skill install agents             # -> ~/.claude/skills/plivo-cx-agents/
   plivo skill install audio-streaming    # -> ~/.claude/skills/plivo-audio-streaming/
   plivo skill install voice-xml          # -> ~/.claude/skills/plivo-voice-xml/
   plivo skill install all                # every listed skill
   plivo skill install all --project      # -> <repo>/.claude/skills/, for the whole team
+  plivo skill install all --agent codex  # -> ~/.agents/skills/, where Codex reads them
   plivo skill install all --dry-run      # show destinations, write nothing`,
 	Args:      cobra.MaximumNArgs(1),
-	ValidArgs: []string{"cli", "audio-streaming", "sip-trunking", "voice-xml", "all"},
+	ValidArgs: []string{"agents", "cli", "audio-streaming", "sip-trunking", "voice-xml", "all"},
 	RunE:      runSkillInstall,
 }
 
@@ -133,8 +150,11 @@ edits, so it is kept unless you pass --force.`,
 var skillListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "Show bundled skills and whether each is installed",
-	Args:  cobra.NoArgs,
-	RunE:  runSkillList,
+	Example: `  plivo skill list                # in ~/.claude/skills
+  plivo skill list --agent codex  # in ~/.agents/skills
+  plivo skill list --project      # in <repo>/.claude/skills`,
+	Args: cobra.NoArgs,
+	RunE: runSkillList,
 }
 
 // skillUpdateCmd brings installed skills up to the bundled version without
@@ -145,13 +165,13 @@ var skillUpdateCmd = &cobra.Command{
 	Short: "Update installed skills to the versions bundled in this binary",
 	Long: `Update every installed Plivo skill to the version bundled in this binary.
 
-It looks in ~/.claude/skills and, inside a git repository, in
-<repo>/.claude/skills. A copy is replaced only when it matches a version a
+It looks in each agent's skills folder, ~/.claude/skills (Claude Code and
+Cursor) and ~/.agents/skills (Codex), and inside a git repository in the same
+two folders under <repo>. A copy is replaced only when it matches a version a
 release shipped; anything else is treated as your own edit and kept, and
 --force replaces it too. Skills that are not installed stay that way: add them
-with ` + "`plivo skill install`" + `. A retired skill still installed next to the one
-that replaced it is reported with the command that removes it; update itself
-deletes nothing.`,
+with ` + "`plivo skill install`" + `. A retired skill still in a .claude/skills folder
+is reported with the command that retires it; update itself deletes nothing.`,
 	Example: `  plivo skill update              # update what is installed
   plivo skill update --dry-run    # show what would change, write nothing
   plivo skill update --force      # also replace copies you edited`,
@@ -164,9 +184,31 @@ func init() {
 	skillInstallCmd.Flags().StringVar(&skillDir, "dir", "", "destination directory (default: ~/.claude/skills/<skill>)")
 	skillInstallCmd.Flags().BoolVar(&skillPrint, "print", false, "write the skill content to stdout instead of installing")
 	skillInstallCmd.Flags().BoolVar(&skillProject, "project", false, "install into the current git repository's .claude/skills")
-	skillInstallCmd.Flags().BoolVar(&skillForce, "force", false, "with --project, overwrite a skill file that differs from the bundled one")
+	skillInstallCmd.Flags().BoolVar(&skillForce, "force", false, "also overwrite a copy that matches no released version (its edits are lost)")
+	skillInstallCmd.Flags().StringVar(&skillAgent, "agent", "", "coding agent to install for: claude (~/.claude/skills) or codex (~/.agents/skills) (default: claude)")
+	skillListCmd.Flags().BoolVar(&skillProject, "project", false, "show the skills installed in the current git repository's .claude/skills")
+	skillListCmd.Flags().StringVar(&skillAgent, "agent", "", "coding agent whose skills to show: claude (~/.claude/skills) or codex (~/.agents/skills) (default: claude)")
 	skillCmd.AddCommand(skillInstallCmd, skillListCmd, skillUpdateCmd)
 	rootCmd.AddCommand(skillCmd)
+}
+
+// checkSkillAgent refuses an --agent the CLI does not know, and one given
+// with --dir or --project, which names the folder itself.
+func checkSkillAgent() error {
+	if skillAgent == "" {
+		return nil
+	}
+	if _, ok := agentSkillsDirs[skillAgent]; !ok {
+		return clierr.BadFlag("agent", fmt.Sprintf("unknown agent %q; use claude or codex", skillAgent))
+	}
+	if skillDir != "" || skillProject {
+		flag := "--project"
+		if skillDir != "" {
+			flag = "--dir"
+		}
+		return clierr.BadFlag("agent", "can't be combined with "+flag+", which names the folder itself")
+	}
+	return nil
 }
 
 func runSkillInstall(cmd *cobra.Command, args []string) error {
@@ -177,8 +219,8 @@ func runSkillInstall(cmd *cobra.Command, args []string) error {
 	if skillProject && skillDir != "" {
 		return clierr.BadFlag("project", "can't be combined with --dir; --project installs into the repository's .claude/skills")
 	}
-	if skillForce && !skillProject {
-		return clierr.BadFlag("force", "only applies with --project; a home or --dir install always overwrites")
+	if err := checkSkillAgent(); err != nil {
+		return err
 	}
 
 	// "all" fans out; --dir and --print each name a single destination, so they
@@ -205,20 +247,42 @@ func runSkillInstall(cmd *cobra.Command, args []string) error {
 	return installSkills([]bundledSkill{s})
 }
 
-// installSkills installs each skill, into the repository under --project. A
-// project copy that was kept fails the command once the rest are installed.
+// installSkills installs each skill, into the repository under --project and
+// into the agent's skills directory under --agent. A copy that was kept fails
+// the command once the rest are installed.
 func installSkills(skills []bundledSkill) error {
-	projectRoot := ""
-	if skillProject {
-		root, err := projectSkillsRoot()
-		if err != nil {
-			return err
+	var root, repo string
+	var err error
+	switch {
+	case skillProject:
+		if root, repo, err = projectSkillsRoot(); err == nil {
+			err = projectWritesInside(repo, root, skills)
 		}
-		projectRoot = root
+	case skillAgent != "":
+		root, err = agentSkillsRoot(skillAgent)
 	}
+	if err != nil {
+		return err
+	}
+	return installSkillsIn(skills, root)
+}
+
+// agentSkillsRoot returns the user skills directory the named agent reads.
+func agentSkillsRoot(agent string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", clierr.Wrap(fmt.Errorf("resolve home directory: %w", err))
+	}
+	return filepath.Join(home, agentSkillsDirs[agent]), nil
+}
+
+// installSkillsIn installs each skill into root, or where --dir or the default
+// (~/.claude/skills) puts it when root is "". A copy that was kept fails the
+// call once the rest are installed.
+func installSkillsIn(skills []bundledSkill, root string) error {
 	var kept []string
 	for _, s := range skills {
-		k, err := installSkill(s, projectRoot)
+		k, err := installSkill(s, root)
 		if err != nil {
 			return err
 		}
@@ -229,31 +293,31 @@ func installSkills(skills []bundledSkill) error {
 	if len(kept) == 0 {
 		return nil
 	}
-	what := kept[0] + ", which differs from the bundled skill"
+	what := kept[0] + ", which matches no released version"
 	if len(kept) > 1 {
-		what = strings.Join(kept, ", ") + ", which differ from the bundled skills"
+		what = strings.Join(kept, ", ") + ", which match no released version"
 	}
 	e := clierr.DestructiveRefused("overwrite " + what)
-	e.Hint = "A project copy may hold your team's edits. `plivo skill update` replaces it only if it " +
-		"matches a released version; --force overwrites it anyway."
+	e.Hint = "A copy that matches no released version holds someone's edits, so it was kept. " +
+		"--force overwrites it anyway; the edits are lost."
 	e.Context = map[string]any{"kept": kept}
 	return e
 }
 
 // projectSkillsRoot returns <repo>/.claude/skills for the git repository the
-// working directory is in.
-func projectSkillsRoot() (string, error) {
+// working directory is in, and the repository's root.
+func projectSkillsRoot() (skills, repo string, err error) {
 	wd, err := os.Getwd()
 	if err != nil {
-		return "", clierr.Wrap(fmt.Errorf("resolve working directory: %w", err))
+		return "", "", clierr.Wrap(fmt.Errorf("resolve working directory: %w", err))
 	}
-	root, ok := findGitRoot(wd)
+	repo, ok := findGitRoot(wd)
 	if !ok {
-		e := clierr.BadInput(wd + " is not inside a git repository, so --project has nowhere to install")
-		e.Hint = "Run it from inside the project, or drop --project to install for your user (~/.claude/skills)."
-		return "", e
+		e := clierr.BadInput(wd + " is not inside a git repository, so --project has no repository to use")
+		e.Hint = "Run it from inside the project, or drop --project for your user's skills (~/.claude/skills)."
+		return "", "", e
 	}
-	return filepath.Join(root, ".claude", "skills"), nil
+	return filepath.Join(repo, ".claude", "skills"), repo, nil
 }
 
 // findGitRoot walks up from dir to the nearest folder holding .git: a
@@ -295,6 +359,18 @@ type skillListEntry struct {
 }
 
 func runSkillList(cmd *cobra.Command, _ []string) error {
+	if err := checkSkillAgent(); err != nil {
+		return err
+	}
+	root, rootErr := resolveSkillDir("", "") // ~/.claude/skills
+	switch {
+	case skillProject:
+		if root, _, rootErr = projectSkillsRoot(); rootErr != nil {
+			return rootErr
+		}
+	case skillAgent != "":
+		root, rootErr = agentSkillsRoot(skillAgent)
+	}
 	rows := make([]skillListEntry, 0, len(bundledSkills))
 	for _, sk := range bundledSkills {
 		row := skillListEntry{
@@ -303,17 +379,11 @@ func runSkillList(cmd *cobra.Command, _ []string) error {
 			State:      skillStateAbsent,
 			Summary:    sk.summary,
 		}
-		// A directory we cannot resolve is reported as absent rather than
-		// failing the whole listing.
-		if dir, err := resolveSkillDir("", sk.dirName); err == nil {
-			path := filepath.Join(dir, skillFileName)
-			row.Path = path
-			if b, rerr := os.ReadFile(path); rerr == nil {
-				row.State = skillStateCurrent
-				if string(b) != sk.content {
-					row.State = skillStateStale
-				}
-			}
+		// A home directory we cannot resolve is reported as absent rather
+		// than failing the whole listing.
+		if rootErr == nil {
+			row.Path = filepath.Join(root, sk.dirName, skillFileName)
+			row.State = skillStateAt(sk, row.Path)
 		}
 		rows = append(rows, row)
 	}
@@ -330,25 +400,47 @@ func runSkillList(cmd *cobra.Command, _ []string) error {
 	if err := w.Flush(); err != nil {
 		return clierr.Wrap(err)
 	}
-	fmt.Fprintf(os.Stderr, "\nInstall one with: plivo skill install <selector>  (or \"all\")\n")
+	install := "plivo skill install <selector>"
+	if skillProject {
+		install += " --project"
+	}
+	if skillAgent != "" {
+		install += " --agent " + skillAgent
+	}
+	fmt.Fprintf(os.Stderr, "\nInstall one with: %s  (or \"all\")\n", install)
 	return nil
 }
 
-// installSkill writes one skill to its resolved directory, honouring --dir and
-// --dry-run; under --project, projectRoot is the repository's skills root. A
-// project copy that differs from the bundled one is left alone unless --force,
-// and its path returned.
-func installSkill(s bundledSkill, projectRoot string) (kept string, err error) {
-	dir := filepath.Join(projectRoot, s.dirName)
-	if projectRoot == "" {
+// skillStateAt reports the state of the copy of s at path. CRLF line endings
+// read as LF, as they do for `skill update`: a Windows checkout of a committed
+// skill is the same version.
+func skillStateAt(s bundledSkill, path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return skillStateAbsent
+	}
+	if skillDigest(b) != skillDigest([]byte(s.content)) {
+		return skillStateStale
+	}
+	return skillStateCurrent
+}
+
+// installSkill writes one skill into root, or to its resolved directory when
+// root is "", honouring --dir and --dry-run; under --project, root is the
+// repository's skills root. A copy that holds edits is left alone unless
+// --force, and its path returned: home and --dir copies used to be
+// overwritten without a look.
+func installSkill(s bundledSkill, root string) (kept string, err error) {
+	dir := filepath.Join(root, s.dirName)
+	if root == "" {
 		if dir, err = resolveSkillDir(skillDir, s.dirName); err != nil {
 			return "", err
 		}
 	}
 	dest := filepath.Join(dir, skillFileName)
 
-	if projectRoot != "" && !skillForce {
-		if b, err := os.ReadFile(dest); err == nil && crlfToLF(string(b)) != crlfToLF(s.content) {
+	if !skillForce {
+		if b, err := os.ReadFile(dest); err == nil && skillEdited(s, b) {
 			return dest, nil
 		}
 	}
@@ -368,17 +460,69 @@ func installSkill(s bundledSkill, projectRoot string) (kept string, err error) {
 
 	// --dir names this skill's own folder, so there is no telling where an
 	// older copy of a replaced skill would be. No release wrote a retired
-	// skill into a project, so a project has none of the CLI's to remove.
-	if skillDir != "" || projectRoot != "" {
+	// skill into a project, so a project has none of the CLI's to retire.
+	if skillDir != "" || skillProject {
 		return "", nil
 	}
-	removeReplacedSkills(s)
+	retireReplacedSkills(s, filepath.Dir(dir))
 	return "", nil
 }
 
+// projectWritesInside refuses a project install that would write outside the
+// repository: through a skills folder, skill folder or SKILL.md whose links
+// lead out of it, or a link that leads nowhere. Links within it, as npx skills
+// makes them, are followed.
+func projectWritesInside(repo, root string, skills []bundledSkill) error {
+	paths := []string{root}
+	for _, s := range skills {
+		dir := filepath.Join(root, s.dirName)
+		paths = append(paths, dir, filepath.Join(dir, skillFileName))
+	}
+	for _, p := range paths {
+		if !resolvesInside(repo, p) {
+			return projectLinkErr(p + " resolves outside the repository " + repo)
+		}
+	}
+	return nil
+}
+
+// projectLinkErr refuses to write a skill in a repository through a link that
+// leads out of it. A clone brings its links along, so one could aim the write
+// at any file the user can write. Home copies follow links, as npx skills
+// makes them there.
+func projectLinkErr(why string) error {
+	e := clierr.BadInput(why + ", so plivo won't write a skill through it")
+	e.Hint = "A link in a repository can point anywhere. Replace it with a folder, or keep the skill in your home directory."
+	return e
+}
+
+// resolvesInside reports whether path, with its links resolved, lies inside
+// repo. The nearest part of path that exists decides where the rest is made,
+// and a link that leads nowhere lies nowhere.
+func resolvesInside(repo, path string) bool {
+	near := path
+	for {
+		if _, err := os.Lstat(near); err == nil || filepath.Dir(near) == near {
+			break
+		}
+		near = filepath.Dir(near)
+	}
+	realRepo, err := filepath.EvalSymlinks(repo)
+	if err != nil {
+		return false
+	}
+	realNear, err := filepath.EvalSymlinks(near)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(realRepo, realNear)
+	return err == nil && filepath.IsLocal(rel)
+}
+
 // skillUpdateRow is one installed copy `skill update` looked at, and the JSON
-// shape. Result is updated, would_update (--dry-run), up_to_date, kept or
-// retired; a retired row's Hint is the command that removes it.
+// shape. Result is updated, would_update (--dry-run), up_to_date, kept, refused
+// or retired; a retired row's Hint is the command that removes it, a refused
+// one's why it was not written.
 type skillUpdateRow struct {
 	Selector string `json:"selector"`
 	Path     string `json:"path"`
@@ -389,17 +533,31 @@ type skillUpdateRow struct {
 }
 
 func runSkillUpdate(cmd *cobra.Command, _ []string) error {
-	var roots []string
-	homeRoot := ""
-	if home, err := os.UserHomeDir(); err == nil {
-		homeRoot = filepath.Join(home, ".claude", "skills")
-		roots = append(roots, homeRoot)
+	// Each agent's skills folder, in the home directory and in the git
+	// repository the working directory is in.
+	var bases, roots []string
+	home, _ := os.UserHomeDir()
+	if home != "" {
+		bases = append(bases, home)
 	}
-	if p, err := projectSkillsRoot(); err == nil && !slices.Contains(roots, p) {
-		roots = append(roots, p)
+	repo := ""
+	if wd, err := os.Getwd(); err == nil {
+		if r, ok := findGitRoot(wd); ok && !slices.Contains(bases, r) {
+			repo = r
+			bases = append(bases, repo)
+		}
+	}
+	inRepo := map[string]bool{}
+	for _, base := range bases {
+		for _, agent := range slices.Sorted(maps.Keys(agentSkillsDirs)) {
+			root := filepath.Join(base, agentSkillsDirs[agent])
+			roots = append(roots, root)
+			inRepo[root] = base == repo
+		}
 	}
 
 	rows := []skillUpdateRow{}
+	seen := map[string]bool{} // a copy reached twice, through a link npx skills made, is one row
 	for _, root := range roots {
 		for _, s := range bundledSkills {
 			path := filepath.Join(root, s.dirName, skillFileName)
@@ -410,13 +568,22 @@ func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 			if err != nil {
 				return clierr.Wrap(fmt.Errorf("read %s: %w", path, err))
 			}
+			if resolved, err := filepath.EvalSymlinks(path); err == nil {
+				if seen[resolved] {
+					continue
+				}
+				seen[resolved] = true
+			}
 			row := skillUpdateRow{Selector: s.selector, Path: path, OldLines: lineCount(b), NewLines: lineCount([]byte(s.content))}
 			have := skillDigest(b)
 			switch {
 			case have == skillDigest([]byte(s.content)):
 				row.Result = "up_to_date"
-			case !skillForce && !slices.Contains(shippedSkillHashes[s.dirName], have):
+			case !skillForce && skillEdited(s, b):
 				row.Result = "kept"
+			case inRepo[root] && !resolvesInside(repo, path):
+				// A clone brings its links along: one could aim the write anywhere.
+				row.Result, row.Hint = "refused", "a link leads outside the repository"
 			case dryRunFlag:
 				row.Result = "would_update"
 			default:
@@ -428,9 +595,10 @@ func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 			rows = append(rows, row)
 		}
 	}
-	for _, root := range roots {
+	// The retired skill predates --agent, so only a .claude/skills can hold it.
+	for _, base := range bases {
 		for _, s := range bundledSkills {
-			rows = append(rows, retiredSkillRows(s, root, root == homeRoot)...)
+			rows = append(rows, retiredSkillRows(s, filepath.Join(base, agentSkillsDirs["claude"]), base == home)...)
 		}
 	}
 
@@ -438,7 +606,7 @@ func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 		return output.JSONSuccess(os.Stdout, rows, nil)
 	}
 	if len(rows) == 0 {
-		fmt.Fprintf(os.Stderr, "No Plivo skills installed in %s. Install one with: plivo skill install\n", strings.Join(roots, " or "))
+		fmt.Fprintf(os.Stderr, "No Plivo skills installed in %s. Install one with: plivo skill install\n", strings.Join(roots, ", "))
 		return nil
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
@@ -453,6 +621,8 @@ func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 			result = fmt.Sprintf("would update, %d -> %d lines", r.OldLines, r.NewLines)
 		case "kept":
 			result, kept = "kept: local edits", true
+		case "refused":
+			result = "refused: " + r.Hint
 		case "retired":
 			result = "retired: run " + r.Hint
 		}
@@ -486,6 +656,13 @@ func retiredSkillRows(s bundledSkill, root string, isHome bool) []skillUpdateRow
 	return rows
 }
 
+// skillEdited reports whether b, an installed copy of s, matches neither the
+// bundled version nor one a release shipped, and so holds someone's edits.
+func skillEdited(s bundledSkill, b []byte) bool {
+	have := skillDigest(b)
+	return have != skillDigest([]byte(s.content)) && !slices.Contains(shippedSkillHashes[s.dirName], have)
+}
+
 // skillDigest is the sha256 of a SKILL.md with CRLF read as LF, so a copy a
 // Windows checkout converted still matches the version it came from.
 // tools/skillhashes computes the same digest for cmd/skill_hashes.go.
@@ -503,39 +680,36 @@ func lineCount(b []byte) int {
 	return n
 }
 
-// removeReplacedSkills removes, from the default skills root, the skills that s
-// supersedes, so an agent never sees both. Earlier releases wrote only
-// SKILL.md: a folder that holds other files keeps them. A failure is only a
+// retireReplacedSkills renames, in the skills root s was installed into, the
+// SKILL.md of each skill that s supersedes to SKILL.md.retired, so an agent
+// never loads both. It is renamed, not deleted, since the copy may hold edits,
+// and for the same reason a copy retired before is kept: os.Rename would
+// replace it, so this one takes SKILL.md.retired.2 or the next free name. The
+// folder stays, as an agent finds a skill by its SKILL.md. A failure is only a
 // warning, because the new skill is already installed.
-func removeReplacedSkills(s bundledSkill) {
+func retireReplacedSkills(s bundledSkill, root string) {
 	for _, name := range s.replaces {
-		old, err := resolveSkillDir("", name)
-		if err != nil {
-			continue
-		}
-		info, err := os.Lstat(old)
-		if err != nil {
+		old := filepath.Join(root, name)
+		path := filepath.Join(old, skillFileName)
+		if _, err := os.Stat(path); err != nil {
 			continue
 		}
 		if dryRunFlag {
-			fmt.Fprintf(os.Stderr, "Would remove retired skill: %s\n", old)
+			fmt.Fprintf(os.Stderr, "Would retire skill: %s\n", old)
 			continue
 		}
-		if info.IsDir() {
-			if err := os.Remove(filepath.Join(old, skillFileName)); err != nil && !os.IsNotExist(err) {
-				fmt.Fprintf(os.Stderr, "Warning: could not remove retired skill %s: %v\n", old, err)
-				continue
+		dst := path + ".retired"
+		for i := 2; ; i++ {
+			if _, err := os.Lstat(dst); err != nil {
+				break
 			}
+			dst = fmt.Sprintf("%s.retired.%d", path, i)
 		}
-		if err := os.Remove(old); err != nil {
-			if info.IsDir() {
-				fmt.Fprintf(os.Stderr, "Removed the retired skill file from %s; kept the folder, which holds other files\n", old)
-			} else {
-				fmt.Fprintf(os.Stderr, "Warning: could not remove retired skill %s: %v\n", old, err)
-			}
+		if err := os.Rename(path, dst); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not retire skill %s: %v\n", old, err)
 			continue
 		}
-		fmt.Fprintf(os.Stderr, "Removed retired skill: %s (now part of %s)\n", old, s.dirName)
+		fmt.Fprintf(os.Stderr, "Retired skill %s (now part of %s): renamed its SKILL.md to %s\n", old, s.dirName, filepath.Base(dst))
 	}
 }
 

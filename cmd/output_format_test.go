@@ -109,7 +109,19 @@ const listPageBody = `{"api_id":"` + zeroUUID + `","meta":{"limit":20,"offset":0
 func TestOutputFormats_listCommandsHonourEveryFormat(t *testing.T) {
 	setFakeCreds(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(listPageBody))
+		body := listPageBody // rows under "objects", or under the list's own key
+		for suffix, key := range map[string]string{"/Brand/": "brands", "/Campaign/": "campaigns", "/Compliance/": "compliances", "/Verify/Session/": "sessions"} {
+			if strings.HasSuffix(r.URL.Path, suffix) {
+				body = strings.Replace(body, `"objects"`, `"`+key+`"`, 1)
+			}
+		}
+		if strings.HasSuffix(r.URL.Path, "/Masking/Session/") { // meta and rows nested under response
+			body = strings.Replace(listPageBody, `"meta"`, `"response":{"meta"`, 1) + "}"
+		}
+		if strings.HasSuffix(r.URL.Path, "/Conference/") {
+			body = `{"api_id":"` + zeroUUID + `","conferences":["first","second"]}`
+		}
+		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(srv.Close)
 	clientForTest = &api.Client{BaseURL: srv.URL, BuddyBaseURL: srv.URL, AuthID: "MAFAKEFORTEST", AuthToken: "tok", HTTP: &http.Client{}}
@@ -150,8 +162,12 @@ func TestOutputFormats_listCommandsHonourEveryFormat(t *testing.T) {
 			if err != nil {
 				t.Fatalf("-o csv does not parse: %v", err)
 			}
-			if _, isObject := rows[0].(map[string]any); isObject && len(table) != len(rows)+1 {
-				t.Errorf("-o csv: %d lines, want a header and %d rows", len(table), len(rows))
+			want := len(rows)
+			if _, isObject := rows[0].(map[string]any); isObject {
+				want++ // the header
+			}
+			if len(table) != want {
+				t.Errorf("-o csv: %d lines, want %d for %d rows", len(table), want, len(rows))
 			}
 
 			var doc any
@@ -204,12 +220,17 @@ func listCommandPaths() [][]string {
 	return out
 }
 
-// rowsOf mirrors which records jsonl and csv write: a list's objects, an
-// array's elements, or the one value.
+// rowsOf mirrors which records jsonl and csv write: a list's rows (its page's
+// one array), an array's elements, or the one value.
 func rowsOf(data any) []any {
 	if page, ok := data.(map[string]any); ok {
-		if objects, ok := page["objects"].([]any); ok {
-			return objects
+		if nested, ok := page["response"].(map[string]any); ok {
+			page = nested
+		}
+		for _, v := range page {
+			if rows, ok := v.([]any); ok {
+				return rows
+			}
 		}
 	}
 	if items, ok := data.([]any); ok {
@@ -304,6 +325,7 @@ func TestOutputFormats_queryNeedsJSONAndValidSyntax(t *testing.T) {
 		{"with -o table", []string{"numbers", "list", "-o", "table", "--query", "data"}},
 		{"unparseable", []string{"numbers", "list", "--query", "data.objects["}},
 		{"unparseable with yaml", []string{"sip", "trunks", "list", "-o", "yaml", "--query", "[?"}},
+		{"unknown function", []string{"numbers", "list", "--query", "lenght(data.objects)"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -330,7 +352,7 @@ func TestOutputFormats_queryFailingOnTheDataIsBadFlag(t *testing.T) {
 	clientForTest = &api.Client{BaseURL: srv.URL, AuthID: "MAFAKEFORTEST", AuthToken: "tok", HTTP: &http.Client{}}
 	t.Cleanup(func() { clientForTest = nil })
 
-	err, stdout, _ := execCmd(t, "numbers", "list", "--query", "lenght(data.objects)")
+	err, stdout, _ := execCmd(t, "numbers", "list", "--query", "abs(data.objects)")
 	var qe *output.QueryError
 	if !errors.As(err, &qe) {
 		t.Fatalf("want *output.QueryError, got %v", err)
@@ -338,8 +360,20 @@ func TestOutputFormats_queryFailingOnTheDataIsBadFlag(t *testing.T) {
 	if stdout != "" {
 		t.Errorf("wrote %q before failing", stdout)
 	}
-	if got := queryFlagError(err); !isBadFlag(got) || !strings.Contains(got.Error(), "lenght") {
-		t.Errorf("queryFlagError = %v, want BAD_FLAG naming the function", got)
+	if got := queryFlagError(err); !isBadFlag(got) || !strings.Contains(got.Error(), "Invalid type") {
+		t.Errorf("queryFlagError = %v, want BAD_FLAG naming the type error", got)
+	}
+}
+
+// After a write the API accepted, an error would read as "nothing happened"
+// and invite a second send: the result is printed whole, with a warning.
+func TestOutputFormats_queryFailingAfterAWritePrintsTheResult(t *testing.T) {
+	setFakeCreds(t)
+	resetWriteFlags(t)
+	sipWriteServer(t, trunksUsingU1)
+	err, stdout, stderr := execCmd(t, "sip", "uris", "create", "--name", "n", "--uri", "sip.example.com", "--query", "abs(data)")
+	if err != nil || !strings.Contains(stdout, `"uri_uuid": "U1"`) || !strings.Contains(stderr, "do not run it again") {
+		t.Errorf("want exit 0, the unfiltered result and a warning, got %v:\nstdout: %s\nstderr: %s", err, stdout, stderr)
 	}
 }
 
@@ -383,5 +417,26 @@ func TestAPI_queryIsURLParamsWithAHint(t *testing.T) {
 	}
 	if want := "id,name,tags,count\na,first,\"[\"\"x\"\"]\",\nb,,,2\n"; stdout != want {
 		t.Errorf("-o csv = %q, want %q", stdout, want)
+	}
+}
+
+// Endpoint and subaccount tables put each field the API sends in its column:
+// app_id comes from the endpoint's application URI.
+func TestTables_putTheAPIsFieldsInTheirColumns(t *testing.T) {
+	setFakeCreds(t)
+	ep := `{"alias":"callme","application":"/v1/Account/CIFAKEPLACEHOLDER001/Application/33406267401237901/","endpoint_id":"32866729519064","sip_uri":"sip:callme140703093944@phone.plivo.com","sub_account":null,"username":"callme140703093944"}`
+	sub := `{"auth_id":"SAQASUBACCOUNT1","created":"2017-05-22","enabled":false,"modified":"2017-05-23","name":"shop"}`
+	list := func(obj string) string { return `{"meta":{"total_count":1},"objects":[` + obj + `]}` }
+	for _, tc := range [][3]string{
+		{list(ep), "voice endpoints list", "ENDPOINT_ID USERNAME ALIAS SIP_URI APP_ID 32866729519064 callme140703093944 callme sip:callme140703093944@phone.plivo.com 33406267401237901"},
+		{ep, "voice endpoints get 32866729519064", "endpoint_id: 32866729519064 username: callme140703093944 alias: callme sip_uri: sip:callme140703093944@phone.plivo.com app_id: 33406267401237901 sub_account:"},
+		{list(sub), "account subaccounts list", "AUTH_ID NAME ENABLED CREATED SAQASUBACCOUNT1 shop false 2017-05-22"},
+		{sub, "account subaccounts get SAQASUBACCOUNT1", "auth_id: SAQASUBACCOUNT1 name: shop enabled: false created: 2017-05-22 modified: 2017-05-23"},
+	} {
+		sipServer(t, http.StatusOK, tc[0])
+		err, stdout, _ := execCmd(t, append(strings.Fields(tc[1]), "-o", "table")...)
+		if got := strings.Join(strings.Fields(stdout), " "); err != nil || got != tc[2] {
+			t.Errorf("%s: %v\n got %s\nwant %s", tc[1], err, got, tc[2])
+		}
 	}
 }

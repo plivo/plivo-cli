@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	agentsskill "github.com/plivo/plivo-cli/agents-skill"
 	cliskill "github.com/plivo/plivo-cli/cli-skill"
 	"github.com/plivo/plivo-cli/internal/clierr"
 	voicexmlskill "github.com/plivo/plivo-cli/voice-xml-skill"
@@ -135,40 +136,22 @@ func TestSkillInstall_printToStdout(t *testing.T) {
 	}
 }
 
-// The CX agents skill is embedded but deliberately NOT listed: the code stays
-// in the repo while the feature is not live. This guards that decision, so
-// re-listing it has to be an intentional edit that updates this test too,
-// rather than a silent reappearance in a user-facing list.
-func TestSkillInstall_cxAgentsSkillIsNotOffered(t *testing.T) {
+// The CX agents skill is listed first, and bare `skill install` still writes
+// the CLI skill.
+func TestSkillInstall_agentsSkillIsListedFirst(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Cleanup(func() { skillDir = ""; skillPrint = false; dryRunFlag = false })
 
-	for _, s := range bundledSkills {
-		if s.selector == "agents" || s.dirName == "plivo-cx-agents" {
-			t.Fatalf("the CX agents skill is listed again (%q -> %q)", s.selector, s.dirName)
-		}
+	if s, _ := lookupSkill(""); bundledSkills[0].selector != "agents" || s.selector != "cli" {
+		t.Fatalf("first skill %q, default %q; want agents first and cli as the default", bundledSkills[0].selector, s.selector)
 	}
-
-	if err := runSkillInstall(nil, []string{"agents"}); err == nil {
-		t.Error("`skill install agents` succeeded; it must not install while unlisted")
+	if err := runSkillInstall(nil, []string{"agents"}); err != nil {
+		t.Fatalf("install agents: %v", err)
 	}
-
-	// `all` fans out over bundledSkills, so it must not reach the CX skill either.
-	if err := runSkillInstall(nil, []string{"all"}); err != nil {
-		t.Fatalf("install all: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "plivo-cx-agents", skillFileName)); err == nil {
-		t.Error("`skill install all` wrote the CX agents skill despite it being unlisted")
-	}
-
-	// Match the selector and install dir, not the bare word "agents" — that
-	// appears legitimately in "LLM coding agents".
-	for _, txt := range []string{skillInstallCmd.Use, skillInstallCmd.Long, skillInstallCmd.Example} {
-		if strings.Contains(txt, "install agents") || strings.Contains(txt, "plivo-cx-agents") {
-			t.Errorf("help text still advertises the CX agents skill: %q", txt)
-		}
+	if got, err := os.ReadFile(filepath.Join(home, ".claude", "skills", "plivo-cx-agents", skillFileName)); err != nil || string(got) != agentsskill.SkillMD {
+		t.Errorf("install agents didn't write the embedded skill (err %v)", err)
 	}
 }
 
@@ -231,13 +214,14 @@ func TestSkillInstall_allBundledSkillsInstallByteIdentical(t *testing.T) {
 // plivo-audio-streaming. Two skills claiming the same request make an agent
 // pick between them, so installing the replacement removes the old copy from
 // the default skills root, and from nowhere else.
+// Its SKILL.md is renamed SKILL.md.retired, not deleted: it may hold edits.
 func TestSkillInstall_removesRetiredFirstAgentSkill(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Cleanup(func() { skillDir = ""; skillPrint = false; dryRunFlag = false })
 
-	old := writeRetiredSkill(t, filepath.Join(home, ".claude", "skills"))
+	old := filepath.Join(writeRetiredSkill(t, filepath.Join(home, ".claude", "skills")), skillFileName)
 
 	dryRunFlag = true
 	if err := runSkillInstall(nil, []string{"audio-streaming"}); err != nil {
@@ -251,7 +235,7 @@ func TestSkillInstall_removesRetiredFirstAgentSkill(t *testing.T) {
 	// --dir names the skill's own folder: a sibling plivo-first-agent there, or
 	// the copy in the default root, is not the install's to remove.
 	other := t.TempDir()
-	sibling := writeRetiredSkill(t, other)
+	sibling := filepath.Join(writeRetiredSkill(t, other), skillFileName)
 	skillDir = filepath.Join(other, "plivo-audio-streaming")
 	if err := runSkillInstall(nil, []string{"audio-streaming"}); err != nil {
 		t.Fatalf("--dir install: %v", err)
@@ -266,8 +250,8 @@ func TestSkillInstall_removesRetiredFirstAgentSkill(t *testing.T) {
 	if err := runSkillInstall(nil, []string{"audio-streaming"}); err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	if _, err := os.Stat(old); !os.IsNotExist(err) {
-		t.Errorf("plivo-first-agent still installed after installing its replacement (stat err: %v)", err)
+	if _, err := os.Stat(old); !os.IsNotExist(err) || !fileIs(t, old+".retired", "---\nname: plivo-first-agent\n---\n") {
+		t.Errorf("plivo-first-agent not renamed SKILL.md.retired after installing its replacement (stat err: %v)", err)
 	}
 	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "plivo-audio-streaming", skillFileName)); err != nil {
 		t.Errorf("replacement not installed: %v", err)
@@ -287,9 +271,17 @@ func TestSkillInstall_keepsUserFilesInRetiredSkillFolder(t *testing.T) {
 	if err := os.WriteFile(notes, []byte("mine"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// A copy retired before is the user's too, and os.Rename would replace it.
+	earlier := filepath.Join(old, skillFileName+".retired")
+	if err := os.WriteFile(earlier, []byte("retired before"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := runSkillInstall(nil, []string{"audio-streaming"}); err != nil {
 		t.Fatalf("install failed because the retired folder held another file: %v", err)
+	}
+	if !fileIs(t, earlier, "retired before") || !fileIs(t, earlier+".2", "---\nname: plivo-first-agent\n---\n") {
+		t.Error("want the copy retired before kept, and this one in SKILL.md.retired.2")
 	}
 	if _, err := os.Stat(filepath.Join(old, skillFileName)); !os.IsNotExist(err) {
 		t.Errorf("retired SKILL.md still there, so agents keep loading the old skill (stat err: %v)", err)
@@ -332,8 +324,8 @@ func TestSkillList_reportsEverySkillAndItsState(t *testing.T) {
 	}
 
 	// Install one, then it reports installed.
-	if err := runSkillInstall(nil, nil); err != nil {
-		t.Fatalf("default install: %v", err)
+	if err := runSkillInstall(nil, []string{bundledSkills[0].selector}); err != nil {
+		t.Fatalf("install: %v", err)
 	}
 	for _, r := range skillListRows(t) {
 		if r.Selector == bundledSkills[0].selector && r.State != skillStateCurrent {
@@ -360,21 +352,6 @@ func TestSkillList_reportsEverySkillAndItsState(t *testing.T) {
 		t.Error("the tampered skill vanished from the listing")
 	}
 	_ = buf
-}
-
-// The CX agents skill must not appear in the listing either.
-func TestSkillList_omitsTheUnlistedCXAgentsSkill(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	t.Cleanup(func() { outputFormat = "" })
-	outputFormat = "json"
-
-	for _, r := range skillListRows(t) {
-		if r.Selector == "agents" || r.InstallsTo == "plivo-cx-agents" {
-			t.Errorf("the CX agents skill appeared in `skill list`: %+v", r)
-		}
-	}
 }
 
 // skillListRows runs `skill list` in JSON mode and decodes the envelope.
@@ -495,13 +472,78 @@ func TestSkillInstall_projectRefusesOutsideARepo(t *testing.T) {
 	t.Chdir(dir)
 	t.Setenv("HOME", t.TempDir())
 
-	err, _, _ := execCmd(t, "skill", "install", "--project")
-	var ce *clierr.Error
-	if !errors.As(err, &ce) || ce.Code != clierr.CodeBadInput {
-		t.Fatalf("err = %v, want BAD_INPUT", err)
+	for _, verb := range []string{"install", "list"} {
+		err, _, _ := execCmd(t, "skill", verb, "--project")
+		var ce *clierr.Error
+		if !errors.As(err, &ce) || ce.Code != clierr.CodeBadInput {
+			t.Fatalf("%s: err = %v, want BAD_INPUT", verb, err)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".claude")); !os.IsNotExist(err) {
 		t.Errorf("wrote into a folder that is not a repository (stat err: %v)", err)
+	}
+}
+
+func TestSkillList_projectShowsTheRepositorysSkills(t *testing.T) {
+	root, _ := fakeRepo(t, false)
+	if err, _, stderr := execCmd(t, "skill", "install", "voice-xml", "--project"); err != nil {
+		t.Fatalf("install --project: %v\n%s", err, stderr)
+	}
+	outputFormat, skillProject = "json", true
+	t.Cleanup(func() { outputFormat, skillProject = "", false })
+	for _, r := range skillListRows(t) {
+		want := skillStateAbsent
+		if r.Selector == "voice-xml" {
+			want = skillStateCurrent
+		}
+		if r.State != want || r.Path != projectSkillPath(root, r.InstallsTo) {
+			t.Errorf("%+v, want %q at the project path", r, want)
+		}
+	}
+}
+
+func TestSkillInstall_agentCodexInstallsIntoAgentsSkills(t *testing.T) {
+	_, home := fakeRepo(t, false)
+	if err, _, stderr := execCmd(t, "skill", "install", "all", "--agent", "codex"); err != nil {
+		t.Fatalf("install all --agent codex: %v\n%s", err, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude")); !skillsCurrentIn(filepath.Join(home, ".agents", "skills")) || !os.IsNotExist(err) {
+		t.Errorf("want every skill in ~/.agents/skills and none in ~/.claude (stat err: %v)", err)
+	}
+	for _, args := range [][]string{
+		{"skill", "install", "--agent", "codex", "--project"},
+		{"skill", "install", "--agent", "codex", "--dir", t.TempDir()},
+		{"skill", "install", "--agent", "cursor"},
+	} {
+		err, _, _ := execCmd(t, args...)
+		var ce *clierr.Error
+		if !errors.As(err, &ce) || ce.Code != clierr.CodeBadFlag {
+			t.Errorf("%v: err = %v, want BAD_FLAG", args, err)
+		}
+	}
+}
+
+// list --agent shows the folder that agent reads, as install --agent fills
+// it; without --agent it is still ~/.claude/skills.
+func TestSkillList_agentShowsThatAgentsFolder(t *testing.T) {
+	_, home := fakeRepo(t, false)
+	if err, _, stderr := execCmd(t, "skill", "install", "all", "--agent", "codex"); err != nil {
+		t.Fatalf("install all --agent codex: %v\n%s", err, stderr)
+	}
+	outputFormat = "json"
+	t.Cleanup(func() { outputFormat, skillAgent = "", "" })
+	for agent, dir := range map[string]string{"": ".claude", "codex": ".agents"} {
+		skillAgent = agent
+		for _, r := range skillListRows(t) {
+			want := filepath.Join(home, dir, "skills", r.InstallsTo, skillFileName)
+			if r.Path != want || (r.State == skillStateCurrent) != (agent == "codex") {
+				t.Errorf("--agent %q: %+v, want %s, installed only in ~/.agents/skills", agent, r, want)
+			}
+		}
+	}
+	// The flag itself, refused with --project as install refuses it.
+	if err, _, _ := execCmd(t, "skill", "list", "--agent", "codex", "--project"); err == nil || !strings.Contains(err.Error(), "combined with --project,") {
+		t.Errorf("--agent with --project: %v, want it refused, naming --project alone", err)
 	}
 }
 
@@ -578,6 +620,50 @@ func TestSkillInstall_projectDryRunWritesNothing(t *testing.T) {
 	}
 }
 
+// A clone brings its links along: --project refuses a linked skill folder or
+// SKILL.md, even a dangling one, and a .claude that leads out of the
+// repository, so nothing is written outside it.
+func TestSkillInstall_projectRefusesToWriteThroughALink(t *testing.T) {
+	for _, link := range []string{".claude", ".claude/skills/plivo-cli", ".claude/skills/plivo-cli/SKILL.md"} {
+		root, _ := fakeRepo(t, false)
+		outside := t.TempDir()
+		target, p := outside, filepath.Join(root, filepath.FromSlash(link))
+		if strings.HasSuffix(link, skillFileName) {
+			target = filepath.Join(outside, skillFileName) // dangling: the install would create it
+		}
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, p); err != nil {
+			t.Skipf("no symlinks here: %v", err)
+		}
+		err, _, _ := execCmd(t, "skill", "install", "--project")
+		var ce *clierr.Error
+		if entries, _ := os.ReadDir(outside); !errors.As(err, &ce) || ce.Code != clierr.CodeBadInput || len(entries) > 0 {
+			t.Errorf("%s: err = %v, wrote %d entries outside; want BAD_INPUT and none", link, err, len(entries))
+		}
+	}
+}
+
+// npx skills links .claude/skills/<skill> to its copy in .agents/skills: a link
+// that stays in the repository is installed through.
+func TestSkillInstall_projectInstallsThroughALinkInTheRepo(t *testing.T) {
+	root, _ := fakeRepo(t, false)
+	copyDir := filepath.Join(root, ".agents", "skills", "plivo-cli")
+	link := filepath.Join(root, ".claude", "skills", "plivo-cli")
+	for _, d := range []string{copyDir, filepath.Dir(link)} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(filepath.Join("..", "..", ".agents", "skills", "plivo-cli"), link); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+	if err, _, _ := execCmd(t, "skill", "install", "--project"); err != nil || !fileIs(t, filepath.Join(copyDir, skillFileName), cliskill.SkillMD) {
+		t.Errorf("install through an in-repo link: %v", err)
+	}
+}
+
 // Git for Windows checks a committed skill out with CRLF line endings by
 // default. That copy is the same skill, not an edit to keep.
 func TestSkillInstall_projectReadsCRLFAsLF(t *testing.T) {
@@ -609,24 +695,26 @@ func TestSkillInstall_projectReadsCRLFAsLF(t *testing.T) {
 	}
 }
 
-// --force only means something for a project copy; a home or --dir install
-// always overwrites, so the flag there is a mistake to report, not ignore.
-func TestSkillInstall_forceNeedsProject(t *testing.T) {
+// A home copy can hold edits too: one that matches no released version is
+// kept, as `skill update` keeps it, unless --force.
+func TestSkillInstall_homeKeepsAnEditedCopyUnlessForced(t *testing.T) {
 	_, home := fakeRepo(t, false)
-	err, _, _ := execCmd(t, "skill", "install", "--force")
+	p := writeSkillFile(t, home, "plivo-cli", "my own notes\n")
+	err, _, _ := execCmd(t, "skill", "install")
 	var ce *clierr.Error
-	if !errors.As(err, &ce) || ce.Code != clierr.CodeBadFlag {
-		t.Fatalf("err = %v, want BAD_FLAG", err)
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeDestructiveRefused || !fileIs(t, p, "my own notes\n") {
+		t.Fatalf("err = %v, want DESTRUCTIVE_REFUSED and the edited copy kept", err)
 	}
-	if _, err := os.Stat(filepath.Join(home, ".claude")); !os.IsNotExist(err) {
-		t.Errorf("a rejected command wrote under HOME (stat err: %v)", err)
+	if err, _, _ := execCmd(t, "skill", "install", "--force"); err != nil || !fileIs(t, p, cliskill.SkillMD) {
+		t.Errorf("--force did not replace the edited copy: %v", err)
 	}
 }
 
-// Without --project nothing changes: the home copy is the CLI's own and is
+// A home copy that a release shipped holds no edits, so it is still
 // overwritten, as every earlier release did.
 func TestSkillInstall_homeInstallStillOverwrites(t *testing.T) {
 	_, home := fakeRepo(t, false)
+	shipVersion(t, "plivo-cli", "older\n")
 	p := filepath.Join(home, ".claude", "skills", "plivo-cli", skillFileName)
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
@@ -684,7 +772,13 @@ func shipVersion(t *testing.T, dir, content string) {
 
 func writeSkillFile(t *testing.T, root, dir, content string) string {
 	t.Helper()
-	p := filepath.Join(root, ".claude", "skills", dir, skillFileName)
+	return writeSkillIn(t, filepath.Join(root, ".claude", "skills"), dir, content)
+}
+
+// writeSkillIn writes the SKILL.md of the skill in dir under the skills folder.
+func writeSkillIn(t *testing.T, skills, dir, content string) string {
+	t.Helper()
+	p := filepath.Join(skills, dir, skillFileName)
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -781,23 +875,73 @@ func TestSkillUpdate_dryRunWritesNothing(t *testing.T) {
 	}
 }
 
-func TestSkillUpdate_coversTheProjectInsideARepo(t *testing.T) {
+// Every agent's skills folder is updated, at home and in the repository, and
+// an edited copy in any of them is kept.
+func TestSkillUpdate_coversEveryAgentsFolderAtHomeAndInTheRepo(t *testing.T) {
 	root, home := fakeRepo(t, false)
 	const older = "---\nname: plivo-voice-xml\n---\nolder\n"
 	shipVersion(t, "plivo-voice-xml", older)
-	paths := []string{
-		writeSkillFile(t, home, "plivo-voice-xml", older),
-		writeSkillFile(t, root, "plivo-voice-xml", older),
+	var paths []string
+	for _, base := range []string{home, root} {
+		for _, dir := range agentSkillsDirs {
+			paths = append(paths, writeSkillIn(t, filepath.Join(base, dir), "plivo-voice-xml", older))
+		}
 	}
+	edited := writeSkillIn(t, filepath.Join(home, ".agents", "skills"), "plivo-cli", "my own notes\n")
 
-	rows := skillUpdateRows(t)
-	if len(rows) != 2 {
-		t.Fatalf("rows = %+v, want the home and the project copy", rows)
+	if rows := skillUpdateRows(t); len(rows) != len(paths)+1 {
+		t.Fatalf("rows = %+v, want a copy in each agent's folder at home and in the project, and the kept one", rows)
 	}
 	for _, p := range paths {
 		if !fileIs(t, p, voicexmlskill.SkillMD) {
 			t.Errorf("%s was not updated", p)
 		}
+	}
+	if !fileIs(t, edited, "my own notes\n") {
+		t.Error("an edited copy in ~/.agents/skills was overwritten without --force")
+	}
+}
+
+// npx skills links ~/.claude/skills/<skill> to the copy in ~/.agents/skills:
+// that copy is one row, updated once.
+func TestSkillUpdate_aLinkedCopyIsOneRow(t *testing.T) {
+	home := skillUpdateHome(t)
+	shipVersion(t, "plivo-cli", olderCLISkill)
+	copyDir := filepath.Dir(writeSkillIn(t, filepath.Join(home, ".agents", "skills"), "plivo-cli", olderCLISkill))
+	link := filepath.Join(home, ".claude", "skills", "plivo-cli")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(copyDir, link); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+	if rows := skillUpdateRows(t); len(rows) != 1 || rows[0].Result != "updated" {
+		t.Errorf("rows = %+v, want one updated row", rows)
+	}
+}
+
+// In a repository, a copy reached through a link that leads out of it is
+// refused, even with --force, and the other copies are still updated: a clone
+// brings its links along.
+func TestSkillUpdate_refusesALinkOutOfTheRepo(t *testing.T) {
+	root, home := fakeRepo(t, false)
+	shipVersion(t, "plivo-cli", olderCLISkill)
+	homeCopy := writeSkillIn(t, filepath.Join(home, ".claude", "skills"), "plivo-cli", olderCLISkill)
+	target := writeSkillIn(t, t.TempDir(), "plivo-cli", "not a skill\n")
+	link := filepath.Join(root, ".claude", "skills", "plivo-cli")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Dir(target), link); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+	for _, args := range [][]string{{"--force", "--dry-run"}, {"--force"}} {
+		if rows := skillUpdateRows(t, args...); len(rows) != 2 || rows[1].Result != "refused" {
+			t.Errorf("%v: rows = %+v, want the copy through the link refused", args, rows)
+		}
+	}
+	if !fileIs(t, target, "not a skill\n") || !fileIs(t, homeCopy, cliskill.SkillMD) {
+		t.Error("want the file the link leads to untouched, and the home copy updated")
 	}
 }
 
@@ -884,5 +1028,20 @@ func TestSkillUpdate_reportsARetiredSkillInTheProject(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(old, skillFileName)); err != nil {
 		t.Errorf("update deleted the retired project copy: %v", err)
+	}
+}
+
+// The plugin in plugin/ ships copies of the bundled skills, refreshed by
+// `make plugin-skills`.
+func TestPluginSkillsMatchBundled(t *testing.T) {
+	dir := filepath.Join("..", "plugin", "skills")
+	for _, s := range bundledSkills {
+		got, err := os.ReadFile(filepath.Join(dir, s.dirName, "SKILL.md"))
+		if err != nil || string(got) != s.content {
+			t.Errorf("plugin/skills/%s/SKILL.md is not the bundled skill: run `make plugin-skills`", s.dirName)
+		}
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != len(bundledSkills) {
+		t.Errorf("plugin/skills has %d skills, want the %d bundled ones", len(entries), len(bundledSkills))
 	}
 }

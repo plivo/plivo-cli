@@ -80,7 +80,8 @@ func init() {
 	_ = epCreateCmd.MarkFlagRequired("username")
 	epCreateCmd.Flags().StringVar(&epCreatePassword, "password", "", "SIP password (required)")
 	_ = epCreateCmd.MarkFlagRequired("password")
-	epCreateCmd.Flags().StringVar(&epCreateAlias, "alias", "", "human-friendly label")
+	epCreateCmd.Flags().StringVar(&epCreateAlias, "alias", "", "human-friendly label (required)")
+	_ = epCreateCmd.MarkFlagRequired("alias")
 	epCreateCmd.Flags().StringVar(&epCreateAppID, "app-id", "", "application to attach")
 
 	epUpdateCmd.Flags().StringVar(&epUpdatePassword, "password", "", "new password")
@@ -111,7 +112,7 @@ func runEndpointList(cmd *cobra.Command, args []string) error {
 	}
 	rows := [][]string{{"ENDPOINT_ID", "USERNAME", "ALIAS", "SIP_URI", "APP_ID"}}
 	for _, e := range resp.Objects {
-		rows = append(rows, []string{e.EndpointID, e.Username, e.Alias, e.SipURI, e.AppID})
+		rows = append(rows, []string{e.EndpointID, e.Username, e.Alias, e.SipURI, e.ResolvedAppID()})
 	}
 	return output.Table(os.Stdout, rows)
 }
@@ -141,7 +142,7 @@ func runEndpointGet(cmd *cobra.Command, args []string) error {
 		{"username", e.Username},
 		{"alias", e.Alias},
 		{"sip_uri", e.SipURI},
-		{"app_id", e.AppID},
+		{"app_id", e.ResolvedAppID()},
 		{"sub_account", e.Subaccount},
 	})
 }
@@ -154,9 +155,7 @@ func runEndpointCreate(cmd *cobra.Command, args []string) error {
 	body := map[string]any{
 		"username": epCreateUsername,
 		"password": epCreatePassword,
-	}
-	if epCreateAlias != "" {
-		body["alias"] = epCreateAlias
+		"alias":    epCreateAlias,
 	}
 	if epCreateAppID != "" {
 		body["app_id"] = epCreateAppID
@@ -219,8 +218,7 @@ func runEndpointUpdate(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Updated endpoint %s: %s\n", id, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("Updated endpoint %s: %s", id, resp.Message), resp.Raw())
 }
 
 func runEndpointDelete(cmd *cobra.Command, args []string) error {
@@ -242,6 +240,5 @@ func runEndpointDelete(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Deleted endpoint %s\n", id)
-	return nil
+	return emitWrite(fmt.Sprintf("Deleted endpoint %s", id), map[string]any{"endpoint_id": id, "deleted": true})
 }

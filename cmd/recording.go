@@ -156,6 +156,5 @@ func runRecordingDelete(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "Deleted recording %s\n", id)
-	return nil
+	return emitWrite(fmt.Sprintf("Deleted recording %s", id), map[string]any{"recording_id": id, "deleted": true})
 }

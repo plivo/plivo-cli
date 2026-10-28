@@ -1,15 +1,20 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/plivo/plivo-cli/internal/clierr"
 )
 
 // captureStderr swaps os.Stderr for a pipe, runs fn, then returns whatever
@@ -345,8 +350,8 @@ func TestDo_decodeError_includesBodyInError(t *testing.T) {
 
 	var out struct{ X string }
 	_, err := c.Do("GET", srv.URL+"/x", nil, nil, &out)
-	if err == nil {
-		t.Fatal("expected decode error")
+	if _, network := err.(*clierr.Error); err == nil || network {
+		t.Fatalf("want a plain decode error, got %#v", err)
 	}
 	if !strings.Contains(err.Error(), "decode response") {
 		t.Errorf("error doesn't mention decode: %v", err)
@@ -358,15 +363,16 @@ func TestDo_decodeError_includesBodyInError(t *testing.T) {
 
 func TestDo_transportError(t *testing.T) {
 	c := New("MAabc", "tok", time.Second)
-	// Unroutable URL → DNS/connection error.
-	c.BaseURL = "http://nonexistent.invalid"
+	srv := httptest.NewServer(http.NotFoundHandler())
+	srv.Close() // nothing listens: the connection is refused
 
-	_, err := c.Do("GET", "http://nonexistent.invalid/x", nil, nil, nil)
-	if err == nil {
-		t.Fatal("expected transport error")
+	_, err := c.Do("GET", srv.URL+"/x", nil, nil, nil)
+	if e, ok := err.(*clierr.Error); !ok || e.Code != clierr.CodeNetworkError || !e.Retryable {
+		t.Errorf("GET: want a retryable NETWORK_ERROR, got %#v", err)
 	}
-	if !strings.Contains(err.Error(), "http:") {
-		t.Errorf("transport error should be wrapped: %v", err)
+	_, err = c.DoMultipart("POST", srv.URL+"/x", []byte("{}"), nil, nil)
+	if e, ok := err.(*clierr.Error); !ok || e.Code != clierr.CodeNetworkError || e.Retryable {
+		t.Errorf("multipart POST: want a NETWORK_ERROR not marked retryable, got %#v", err)
 	}
 }
 
@@ -419,5 +425,33 @@ func TestRetryAfter_httpDate(t *testing.T) {
 	}
 	if got := retryAfter(now.Add(-time.Minute).Format(http.TimeFormat), now); got != 0 {
 		t.Errorf("past date: got %v, want 0", got)
+	}
+}
+
+// A redirect is never followed: it took the credentials to another port of the
+// same host, and a 307's body anywhere. Do and StreamSSE report it instead.
+func TestRedirect_isNotFollowed(t *testing.T) {
+	var landed atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { landed.Add(1) }))
+	defer target.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/landed", http.StatusTemporaryRedirect)
+	}))
+	defer srv.Close()
+	c := New("MA1", "tok", time.Second)
+	apiErr, err := c.Do("POST", srv.URL+"/x", map[string]string{"k": "v"}, nil, nil)
+	if err != nil || apiErr == nil || apiErr.StatusCode != 307 || apiErr.Code != clierr.CodeUpstreamError || apiErr.Message == "" ||
+		!strings.Contains(apiErr.Hint, target.URL+"/landed") || !strings.Contains(apiErr.Hint, "end in a slash") {
+		t.Errorf("Do: got %v / %v, want an UPSTREAM_ERROR naming the 307, its target and the slash", apiErr, err)
+	}
+	if apiErr, err := c.DoMultipart("POST", srv.URL+"/x/", []byte("{}"), nil, nil); err != nil || apiErr == nil || apiErr.StatusCode != 307 {
+		t.Errorf("DoMultipart: got %v / %v, want the 307", apiErr, err)
+	}
+	var httpErr *SSEHTTPError
+	if err := c.StreamSSE(context.Background(), "POST", srv.URL+"/x", nil, func(SSEEvent) bool { return true }); !errors.As(err, &httpErr) || httpErr.StatusCode != 307 {
+		t.Errorf("StreamSSE: got %v, want the 307", err)
+	}
+	if n := landed.Load(); n != 0 {
+		t.Errorf("followed the redirect %d times", n)
 	}
 }

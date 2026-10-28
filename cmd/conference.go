@@ -81,16 +81,11 @@ var confMemberUndeafCmd = &cobra.Command{
 	RunE:  runConferenceMemberUndeaf,
 }
 
-var (
-	confMemberPlayURLs   string
-	confMemberPlayLength int
-	confMemberPlayLoop   bool
-	confMemberPlayMix    bool
-)
+var confMemberPlayURL string
 
 var confMemberPlayCmd = &cobra.Command{
 	Use:   "play <conference_name> <member_id>",
-	Short: "Play audio file(s) into a member's channel",
+	Short: "Play an audio file into a member's channel",
 	Args:  cobra.ExactArgs(2),
 	RunE:  runConferenceMemberPlay,
 }
@@ -127,7 +122,8 @@ var (
 	confRecordTimeLimit   int
 	confRecordFileFormat  string
 	confRecordCallbackURL string
-	confRecordTranscribe  bool
+	confRecordTransType   string
+	confRecordTransURL    string
 )
 
 var confRecordCmd = &cobra.Command{
@@ -139,17 +135,14 @@ var confRecordCmd = &cobra.Command{
 
 var confStopRecordCmd = &cobra.Command{
 	Use:   "stop-record <conference_name>",
-	Short: "Stop the active recording on a conference",
+	Short: "Stop the active recording on a conference (requires --yes)",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runConferenceStopRecord,
 }
 
 func init() {
-	confMemberPlayCmd.Flags().StringVar(&confMemberPlayURLs, "urls", "", "comma-separated audio file URLs (required)")
-	_ = confMemberPlayCmd.MarkFlagRequired("urls")
-	confMemberPlayCmd.Flags().IntVar(&confMemberPlayLength, "length", 0, "stop after N seconds")
-	confMemberPlayCmd.Flags().BoolVar(&confMemberPlayLoop, "loop", false, "loop playback")
-	confMemberPlayCmd.Flags().BoolVar(&confMemberPlayMix, "mix", true, "mix with conference audio")
+	confMemberPlayCmd.Flags().StringVar(&confMemberPlayURL, "url", "", "URL of the .mp3 or .wav file to play (required)")
+	_ = confMemberPlayCmd.MarkFlagRequired("url")
 
 	confMemberSpeakCmd.Flags().StringVar(&confMemberSpeakText, "text", "", "TTS text (required)")
 	_ = confMemberSpeakCmd.MarkFlagRequired("text")
@@ -159,7 +152,9 @@ func init() {
 	confRecordCmd.Flags().IntVar(&confRecordTimeLimit, "time-limit", 60, "max recording length in seconds")
 	confRecordCmd.Flags().StringVar(&confRecordFileFormat, "file-format", "mp3", "mp3|wav")
 	confRecordCmd.Flags().StringVar(&confRecordCallbackURL, "callback-url", "", "URL hit when recording finishes")
-	confRecordCmd.Flags().BoolVar(&confRecordTranscribe, "transcribe", false, "request transcription")
+	confRecordCmd.Flags().StringVar(&confRecordTransType, "transcription-type", "", "transcription type: auto (results go to --transcription-url)")
+	confRecordCmd.Flags().StringVar(&confRecordTransURL, "transcription-url", "", "URL the transcription is sent to")
+	ignoredFlag(confRecordCmd, "transcribe", true, transcribeNote)
 
 	confMemberCmd.AddCommand(confMemberKickCmd, confMemberMuteCmd, confMemberUnmuteCmd,
 		confMemberDeafCmd, confMemberUndeafCmd, confMemberPlayCmd, confMemberStopPlayCmd,
@@ -248,7 +243,8 @@ func runConferenceMemberKick(cmd *cobra.Command, args []string) error {
 	if err := confirmDestructive("kick member " + member + " from " + name); err != nil {
 		return err
 	}
-	return doConferenceMemberDelete(name, member, "")
+	// POST .../Kick/: a DELETE on the member hangs up its call instead.
+	return doConferenceMemberCall("POST", name, member, "Kick")
 }
 
 func runConferenceMemberMute(cmd *cobra.Command, args []string) error {
@@ -256,7 +252,7 @@ func runConferenceMemberMute(cmd *cobra.Command, args []string) error {
 }
 
 func runConferenceMemberUnmute(cmd *cobra.Command, args []string) error {
-	return doConferenceMemberDelete(args[0], args[1], "Mute")
+	return doConferenceMemberCall("DELETE", args[0], args[1], "Mute")
 }
 
 func runConferenceMemberDeaf(cmd *cobra.Command, args []string) error {
@@ -264,23 +260,17 @@ func runConferenceMemberDeaf(cmd *cobra.Command, args []string) error {
 }
 
 func runConferenceMemberUndeaf(cmd *cobra.Command, args []string) error {
-	return doConferenceMemberDelete(args[0], args[1], "Deaf")
+	return doConferenceMemberCall("DELETE", args[0], args[1], "Deaf")
 }
 
+// runConferenceMemberPlay sends the one url the member Play API takes; it has
+// no urls, length, loop or mix, unlike a call's.
 func runConferenceMemberPlay(cmd *cobra.Command, args []string) error {
-	body := map[string]any{
-		"urls": confMemberPlayURLs,
-		"loop": confMemberPlayLoop,
-		"mix":  confMemberPlayMix,
-	}
-	if confMemberPlayLength > 0 {
-		body["length"] = confMemberPlayLength
-	}
-	return doConferenceMemberPost(args[0], args[1], "Play", body, "playing audio")
+	return doConferenceMemberPost(args[0], args[1], "Play", map[string]any{"url": confMemberPlayURL}, "playing audio")
 }
 
 func runConferenceMemberStopPlay(cmd *cobra.Command, args []string) error {
-	return doConferenceMemberDelete(args[0], args[1], "Play")
+	return doConferenceMemberCall("DELETE", args[0], args[1], "Play")
 }
 
 func runConferenceMemberSpeak(cmd *cobra.Command, args []string) error {
@@ -293,7 +283,7 @@ func runConferenceMemberSpeak(cmd *cobra.Command, args []string) error {
 }
 
 func runConferenceMemberStopSpeak(cmd *cobra.Command, args []string) error {
-	return doConferenceMemberDelete(args[0], args[1], "Speak")
+	return doConferenceMemberCall("DELETE", args[0], args[1], "Speak")
 }
 
 func runConferenceRecord(cmd *cobra.Command, args []string) error {
@@ -305,8 +295,8 @@ func runConferenceRecord(cmd *cobra.Command, args []string) error {
 	body := map[string]any{
 		"time_limit":  confRecordTimeLimit,
 		"file_format": confRecordFileFormat,
-		"transcribe":  confRecordTranscribe,
 	}
+	putSet(body, map[string]string{"transcription_type": confRecordTransType, "transcription_url": confRecordTransURL})
 	if confRecordCallbackURL != "" {
 		body["callback_url"] = confRecordCallbackURL
 	}
@@ -338,6 +328,9 @@ func runConferenceRecord(cmd *cobra.Command, args []string) error {
 }
 
 func runConferenceStopRecord(cmd *cobra.Command, args []string) error {
+	if err := confirmDestructive("stop recording conference " + args[0]); err != nil {
+		return err
+	}
 	return doConferenceDelete(args[0], "Record")
 }
 
@@ -361,11 +354,10 @@ func doConferenceDelete(name, sub string) error {
 		return nil
 	}
 	if sub == "" {
-		fmt.Fprintf(os.Stderr, "Ended conference %s\n", name)
-	} else {
-		fmt.Fprintf(os.Stderr, "Stopped %s on conference %s\n", sub, name)
+		return emitWrite(fmt.Sprintf("Ended conference %s", name), map[string]any{"conference_name": name, "ended": true})
 	}
-	return nil
+	return emitWrite(fmt.Sprintf("Stopped %s on conference %s", sub, name),
+		map[string]any{"conference_name": name, "resource": sub, "stopped": true})
 }
 
 func doConferenceMemberPost(name, member, sub string, body map[string]any, label string) error {
@@ -384,20 +376,22 @@ func doConferenceMemberPost(name, member, sub string, body map[string]any, label
 	if dryRunFlag {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "%s: %s/%s — %s\n", label, name, member, resp.Message)
-	return nil
+	return emitResponse(fmt.Sprintf("%s: %s/%s — %s", label, name, member, resp.Message), resp.Raw())
 }
 
-func doConferenceMemberDelete(name, member, sub string) error {
+// doConferenceMemberCall sends method to the member's sub resource: POST Kick,
+// with the empty JSON object the API's docs send, or a DELETE that undoes a
+// mute, deafen, play or speak.
+func doConferenceMemberCall(method, name, member, sub string) error {
 	client, _, err := getClient()
 	if err != nil {
 		return err
 	}
-	parts := []string{"Conference", name, "Member", member}
-	if sub != "" {
-		parts = append(parts, sub)
+	var body any
+	if method == "POST" {
+		body = map[string]any{}
 	}
-	apiErr, err := client.Do("DELETE", client.AccountURL(parts...), nil, nil, nil)
+	apiErr, err := client.Do(method, client.AccountURL("Conference", name, "Member", member, sub), body, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -407,10 +401,10 @@ func doConferenceMemberDelete(name, member, sub string) error {
 	if dryRunFlag {
 		return nil
 	}
-	if sub == "" {
-		fmt.Fprintf(os.Stderr, "Kicked member %s from %s\n", member, name)
-	} else {
-		fmt.Fprintf(os.Stderr, "Cleared %s on %s/%s\n", sub, name, member)
+	if sub == "Kick" {
+		return emitWrite(fmt.Sprintf("Kicked member %s from %s", member, name),
+			map[string]any{"conference_name": name, "member_id": member, "kicked": true})
 	}
-	return nil
+	return emitWrite(fmt.Sprintf("Cleared %s on %s/%s", sub, name, member),
+		map[string]any{"conference_name": name, "member_id": member, "resource": sub, "cleared": true})
 }

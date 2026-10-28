@@ -53,6 +53,14 @@ Headless / CI use:
   Not supported. Browser OAuth (PKCE) is the only credential source, so
   scripts and CI need a profile that was logged in on that machine already.
 
+Inside a coding agent:
+  Run inside Claude Code, Cursor or Codex, a login asks once per machine
+  whether to install the Plivo skills where that agent reads them, unless
+  current copies are there already. Without a terminal to ask on, and in
+  each other agent once it has asked, it prints that agent's install
+  command instead, once. --yes installs them without asking, and --quiet
+  skips the offer.
+
 By default the CLI validates credentials with GET /Account/ before
 saving. Pass --no-verify to skip (offline / mock use only).`,
 	Example: `  plivo login
@@ -87,7 +95,20 @@ func init() {
 }
 
 func runLogin(cmd *cobra.Command, args []string) error {
-	return runLoginBrowser(cmd.Flags().Changed("name"))
+	if dryRunFlag {
+		path, _ := config.Path()
+		profile := "a profile named after the organization"
+		if cmd.Flags().Changed("name") {
+			profile = fmt.Sprintf("profile %q", loginName)
+		}
+		fmt.Fprintf(os.Stderr, "[dry-run] Would open the browser to log in, then save %s in %s\n", profile, path)
+		return nil
+	}
+	if err := runLoginBrowser(cmd.Flags().Changed("name")); err != nil {
+		return err
+	}
+	offerSkills()
+	return nil
 }
 
 // loginBundle is the full set of fields a login flow hands to persistProfile.
@@ -106,8 +127,11 @@ type loginBundle struct {
 	OrgUUID   string // org's stable identifier, when the auth server sends one. Informational only today.
 }
 
-// persistProfile writes the credential bundle to config.toml + keychain.
-// Shared by every login method (today only browser; kept generic).
+// persistProfile adds the credential bundle to cfg, with the token in the OS
+// keychain, and returns the profile name it picked and whether the token went
+// to the keychain (if not, it is inline in cfg). Shared by every login method
+// (today only browser; kept generic). The caller saves cfg under the config
+// lock, so the name is picked from the config as it is saved.
 //
 // requestedName is the -n/--name flag value; nameExplicit reports whether
 // the caller actually passed -n (cmd.Flags().Changed("name")) rather than
@@ -122,7 +146,7 @@ type loginBundle struct {
 // user's naming choice, so we ask rather than guess) or auto-suffixes
 // (auto-derived name — the CLI picked the name, so it can also pick a
 // free one without bothering the user).
-func persistProfile(cfg *config.Config, requestedName string, nameExplicit bool, b loginBundle) error {
+func persistProfile(cfg *config.Config, requestedName string, nameExplicit bool, b loginBundle) (string, bool, error) {
 	profileName := requestedName
 	if !nameExplicit {
 		if slug := slugifyOrgName(b.OrgName); slug != "" {
@@ -132,7 +156,7 @@ func persistProfile(cfg *config.Config, requestedName string, nameExplicit bool,
 
 	if existing, ok := cfg.Profiles[profileName]; ok && existing.AuthID != "" && existing.AuthID != b.AuthID {
 		if nameExplicit {
-			return &clierr.Error{
+			return "", false, &clierr.Error{
 				Code:    clierr.CodeResourceConflict,
 				Message: fmt.Sprintf("profile %q already holds different credentials (%s)", profileName, describeProfile(existing)),
 				Hint:    fmt.Sprintf("Log in with a different name (-n/--name), or replace it first with `plivo logout %s`.", profileName),
@@ -152,29 +176,29 @@ func persistProfile(cfg *config.Config, requestedName string, nameExplicit bool,
 		OrgName: b.OrgName,
 		OrgUUID: b.OrgUUID,
 	}
-	storedInKeychain := true
+	inKeychain := true
 	if err := config.SetToken(profileName, b.AuthToken); err != nil {
 		// Headless Linux without Secret Service, or other keychain miss.
 		// Fall back to storing the token inline in config.toml (file is 0600).
 		prof.AuthToken = b.AuthToken
-		storedInKeychain = false
+		inKeychain = false
 	}
 	cfg.Profiles[profileName] = prof
 	if cfg.Active == "" {
 		cfg.Active = profileName
 	}
-	if err := config.Save(cfg); err != nil {
-		return err
-	}
+	return profileName, inKeychain, nil
+}
 
+// printProfileSaved confirms which profile a login saved, and where.
+func printProfileSaved(profileName string, inKeychain bool, b loginBundle) {
 	cfgPath, _ := config.Path()
 	fmt.Fprintf(os.Stderr, "✓ %s\n", loginConfirmationLine(profileName, b))
-	if storedInKeychain {
+	if inKeychain {
 		fmt.Fprintf(os.Stderr, "  Profile: %s\n  Token:   OS keychain\n", cfgPath)
 	} else {
 		fmt.Fprintf(os.Stderr, "  Profile: %s\n  Token:   inline in config (OS keychain unavailable)\n", cfgPath)
 	}
-	return nil
 }
 
 // loginConfirmationLine renders the one-line "who/what got saved where"
@@ -255,36 +279,39 @@ func slugifyOrgName(name string) string {
 }
 
 func runLogout(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return err
-	}
-
 	name := ""
 	if len(args) > 0 {
 		name = args[0]
-	} else {
-		name = cfg.Active
-		if name == "" {
-			return clierr.BadInput("no active profile to log out — pass a profile name")
+	}
+	noneActive := false
+	if err := updateConfig(func(cfg *config.Config) error {
+		if len(args) == 0 {
+			if name = cfg.Active; name == "" {
+				return clierr.BadInput("no active profile to log out — pass a profile name")
+			}
 		}
-	}
-	if _, ok := cfg.Profiles[name]; !ok {
-		return clierr.BadInput(fmt.Sprintf("profile %q not found", name))
-	}
-
-	// Best-effort keychain removal (no-op if the token lived inline).
-	_ = config.DeleteToken(name)
-	delete(cfg.Profiles, name)
-	if cfg.Active == name {
-		cfg.Active = ""
-	}
-	if err := config.Save(cfg); err != nil {
+		if _, ok := cfg.Profiles[name]; !ok {
+			return clierr.BadInput(fmt.Sprintf("profile %q not found", name))
+		}
+		delete(cfg.Profiles, name)
+		if cfg.Active == name {
+			cfg.Active = ""
+		}
+		noneActive = cfg.Active == "" && len(cfg.Profiles) > 0
+		return nil
+	}); err != nil {
 		return err
 	}
+	if dryRunFlag {
+		fmt.Fprintf(os.Stderr, "[dry-run] Would log out profile %q%s\n", name, alsoKeychain(name))
+		return nil
+	}
 
+	// Best-effort keychain removal (no-op if the token lived inline), once
+	// the profile is gone.
+	_ = config.DeleteToken(name)
 	fmt.Fprintf(os.Stderr, "✓ Logged out profile %q.\n", name)
-	if cfg.Active == "" && len(cfg.Profiles) > 0 {
+	if noneActive {
 		fmt.Fprintln(os.Stderr, "  No active profile — pick one with `plivo auth use <name>`.")
 	}
 	return nil
