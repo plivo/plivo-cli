@@ -16,6 +16,11 @@
       "title": "Voice agents",
       "description": "Put a voice agent on real phone calls.",
       "skills": ["plivo-sip-trunking", "plivo-audio-streaming", "plivo-voice-xml"]
+    },
+    {
+      "title": "Call forwarding",
+      "description": "Debug forwarded calls into a Plivo number, out of Plivo or into a SIP trunk.",
+      "skills": ["plivo-call-forwarding"]
     }
   ]
 }
