@@ -17,7 +17,7 @@ const lookupPrice = "USD 0.004"
 
 var lookupCmd = &cobra.Command{
 	Use:   "lookup <number>",
-	Short: "Carrier + format lookup for an E.164 number (spends money — requires --yes)",
+	Short: "Carrier + format lookup for an E.164 number (lookup.plivo.com)",
 	Long: `Carrier + format lookup for an E.164 number (lookup.plivo.com).
 
 Each lookup is billed: ` + lookupPrice + ` per request. It requires --yes;
