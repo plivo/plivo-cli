@@ -1,9 +1,14 @@
-Create a SIP endpoint
+Create a SIP endpoint.
+
+With --agent, a Plivo CX agent answers the calls the endpoint makes: the
+endpoint is created, then linked to the agent. If the link fails, the endpoint
+is kept, and the error gives the command that links it.
 
 Usage:
   plivo voice endpoints create [flags]
 
 Flags:
+      --agent string      CX agent (agent_uuid) to answer the endpoint's calls; not with --app-id
       --alias string      human-friendly label (required)
       --app-id string     application to attach
   -h, --help              help for create
