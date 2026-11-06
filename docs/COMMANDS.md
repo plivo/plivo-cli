@@ -4900,15 +4900,18 @@ Examples:
 Flags:
 
 ```
-      --answer-method string   GET|POST, as set on the application (default "POST")
-      --answer-url string      the answer URL to request, as Plivo would (required)
-      --direction string       inbound|outbound, sent as Direction (default "inbound")
-      --duration int           seconds of synthetic audio to stream (max 30) (default 3)
-      --expect-audio           fail unless playAudio comes back; the audio is a tone, so only an echo-style agent or one that speaks first answers
-      --from string            the caller, sent as From (default "+14155551234")
-      --insecure               skip TLS verification (self-signed dev certs only)
-      --to string              the number called, sent as To (default "+14155555678")
-      --xml-only               stop after the answer URL and its XML: open no WebSocket
+      --answer-method string      GET|POST, as set on the application (default "POST")
+      --answer-url string         the answer URL to request, as Plivo would (required)
+      --direction string          inbound|outbound, sent as Direction (default "inbound")
+      --duration int              seconds of synthetic audio to stream (max 30) (default 3)
+      --expect-audio              fail unless playAudio comes back; the audio is a tone, so only an echo-style agent or one that speaks first answers
+      --forwarded-cause string    the forwarding cause, such as 302, 486 or 408, sent as ForwardedCause (needs --forwarded-from)
+      --forwarded-from string     the number that forwarded the call, sent as ForwardedFrom
+      --forwarded-reason string   the forwarding reason, such as UserBusy, NoReply or Unconditional, sent as ForwardedReason (needs --forwarded-from)
+      --from string               the caller, sent as From (default "+14155551234")
+      --insecure                  skip TLS verification (self-signed dev certs only)
+      --to string                 the number called, sent as To (default "+14155555678")
+      --xml-only                  stop after the answer URL and its XML: open no WebSocket
 ```
 
 ---

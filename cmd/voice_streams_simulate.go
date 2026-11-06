@@ -30,9 +30,10 @@ import (
 )
 
 var (
-	simAnswerURL, simAnswerMethod string
-	simFrom, simTo, simDirection  string
-	simFlags                      simulateFlags
+	simAnswerURL, simAnswerMethod         string
+	simFrom, simTo, simDirection          string
+	simFwdFrom, simFwdCause, simFwdReason string
+	simFlags                              simulateFlags
 )
 
 var voiceStreamsSimulateCmd = &cobra.Command{
@@ -72,6 +73,9 @@ func init() {
 	f.StringVar(&simFrom, "from", sampleCaller, "the caller, sent as From")
 	f.StringVar(&simTo, "to", sampleCalled, "the number called, sent as To")
 	f.StringVar(&simDirection, "direction", dirInbound, "inbound|outbound, sent as Direction")
+	f.StringVar(&simFwdFrom, "forwarded-from", "", "the number that forwarded the call, sent as ForwardedFrom")
+	f.StringVar(&simFwdCause, "forwarded-cause", "", "the forwarding cause, such as 302, 486 or 408, sent as ForwardedCause (needs --forwarded-from)")
+	f.StringVar(&simFwdReason, "forwarded-reason", "", "the forwarding reason, such as UserBusy, NoReply or Unconditional, sent as ForwardedReason (needs --forwarded-from)")
 	simFlags.register(f)
 	voiceStreamsCmd.AddCommand(voiceStreamsSimulateCmd)
 }
@@ -142,12 +146,26 @@ func runVoiceStreamsSimulate(cmd *cobra.Command, _ []string) error {
 	if simDirection != dirInbound && simDirection != dirOutbound {
 		return clierr.BadFlag("direction", fmt.Sprintf("%q is not inbound or outbound", simDirection))
 	}
+	if simFwdFrom == "" {
+		if simFwdCause != "" {
+			return clierr.BadFlag("forwarded-cause", "needs --forwarded-from: Plivo sends a cause only on a forwarded call")
+		}
+		if simFwdReason != "" {
+			return clierr.BadFlag("forwarded-reason", "needs --forwarded-from: Plivo sends a reason only on a forwarded call")
+		}
+	}
 	signer, err := resolveStreamSigner()
 	if err != nil {
 		return err
 	}
 	o := simulateOpts{simulateFlags: simFlags, answerURL: simAnswerURL, method: simAnswerMethod,
 		params: callParams(strings.TrimSpace(simFrom), strings.TrimSpace(simTo), simDirection)}
+	// Untrimmed: Plivo passes on the carrier's values unchanged.
+	for field, v := range map[string]string{"ForwardedFrom": simFwdFrom, "ForwardedCause": simFwdCause, "ForwardedReason": simFwdReason} {
+		if v != "" {
+			o.params[field] = v
+		}
+	}
 	if dryRunFlag {
 		printSimulatePlan(o, signer)
 		return nil
