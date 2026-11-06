@@ -1,6 +1,6 @@
 ---
 name: plivo-call-forwarding
-description: "Debugs call forwarding on Plivo with the Plivo CLI, in three cases: a carrier forwards calls into a Plivo number and ForwardedFrom, ForwardedCause or ForwardedReason is missing or odd on the answer and hangup URLs; Plivo forwards a call out with Dial XML, a PHLO Call Forward node or an agent transfer and the forwarded leg fails; a carrier forwards into a SIP trunk number and the Diversion header must reach the customer's SBC. It finds the call, reads both legs and the application, maps hangup causes and tests with voice streams simulate or a real forward. Not for writing XML (plivo-voice-xml) or setting up a SIP trunk (plivo-sip-trunking)."
+description: "Debugs call forwarding on Plivo with the Plivo CLI, in three cases: a carrier forwards calls into a Plivo number and ForwardedFrom, ForwardedCause or ForwardedReason is missing or odd on the answer and hangup URLs; Plivo forwards a call out with Dial XML, a PHLO Call Forward node or an agent transfer and the forwarded leg fails; a carrier forwards into a SIP trunk number and the Diversion header must reach the customer's SBC. It finds the call, reads both legs and the app, maps hangup causes and tests with voice streams simulate or a real forward. Use when forwarded calls never arrive, lack the forwarding number or fail. Not for writing XML (plivo-voice-xml) or setting up a SIP trunk (plivo-sip-trunking)."
 license: Apache-2.0
 ---
 
@@ -12,7 +12,7 @@ Rules here come from the Plivo docs and from forwarded calls Plivo has traced; v
 
 - Use the CLI for every Plivo step and `-o json` to read values. `plivo <command> --help` wins on which commands and flags exist.
 - Debugging only reads. Preview any write with `--dry-run` and run it after the user agrees. A test call costs money: check `cash_credits` in `plivo auth whoami -o json` first.
-- `--since` and `--until` are UTC (`YYYY-MM-DD HH:MM`) and filter on when a call ended. Pass numbers to `--to`, `--from` and `numbers` commands as digits, no `+`.
+- `--since` and `--until` are UTC (`YYYY-MM-DD HH:MM`) and filter on when a call ended. Pass numbers to `numbers` commands as digits, no `+`.
 - Ask with your agent's question tool (AskUserQuestion in Claude Code). Mask phone numbers in chat; show them in full only in commands.
 - Report what you saw this session, not what you assume. Run `diagnose` once per call: it shares a small rate limit with `plivo ask`.
 - When this file runs out: `plivo docs search "<terms>"`, `plivo docs show <path>`, then `plivo ask "<question>"`, then Plivo support (https://support.plivo.com) with the call UUID and the time.
@@ -23,7 +23,7 @@ If it is unclear, ask (header Forwarding) which kind goes wrong:
 
 | Kind | What happens | Tell it by |
 |---|---|---|
-| A. Into your number | A phone or another provider forwards its calls to your Plivo number, and your answer URL runs | `plivo numbers get <digits> -o json`: `application` ends `/Application/<app_id>/` |
+| A. Into your number | A phone or another provider forwards its calls to your Plivo number, and your answer URL runs | `plivo numbers get <digits> -o json`: `application` does not contain `/Zentrunk/Trunk/` |
 | B. Out of Plivo | `<Dial>`, a PHLO Call Forward node or an agent transfer rings another phone or SIP address | the forward is a second call, the B-leg |
 | C. Into a SIP trunk number | As A, but the number routes to an inbound SIP trunk: no answer URL | `application` contains `/Zentrunk/Trunk/` |
 
@@ -46,7 +46,7 @@ Advise the user's code: cut each number at the first `;`, drop a leading `+`, co
 
 ### "No ForwardedFrom" or "forwarded calls fail"
 
-1. `plivo voice calls list --direction inbound --to <digits> --since "<UTC>" -o json`. No record: see "Never arrives".
+1. `plivo voice calls list --direction inbound --to <number> --since "<UTC>" -o json`. No record: see "Never arrives".
 2. `plivo voice calls get <call_uuid> -o json`: `hangup_cause_code`, `hangup_cause_name`, `hangup_source`. Source `Answer XML`: the app's own XML hung up; check whether its logic rejects a missing or unexpected `ForwardedFrom`. 1010 (out of credits) or 5030 (concurrency limit): the account stopped the call. 7011 or 8011: the answer URL failed (voice-xml skill).
 3. `plivo numbers get <digits> -o json`, then `plivo account applications get <app_id> -o json`: check `answer_url`, `answer_method` and `hangup_url`, and that no forwarding name sits in a query string.
 4. Ask for the server's log of both requests for that `CallUUID`. In the log but not seen by the code: the query string, or code that reads only one of query and body. Missing from the log too: step 5.
@@ -54,8 +54,8 @@ Advise the user's code: cut each number at the first `;`, drop a leading `+`, co
 
 ### Never arrives
 
-- No record in the window: the call never reached Plivo. The user checks the forwarding with their carrier: the target number and the type. Busy, no-answer and unreachable forwarding fire only in that condition.
-- It may land on another of the account's numbers: drop `--to` and pass `--from <caller digits>`.
+- No record in the window: the call never reached Plivo. Check the target number and the forwarding type with the carrier. Busy, no-answer and unreachable forwarding fire only in that condition.
+- It may land on another of the account's numbers: drop `--to` and pass `--from <caller>`.
 - Test from a third phone, never from the forwarding phone or the Plivo number.
 
 ### Test
