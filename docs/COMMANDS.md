@@ -1338,7 +1338,7 @@ Carrier + format lookup for an E.164 number (lookup.plivo.com)
 
 Carrier + format lookup for an E.164 number (lookup.plivo.com).
 
-Each lookup is billed: USD 0.004 per request. It takes no --yes;
+Each lookup is billed: USD 0.004 per request. It requires --yes;
 --dry-run prints the request without sending it.
 
 ```
