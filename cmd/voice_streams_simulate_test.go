@@ -73,7 +73,8 @@ func TestVoiceStreamsSimulate_actsAsPlivo(t *testing.T) {
 					body[k] = r.PostForm.Get(k)
 				}
 				mu.Lock()
-				fields = map[string]string{"From": r.Form.Get("From"), "CallUUID": r.Form.Get("CallUUID"), "Direction": r.Form.Get("Direction")}
+				fields = map[string]string{"From": r.Form.Get("From"), "CallUUID": r.Form.Get("CallUUID"), "Direction": r.Form.Get("Direction"),
+					"ForwardedFrom": r.Form.Get("ForwardedFrom"), "ForwardedCause": r.Form.Get("ForwardedCause"), "ForwardedReason": r.Form.Get("ForwardedReason")}
 				signed = r.Method == tc.method && plivosig.Validate("ci-only-not-a-real-token", "http://"+r.Host+r.URL.RequestURI(),
 					r.Method, r.Header.Get(plivosig.HeaderNonce), r.Header.Get(plivosig.HeaderSignature), body)
 				mu.Unlock()
@@ -83,11 +84,13 @@ func TestVoiceStreamsSimulate_actsAsPlivo(t *testing.T) {
 			}))
 			t.Cleanup(srv.Close)
 
-			res, ce := simulateJSON(t, "--answer-url", srv.URL+"/answer?agent=1", "--answer-method", tc.method, "--expect-audio")
+			res, ce := simulateJSON(t, "--answer-url", srv.URL+"/answer?agent=1", "--answer-method", tc.method, "--expect-audio",
+				"--forwarded-from", "14155550100", "--forwarded-cause", "486", "--forwarded-reason", "UserBusy")
 			ws.assertStopThenClose(t)
 			mu.Lock()
 			defer mu.Unlock()
-			if !signed || fields["From"] != sampleCaller || fields["Direction"] != "inbound" {
+			if !signed || fields["From"] != sampleCaller || fields["Direction"] != "inbound" ||
+				fields["ForwardedFrom"] != "14155550100" || fields["ForwardedCause"] != "486" || fields["ForwardedReason"] != "UserBusy" {
 				t.Errorf("signature valid = %v, fields = %v; want a valid %s with Plivo's fields", signed, fields, tc.method)
 			}
 			if ws.callID == "" || ws.callID != fields["CallUUID"] {
@@ -202,6 +205,9 @@ func TestVoiceStreamsSimulate_dryRunAndFlagsSendNothing(t *testing.T) {
 		"expect-audio":  {"--answer-url", srv.URL, "--xml-only", "--expect-audio"},
 		"duration":      {"--answer-url", srv.URL, "--duration", "31"},
 		"direction":     {"--answer-url", srv.URL, "--direction", "sideways"},
+
+		"forwarded-cause":  {"--answer-url", srv.URL, "--forwarded-cause", "486"},
+		"forwarded-reason": {"--answer-url", srv.URL, "--forwarded-reason", "UserBusy"},
 	} {
 		if _, ce := simulateJSON(t, args...); ce == nil || ce.Code != clierr.CodeBadFlag || ce.Context["flag"] != flag {
 			t.Errorf("%v: err = %v, want BAD_FLAG --%s", args, ce, flag)
