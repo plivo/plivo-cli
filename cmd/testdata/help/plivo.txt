@@ -28,7 +28,7 @@ Available Commands:
   help        Help about any command
   login       Log in to Plivo (browser-based; saves credentials securely to the OS keychain)
   logout      Log out a profile (deletes its entry + removes the auth_token from the OS keychain)
-  lookup      Carrier + format lookup for an E.164 number (lookup.plivo.com)
+  lookup      Carrier + format lookup for an E.164 number (spends money — requires --yes)
   messaging   Send messages (SMS / MMS / WhatsApp) — channel-split surface
   numbers     Manage account phone numbers
   open        Open the console or docs page for a call, the call logs, or the docs

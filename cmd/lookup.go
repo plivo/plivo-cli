@@ -17,10 +17,10 @@ const lookupPrice = "USD 0.004"
 
 var lookupCmd = &cobra.Command{
 	Use:   "lookup <number>",
-	Short: "Carrier + format lookup for an E.164 number (lookup.plivo.com)",
+	Short: "Carrier + format lookup for an E.164 number (spends money — requires --yes)",
 	Long: `Carrier + format lookup for an E.164 number (lookup.plivo.com).
 
-Each lookup is billed: ` + lookupPrice + ` per request. It takes no --yes;
+Each lookup is billed: ` + lookupPrice + ` per request. It requires --yes;
 --dry-run prints the request without sending it.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runLookup,
@@ -37,6 +37,11 @@ func runLookup(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	proceed, dryRun, gerr := guardSpend("lookup for " + number + " (billed " + lookupPrice + " per request)")
+	if !proceed {
+		return gerr
+	}
+	applyDryRun(client, dryRun)
 	q := url.Values{}
 	q.Set("type", lookupType)
 	var n api.LookupNumber
@@ -47,7 +52,7 @@ func runLookup(cmd *cobra.Command, args []string) error {
 	if apiErr != nil {
 		return apiErr
 	}
-	if dryRunFlag {
+	if dryRun {
 		return nil
 	}
 	if !quietFlag {
