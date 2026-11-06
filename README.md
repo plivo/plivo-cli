@@ -196,6 +196,7 @@ plivo voice calls make --from +1... --to +1... --yes        # actually call
 | [`plivo-audio-streaming`](audio-streaming-skill/SKILL.md) | `audio-streaming` | A voice bot on real calls with `<Stream>`, from setup to go-live |
 | [`plivo-sip-trunking`](sip-trunking-skill/SKILL.md) | `sip-trunking` | Connect an AI voice platform over SIP trunking |
 | [`plivo-voice-xml`](voice-xml-skill/SKILL.md) | `voice-xml` | Write and fix Plivo Voice XML |
+| [`plivo-call-forwarding`](call-forwarding-skill/SKILL.md) | `call-forwarding` | Debug forwarded calls into a Plivo number, out of Plivo or into a SIP trunk |
 
 `plivo skill install all` installs every one, and `npx skills add plivo/plivo-cli --skill <skill>` installs one without the CLI.
 
@@ -215,7 +216,7 @@ curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/skills.sh | sh
 
 `plivo skill install` and the one-line installer default to the Claude Code skills directory (`~/.claude/skills/plivo-cli`). For another agent, point it elsewhere — `plivo skill install --dir <path>` or `PLIVO_SKILL_DIR=<path>` for the installer. To capture the skill for an agent that loads it differently, `plivo skill install --print` writes it to stdout.
 
-As a Claude Code plugin, with all five product skills kept current with this repository, type this inside Claude Code (2.1.275+; on older versions run `/plugin marketplace add plivo/plivo-cli`, then `/plugin install plivo@plivo`):
+As a Claude Code plugin, with all six product skills kept current with this repository, type this inside Claude Code (2.1.275+; on older versions run `/plugin marketplace add plivo/plivo-cli`, then `/plugin install plivo@plivo`):
 
 ```
 /plugin install plivo --marketplace plivo/plivo-cli
@@ -223,7 +224,7 @@ As a Claude Code plugin, with all five product skills kept current with this rep
 
 Owners of a Claude organization can add `https://github.com/plivo/plivo-cli` under Organization settings > Plugins & skills to give every member the skills.
 
-For Google Antigravity (app, IDE and CLI), install the same five skills as a plugin:
+For Google Antigravity (app, IDE and CLI), install the same six skills as a plugin:
 
 ```
 agy plugin install https://github.com/plivo/plivo-cli/tree/main/antigravity/plivo

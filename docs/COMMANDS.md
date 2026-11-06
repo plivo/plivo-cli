@@ -3525,6 +3525,7 @@ They are bundled in the binary, so this writes them out without a network call.
   audio-streaming  a voice bot on real calls with <Stream>, from setup to go-live
   sip-trunking     connect an AI voice platform over SIP trunking
   voice-xml        write and fix Plivo Voice XML
+  call-forwarding  debug forwarded calls, into Plivo or out of it
   all              every listed skill
 
 With no argument, installs the CLI skill (unchanged from previous releases).
@@ -3543,7 +3544,7 @@ it is kept unless you pass --force, as `plivo skill update` does. A retired
 skill that an install replaces keeps its file, renamed SKILL.md.retired.
 
 ```
-plivo skill install [agents|cli|audio-streaming|sip-trunking|voice-xml|all] [flags]
+plivo skill install [agents|cli|audio-streaming|sip-trunking|voice-xml|call-forwarding|all] [flags]
 ```
 
 Examples:
@@ -4873,6 +4874,10 @@ with X-Plivo-Signature-V3 when a profile is logged in; check the reply (a
 of a 1 kHz tone in its contentType, as `voice streams test` does, reading back
 what the voice agent sends when the stream is bidirectional.
 
+For a forwarded call Plivo adds ForwardedFrom, ForwardedCause and
+ForwardedReason, exactly as the carrier sent them: --forwarded-from,
+--forwarded-cause and --forwarded-reason send them as given.
+
 --xml-only stops after the XML and opens no WebSocket. Only the answer
 document is read: no <Redirect> or action URL is followed. A Plivo-hosted
 answer URL (a console flow or an agent) is refused with nothing sent: a
@@ -4895,20 +4900,24 @@ Examples:
   plivo voice streams simulate --answer-url https://agent.example.com/answer
   plivo voice streams simulate --answer-url https://agent.example.com/answer --answer-method GET --to +14155551234 -o json
   plivo voice streams simulate --answer-url https://agent.example.com/answer --xml-only
+  plivo voice streams simulate --answer-url https://agent.example.com/answer --forwarded-from +14155550100 --forwarded-cause 486 --forwarded-reason UserBusy
 ```
 
 Flags:
 
 ```
-      --answer-method string   GET|POST, as set on the application (default "POST")
-      --answer-url string      the answer URL to request, as Plivo would (required)
-      --direction string       inbound|outbound, sent as Direction (default "inbound")
-      --duration int           seconds of synthetic audio to stream (max 30) (default 3)
-      --expect-audio           fail unless playAudio comes back; the audio is a tone, so only an echo-style agent or one that speaks first answers
-      --from string            the caller, sent as From (default "+14155551234")
-      --insecure               skip TLS verification (self-signed dev certs only)
-      --to string              the number called, sent as To (default "+14155555678")
-      --xml-only               stop after the answer URL and its XML: open no WebSocket
+      --answer-method string      GET|POST, as set on the application (default "POST")
+      --answer-url string         the answer URL to request, as Plivo would (required)
+      --direction string          inbound|outbound, sent as Direction (default "inbound")
+      --duration int              seconds of synthetic audio to stream (max 30) (default 3)
+      --expect-audio              fail unless playAudio comes back; the audio is a tone, so only an echo-style agent or one that speaks first answers
+      --forwarded-cause string    the forwarding cause, such as 302, 486 or 408, sent as ForwardedCause (needs --forwarded-from)
+      --forwarded-from string     the number that forwarded the call, sent as ForwardedFrom
+      --forwarded-reason string   the forwarding reason, such as UserBusy, NoReply or Unconditional, sent as ForwardedReason (needs --forwarded-from)
+      --from string               the caller, sent as From (default "+14155551234")
+      --insecure                  skip TLS verification (self-signed dev certs only)
+      --to string                 the number called, sent as To (default "+14155555678")
+      --xml-only                  stop after the answer URL and its XML: open no WebSocket
 ```
 
 ---

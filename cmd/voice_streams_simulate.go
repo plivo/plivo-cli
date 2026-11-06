@@ -30,9 +30,10 @@ import (
 )
 
 var (
-	simAnswerURL, simAnswerMethod string
-	simFrom, simTo, simDirection  string
-	simFlags                      simulateFlags
+	simAnswerURL, simAnswerMethod         string
+	simFrom, simTo, simDirection          string
+	simFwdFrom, simFwdCause, simFwdReason string
+	simFlags                              simulateFlags
 )
 
 var voiceStreamsSimulateCmd = &cobra.Command{
@@ -47,6 +48,10 @@ with X-Plivo-Signature-V3 when a profile is logged in; check the reply (a
 of a 1 kHz tone in its contentType, as ` + "`voice streams test`" + ` does, reading back
 what the voice agent sends when the stream is bidirectional.
 
+For a forwarded call Plivo adds ForwardedFrom, ForwardedCause and
+ForwardedReason, exactly as the carrier sent them: --forwarded-from,
+--forwarded-cause and --forwarded-reason send them as given.
+
 --xml-only stops after the XML and opens no WebSocket. Only the answer
 document is read: no <Redirect> or action URL is followed. A Plivo-hosted
 answer URL (a console flow or an agent) is refused with nothing sent: a
@@ -60,7 +65,8 @@ prints checks[] and the stream summary; when a check fails it prints only
 the error, with checks[] in error.context.`,
 	Example: `  plivo voice streams simulate --answer-url https://agent.example.com/answer
   plivo voice streams simulate --answer-url https://agent.example.com/answer --answer-method GET --to +14155551234 -o json
-  plivo voice streams simulate --answer-url https://agent.example.com/answer --xml-only`,
+  plivo voice streams simulate --answer-url https://agent.example.com/answer --xml-only
+  plivo voice streams simulate --answer-url https://agent.example.com/answer --forwarded-from +14155550100 --forwarded-cause 486 --forwarded-reason UserBusy`,
 	Args: cobra.NoArgs,
 	RunE: runVoiceStreamsSimulate,
 }
@@ -72,6 +78,9 @@ func init() {
 	f.StringVar(&simFrom, "from", sampleCaller, "the caller, sent as From")
 	f.StringVar(&simTo, "to", sampleCalled, "the number called, sent as To")
 	f.StringVar(&simDirection, "direction", dirInbound, "inbound|outbound, sent as Direction")
+	f.StringVar(&simFwdFrom, "forwarded-from", "", "the number that forwarded the call, sent as ForwardedFrom")
+	f.StringVar(&simFwdCause, "forwarded-cause", "", "the forwarding cause, such as 302, 486 or 408, sent as ForwardedCause (needs --forwarded-from)")
+	f.StringVar(&simFwdReason, "forwarded-reason", "", "the forwarding reason, such as UserBusy, NoReply or Unconditional, sent as ForwardedReason (needs --forwarded-from)")
 	simFlags.register(f)
 	voiceStreamsCmd.AddCommand(voiceStreamsSimulateCmd)
 }
@@ -142,12 +151,26 @@ func runVoiceStreamsSimulate(cmd *cobra.Command, _ []string) error {
 	if simDirection != dirInbound && simDirection != dirOutbound {
 		return clierr.BadFlag("direction", fmt.Sprintf("%q is not inbound or outbound", simDirection))
 	}
+	if simFwdFrom == "" {
+		if simFwdCause != "" {
+			return clierr.BadFlag("forwarded-cause", "needs --forwarded-from: Plivo sends a cause only on a forwarded call")
+		}
+		if simFwdReason != "" {
+			return clierr.BadFlag("forwarded-reason", "needs --forwarded-from: Plivo sends a reason only on a forwarded call")
+		}
+	}
 	signer, err := resolveStreamSigner()
 	if err != nil {
 		return err
 	}
 	o := simulateOpts{simulateFlags: simFlags, answerURL: simAnswerURL, method: simAnswerMethod,
 		params: callParams(strings.TrimSpace(simFrom), strings.TrimSpace(simTo), simDirection)}
+	// Untrimmed: Plivo passes on the carrier's values unchanged.
+	for field, v := range map[string]string{"ForwardedFrom": simFwdFrom, "ForwardedCause": simFwdCause, "ForwardedReason": simFwdReason} {
+		if v != "" {
+			o.params[field] = v
+		}
+	}
 	if dryRunFlag {
 		printSimulatePlan(o, signer)
 		return nil
