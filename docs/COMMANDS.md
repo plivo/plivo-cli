@@ -4403,6 +4403,12 @@ Subcommands:
 
 Create a SIP endpoint
 
+Create a SIP endpoint.
+
+With --agent, a Plivo CX agent answers the calls the endpoint makes: the
+endpoint is created, then linked to the agent. If the link fails, the endpoint
+is kept, and the error gives the command that links it.
+
 ```
 plivo voice endpoints create [flags]
 ```
@@ -4410,6 +4416,7 @@ plivo voice endpoints create [flags]
 Flags:
 
 ```
+      --agent string      CX agent (agent_uuid) to answer the endpoint's calls; not with --app-id
       --alias string      human-friendly label (required)
       --app-id string     application to attach
       --password string   SIP password (required)
@@ -4460,6 +4467,12 @@ Flags:
 
 Update a SIP endpoint
 
+Update a SIP endpoint.
+
+With --agent, a Plivo CX agent answers the calls the endpoint makes, in place
+of its application. Any other change is made first. To route the endpoint to
+an application again, pass --app-id.
+
 ```
 plivo voice endpoints update <endpoint_id> [flags]
 ```
@@ -4467,6 +4480,7 @@ plivo voice endpoints update <endpoint_id> [flags]
 Flags:
 
 ```
+      --agent string      CX agent (agent_uuid) to answer the endpoint's calls; not with --app-id
       --alias string      new alias
       --app-id string     new application id
       --password string   new password

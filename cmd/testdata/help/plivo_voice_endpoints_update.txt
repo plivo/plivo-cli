@@ -1,9 +1,14 @@
-Update a SIP endpoint
+Update a SIP endpoint.
+
+With --agent, a Plivo CX agent answers the calls the endpoint makes, in place
+of its application. Any other change is made first. To route the endpoint to
+an application again, pass --app-id.
 
 Usage:
   plivo voice endpoints update <endpoint_id> [flags]
 
 Flags:
+      --agent string      CX agent (agent_uuid) to answer the endpoint's calls; not with --app-id
       --alias string      new alias
       --app-id string     new application id
   -h, --help              help for update
