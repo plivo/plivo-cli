@@ -3525,6 +3525,7 @@ They are bundled in the binary, so this writes them out without a network call.
   audio-streaming  a voice bot on real calls with <Stream>, from setup to go-live
   sip-trunking     connect an AI voice platform over SIP trunking
   voice-xml        write and fix Plivo Voice XML
+  call-forwarding  debug forwarded calls, into Plivo or out of it
   all              every listed skill
 
 With no argument, installs the CLI skill (unchanged from previous releases).
@@ -3543,7 +3544,7 @@ it is kept unless you pass --force, as `plivo skill update` does. A retired
 skill that an install replaces keeps its file, renamed SKILL.md.retired.
 
 ```
-plivo skill install [agents|cli|audio-streaming|sip-trunking|voice-xml|all] [flags]
+plivo skill install [agents|cli|audio-streaming|sip-trunking|voice-xml|call-forwarding|all] [flags]
 ```
 
 Examples:

@@ -33,6 +33,7 @@ var skills = []struct{ src, dir string }{
 	{"audio-streaming-skill/SKILL.md", "plivo-audio-streaming"},
 	{"sip-trunking-skill/SKILL.md", "plivo-sip-trunking"},
 	{"voice-xml-skill/SKILL.md", "plivo-voice-xml"},
+	{"call-forwarding-skill/SKILL.md", "plivo-call-forwarding"},
 }
 
 func main() {
