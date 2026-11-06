@@ -38,7 +38,7 @@ On a forwarded call, Plivo's answer URL and hangup URL requests carry `Forwarded
 - `ForwardedReason` casing varies by carrier. *Seen*: `NoReply`, `UserBusy`, `no-answer`, `Unconditional`, `NotLoggedIn`, `SubscriberNotReachable`, `unknown`, in pairs such as 408 `NoReply`, 486 `UserBusy`, 302 `no-answer`, 302 `UserBusy`, 302 `Unconditional`.
 - Each field is optional on its own: some forwarded calls carry `ForwardedFrom` with no cause or reason.
 - None of the three: a direct dial, or the carrier sent no forwarding information. Only the carrier can say why.
-- A value in the answer URL's query string shadows the one in the POST body: keep these names out of it.
+- A value in the answer URL's query string can shadow the one in the POST body (many frameworks merge both): keep these names out of it.
 - The call record has no documented forwarding field: the server's log of the answer and hangup requests is the record.
 - The `<Stream>` `start` event carries no forwarding fields: read them on the answer URL request and pass what the voice agent needs in `extraHeaders`, letters and digits only (drop `+` and anything from `;`).
 

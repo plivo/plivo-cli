@@ -131,6 +131,6 @@ var shippedSkillHashes = map[string][]string{
 		"fe86bfeea69b303491ba697469203bd9ecfcf5a9359fc91841959b50243253d4",
 	},
 	"plivo-call-forwarding": {
-		"457ee82496aac054c5d719f1f785f1880b1ea0659e2f7a5e22b700bf60afa1c8",
+		"b75a2952924cdde24bb9b094bd05643e72e9a35f4a67507bd16a4128dcb5ac3f",
 	},
 }
