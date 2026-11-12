@@ -249,16 +249,18 @@ Billing is per character: each `done` event and the usage report give the billed
 
 ## When a request fails
 
-Read the error body first: its `code`, `message` and `param`. Only these are documented:
+With the CLI, add `-o json`: the error envelope prints on stderr. Its `error.code` is the CLI's own code (`VALIDATION_ERROR`, `RESOURCE_NOT_FOUND`, `UPSTREAM_TIMEOUT` and so on), not Plivo's. Plivo's answer is at `error.context.upstream.body`: its `code`, the text in `error` (not `message`), a `param` when a field is at fault, and `api_id`. Read that body first, and key the table on `upstream.body.code`. Only these are documented:
 
-| Status and code | Meaning | Fix |
+| `upstream.body.code` (HTTP status) | Meaning | Fix |
 |---|---|---|
-| `429 concurrency_limit` | More than 50 open connections on the account | Close idle sockets, then retry |
-| `400 language_not_supported` | The voice does not speak the text's language | Pick a voice from `plivo tts voices --language <code>`, or set `--language` |
-| `422 invalid_request` | A bad value; `param` names the field (`lexicon_id` for a deleted lexicon). A `null` for an optional field also returns it | Fix that field, or omit it |
-| `404 not_found` | The lexicon ID does not exist | `plivo tts lexicons list` |
+| `concurrency_limit` (429) | More than 50 open connections on the account | Close idle sockets, then retry |
+| `language_not_supported` (400) | The voice does not speak the text's language | Pick a voice from `plivo tts voices --language <code>`, or set `--language` |
+| `invalid_request` (422) | A bad value; `param` names the field (`lexicon_id` for a deleted lexicon). A `null` for an optional field also returns it | Fix that field, or omit it |
+| `not_found` (404) | The lexicon ID does not exist | `plivo tts lexicons list` |
 
-The docs' full error page was not available when this file was written, so for any other code, show the user the whole body and do not guess a cause. Every response carries a `nimble-connection-id` header that matches `api_id` in an error body: give it to Plivo support with the UTC time and the command (not the text, if it is private).
+A realtime WebSocket client has no CLI envelope: its `error` frame carries `code`, `message` and `param` at the top level.
+
+The docs' full error page was not available when this file was written, so for any other code, show the user the whole `upstream.body` and do not guess a cause. To get help, give Plivo support `upstream.body.api_id` and `error.request_id`, with the UTC time and the command (not the text, if it is private). A direct HTTP or WebSocket client, such as the realtime script, has no envelope: every response carries a `nimble-connection-id` header that matches `api_id` in an error body, so give support that.
 
 Check in this order: the voice and language pair (`plivo tts voices`); the text length (5,000 characters) and the `--pace` and `--volume` ranges; for mp3, `--bitrate`; `cash_credits`; then the error body.
 
