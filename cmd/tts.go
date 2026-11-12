@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"mime"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -295,6 +296,11 @@ func runTTSSpeak(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if apiErr != nil {
+		// A 5xx or 408 can come back after Plivo did the work and billed it.
+		if apiErr.StatusCode >= 500 || apiErr.StatusCode == http.StatusRequestTimeout {
+			apiErr.Retryable = false
+			apiErr.Hint = "The request may have been billed. Compare `plivo tts usage` with the reading from before the send before you send it again."
+		}
 		return apiErr
 	}
 	if client.DryRun {

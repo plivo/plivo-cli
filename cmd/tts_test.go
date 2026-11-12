@@ -175,6 +175,12 @@ func TestTTSSpeak_apiErrorWritesNothing(t *testing.T) {
 	if _, err := os.Stat(out); ttsCode(r.err) != clierr.CodeUpstreamError || err == nil || !strings.Contains(r.stderr, "voice overloaded") {
 		t.Errorf("JSON 200: err %v, file written %v, stderr %q", r.err, err == nil, r.stderr)
 	}
+	// A 5xx may have been billed: never retryable, and the hint sends the caller to the usage report.
+	r = ttsRun(t, newQAServer(t, map[string]string{"POST TTS/": `502 {"error": "no node"}`}), "", "speak", "--voice", "v", "--text", "hi", "--out", out, "--yes")
+	var ce *clierr.Error
+	if _, err := os.Stat(out); !errors.As(r.err, &ce) || ce.Retryable || !strings.Contains(ce.Hint, "tts usage") || err == nil || len(r.reqs) != 1 {
+		t.Errorf("502: err %v, file written %v, requests %v; want not retryable, a usage hint, no file, 1 request", r.err, err == nil, r.reqs)
+	}
 }
 
 const ttsVoicesJSON = `{"api_id": "x", "meta": {"total_count": 3}, "objects": [
