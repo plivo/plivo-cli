@@ -92,7 +92,7 @@ plivo tts speak --voice r4_riya --language hi --text "आपका पैके�
   --format mulaw --sample-rate 8000 --out reminder.ulaw --dry-run
 ```
 
-Show the preview and the character count, then ask: "Synthesize <N> characters now? Plivo bills per character." Synthesize / Not now (header Synthesize). On yes, take a reading with `plivo tts usage -o json`, then run the same command with `--yes` in place of `--dry-run`.
+The preview prints the character count on its first line (`[dry-run] <N> characters, ...`): quote that number and do not count bytes yourself. Show the preview, then ask: "Synthesize <N> characters now? Plivo bills per character." Synthesize / Not now (header Synthesize). On yes, take a reading with `plivo tts usage -o json`, then run the same command with `--yes` in place of `--dry-run`.
 
 If a billed run fails with `UPSTREAM_TIMEOUT`, `NETWORK_ERROR` or a 5xx, do not run it again: the request may have been billed. Read `plivo tts usage -o json` again, compare it with the reading from before the send, tell the user what changed, and ask before you send again. Take a usage reading before every billed run.
 
