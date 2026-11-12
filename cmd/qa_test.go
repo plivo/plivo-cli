@@ -115,7 +115,7 @@ func (r qaReq) String() string {
 // is skipped while it fails, and fails once it passes.
 func TestQA_regressions(t *testing.T) {
 	var cases []qaCase
-	for _, round := range [][]qaCase{r1Cases(), r2Cases(), r3Cases(), keepCases()} {
+	for _, round := range [][]qaCase{r1Cases(), r2Cases(), r3Cases(), r4TtsCases(), keepCases()} {
 		cases = append(cases, round...)
 	}
 	seen := map[string]bool{}
