@@ -193,6 +193,9 @@ func persistProfile(cfg *config.Config, requestedName string, nameExplicit bool,
 // printProfileSaved confirms which profile a login saved, and where.
 func printProfileSaved(profileName string, inKeychain bool, b loginBundle) {
 	cfgPath, _ := config.Path()
+	if printBanner(os.Stderr) {
+		printWelcome(os.Stderr, b.Name, b.Email, b.OrgName)
+	}
 	fmt.Fprintf(os.Stderr, "✓ %s\n", loginConfirmationLine(profileName, b))
 	if inKeychain {
 		fmt.Fprintf(os.Stderr, "  Profile: %s\n  Token:   OS keychain\n", cfgPath)
