@@ -352,9 +352,9 @@ func TestListTimeFlags_refusedBeforeAnyRequest(t *testing.T) {
 	}
 	// The lists that check each limit locally. SIP Trunking's own 400 covers
 	// its limit, which is 3 months.
-	retains := map[string]bool{"voice calls list": true,
+	retains := map[string]bool{"voice calls list": true, "voice calls stats": true,
 		"messaging sms list": true, "messaging mms list": true, "messaging whatsapp list": true}
-	spans := map[string]bool{"voice calls list": true, "voice recordings list": true}
+	spans := map[string]bool{"voice calls list": true, "voice calls stats": true, "voice recordings list": true}
 	d := daysAgo(3)
 	lists := 0
 	walkOwnCommands(func(c *cobra.Command, path []string) {
@@ -391,8 +391,8 @@ func TestListTimeFlags_refusedBeforeAnyRequest(t *testing.T) {
 			})
 		}
 	})
-	if lists != 6 {
-		t.Errorf("found %d lists with --since, want 6", lists)
+	if lists != 7 {
+		t.Errorf("found %d lists with --since, want 7", lists)
 	}
 }
 
