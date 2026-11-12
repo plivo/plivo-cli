@@ -1105,10 +1105,9 @@ type TTSVoice struct {
 	AccentType string   `json:"accent_type"`
 }
 
+// TTSVoiceList is what plivo tts voices prints: the voices, filtered here.
 type TTSVoiceList struct {
 	RawBody
-	APIID   string     `json:"api_id"`
-	Meta    PageMeta   `json:"meta"`
 	Objects []TTSVoice `json:"objects"`
 }
 

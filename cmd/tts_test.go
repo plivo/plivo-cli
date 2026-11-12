@@ -202,6 +202,10 @@ func TestTTSVoices_filterHere(t *testing.T) {
 	if r = ttsRun(t, srv, "", "voices", "--language", "kn", "-o", "json"); r.err != nil || !strings.Contains(r.stdout, `"objects": []`) {
 		t.Errorf("no match must be an empty list: err %v\n%s", r.err, r.stdout)
 	}
+	srv = newQAServer(t, map[string]string{"GET TTS/Voices/": `{"voices": [{"voice_id": "r4_riya", "languages": ["hi"]}]}`})
+	if r = ttsRun(t, srv, "", "voices", "-o", "table"); r.err != nil || !strings.Contains(r.stdout, "r4_riya") {
+		t.Errorf("the docs' voices shape: err %v\n%s", r.err, r.stdout)
+	}
 }
 
 const ttsLexJSON = `{"lexicon_id": "lx_1", "name": "brands", "kind": "respell", "version": 1, "rules": [{"word": "Plivo", "value": "PLEE-voh"}]}`

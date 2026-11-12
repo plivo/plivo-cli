@@ -205,7 +205,11 @@ func runTTSVoices(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	var resp api.TTSVoiceList
+	// The docs list the voices under "voices", the live API under "objects".
+	var resp struct {
+		api.TTSVoiceList
+		Voices []api.TTSVoice `json:"voices"`
+	}
 	apiErr, err := client.Do("GET", client.AccountURL("TTS", "Voices"), nil, nil, &resp)
 	if err != nil {
 		return err
@@ -218,7 +222,11 @@ func runTTSVoices(cmd *cobra.Command, args []string) error {
 	}
 	var rows []api.TTSVoice
 	table := [][]string{{"VOICE_ID", "NAME", "GENDER", "LANGUAGES", "ACCENT"}}
-	for _, v := range resp.Objects {
+	voices := resp.Objects
+	if len(voices) == 0 {
+		voices = resp.Voices
+	}
+	for _, v := range voices {
 		if ttsVoicesLanguage != "" && !slices.ContainsFunc(v.Languages, func(l string) bool { return strings.EqualFold(l, ttsVoicesLanguage) }) {
 			continue
 		}
