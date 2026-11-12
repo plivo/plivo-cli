@@ -5,6 +5,48 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-11-12
+
+### Added
+
+- `plivo tts` turns text into speech with Plivo's text-to-speech API.
+  `tts voices` lists the voices (`--language` and `--gender` narrow the
+  list), `tts speak` writes an audio file (wav, mp3, mulaw, alaw or pcm, up
+  to 5,000 characters), `tts lexicons list|get|create|delete` manages
+  pronunciation lexicons, and `tts usage` shows the characters and audio
+  generated so far. `speak` is billed per character, so it refuses to run
+  without `--yes`; `--dry-run` previews the request and the character count
+  first. Realtime text-to-speech is a WebSocket API with no CLI command: the
+  skill below covers it.
+- `skill install tts` installs the text-to-speech skill. Your agent picks a
+  voice, checks your credit, previews the request and sends it only after
+  you agree.
+- `skill install call-forwarding` installs a skill for debugging forwarded
+  calls: `ForwardedFrom` on an answer URL, a forwarded leg that fails, or a
+  `Diversion` header on a SIP trunk.
+- `voice streams simulate --forwarded-from <number>` requests the answer URL
+  as Plivo does for a forwarded call, with `ForwardedFrom`. Together with it,
+  `--forwarded-cause` (such as 486) and `--forwarded-reason` (such as
+  `UserBusy`) add `ForwardedCause` and `ForwardedReason`.
+- `voice endpoints create --agent <agent_uuid>` and `voice endpoints update
+  <endpoint_id> --agent <agent_uuid>` link a SIP endpoint to a Plivo CX
+  agent, so the agent answers the calls the endpoint makes. `--agent` does
+  not combine with `--app-id`. If the link fails after a create, the
+  endpoint is kept and the error gives the command that links it.
+- The skills also install as a Google Antigravity plugin (`agy plugin
+  install https://github.com/plivo/plivo-cli/tree/main/antigravity/plivo`)
+  and as a Codex plugin (`codex plugin marketplace add plivo/plivo-cli`,
+  then `codex plugin add plivo@plivo`).
+
+### Changed
+
+- The Claude Code plugin, the Gemini CLI extension and the Antigravity
+  plugin carry seven skills: the five of 1.3.2 plus text-to-speech and call
+  forwarding.
+- The `plivo-cli` skill routes text-to-speech and forwarded-call requests
+  to the matching skill, and lists `tts speak` as a command that spends
+  credit.
+
 ## [1.3.2] - 2026-10-28
 
 v1.3.1 was tagged but never released: its changes ship in this release.
