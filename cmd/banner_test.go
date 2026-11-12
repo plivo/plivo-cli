@@ -24,18 +24,24 @@ func bannerSession(t *testing.T, tty bool, cols int) {
 
 var ansiRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
-func TestBannerLogoIsRectangular(t *testing.T) {
-	for i, row := range bannerLogo {
-		if len(row) != len(bannerLogo[0]) || strings.Trim(row, "#.") != "" {
-			t.Fatalf("logo row %d is %q: want %d chars of # and .", i, row, len(bannerLogo[0]))
+func TestBannerGridsAreRectangular(t *testing.T) {
+	for name, grid := range map[string][]string{"logo": bannerLogo[:], "cli": bannerCLI[:]} {
+		for i, row := range grid {
+			if len(row) != len(grid[0]) || strings.Trim(row, "#.") != "" {
+				t.Fatalf("%s row %d is %q: want %d chars of # and .", name, i, row, len(grid[0]))
+			}
 		}
+	}
+	if bannerCLIAt+len(bannerCLI[0]) > len(bannerLogo[0]) {
+		t.Error("CLI runs past the logo's right edge")
 	}
 }
 
 func TestRenderBanner(t *testing.T) {
+	bannerSession(t, true, 80)
 	plain := renderBanner(false)
-	if len(plain) != 11 {
-		t.Fatalf("got %d rows, want 11", len(plain))
+	if len(plain) != 16 {
+		t.Fatalf("got %d rows, want 16", len(plain))
 	}
 	for i, row := range plain {
 		if strings.Contains(row, "\x1b") {
@@ -45,30 +51,43 @@ func TestRenderBanner(t *testing.T) {
 			t.Errorf("row %d is %d columns, want at most 52", i, n)
 		}
 	}
-	if !strings.Contains(plain[10], bannerLabel) {
-		t.Errorf("label row %q does not hold %q", plain[10], bannerLabel)
+	if strings.TrimSpace(plain[9]) != "" || !strings.Contains(plain[10], "█") || !strings.Contains(plain[15], "█") {
+		t.Errorf("CLI should fill rows 11 to 16 under a blank row 10: %q / %q / %q", plain[9], plain[10], plain[15])
 	}
 
-	for i, row := range renderBanner(true) {
-		if !strings.HasPrefix(row, bannerOn()) || !strings.HasSuffix(row, bannerOff) {
-			t.Errorf("row %d is not wrapped in the ink colour: %q", i, row)
+	// Painted, the shadow adds a pixel on the right and one below, so a row.
+	painted := renderBanner(true)
+	if len(painted) != 17 {
+		t.Fatalf("painted: got %d rows, want 17", len(painted))
+	}
+	for i, row := range painted {
+		if !strings.HasSuffix(row, bannerOff) {
+			t.Errorf("painted row %d does not end in a reset: %q", i, row)
 		}
-		if got := ansiRe.ReplaceAllString(row, ""); got != plain[i] {
-			t.Errorf("row %d changes its letters when painted:\n got %q\nwant %q", i, got, plain[i])
+		if n := utf8.RuneCountInString(ansiRe.ReplaceAllString(row, "")); n > 53 {
+			t.Errorf("painted row %d is %d columns, want at most 53", i, n)
 		}
 	}
 }
 
-func TestBannerInk(t *testing.T) {
+func TestBannerColours(t *testing.T) {
 	bannerSession(t, true, 80)
 	t.Setenv("COLORTERM", "truecolor")
-	if got := renderBanner(true)[0]; !strings.Contains(got, "38;2;77;106;255") {
-		t.Errorf("24-bit terminal should get #4d6aff ink: %q", got)
+	all := strings.Join(renderBanner(true), "\n")
+	for _, want := range []string{"38;2;77;106;255m", "38;2;38;52;140m", "48;2;38;52;140m"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("24-bit banner lacks %q", want)
+		}
 	}
 	t.Setenv("COLORTERM", "")
-	got := renderBanner(true)[0]
-	if !strings.Contains(got, "38;5;63") || strings.Contains(got, "38;2;") {
-		t.Errorf("256-colour terminal should get colour 63: %q", got)
+	all = strings.Join(renderBanner(true), "\n")
+	for _, want := range []string{"38;5;63m", "38;5;60m", "48;5;60m"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("256-colour banner lacks %q", want)
+		}
+	}
+	if strings.Contains(all, ";2;") {
+		t.Error("256-colour banner has a 24-bit escape")
 	}
 }
 
@@ -133,8 +152,8 @@ func TestPrintBannerLayout(t *testing.T) {
 		t.Fatal("banner not drawn")
 	}
 	lines := strings.Split(strings.TrimSuffix(buf.String(), "\n"), "\n")
-	if len(lines) != 13 || lines[0] != "" || lines[12] != "" {
-		t.Errorf("want 11 rows between two blank lines, got %d lines", len(lines))
+	if len(lines) != 18 || lines[0] != "" || lines[17] != "" {
+		t.Errorf("want 16 rows between two blank lines, got %d lines", len(lines))
 	}
 }
 
