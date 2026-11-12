@@ -146,7 +146,7 @@ plivo tts lexicons delete lx_... --dry-run      # then --yes, after the user agr
 
 ## Use the audio on a call
 
-- **Play a file.** Synthesize `wav` (`--sample-rate 8000` or `16000`) or `mp3`, host it at an HTTPS URL, and play it from the answer XML with `<Play>https://.../reminder.mp3</Play>`. `<Play>` takes mp3 or wav up to 10 MB, 8 or 16 kHz mono recommended; it does not take raw mu-law. A raw `.ulaw` file is for the stream below. To speak plain text inside a call with no file, use the `<Speak>` element instead (`plivo skill install voice-xml`).
+- **Play a file.** Synthesize `wav` (`--sample-rate 8000` or `16000`) or `mp3`, host it at an HTTPS URL, and play it from the answer XML with `<Play>https://.../message.mp3</Play>`. `<Play>` takes mp3 or wav up to 10 MB, 8 or 16 kHz mono recommended; it does not take raw mu-law. A raw `.ulaw` file is for the stream below. To speak plain text inside a call with no file, use the `<Speak>` element instead (`plivo skill install voice-xml`).
 - **Send it down an audio stream.** For a voice agent on `<Stream>` with `bidirectional="true"` and `contentType="audio/x-mulaw;rate=8000"`, synthesize raw mu-law at 8000 Hz (`--format mulaw --sample-rate 8000`). Base64 the bytes in pieces of 12,000 raw bytes or fewer (16,000 base64 characters, 75 frames of 160 bytes) and send each as `{"event": "playAudio", "media": {"contentType": "audio/x-mulaw", "sampleRate": 8000, "payload": "<base64>"}}`. Send at real-time pace: bursting overflows the playback buffer (see the audio-streaming skill). The stream's XML, events and debugging are in `plivo skill install audio-streaming`.
 - **Live replies from a model.** Use the realtime WebSocket below with the same raw mu-law 8000 `output_format`, and forward each audio frame's bytes as a `playAudio` payload.
 
@@ -213,7 +213,7 @@ Messages you send (JSON text frames, up to 64 KiB each):
 
 | `type` | Fields | Meaning |
 |---|---|---|
-| `text` | `context_id`, `text` (up to 5,000 characters), `finish` (default `false`), `timestamps` (default `false`); on a reply's first message also `voice_id` (required), `language`, `output_format`, `pace`, `volume`, `lexicon_id`, `continuation`, `seed` | A new `context_id` opens a reply. Send the text in pieces, and `finish: true` on the last |
+| `text` | `context_id`, `text` (up to 5,000 characters), `finish` (default `false`), `timestamps` (default `false`); on a reply's first message also `voice_id` (required), `language`, `output_format`, `pace`, `volume`, `pronunciations`, `lexicon_id`, `continuation`, `seed` | A new `context_id` opens a reply. Send the text in pieces, and `finish: true` on the last |
 | `flush` | `context_id` | Speak everything received so far for that reply; the server answers `flush_done` |
 | `cancel` | optional `context_id` | Stop that reply now; with no `context_id`, stop all replies |
 
