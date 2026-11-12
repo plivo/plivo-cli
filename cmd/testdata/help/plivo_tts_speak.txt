@@ -13,6 +13,9 @@ takes 8000, 16000, 22050, 24000, 32000, 44100 or 48000 for wav, pcm, f32 and
 wav-f32, and 8000 for the mulaw and alaw formats. --out - writes the audio to
 stdout, which is refused on a terminal.
 
+--text-normalization=false reads numbers and dates as written, not as words
+(write =false: a space before false does not work).
+
 Usage:
   plivo tts speak [flags]
 
@@ -22,19 +25,20 @@ Examples:
   plivo tts speak --voice r4_riya --language hi --file msg.txt --out msg.ulaw --yes
 
 Flags:
-      --bitrate int       mp3 bitrate in bits per second (default depends on the sample rate)
-      --file string       read the text from this file (- for stdin)
-      --format string     audio format: wav, pcm, f32, wav-f32, mulaw, alaw, wav-mulaw, wav-alaw or mp3 (default from the --out extension)
-  -h, --help              help for speak
-      --language string   language code: auto, en, hi, bn, ta, te, mr, gu, kn (default auto)
-      --lexicon string    lexicon_id of a saved lexicon to apply
-      --out string        file to write the audio to (- for stdout) (required)
-      --pace float        speaking pace, 0.7 to 1.2 (default 1)
-      --sample-rate int   sample rate in Hz (default from --format)
-      --seed int          repeatable output: the same text, voice and seed give identical audio
-      --text string       text to speak, up to 5000 characters
-      --voice string      voice_id from plivo tts voices (required)
-      --volume float      volume, 0.5 to 2.0 (default 1)
+      --bitrate int          mp3 bitrate in bits per second (default depends on the sample rate)
+      --file string          read the text from this file (- for stdin)
+      --format string        audio format: wav, pcm, f32, wav-f32, mulaw, alaw, wav-mulaw, wav-alaw or mp3 (default from the --out extension)
+  -h, --help                 help for speak
+      --language string      language code: auto, en, hi, bn, ta, te, mr, gu, kn (default auto)
+      --lexicon string       lexicon_id of a saved lexicon to apply
+      --out string           file to write the audio to (- for stdout) (required)
+      --pace float           speaking pace, 0.7 to 1.2 (default 1)
+      --sample-rate int      sample rate in Hz (default from --format)
+      --seed int             repeatable output: the same text, voice and seed give identical audio
+      --text string          text to speak, up to 5000 characters
+      --text-normalization   read numbers and dates as words; turn it off with --text-normalization=false (default true)
+      --voice string         voice_id from plivo tts voices (required)
+      --volume float         volume, 0.5 to 2.0 (default 1)
 
 Global Flags:
       --dry-run            preview requests and local changes without sending or writing anything

@@ -118,7 +118,9 @@ is wav, and the f32 and wav-* formats are never guessed from it. --sample-rate
 takes 8000, 16000, 22050, 24000, 32000, 44100 or 48000 for wav, pcm, f32 and
 wav-f32, and 8000 for the mulaw and alaw formats. --out - writes the audio to
 stdout, which is refused on a terminal.
-`,
+
+--text-normalization=false reads numbers and dates as written, not as words
+(write =false: a space before false does not work).`,
 	Example: `  plivo tts speak --voice r4_ashley --text "Hello from Plivo" --out hello.wav --dry-run
   plivo tts speak --voice r4_ashley --text "Hello from Plivo" --out hello.wav --yes
   plivo tts speak --voice r4_riya --language hi --file msg.txt --out msg.ulaw --yes`,
@@ -190,6 +192,7 @@ var (
 	ttsVolume     float64
 	ttsLexicon    string
 	ttsSeed       int64
+	ttsTextNorm   bool
 
 	ttsLexName  string
 	ttsLexKind  string
@@ -214,6 +217,7 @@ func init() {
 	f.Float64Var(&ttsVolume, "volume", 1.0, "volume, 0.5 to 2.0")
 	f.StringVar(&ttsLexicon, "lexicon", "", "lexicon_id of a saved lexicon to apply")
 	f.Int64Var(&ttsSeed, "seed", 0, "repeatable output: the same text, voice and seed give identical audio")
+	f.BoolVar(&ttsTextNorm, "text-normalization", true, "read numbers and dates as words; turn it off with --text-normalization=false")
 	_ = ttsSpeakCmd.MarkFlagRequired("voice")
 	_ = ttsSpeakCmd.MarkFlagRequired("out")
 
@@ -571,6 +575,9 @@ func ttsSpeakBody(cmd *cobra.Command, text string) (map[string]any, error) {
 			return nil, clierr.BadFlag("volume", fmt.Sprintf("must be %.1f to %.1f", ttsMinVolume, ttsMaxVolume))
 		}
 		body["volume"] = ttsVolume
+	}
+	if cmd.Flags().Changed("text-normalization") {
+		body["text_normalization"] = ttsTextNorm
 	}
 	if ttsLexicon != "" {
 		body["lexicon_id"] = ttsLexicon

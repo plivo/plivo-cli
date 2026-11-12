@@ -136,6 +136,36 @@ func TestTTSFormatNames_listEveryPreset(t *testing.T) {
 	}
 }
 
+func TestTTSSpeak_bodyTakesNormalization(t *testing.T) {
+	var accept string
+	srv := ttsAudioServer(t, &accept)
+	run := func(extra ...string) map[string]any {
+		args := append([]string{"speak", "--voice", "v", "--text", "hi", "--out", filepath.Join(t.TempDir(), "a.wav"), "--yes"}, extra...)
+		r := ttsRun(t, srv, "", args...)
+		if r.err != nil || len(r.reqs) != 1 {
+			t.Fatalf("%v: err %v, requests %v", extra, r.err, r.reqs)
+		}
+		return r.reqs[0].Body
+	}
+	// Left alone the field is not sent; null would be a 422.
+	if b := run(); b["text_normalization"] != nil {
+		t.Errorf("defaults were sent: %v", b)
+	}
+	if b := run("--text-normalization=false"); b["text_normalization"] != false {
+		t.Errorf("=false: %v", b)
+	}
+	if b := run("--text-normalization"); b["text_normalization"] != true {
+		t.Errorf("bare flag: %v", b)
+	}
+	// Only =false works: a space leaves "false" as an argument, and "maybe" is no boolean.
+	for _, bad := range [][]string{{"--text-normalization", "false"}, {"--text-normalization=maybe"}} {
+		args := append([]string{"speak", "--voice", "v", "--text", "hi", "--out", "a.wav", "--yes"}, bad...)
+		if r := ttsRun(t, srv, "", args...); r.err == nil || len(r.reqs) != 0 {
+			t.Errorf("%v: err %v, requests %v; want a refusal and none", bad, r.err, r.reqs)
+		}
+	}
+}
+
 func TestTTSSpeak_refusedBeforeAnyRequest(t *testing.T) {
 	long := strings.Repeat("a", ttsMaxChars+1)
 	for _, c := range []struct {
