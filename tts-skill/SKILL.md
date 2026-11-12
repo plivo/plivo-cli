@@ -6,7 +6,7 @@ license: Apache-2.0
 
 # Plivo Text-to-Speech: make audio from text with the CLI, or stream it live
 
-Take a developer, or their coding agent, from a Plivo account to speech audio: a voice picked, a file synthesized in the format the destination needs, custom pronunciations where a word is said wrong, and, for a live voice agent, a realtime WebSocket. Batch (one request, one complete file) is a CLI command. Realtime is a WebSocket you write in code. This file covers Plivo's TTS API, not the voice agent around it. Related skills, if installed: `plivo skill install audio-streaming` (a voice agent on real calls), `plivo skill install voice-xml` (Plivo XML, including the `<Speak>` element), `plivo skill install` (the CLI's own skill). Without them, use `plivo <command> --help`.
+Take a developer, or their coding agent, from a Plivo account to speech audio: a voice picked, a file synthesized in the format the destination needs, custom pronunciations where a word is said wrong, and, for a live voice agent, a realtime WebSocket. Batch (one request, one complete file) is a CLI command. Realtime is a WebSocket you write in code. This file covers Plivo's TTS API (the Koyal model), not the voice agent around it. Related skills, if installed: `plivo skill install audio-streaming` (a voice agent on real calls), `plivo skill install voice-xml` (Plivo XML, including the `<Speak>` element), `plivo skill install` (the CLI's own skill). Without them, use `plivo <command> --help`.
 
 ## Rules for every step
 
@@ -66,7 +66,7 @@ Each answer to Use is one row, and sets the format:
 |---|---|---|---|---|
 | Play on a call with Voice XML | `wav` | `8000` or `16000` | has a header; host it and play it with `<Play>` (see "Use the audio on a call"). **Risky:** not tested against the API | `.wav` |
 | Stream to a voice agent on Plivo | `mulaw` | `8000` | raw, no header; see "Use the audio on a call" | `.ulaw` |
-| A file or web | `mp3` | `44100` | `--bitrate 128000` (the default for mp3) | `.mp3` |
+| A file or web | `mp3` | `44100` | `--bitrate 128000` (the default at 44100 Hz) | `.mp3` |
 
 If the user picks Other, for their own SIP or telephony stack, ask which format it takes. The CLI also makes `alaw` at 8000 Hz (raw, `.alaw`) and `pcm` at 16000 or 24000 Hz (raw 16-bit, `.pcm`), but no Plivo path plays a raw file, so use them only with that stack.
 
@@ -79,7 +79,7 @@ plivo tts voices --language hi -o json     # add --gender male|female to narrow 
 plivo tts voices -o json                   # every voice
 ```
 
-Each voice has `voice_id`, `name`, `gender`, `languages` and `accent_type`. The list holds Plivo's public voices and any voices the organization owns, so take it from the CLI and do not hardcode one. Public voice IDs start with `r4_` (for example `r4_riya` speaks Hindi and `r4_ashley` speaks English); a voice marked legacy still works, but prefer the others.
+Each voice has `voice_id`, `name`, `gender`, `languages`, `accent_type`, `description` and, when Plivo has set one, `sample_url`, a link to a short sample (the CLI leaves it out while it is empty). When the user wants to hear voices before choosing, show the `sample_url` of each option that has one, or point them to Voice Studio in the console (https://cx.plivo.com/voice-studio/explore). The list holds Plivo's public voices and any voices the organization owns, so take it from the CLI and do not hardcode one. Public voice IDs start with `r4_` (for example `r4_riya` speaks Hindi and `r4_ashley` speaks English); a voice marked legacy still works, but prefer the others.
 
 Ask "Which voice?" (header Voice) with up to three options, each "<name>: <gender>, <accent>" for a voice whose `languages` contain the language. Check: the chosen `voice_id` appears in the list with that language. **Will break:** text in a language the voice does not speak, which returns `400 language_not_supported`.
 
@@ -94,7 +94,7 @@ plivo tts speak --voice r4_riya --language hi --text "आपका पैके�
 
 The preview prints the character count on its first line (`[dry-run] <N> characters, ...`): quote that number and do not count bytes yourself. Show the preview, then ask: "Synthesize <N> characters now? Plivo bills per character." Synthesize / Not now (header Synthesize). On yes, take a reading with `plivo tts usage -o json`, then run the same command with `--yes` in place of `--dry-run`.
 
-If a billed run fails with any `UPSTREAM_*` code (`UPSTREAM_TIMEOUT`, `UPSTREAM_UNAVAILABLE`, and `UPSTREAM_ERROR`, which includes a 200 answer that is not audio), with `NETWORK_ERROR`, or with an error whose hint says the request was or may have been billed, do not run it again. In those cases ignore `retryable: true` and any "retry" hint: the request may have been billed. Read `plivo tts usage -o json` again, compare it with the reading from before the send, tell the user what changed, and ask before you send again. Take a usage reading before every billed run.
+If a billed run fails with any `UPSTREAM_*` code (`UPSTREAM_TIMEOUT`, `UPSTREAM_UNAVAILABLE`, and `UPSTREAM_ERROR`, which includes a 200 answer that is not audio), with `NETWORK_ERROR`, or with an error whose hint says the request was or may have been billed, do not run it again. In those cases ignore `retryable: true` and any "retry" hint: the request may have been billed. Read `plivo tts usage -o json` again and compare it with the reading from before the send. If it did not change and the failure was a 502 or 503 (`backend_error`, `at_capacity`, `draining`, `auth_unavailable`), the request was refused before it ran: wait a second and send it once more. In every other case, such as a timeout or a network error, tell the user what changed (or that nothing did) and ask before you send again, because a request that timed out may still finish and bill. Take a usage reading before every billed run.
 
 Optional flags:
 
@@ -228,7 +228,7 @@ Messages you receive:
 | `warning` | A problem that does not stop the reply |
 | `error` | `type`, `code`, `message`, `param`, `context_id`, `connection_id` |
 
-`output_format` takes the same fields the batch request sends. These are the values behind each CLI `--format`; `--sample-rate` replaces the rate, and mp3 adds a `bitrate` (128000 by default):
+`output_format` takes the same fields the batch request sends. These are the values behind each CLI `--format`; `--sample-rate` replaces the rate, and mp3 adds a `bitrate`, which only some rates accept (below the table):
 
 | CLI `--format` | `container` | `encoding` | `sample_rate` |
 |---|---|---|---|
@@ -237,6 +237,8 @@ Messages you receive:
 | `mulaw` | `raw` | `pcm_mulaw` | `8000` |
 | `alaw` | `raw` | `pcm_alaw` | `8000` |
 | `pcm` | `raw` | `pcm_s16le` | `24000` |
+
+mp3 takes a bitrate only in these pairs: 44100 and 48000 Hz take 32000, 64000, 96000, 128000 or 192000; 24000 Hz takes 48000; 16000 Hz takes 32000 or 64000; 8000 and 22050 Hz take 32000. The CLI picks a valid default for the rate (128000, 48000, 64000 or 32000), so leave `--bitrate` out unless the user asks. A pair that is not offered returns `400 unsupported_format` and bills nothing.
 
 Only `raw` `pcm_mulaw` at 8000 is exercised by the script above; **risky:** the other combinations are untested on the socket. A `seed` repeats the audio only with `continuation` set to `false`, which is what `--seed` sends. The shape of `pronunciations` is not documented here, so use `lexicon_id`.
 
@@ -261,20 +263,29 @@ Billing is per character: each `done` event and the usage report give the billed
 
 ## When a request fails
 
-With the CLI, add `-o json`: the error envelope prints on stderr. Its `error.code` is the CLI's own code (`VALIDATION_ERROR`, `RESOURCE_NOT_FOUND`, `UPSTREAM_TIMEOUT` and so on), not Plivo's. Plivo's answer is at `error.context.upstream.body`: its `code`, the text in `error` (not `message`), a `param` when a field is at fault, and `api_id`. Read that body first, and key the table on `upstream.body.code`. Only these are documented:
+With the CLI, add `-o json`: the error envelope prints on stderr. Its `error.code` is the CLI's own code (`VALIDATION_ERROR`, `RESOURCE_NOT_FOUND`, `UPSTREAM_TIMEOUT` and so on), not Plivo's. Plivo's answer is at `error.context.upstream.body`: its `code`, the text in `error` (not `message`), a `param` when a field is at fault, and `api_id`. Read that body first, and key the table on `upstream.body.code`. These are the documented codes:
 
 | `upstream.body.code` (HTTP status) | Meaning | Fix |
 |---|---|---|
-| `concurrency_limit` (429) | More than 50 open connections on the account | Close idle sockets, then retry |
+| `unauthorized` (401) | Bad or missing Auth ID or Auth Token | `plivo whoami`, then log in again |
+| `forbidden` (403) | The credentials are not for the Auth ID in the request path | Use the account that owns the credentials |
+| `voice_not_found` (404) | Unknown voice, or one the account may not use | `plivo tts voices` |
 | `language_not_supported` (400) | The voice does not speak the text's language | Pick a voice from `plivo tts voices --language <code>`, or set `--language` |
-| `invalid_request` (422) | A bad value; `param` names the field (`lexicon_id` for a deleted lexicon). A `null` for an optional field also returns it | Fix that field, or omit it |
-| `not_found` (404) | The lexicon ID does not exist | `plivo tts lexicons list` |
+| `empty_text`, `text_too_long` (400) | Nothing to speak, or over 5,000 characters | Send 1 to 5,000 characters; split longer text |
+| `unsupported_format` (400) | That format, rate or bitrate pair is not offered; nothing is billed | Fix `--format`, `--sample-rate` and `--bitrate` (mp3 pairs are above) |
+| `invalid_request` (422; 400 if not JSON, 413 over 1 MiB) | A bad value; `param` names the field (`lexicon_id` for a deleted lexicon). A `null` for an optional field also returns it | Fix that field, or omit it |
+| `not_found` (404), `method_not_allowed` (405) | A wrong path or method, or a lexicon ID that does not exist | `plivo tts lexicons list` |
+| `concurrency_limit` (429) | More than 50 open connections on the account | Close idle sockets, wait 1 s, then retry |
+| `at_capacity`, `draining`, `auth_unavailable` (503) | Busy right now | Wait 1 s, then retry (see the billed-run rule in step 5) |
+| `backend_error` (502) | The engine failed | Wait 1 s, then retry (same rule) |
+| `internal_error` (500) | A bug on Plivo's side | Give support the `api_id` |
+| `cancelled` (499) | The request was cancelled or the client left | Nothing to fix |
 
 A realtime WebSocket client has no CLI envelope: its `error` frame carries `code`, `message` and `param` at the top level.
 
-The docs' full error page was not available when this file was written, so for any other code, show the user the whole `upstream.body` and do not guess a cause. To get help, give Plivo support `upstream.body.api_id` and `error.request_id`, with the UTC time and the command (not the text, if it is private). A direct HTTP or WebSocket client, such as the realtime script, has no envelope: every response carries a `nimble-connection-id` header that matches `api_id` in an error body, so give support that.
+For any other code, show the user the whole `upstream.body` and do not guess a cause. To get help, give Plivo support `upstream.body.api_id` and `error.request_id`, with the UTC time and the command (not the text, if it is private). A direct HTTP or WebSocket client, such as the realtime script, has no envelope: every response carries a `nimble-connection-id` header that matches `api_id` in an error body, so give support that.
 
-Check in this order: the voice and language pair (`plivo tts voices`); the text length (5,000 characters) and the `--pace` and `--volume` ranges; for mp3, `--bitrate`; `cash_credits`; then the error body.
+Check in this order: the voice and language pair (`plivo tts voices`); the text length (5,000 characters) and the `--pace` and `--volume` ranges; for mp3, the `--sample-rate` and `--bitrate` pair; `cash_credits`; then the error body.
 
 ## When this skill does not have the answer
 
