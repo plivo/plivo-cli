@@ -94,7 +94,7 @@ plivo tts speak --voice r4_riya --language hi --text "आपका पैके�
 
 The preview prints the character count on its first line (`[dry-run] <N> characters, ...`): quote that number and do not count bytes yourself. Show the preview, then ask: "Synthesize <N> characters now? Plivo bills per character." Synthesize / Not now (header Synthesize). On yes, take a reading with `plivo tts usage -o json`, then run the same command with `--yes` in place of `--dry-run`.
 
-If a billed run fails with any `UPSTREAM_*` code (`UPSTREAM_TIMEOUT`, `UPSTREAM_UNAVAILABLE`, and `UPSTREAM_ERROR`, which includes a 200 answer that is not audio), with `NETWORK_ERROR`, or with an error whose hint says the request was or may have been billed, do not run it again. Ignore `retryable: true` and any "retry" hint on a billed run: the request may have been billed. Read `plivo tts usage -o json` again, compare it with the reading from before the send, tell the user what changed, and ask before you send again. Take a usage reading before every billed run.
+If a billed run fails with any `UPSTREAM_*` code (`UPSTREAM_TIMEOUT`, `UPSTREAM_UNAVAILABLE`, and `UPSTREAM_ERROR`, which includes a 200 answer that is not audio), with `NETWORK_ERROR`, or with an error whose hint says the request was or may have been billed, do not run it again. In those cases ignore `retryable: true` and any "retry" hint: the request may have been billed. Read `plivo tts usage -o json` again, compare it with the reading from before the send, tell the user what changed, and ask before you send again. Take a usage reading before every billed run.
 
 Optional flags:
 
