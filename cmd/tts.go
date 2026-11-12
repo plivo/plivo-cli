@@ -388,13 +388,17 @@ func ttsSave(f *os.File, dest string, data []byte) error {
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
-	if err == nil {
-		err = os.Chmod(f.Name(), 0o644)
+	if err != nil {
+		return err
 	}
-	if err == nil {
-		err = os.Rename(f.Name(), dest)
+	// The file keeps the permissions of the one it replaces; a new one gets 0644.
+	// A chmod that fails is cosmetic and must not cost the billed audio.
+	mode := os.FileMode(0o644)
+	if st, serr := os.Stat(dest); serr == nil {
+		mode = st.Mode().Perm()
 	}
-	return err
+	_ = os.Chmod(f.Name(), mode)
+	return os.Rename(f.Name(), dest)
 }
 
 const ttsBilledHint = "The request was sent and billed; the audio was not saved."
