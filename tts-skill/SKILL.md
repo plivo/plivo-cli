@@ -68,9 +68,9 @@ Each answer to Use is one row, and sets the format:
 | Stream to a voice agent on Plivo | `mulaw` | `8000` | raw, no header; see "Use the audio on a call" | `.ulaw` |
 | A file or web | `mp3` | `44100` | `--bitrate 128000` (the default at 44100 Hz) | `.mp3` |
 
-If the user picks Other, for their own SIP or telephony stack, ask which format it takes. The CLI also makes `alaw` at 8000 Hz (raw, `.alaw`) and `pcm` at 16000 or 24000 Hz (raw 16-bit, `.pcm`), but no Plivo path plays a raw file, so use them only with that stack.
+If the user picks Other, for their own SIP or telephony stack, ask which format it takes. The CLI also makes `alaw` at 8000 Hz (raw, `.alaw`) and `pcm` at 16000 or 24000 Hz (raw 16-bit, `.pcm`), but no Plivo path plays a raw file, so use them only with that stack. From v1.3.4 the CLI also makes `f32` (raw 32-bit float samples, 24000 Hz by default), `wav-f32` (the same samples in a WAV file), and `wav-mulaw` and `wav-alaw` (8000 Hz G.711 in a WAV file). Use `f32` and `wav-f32` only for a pipeline that wants float samples. Use raw `mulaw` or `alaw` for streaming and `playAudio`, and `wav-mulaw` or `wav-alaw` only for a file someone plays. **Risky:** G.711 WAV is untested with `<Play>`: keep `wav` (16-bit) for it.
 
-Without `--format` the CLI picks the format from the `--out` extension (`.wav`, `.mp3`, `.ulaw` or `.mulaw`, `.alaw`, `.pcm` or `.raw`) and falls back to `wav` at 24000 Hz. Pass `--format` anyway and name the file for it: a raw file with a `.wav` name does not play. **Risky:** a sample rate that does not fit the destination, for example 24000 Hz into a phone call.
+Without `--format` the CLI picks the format from the `--out` extension (`.wav`, `.mp3`, `.ulaw` or `.mulaw`, `.alaw`, `.pcm` or `.raw`) and falls back to `wav` at 24000 Hz. The v1.3.4 names (`f32`, `wav-f32`, `wav-mulaw`, `wav-alaw`) have no extension and are never picked from one, so a `.wav` name still means plain `wav`: pass `--format`. Pass `--format` anyway and name the file for it (`.wav` for the three `wav-*` formats, `.f32` for `f32`): a raw file with a `.wav` name does not play. **Risky:** a sample rate that does not fit the destination, for example 24000 Hz into a phone call. From v1.3.4 the CLI refuses, before it sends anything, a `--sample-rate` the format does not offer: 8000, 16000, 22050, 24000, 32000, 44100 or 48000 for `wav`, `pcm`, `f32` and `wav-f32`, and 8000 for `mulaw`, `alaw`, `wav-mulaw` and `wav-alaw`.
 
 ### Step 4: pick a voice
 
@@ -85,7 +85,7 @@ Ask "Which voice?" (header Voice) with up to three options, each "<name>: <gende
 
 ### Step 5: synthesize
 
-Put the text in the command, or in a file for anything long (`--file text.txt`). `--file -` reads stdin once, so keep it for a one-shot pipe, never for the `--dry-run` then `--yes` pair: the second command would find nothing to read. The limit is 5,000 characters per request: for more, split at sentence ends and synthesize each part, and ask the consent question below once, for the total number of characters across all the parts. Long text takes longer to synthesize: pass a longer global `--timeout` in seconds (the default is 30), for example `--timeout 120`. Raw formats (`mulaw`, `alaw`, `pcm`) join byte for byte; `wav` and `mp3` need a tool such as `ffmpeg`.
+Put the text in the command, or in a file for anything long (`--file text.txt`). `--file -` reads stdin once, so keep it for a one-shot pipe, never for the `--dry-run` then `--yes` pair: the second command would find nothing to read. The limit is 5,000 characters per request: for more, split at sentence ends and synthesize each part, and ask the consent question below once, for the total number of characters across all the parts. Long text takes longer to synthesize: pass a longer global `--timeout` in seconds (the default is 30), for example `--timeout 120`. Raw formats (`mulaw`, `alaw`, `pcm`, and from v1.3.4 `f32`) join byte for byte; `wav`, `mp3` and the v1.3.4 `wav-*` formats need a tool such as `ffmpeg`.
 
 ```bash
 plivo tts speak --voice r4_riya --language hi --text "आपका पैकेज कल पहुंचेगा।" \
@@ -105,25 +105,27 @@ Optional flags:
 | `--volume` | 0.5 to 2.0 (default 1.0) | Loudness |
 | `--lexicon <id>` | a saved lexicon, `lx_...` | Custom pronunciations (below) |
 | `--seed N` | integer | Same text, voice and seed give identical audio, for tests |
+| `--text-normalization=false` | v1.3.4+; write the `=` | Read numbers and dates as written, not as words |
+| `--pronounce word=value` | v1.3.4+; up to 100, needs `--pronounce-kind` | Inline pronunciation rules for this request (below) |
 
-Numbers, currency and dates are normalized for you ("1,250" is spoken as an amount, not digits). `--out -` writes the audio to stdout for a pipe; the CLI refuses to print audio to a terminal.
+Numbers, currency and dates are normalized for you ("1,250" is spoken as an amount, not digits). From v1.3.4, `--text-normalization=false` turns that off, for text already written as words or a rule that needs the raw token; `--text-normalization false` fails, so write the `=`. The docs do not say whether normalization or rule matching comes first. `--out -` writes the audio to stdout for a pipe; the CLI refuses to print audio to a terminal.
 
 Check: the command exits 0 and `--out` exists.
 
 ### Step 6: check the file and report
 
 ```bash
-ls -l reminder.ulaw      # bytes: mulaw and alaw at 8000 Hz are 8000 bytes per second; 24000 Hz pcm is 48000
-ffprobe -v error -f mulaw -ar 8000 -show_entries format=duration -of csv=p=0 reminder.ulaw   # seconds; alaw: -f alaw; pcm: -f s16le -ar <rate>
+ls -l reminder.ulaw      # bytes: mulaw and alaw at 8000 Hz are 8000 bytes per second; 24000 Hz pcm is 48000, f32 (v1.3.4+) 96000
+ffprobe -v error -f mulaw -ar 8000 -show_entries format=duration -of csv=p=0 reminder.ulaw   # seconds; alaw: -f alaw; pcm: -f s16le -ar <rate>; f32: -f f32le -ar <rate>
 ```
 
-To listen to a raw file, the user runs `ffplay -autoexit -f mulaw -ar 8000 reminder.ulaw`. For a `.wav` or `.mp3`, `file out.wav` reports "RIFF ... WAVE audio" (or MP3 audio) and `afplay out.wav` plays it on macOS (`ffplay -autoexit` elsewhere). Use `file` and `afplay` for those two only: a raw file has no header to report.
+To listen to a raw file, the user runs `ffplay -autoexit -f mulaw -ar 8000 reminder.ulaw`. For a `.wav` or `.mp3`, `file out.wav` reports "RIFF ... WAVE audio" (or MP3 audio) and `afplay out.wav` plays it on macOS (`ffplay -autoexit` elsewhere). Use `file` and `afplay` for those two only: a raw file has no header to report. The v1.3.4 `wav-f32`, `wav-mulaw` and `wav-alaw` files are WAV files too, and `ffprobe -v error -show_entries stream=codec_name,sample_rate -of csv=p=0 out.wav` prints their encoding (`pcm_f32le`, `pcm_mulaw` or `pcm_alaw`) and rate.
 
 Report: the file path, its size, the format flags you used, and the character count. Ask "Does it sound right?" (header Listen), since you cannot hear it. Then read `plivo tts usage -o json` again and compare it with the reading from before the run (see "Billing and usage").
 
 ## Pronunciation and lexicons
 
-A lexicon is a saved list of rules that change how words are said. Use one when a brand, name or term comes out wrong. `plivo tts speak` has no inline-rule flag: save the rules as a lexicon, then pass `--lexicon`.
+A lexicon is a saved list of rules that change how words are said. Use one when a brand, name or term comes out wrong. Before v1.3.4, `plivo tts speak` has no inline-rule flag: save the rules as a lexicon, then pass `--lexicon`. From v1.3.4, `--pronounce word=value` (repeatable) with one `--pronounce-kind` gives the rules for a single request, with no lexicon to save or delete (below).
 
 | `--kind` | A rule's `value` is written as |
 |---|---|
@@ -143,6 +145,15 @@ plivo tts lexicons delete lx_... --dry-run      # then --yes, after the user agr
 ```
 
 `--file` and `--rule` can be combined: the rules are merged, and `--rule` repeats. The create command prints the lexicon with its `lexicon_id` (starts with `lx_`): record it. Limits: 100 lexicons per organization, 100 rules per lexicon, a name up to 100 characters, a `word` up to 100 and a `value` up to 120. **Will break:** synthesizing with a deleted `lexicon_id` returns `422 invalid_request` with `param: lexicon_id`; `get` or `delete` on an unknown ID returns `404 not_found`. Deleting a lexicon cannot be undone: ask first.
+
+Inline rules, from v1.3.4:
+
+```bash
+plivo tts speak --voice r4_ashley --text "Welcome to Plivo" --pronounce "Plivo=plee-voh" \
+  --pronounce-kind respell --format mp3 --out welcome.mp3 --dry-run     # the preview shows the pronunciations
+```
+
+`--pronounce-kind` (`ipa`, `arpa` or `respell`, lowercase) says how every `--pronounce` value is written. It is required with `--pronounce` and has no default, and the CLI refuses either flag without the other. A request takes up to 100 rules, and the CLI refuses inline rules together with `--lexicon`: use one or the other. **Risky:** the docs do not say how a rule matches (case, whole words only, a word of several words, a word given twice), nor which rule wins when the same word is given twice. The rules are tested in English only. Ask the user to listen for the word, and say that you could not check it.
 
 ## Use the audio on a call
 
@@ -237,10 +248,14 @@ Messages you receive:
 | `mulaw` | `raw` | `pcm_mulaw` | `8000` |
 | `alaw` | `raw` | `pcm_alaw` | `8000` |
 | `pcm` | `raw` | `pcm_s16le` | `24000` |
+| `f32` (v1.3.4+) | `raw` | `pcm_f32le` | `24000` |
+| `wav-f32` (v1.3.4+) | `wav` | `pcm_f32le` | `24000` |
+| `wav-mulaw` (v1.3.4+) | `wav` | `pcm_mulaw` | `8000` |
+| `wav-alaw` (v1.3.4+) | `wav` | `pcm_alaw` | `8000` |
 
 mp3 takes a bitrate only in these pairs: 44100 and 48000 Hz take 32000, 64000, 96000, 128000 or 192000; 24000 Hz takes 48000; 16000 Hz takes 32000 or 64000; 8000 and 22050 Hz take 32000. The CLI picks a valid default for the rate (128000, 48000, 64000 or 32000), so leave `--bitrate` out unless the user asks. A pair that is not offered returns `400 unsupported_format` and bills nothing.
 
-Only `raw` `pcm_mulaw` at 8000 is exercised by the script above; **risky:** the other combinations are untested on the socket. A `seed` repeats the audio only with `continuation` set to `false`, which is what `--seed` sends. The shape of `pronunciations` is not documented here, so use `lexicon_id`.
+Only `raw` `pcm_mulaw` at 8000 is exercised by the script above; **risky:** the other combinations are untested on the socket, among them the `wav` container over the socket and the wav-wrapped formats. A `seed` repeats the audio only with `continuation` set to `false`, which is what `--seed` sends. `pronunciations` takes the batch request's shape: an array of up to 100 `{"word": ..., "value": ..., "kind": "ipa" | "arpa" | "respell"}` objects, sent on a reply's first `text` message; **risky:** untested here, and how it combines with `lexicon_id` is not documented, so send one of them.
 
 Rules that matter: keep reading the socket, because a client that reads nothing for 30 s is dropped. One socket carries up to 8 replies at once, each with its own `context_id`. The realtime messages use the same field names as the batch request, so `pace`, `volume` and `lexicon_id` mean what they mean for `plivo tts speak`; the batch-only `--file`, `--out` and `--format` flags have no counterpart. Omit an optional field rather than send `null`, which returns `422`. Close codes: `1013` is a retryable error (reconnect with a short, growing wait), `1011` is a server (5xx) error, `1008` is any other error (read the `error` message first). The India regional host `wss://in.api.plivo.com` serves the same paths; the docs do not say which accounts need it, so use it only when the default host refuses the account and the user confirms.
 
@@ -256,6 +271,7 @@ Rules that matter: keep reading the socket, because a client that reads nothing 
 | Slow reader | dropped after 30 s without reading |
 | Pace, volume | 0.7 to 1.2, 0.5 to 2.0 |
 | Lexicons per organization, rules per lexicon | 100, 100 |
+| Inline pronunciations per request (v1.3.4+) | 100 |
 
 ## Billing and usage
 
