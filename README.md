@@ -195,6 +195,7 @@ plivo voice calls make --from +1... --to +1... --yes        # actually call
 | [`plivo-cli`](cli-skill/SKILL.md) | `cli` (the default) | Run any Plivo task with the CLI instead of raw API calls |
 | [`plivo-audio-streaming`](audio-streaming-skill/SKILL.md) | `audio-streaming` | A voice bot on real calls with `<Stream>`, from setup to go-live |
 | [`plivo-sip-trunking`](sip-trunking-skill/SKILL.md) | `sip-trunking` | Connect an AI voice platform over SIP trunking |
+| [`plivo-tts`](tts-skill/SKILL.md) | `tts` | Turn text into speech with Plivo voices: voices, audio files, lexicons, realtime |
 | [`plivo-voice-xml`](voice-xml-skill/SKILL.md) | `voice-xml` | Write and fix Plivo Voice XML |
 
 `plivo skill install all` installs every one, and `npx skills add plivo/plivo-cli --skill <skill>` installs one without the CLI.
