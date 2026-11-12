@@ -377,6 +377,8 @@ func ttsSave(f *os.File, dest string, data []byte) error {
 	return err
 }
 
+const ttsBilledHint = "The request was sent and billed; the audio was not saved."
+
 // ttsCheckAudio refuses a 2xx answer that is not audio: a JSON or HTML body
 // saved as an audio file would be a billed success that plays nothing.
 func ttsCheckAudio(a api.BinaryBody) *clierr.Error {
@@ -393,14 +395,14 @@ func ttsCheckAudio(a api.BinaryBody) *clierr.Error {
 	}
 	e := clierr.Upstream(msg)
 	e.Retryable = false
-	e.Hint = "The request was sent and may have been billed. Check `plivo tts usage` before you send it again."
+	e.Hint = ttsBilledHint + " Check `plivo tts usage` before you send it again."
 	return e
 }
 
 // ttsNotSaved marks an error from after the send: Plivo already billed it.
 func ttsNotSaved(err error) *clierr.Error {
 	e := clierr.Wrap(err)
-	e.Hint = "The request was sent and billed; the audio was not saved."
+	e.Hint = ttsBilledHint
 	return e
 }
 
