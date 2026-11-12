@@ -16,6 +16,11 @@
       "title": "Voice agents",
       "description": "Put a voice agent on real phone calls.",
       "skills": ["plivo-sip-trunking", "plivo-audio-streaming", "plivo-voice-xml"]
+    },
+    {
+      "title": "Text-to-speech",
+      "description": "Turn text into speech with Plivo voices from the command line.",
+      "skills": ["plivo-tts"]
     }
   ]
 }

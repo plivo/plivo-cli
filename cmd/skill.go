@@ -20,6 +20,7 @@ import (
 	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/output"
 	siptrunkingskill "github.com/plivo/plivo-cli/sip-trunking-skill"
+	ttsskill "github.com/plivo/plivo-cli/tts-skill"
 	voicexmlskill "github.com/plivo/plivo-cli/voice-xml-skill"
 	"github.com/spf13/cobra"
 )
@@ -47,6 +48,7 @@ var bundledSkills = []bundledSkill{
 	},
 	{selector: "audio-streaming", dirName: "plivo-audio-streaming", content: audiostreamingskill.SkillMD, summary: "a voice bot on real calls with <Stream>, from setup to go-live", replaces: []string{"plivo-first-agent"}},
 	{selector: "sip-trunking", dirName: "plivo-sip-trunking", content: siptrunkingskill.SkillMD, summary: "connect an AI voice platform over SIP trunking"},
+	{selector: "tts", dirName: "plivo-tts", content: ttsskill.SkillMD, summary: "turn text into speech with Plivo voices from the CLI"},
 	{selector: "voice-xml", dirName: "plivo-voice-xml", content: voicexmlskill.SkillMD, summary: "write and fix Plivo Voice XML"},
 }
 
@@ -103,7 +105,7 @@ var skillCmd = &cobra.Command{
 // skillInstallCmd writes the embedded SKILL.md into the agent skills directory
 // (default ~/.claude/skills/plivo-cli; override with --dir, or --print to stdout).
 var skillInstallCmd = &cobra.Command{
-	Use:   "install [agents|cli|audio-streaming|sip-trunking|voice-xml|all]",
+	Use:   "install [agents|cli|audio-streaming|sip-trunking|tts|voice-xml|all]",
 	Short: "Install an agent skill so coding agents auto-load the reference",
 	Long: `Install a Plivo agent skill.
 
@@ -114,6 +116,7 @@ They are bundled in the binary, so this writes them out without a network call.
   cli              the CLI reference — use ` + "`plivo`" + ` instead of raw curl
   audio-streaming  a voice bot on real calls with <Stream>, from setup to go-live
   sip-trunking     connect an AI voice platform over SIP trunking
+  tts              turn text into speech with Plivo voices from the CLI
   voice-xml        write and fix Plivo Voice XML
   all              every listed skill
 
@@ -134,13 +137,14 @@ skill that an install replaces keeps its file, renamed SKILL.md.retired.`,
 	Example: `  plivo skill install                    # CLI skill -> ~/.claude/skills/plivo-cli/
   plivo skill install agents             # -> ~/.claude/skills/plivo-cx-agents/
   plivo skill install audio-streaming    # -> ~/.claude/skills/plivo-audio-streaming/
+  plivo skill install tts                # -> ~/.claude/skills/plivo-tts/
   plivo skill install voice-xml          # -> ~/.claude/skills/plivo-voice-xml/
   plivo skill install all                # every listed skill
   plivo skill install all --project      # -> <repo>/.claude/skills/, for the whole team
   plivo skill install all --agent codex  # -> ~/.agents/skills/, where Codex reads them
   plivo skill install all --dry-run      # show destinations, write nothing`,
 	Args:      cobra.MaximumNArgs(1),
-	ValidArgs: []string{"agents", "cli", "audio-streaming", "sip-trunking", "voice-xml", "all"},
+	ValidArgs: []string{"agents", "cli", "audio-streaming", "sip-trunking", "tts", "voice-xml", "all"},
 	RunE:      runSkillInstall,
 }
 

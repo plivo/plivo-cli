@@ -524,7 +524,7 @@ Stream status callbacks: the troubleshooting and best-practices pages and the co
 
 To start a stream over REST instead of XML: `plivo voice calls streams start <call_uuid> --url wss://... --bidirectional --content-type "audio/x-mulaw;rate=8000"`. Quote the content type (a bare `;` ends the shell command) and always pass it (the CLI default is `audio/x-l16;rate=16000`). For status callbacks add `--stream-status-callback https://...`: from v1.3.1 it sends `status_callback_url`. Older versions send `stream_status_callback_url`, a field the API does not document, so there use `plivo api POST /Call/<call_uuid>/Stream/` with `status_callback_url` in the body.
 
-Plivo moves raw audio only: STT, the model and the voice are yours, and Plivo TTS exists only as `<Speak>` before or after the stream. A streamed call is billed as the underlying call; quote no prices.
+Plivo moves raw audio only: STT, the model and the voice are yours. For the voice, use any TTS provider, or Plivo's own text-to-speech (`plivo skill install tts`); `<Speak>` is the way to speak before or after the stream. A streamed call is billed as the underlying call; quote no prices.
 
 ## Callbacks, signature validation, timeouts
 

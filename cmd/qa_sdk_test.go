@@ -448,8 +448,8 @@ func qaUnreferenced(path string) bool {
 
 // qaDocsRequests are requests as the API docs define them where the SDK has
 // none or takes fewer parameters: SIP trunking (sip-trunking/api), Speak's
-// voice and DTMF's leg (voice/api/calls), and the compliance update
-// (numbers/compliance, a form).
+// voice and DTMF's leg (voice/api/calls), the compliance update
+// (numbers/compliance, a form), and text-to-speech (models/text-to-speech/api).
 var qaDocsRequests = func() []qaSDKRequest {
 	trunk := []string{"name", "trunk_direction", "trunk_status", "secure", "ipacl_uuid", "credential_uuid", "primary_uri_uuid", "fallback_uri_uuid"}
 	credential := []string{"name", "username", "password"}
@@ -473,6 +473,13 @@ var qaDocsRequests = func() []qaSDKRequest {
 		{"POST", "Call/{}/Speak", []string{"voice"}},
 		{"POST", "Call/{}/DTMF", []string{"leg"}},
 		{"PATCH", "PhoneNumber/Compliance/{}", none},
+		{"POST", "TTS", []string{"voice_id", "text", "language", "output_format", "pace", "volume", "pronunciations", "lexicon_id", "continuation", "seed"}},
+		{"GET", "TTS/Voices", none},
+		{"GET", "TTS/Usage", none},
+		{"GET", "TTS/Lexicons", none},
+		{"POST", "TTS/Lexicons", []string{"name", "kind", "rules"}},
+		{"GET", "TTS/Lexicons/{}", none},
+		{"DELETE", "TTS/Lexicons/{}", none},
 	}
 	for _, r := range []string{"Credential", "IPAccessControlList", "URI"} {
 		reqs = append(reqs, qaSDKRequest{"GET", "Zentrunk/" + r, page})

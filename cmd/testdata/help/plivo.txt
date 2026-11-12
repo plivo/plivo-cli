@@ -35,6 +35,7 @@ Available Commands:
   sip         SIP Trunking — trunks, CDRs, access control
   skill       Manage the plivo-cli agent skill
   support     List your past support escalations (filed via `plivo ask`)
+  tts         Text-to-speech: list voices, speak text to an audio file, manage lexicons
   upgrade     Upgrade plivo to the latest release
   verify      Plivo Verify — OTP / phone-number verification sessions
   voice       Voice — calls, conferences, multiparty, recordings, endpoints

@@ -18,7 +18,7 @@ Not on PATH: `brew install plivo/tap/plivo`, then `plivo --version`. Without Hom
 
 - **Auth.** Browser login (`plivo login`) is the only credential source: the CLI reads no `PLIVO_AUTH_ID` or `PLIVO_AUTH_TOKEN` and has no flag for them. Do not run `plivo login` yourself; if `plivo auth whoami` exits 2, ask the human to run it in their own terminal. Never print, echo, export or store an auth token, including one the user pastes. `--profile <name>` selects another saved profile.
 - **Preview, then confirm.** Run any change with `--dry-run` first: it prints the request on stderr and exits 0 without sending a write. Spend and destructive commands then need `--yes`: run that as a separate command, only once the human has approved that spend or deletion. Other writes (creates, updates, live-call verbs such as `play`, `speak` and `transfer`) have no `--yes` gate and act as soon as they run.
-  - Spend commands (`calls make`, `messaging * send`, `numbers buy|cnam`, `masking sessions create`, 10DLC `brands|campaigns create` and `campaigns update` (v1.3.1+), `verify sessions create`, `multiparty participant add`, mutating `plivo api` verbs) preview with `--dry-run` alone.
+  - Spend commands (`calls make`, `messaging * send`, `numbers buy|cnam`, `masking sessions create`, 10DLC `brands|campaigns create` and `campaigns update` (v1.3.1+), `verify sessions create`, `multiparty participant add`, `tts speak`, mutating `plivo api` verbs) preview with `--dry-run` alone.
   - Destructive commands (`numbers release`, `calls hangup`, `conferences hangup`, `conferences stop-record` (v1.3.1+), `calls streams stop`, `powerpacks numbers remove`, and every `delete`, `kick` and `end`) preview with `--dry-run` alone from v1.2.1. Older versions refuse that with exit 5, although the hint suggests it; preview them there with `--yes --dry-run` (`--dry-run` wins). For `sip * delete`, `--dry-run` (with `--force` for an in-use object) also names what it would detach; in v1.2.0, run it without `--yes` instead: it names them, then refuses.
   - `plivo lookup` is billed per lookup and has no `--yes` gate: ask first.
   - From v1.3.1 every command honours `--dry-run`: `login`, `logout`, `auth use|remove`, `config set|telemetry`, `upgrade`, `voice streams test` and `docs` say what they would do and act on nothing (`docs` fetches nothing), and `ask -i` refuses it. Before v1.3.1 it only holds back Plivo API writes, and those commands act for real: `upgrade` installs (use `upgrade --check`), `voice streams test` connects to the WebSocket (no call), and before v1.2.0 `feedback` submits. `skill install --dry-run` writes nothing, nor, from v1.2.0, do `skill update` and `feedback`. `voice streams simulate` and `voice streams readiness` (v1.3.2+) print the request they would send to the answer URL and send nothing to it; readiness still makes its account reads.
@@ -66,7 +66,7 @@ If the user names a voice agent, an IVR or a SIP platform in "Other", route to t
 | Send a message | Which number to send from (header From, from `numbers list --services sms`), the recipient, the text; for WhatsApp, whether the recipient wrote in the last 24 hours | Credit check, preview `messaging <sms\|mms\|whatsapp> send … --dry-run`, ask (header Send) "Send this to <masked number>?", run with `--yes`, then `messaging get <message_uuid> -o json` for its status. |
 | A number | Country (header Country), local or toll-free, and what it is for: calls, SMS or both | `numbers search`, then the Buy number question above with up to three numbers as options. India: KYC first (`numbers compliance list --country IN --status accepted`); never add `--force` to get past a KYC refusal. Linking: the Link question above, then `numbers update <number> --app-id <app_id>`. |
 | Account | Nothing more for a read | `auth whoami`, `account get`, `account applications list`, `account subaccounts list`. Show the balance (`cash_credits`) when the user asks about their account status. |
-| A voice agent, a Plivo CX agent (an AI conversation flow), an IVR or call XML, a SIP platform | Nothing; hand over | `plivo skill list`. If the matching skill is installed, follow it; if not, ask (header Install) "Install the Plivo <name> skill? It walks you through this step by step. Free, no network." · Install it (recommended) · Just use the CLI. Then `plivo skill install agents`, `audio-streaming`, `voice-xml` or `sip-trunking`. |
+| A voice agent, a Plivo CX agent (an AI conversation flow), an IVR or call XML, a SIP platform, text-to-speech audio | Nothing; hand over | `plivo skill list`. If the matching skill is installed, follow it; if not, ask (header Install) "Install the Plivo <name> skill? It walks you through this step by step. Free, no network." · Install it (recommended) · Just use the CLI. Then `plivo skill install agents`, `audio-streaming`, `voice-xml`, `sip-trunking` or `tts`. |
 
 Pick the right command:
 
@@ -98,6 +98,7 @@ open        console | calls | call <uuid> | sip-call <uuid> | numbers | docs [pa
 sip         calls | connect | credentials | ip-acl | test | trunks | uris   (connect, test: v1.2.0+)
 skill       install [--project] | list | update   (update, --project: v1.2.0+)
 support     past support escalations
+tts         voices | speak | lexicons (list | get | create | delete) | usage
 upgrade     self-update
 verify      sessions (create | get | list | validate)
 voice       calls | conferences | endpoints | multiparty | recordings | streams
@@ -154,9 +155,10 @@ Pick a sending number: `plivo numbers list --services sms -o json | jq -r '.data
 
 ## Other Plivo skills
 
-Each is bundled in the binary and installed separately, with no network: `plivo skill install agents | audio-streaming | sip-trunking | voice-xml`. A CLI too old to offer `agents` gets it with `npx skills add plivo/plivo-cli --skill plivo-cx-agents`.
+Each is bundled in the binary and installed separately, with no network: `plivo skill install agents | audio-streaming | sip-trunking | tts | voice-xml`. A CLI too old to offer `agents` gets it with `npx skills add plivo/plivo-cli --skill plivo-cx-agents`.
 
 - `plivo-cx-agents`: build, test and publish Plivo CX agents, the AI conversation flows of the console builder, through the Agents API.
 - `plivo-audio-streaming`: take a voice bot (a test bot or your own WebSocket bot) to real calls with `<Stream>`, from setup to go-live.
 - `plivo-sip-trunking`: connect LiveKit, ElevenLabs, Retell, Vapi or another SIP platform over SIP trunking.
+- `plivo-tts`: make speech audio from text, pick voices, manage pronunciation lexicons, stream realtime TTS.
 - `plivo-voice-xml`: write and fix the XML an answer URL returns.
