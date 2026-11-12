@@ -23,12 +23,13 @@ func junctionedRepo(t *testing.T, where string) (copyDir string) {
 		copyDir = filepath.Join(root, ".agents", "skills", "plivo-cli")
 	}
 	link := filepath.Join(root, ".claude", "skills", "plivo-cli")
-	_ = os.MkdirAll(copyDir, 0o755) // a failure here fails the mklink below
-	_ = os.MkdirAll(filepath.Dir(link), 0o755)
+	if err := errors.Join(os.MkdirAll(copyDir, 0o755), os.MkdirAll(filepath.Dir(link), 0o755)); err != nil {
+		t.Fatal(err)
+	}
 	if out, err := exec.Command("cmd", "/c", "mklink", "/J", link, copyDir).CombinedOutput(); err != nil {
 		t.Fatalf("mklink /J: %v\n%s", err, out)
 	}
-	t.Cleanup(func() { os.Remove(link) })
+	t.Cleanup(func() { _ = os.Remove(link) })
 	if where == "gone" {
 		_ = os.RemoveAll(copyDir)
 	}
