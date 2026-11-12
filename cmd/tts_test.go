@@ -150,7 +150,7 @@ func TestTTSSpeak_dryRunSendsAndWritesNothing(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "a.wav")
 	r := ttsRun(t, newQAServer(t, nil), "", "--dry-run", "speak", "--voice", "r4_ashley", "--text", "hi", "--out", out)
 	if _, err := os.Stat(out); r.err != nil || len(r.reqs) != 0 || err == nil ||
-		!strings.Contains(r.stderr, "[dry-run] POST") || !strings.Contains(r.stderr, "r4_ashley") {
+		!strings.Contains(r.stderr, "[dry-run] POST") || !strings.Contains(r.stderr, "r4_ashley") || !strings.Contains(r.stderr, "2 characters") {
 		t.Errorf("err %v, requests %v, stderr %q", r.err, r.reqs, r.stderr)
 	}
 }

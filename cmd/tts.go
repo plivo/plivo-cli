@@ -263,6 +263,7 @@ func runTTSSpeak(cmd *cobra.Command, args []string) error {
 	var dest string
 	switch {
 	case dryRun:
+		fmt.Fprintf(os.Stderr, "[dry-run] %d characters, billed per character when sent with --yes\n", chars)
 	case ttsOut == "-":
 		if isTerminal(int(os.Stdout.Fd())) {
 			e := clierr.BadFlag("out", "refusing to write audio to a terminal")
