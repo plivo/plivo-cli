@@ -15,7 +15,7 @@ Take a developer, or their coding agent, from a Plivo account to speech audio: a
 - Ask every question with your agent's own structured question tool. In Claude Code it is AskUserQuestion: one call takes 1 to 4 questions with 2 to 4 options each, and it adds a free-text "Other" option itself, so do not add one. Without such a tool, ask a numbered list with an "Other" choice and wait for the answer.
 - Synthesis is billed per character, so it is a write: two commands, never one. First `plivo tts speak ... --dry-run` (prints the request, sends nothing), then, after you show the preview and the character count and the user agrees, the same command with `--yes`. Without either flag the CLI refuses. `plivo tts lexicons delete` also needs `--yes`, after a `--dry-run`. `plivo tts lexicons create` is free and writes at once, so its `--dry-run` preview is the only check: show it and ask before you run it for real. If a command rejects `--dry-run`, show the current state from `list` or `get` instead and ask.
 - Check the credit before every synthesis: `cash_credits` in `plivo auth whoami -o json`. At 0 or less, tell the user to add credits on the console home page, <https://cx.plivo.com/home>, and stop before the billed step. The docs do not say what a request returns on an empty balance, so never rely on the error to find out.
-- Never read, print or ask for the Auth ID or Auth Token in the chat: the user writes them into `.env` with an editor, and the realtime script reads that file when run with `uv run --env-file .env`. Never read, cat or print `.env`. Never run `plivo login` yourself (step 1).
+- Never read, print or ask for the Auth Token in the chat: the user writes it and the Auth ID into `.env` with an editor, and the realtime script reads that file when run with `uv run --env-file .env`. Never read, cat or print `.env`. The `--dry-run` URL carries the Auth ID in its account segment, so when you show a preview, mask it: keep the first 4 and last 3 characters. Never run `plivo login` yourself (step 1).
 - Report each step as observed, not known or failed. Observed means you saw the evidence in this session. You cannot hear audio: a file with the right size and type is not proof that it sounds right, so say what you checked and ask the user to listen.
 - Verdicts: **will break** when a documented rule or an observed failure says so (name the failure); **risky** when plausible or untested (say what to check); **style** when nothing changes. A rule here with no label is risky.
 
@@ -23,7 +23,7 @@ Take a developer, or their coding agent, from a Plivo account to speech audio: a
 
 - Say "voice" for a `voice_id` and "language" for its language. Keep CLI words out of questions and the report: dry-run, `voice_id`, mu-law, sample rate, WebSocket. The questions written out in the steps are already right, and commands and their previews stay as they are.
 - Show character counts, never prices: the docs give no price, so quote none. Billing is per character, and that is all you say about cost.
-- Keep each question to one or two short sentences: what happens, and what it changes. Question headers: Text, Language, Use, Voice, Synthesize, Listen.
+- Keep each question to one or two short sentences: what happens, and what it changes. Question headers: Language, Use, Voice, Synthesize, Listen.
 
 ## Steps 1 to 6: from the account to a checked audio file
 
@@ -57,7 +57,7 @@ Check: `cash_credits` in the step 1 output is above 0. If it is not, send the us
 
 Ask in plain text what the speech should say (or which file holds it). Then ask, in one structured call:
 
-- Language: "Which language is the text in?" English, Hindi, or Other (Bengali, Tamil, Telugu, Marathi, Gujarati, Kannada). Codes: `en`, `hi`, `bn`, `ta`, `te`, `mr`, `gu`, `kn`. Each voice speaks one language, so this decides the voice list. If the user does not know, leave `--language` out: it defaults to `auto`, which detects the language from the text.
+- Language: infer it from the text, and ask only if it is unclear. Ask "Which language is the text in?" with English, Hindi and Detect from the text (recommended); the tool's own free-text Other covers Bengali, Tamil, Telugu, Marathi, Gujarati and Kannada. Codes: `en`, `hi`, `bn`, `ta`, `te`, `mr`, `gu`, `kn`. Each voice speaks one language, so this decides the voice list. For Detect from the text, leave `--language` out (it defaults to `auto`) and use the language you inferred to filter the voices in step 4.
 - Use: "Where will the audio play?" Play on a call with Voice XML, Stream to a voice agent on Plivo, A file or web.
 
 Each answer to Use is one row, and sets the format:
@@ -142,7 +142,7 @@ plivo tts speak --voice r4_ashley --text "Welcome to Plivo" --format mp3 --sampl
 plivo tts lexicons delete lx_... --dry-run      # then --yes, after the user agrees
 ```
 
-Use `--file` or `--rule`, not both; `--rule` repeats. The create command prints the lexicon with its `lexicon_id` (starts with `lx_`): record it. Limits: 100 lexicons per organization, 100 rules per lexicon, a name up to 100 characters, a `word` up to 100 and a `value` up to 120. **Will break:** synthesizing with a deleted `lexicon_id` returns `422 invalid_request` with `param: lexicon_id`; `get` or `delete` on an unknown ID returns `404 not_found`. Deleting a lexicon cannot be undone: ask first.
+`--file` and `--rule` can be combined: the rules are merged, and `--rule` repeats. The create command prints the lexicon with its `lexicon_id` (starts with `lx_`): record it. Limits: 100 lexicons per organization, 100 rules per lexicon, a name up to 100 characters, a `word` up to 100 and a `value` up to 120. **Will break:** synthesizing with a deleted `lexicon_id` returns `422 invalid_request` with `param: lexicon_id`; `get` or `delete` on an unknown ID returns `404 not_found`. Deleting a lexicon cannot be undone: ask first.
 
 ## Use the audio on a call
 
@@ -213,7 +213,7 @@ Messages you send (JSON text frames, up to 64 KiB each):
 
 | `type` | Fields | Meaning |
 |---|---|---|
-| `text` | `context_id`, `text` (up to 5,000 characters), `finish` (default `false`), `timestamps` (default `false`); on a reply's first message also `voice_id` (required), `language`, `output_format`, `pace`, `volume`, `pronunciations`, `lexicon_id`, `continuation`, `seed` | A new `context_id` opens a reply. Send the text in pieces, and `finish: true` on the last |
+| `text` | `context_id`, `text` (up to 5,000 characters), `finish` (default `false`), `timestamps` (default `false`); on a reply's first message also `voice_id` (required), `language`, `output_format`, `pace`, `volume`, `lexicon_id`, `continuation`, `seed` | A new `context_id` opens a reply. Send the text in pieces, and `finish: true` on the last |
 | `flush` | `context_id` | Speak everything received so far for that reply; the server answers `flush_done` |
 | `cancel` | optional `context_id` | Stop that reply now; with no `context_id`, stop all replies |
 
@@ -227,6 +227,18 @@ Messages you receive:
 | `done` | The reply's audio is complete; carries the billed `characters`. Sent once per reply |
 | `warning` | A problem that does not stop the reply |
 | `error` | `type`, `code`, `message`, `param`, `context_id`, `connection_id` |
+
+`output_format` takes the same fields the batch request sends. These are the values behind each CLI `--format`; `--sample-rate` replaces the rate, and mp3 adds a `bitrate` (128000 by default):
+
+| CLI `--format` | `container` | `encoding` | `sample_rate` |
+|---|---|---|---|
+| `wav` | `wav` | `pcm_s16le` | `24000` |
+| `mp3` | `mp3` | `mp3` | `44100` |
+| `mulaw` | `raw` | `pcm_mulaw` | `8000` |
+| `alaw` | `raw` | `pcm_alaw` | `8000` |
+| `pcm` | `raw` | `pcm_s16le` | `24000` |
+
+Only `raw` `pcm_mulaw` at 8000 is exercised by the script above; **risky:** the other combinations are untested on the socket. A `seed` repeats the audio only with `continuation` set to `false`, which is what `--seed` sends. The shape of `pronunciations` is not documented here, so use `lexicon_id`.
 
 Rules that matter: keep reading the socket, because a client that reads nothing for 30 s is dropped. One socket carries up to 8 replies at once, each with its own `context_id`. The realtime messages use the same field names as the batch request, so `pace`, `volume` and `lexicon_id` mean what they mean for `plivo tts speak`; the batch-only `--file`, `--out` and `--format` flags have no counterpart. Omit an optional field rather than send `null`, which returns `422`. Close codes: `1013` is a retryable error (reconnect with a short, growing wait), `1011` is a server (5xx) error, `1008` is any other error (read the `error` message first). The India regional host `wss://in.api.plivo.com` serves the same paths; the docs do not say which accounts need it, so use it only when the default host refuses the account and the user confirms.
 
@@ -266,4 +278,4 @@ Check in this order: the voice and language pair (`plivo tts voices`); the text 
 
 ## When this skill does not have the answer
 
-Do not guess from other platforms. The docs for Plivo Text-to-Speech may not be published yet: try `plivo docs search text-to-speech` first (it needs no login), then `plivo docs show <path>` for a hit; when piped, add `-o table`. If nothing matches, this file is the reference. Next, `plivo ask "<question>"`, which can also see the account; treat its answer as evidence and prefer the docs where they conflict. The docs do not give a price, per-voice latency, data retention or a list of which accounts need the India host: say so and route to Plivo support or the account manager. Out of scope: speech to text, the model behind a voice agent, SIP trunking (`plivo skill install sip-trunking`), and the `<Speak>` element's own voices (`plivo skill install voice-xml`).
+Do not guess from other platforms. The docs for Plivo Text-to-Speech may not be published yet: try `plivo docs search text-to-speech` first (it needs no login), then `plivo docs show <path>` for a hit; when piped, add `-o table`. A hit counts only if it is about the TTS models API (voices, batch synthesis, lexicons, the realtime socket): `<Speak>`, SSML, voice use-case and integration pages are a different product, so ignore them. If nothing counts, this file is the reference. Next, `plivo ask "<question>"`, which can also see the account; treat its answer as evidence and prefer the docs where they conflict. The docs do not give a price, per-voice latency, data retention or a list of which accounts need the India host: say so and route to Plivo support or the account manager. Out of scope: speech to text, the model behind a voice agent, SIP trunking (`plivo skill install sip-trunking`), and the `<Speak>` element's own voices (`plivo skill install voice-xml`).
