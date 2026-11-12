@@ -184,6 +184,13 @@ func TestCallStats_numberWalksBothDirectionsInAFrozenWindow(t *testing.T) {
 		t.Errorf("window %q to %q", q.Get("end_time__gte"), q.Get("end_time__lte"))
 	}
 
+	// --max-calls is global: the outbound read reaching it skips the inbound one.
+	sent := len(queries())
+	_, stdout, _ = execCmd(t, "voice", "calls", "stats", "--number", "+14155550100", "--max-calls", "25", "-o", "json")
+	if d := statsOut(t, stdout); len(queries())-sent != 2 || d.CallsRead != 25 || !d.Truncated {
+		t.Errorf("--max-calls 25: %d requests, read %d, truncated %v; want 2, 25, true", len(queries())-sent, d.CallsRead, d.Truncated)
+	}
+
 	// --dry-run sends nothing and shows the first request of each read.
 	clientForTest.DryRun = true
 	before := len(queries())
