@@ -4,7 +4,7 @@ package cmd
 func r4StatsCases() []qaCase {
 	const calls = `{"api_id": "qa", "meta": {"limit": 20, "offset": 0, "next": null}, "objects": [` +
 		`{"call_uuid": "` + placeholderUUID + `", "call_direction": "outbound", "from_number": "+14155550100", "to_number": "14155550123", ` +
-		`"answer_time": null, "bill_duration": 0, "hangup_cause_name": "No Answer"}, ` +
+		`"answer_time": null, "bill_duration": 12, "hangup_cause_name": "No Answer"}, ` +
 		`{"call_uuid": "` + r2LiveCall + `", "call_direction": "outbound", "from_number": "14155550100", "to_number": "14155550123", ` +
 		`"answer_time": "2026-11-10 10:00:05+00:00", "bill_duration": 30}]}`
 	const window = "&end_time__gte=2026-11-01+00%3A00%3A00&end_time__lte=2026-11-02+23%3A59%3A59"
