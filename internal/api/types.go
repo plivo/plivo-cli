@@ -1095,3 +1095,58 @@ type UsageOtherCharge struct {
 	TotalUnits  *float64 `json:"total_units"`
 	TotalAmount *float64 `json:"total_amount"`
 }
+
+// TTSVoice is one voice in /Account/{id}/TTS/Voices/. Each speaks one language.
+type TTSVoice struct {
+	VoiceID    string   `json:"voice_id"`
+	Name       string   `json:"name"`
+	Gender     string   `json:"gender"`
+	Languages  []string `json:"languages"`
+	AccentType string   `json:"accent_type"`
+}
+
+type TTSVoiceList struct {
+	RawBody
+	APIID   string     `json:"api_id"`
+	Meta    PageMeta   `json:"meta"`
+	Objects []TTSVoice `json:"objects"`
+}
+
+// TTSLexiconRule is how one word is said, written in its lexicon's kind.
+type TTSLexiconRule struct {
+	Word  string `json:"word"`
+	Value string `json:"value"`
+}
+
+// TTSLexicon is a pronunciation lexicon in /Account/{id}/TTS/Lexicons/.
+type TTSLexicon struct {
+	RawBody
+	LexiconID string           `json:"lexicon_id"`
+	Name      string           `json:"name"`
+	Kind      string           `json:"kind"`
+	Version   int              `json:"version"`
+	Rules     []TTSLexiconRule `json:"rules"`
+}
+
+type TTSLexiconList struct {
+	RawBody
+	APIID   string       `json:"api_id"`
+	Meta    PageMeta     `json:"meta"`
+	Objects []TTSLexicon `json:"objects"`
+}
+
+// TTSUsageRoute totals one route: http is batch, live is realtime.
+type TTSUsageRoute struct {
+	Requests     int64   `json:"requests"`
+	Characters   int64   `json:"characters"`
+	SpokenChars  int64   `json:"spoken_chars"`
+	AudioSeconds float64 `json:"audio_seconds"`
+	Tokens       int64   `json:"tokens"`
+}
+
+// TTSUsage is /Account/{id}/TTS/Usage/.
+type TTSUsage struct {
+	RawBody
+	AuthID string                   `json:"auth_id"`
+	Routes map[string]TTSUsageRoute `json:"routes"`
+}

@@ -1,0 +1,30 @@
+Create a lexicon: up to 100 rules, each a word and how to say it. --kind sets
+how every value is written: ipa, arpa or respell. Give the rules with --rule
+word=value (repeatable) or --file, a JSON array of {"word": ..., "value": ...}.
+Use the lexicon with plivo tts speak --lexicon <lexicon_id>.
+
+Usage:
+  plivo tts lexicons create [flags]
+
+Examples:
+  plivo tts lexicon create --name brands --kind respell --rule "Plivo=PLEE-voh"
+
+Flags:
+      --file string        JSON file: an array of {"word": ..., "value": ...}
+  -h, --help               help for create
+      --kind string        how the values are written: ipa, arpa or respell (required)
+      --name string        lexicon name, up to 100 characters (required)
+      --rule stringArray   a rule as word=value (repeatable)
+
+Global Flags:
+      --dry-run            preview requests and local changes without sending or writing anything
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+      --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
+  -q, --quiet              suppress non-data output
+      --schema             describe the command (arguments, flags, output fields) instead of running it
+      --show-secrets       show auth tokens and passwords in API responses instead of [REDACTED]
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
+  -y, --yes                skip confirmation prompts

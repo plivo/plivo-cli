@@ -98,6 +98,7 @@ open        console | calls | call <uuid> | sip-call <uuid> | numbers | docs [pa
 sip         calls | connect | credentials | ip-acl | test | trunks | uris   (connect, test: v1.2.0+)
 skill       install [--project] | list | update   (update, --project: v1.2.0+)
 support     past support escalations
+tts         voices | speak | lexicons (list | get | create | delete) | usage
 upgrade     self-update
 verify      sessions (create | get | list | validate)
 voice       calls | conferences | endpoints | multiparty | recordings | streams

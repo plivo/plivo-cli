@@ -1,0 +1,46 @@
+Turn text into an audio file with a Plivo voice.
+
+Batch text-to-speech is billed per character, so it needs --yes; --dry-run
+prints the request and sends nothing. Text is up to 5000 characters, from
+--text or --file (- reads stdin).
+
+--format picks the audio: wav (24 kHz), mp3 (44.1 kHz, 128 kbps), mulaw or alaw
+(8 kHz telephony, raw), pcm (24 kHz, raw). Without it the --out extension
+decides (.wav .mp3 .ulaw .alaw .pcm), and anything else is wav. --out - writes
+the audio to stdout, which is refused on a terminal.
+
+Usage:
+  plivo tts speak [flags]
+
+Examples:
+  plivo tts speak --voice r4_ashley --text "Hello from Plivo" --out hello.wav --dry-run
+  plivo tts speak --voice r4_ashley --text "Hello from Plivo" --out hello.wav --yes
+  plivo tts speak --voice r4_riya --language hi --file msg.txt --out msg.ulaw --yes
+
+Flags:
+      --bitrate int       mp3 bitrate in bits per second (default 128000)
+      --file string       read the text from this file (- for stdin)
+      --format string     audio format: wav, mp3, mulaw, alaw or pcm (default from the --out extension)
+  -h, --help              help for speak
+      --language string   language code: auto, en, hi, bn, ta, te, mr, gu, kn (default auto)
+      --lexicon string    lexicon_id of a saved lexicon to apply
+      --out string        file to write the audio to (- for stdout) (required)
+      --pace float        speaking pace, 0.7 to 1.2 (default 1)
+      --sample-rate int   sample rate in Hz (default from --format)
+      --seed int          repeatable output: the same text, voice and seed give identical audio
+      --text string       text to speak, up to 5000 characters
+      --voice string      voice_id from plivo tts voices (required)
+      --volume float      volume, 0.5 to 2.0 (default 1)
+
+Global Flags:
+      --dry-run            preview requests and local changes without sending or writing anything
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+      --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
+  -q, --quiet              suppress non-data output
+      --schema             describe the command (arguments, flags, output fields) instead of running it
+      --show-secrets       show auth tokens and passwords in API responses instead of [REDACTED]
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
+  -y, --yes                skip confirmation prompts
