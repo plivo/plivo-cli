@@ -58,17 +58,17 @@ Check: `cash_credits` in the step 1 output is above 0. If it is not, send the us
 Ask in plain text what the speech should say (or which file holds it). Then ask, in one structured call:
 
 - Language: "Which language is the text in?" English, Hindi, or Other (Bengali, Tamil, Telugu, Marathi, Gujarati, Kannada). Codes: `en`, `hi`, `bn`, `ta`, `te`, `mr`, `gu`, `kn`. Each voice speaks one language, so this decides the voice list. If the user does not know, leave `--language` out: it defaults to `auto`, which detects the language from the text.
-- Use: "Where will the audio play?" A phone call, A live voice agent, A file to download or play in an app.
+- Use: "Where will the audio play?" Play on a call with Voice XML, Stream to a voice agent on Plivo, A file or web.
 
-The answer to Use sets the format:
+Each answer to Use is one row, and sets the format:
 
 | Use | `--format` | `--sample-rate` | Extra | File |
 |---|---|---|---|---|
-| Phone call (US, India) | `mulaw` | `8000` | raw, no header | `.ulaw` |
-| Phone call (Europe) | `alaw` | `8000` | raw, no header | `.alaw` |
-| Voice agent on Plivo audio streaming | `mulaw` | `8000` | raw; see "Use the audio on a call" | `.ulaw` |
-| Wideband agent or web | `pcm` (raw) or `wav` | `16000` or `24000` | 16-bit PCM; `wav` adds a header | `.pcm`, `.wav` |
-| Download or playback | `mp3` | `44100` | `--bitrate 128000` (the default for mp3) | `.mp3` |
+| Play on a call with Voice XML | `wav` | `8000` or `16000` | has a header; host it and play it with `<Play>` (see "Use the audio on a call"). **Risky:** not tested against the API | `.wav` |
+| Stream to a voice agent on Plivo | `mulaw` | `8000` | raw, no header; see "Use the audio on a call" | `.ulaw` |
+| A file or web | `mp3` | `44100` | `--bitrate 128000` (the default for mp3) | `.mp3` |
+
+If the user picks Other, for their own SIP or telephony stack, ask which format it takes. The CLI also makes `alaw` at 8000 Hz (raw, `.alaw`) and `pcm` at 16000 or 24000 Hz (raw 16-bit, `.pcm`), but no Plivo path plays a raw file, so use them only with that stack.
 
 Without `--format` the CLI picks the format from the `--out` extension (`.wav`, `.mp3`, `.ulaw` or `.mulaw`, `.alaw`, `.pcm` or `.raw`) and falls back to `wav` at 24000 Hz. Pass `--format` anyway and name the file for it: a raw file with a `.wav` name does not play. **Risky:** a sample rate that does not fit the destination, for example 24000 Hz into a phone call.
 
@@ -85,7 +85,7 @@ Ask "Which voice?" (header Voice) with up to three options, each "<name>: <gende
 
 ### Step 5: synthesize
 
-Put the text in the command, or in a file for anything long (`--file text.txt`, or `--file -` for stdin). The limit is 5,000 characters per request: for more, split at sentence ends and synthesize each part, and ask the consent question below once, for the total number of characters across all the parts. Long text takes longer to synthesize: pass a longer global `--timeout` in seconds (the default is 30), for example `--timeout 120`. Raw formats (`mulaw`, `alaw`, `pcm`) join byte for byte; `wav` and `mp3` need a tool such as `ffmpeg`.
+Put the text in the command, or in a file for anything long (`--file text.txt`). `--file -` reads stdin once, so keep it for a one-shot pipe, never for the `--dry-run` then `--yes` pair: the second command would find nothing to read. The limit is 5,000 characters per request: for more, split at sentence ends and synthesize each part, and ask the consent question below once, for the total number of characters across all the parts. Long text takes longer to synthesize: pass a longer global `--timeout` in seconds (the default is 30), for example `--timeout 120`. Raw formats (`mulaw`, `alaw`, `pcm`) join byte for byte; `wav` and `mp3` need a tool such as `ffmpeg`.
 
 ```bash
 plivo tts speak --voice r4_riya --language hi --text "आपका पैकेज कल पहुंचेगा।" \
@@ -114,9 +114,10 @@ Check: the command exits 0 and `--out` exists.
 
 ```bash
 ls -l reminder.ulaw      # bytes: mulaw and alaw at 8000 Hz are 8000 bytes per second; 24000 Hz pcm is 48000
-file reminder.wav        # WAV files report "RIFF ... WAVE audio"; raw files report "data"
-afplay reminder.wav      # macOS; ffplay -autoexit works on Linux and Windows; raw files need ffplay -f mulaw -ar 8000
+ffprobe -v error -f mulaw -ar 8000 -show_entries format=duration -of csv=p=0 reminder.ulaw   # seconds; alaw: -f alaw; pcm: -f s16le -ar <rate>
 ```
+
+To listen to a raw file, the user runs `ffplay -autoexit -f mulaw -ar 8000 reminder.ulaw`. For a `.wav` or `.mp3`, `file out.wav` reports "RIFF ... WAVE audio" (or MP3 audio) and `afplay out.wav` plays it on macOS (`ffplay -autoexit` elsewhere). Use `file` and `afplay` for those two only: a raw file has no header to report.
 
 Report: the file path, its size, the format flags you used, and the character count. Ask "Does it sound right?" (header Listen), since you cannot hear it. Then read `plivo tts usage -o json` again and compare it with the reading from before the run (see "Billing and usage").
 
@@ -145,8 +146,8 @@ Use `--file` or `--rule`, not both; `--rule` repeats. The create command prints 
 
 ## Use the audio on a call
 
-- **Play a file.** Synthesize `wav` or `mp3`, host it at an HTTPS URL, and play it from the answer XML with `<Play>https://.../reminder.mp3</Play>`. `<Play>` takes mp3 or wav up to 10 MB, 8 or 16 kHz mono recommended; it does not take raw mu-law. A raw `.ulaw` file is for the stream below. To speak plain text inside a call with no file, use the `<Speak>` element instead (`plivo skill install voice-xml`).
-- **Send it down an audio stream.** For a voice agent on `<Stream>` with `bidirectional="true"` and `contentType="audio/x-mulaw;rate=8000"`, synthesize raw mu-law at 8000 Hz (`--format mulaw --sample-rate 8000`). Base64 the bytes in pieces of 16 KB or less (a multiple of 160 bytes is whole 20 ms frames) and send each as `{"event": "playAudio", "media": {"contentType": "audio/x-mulaw", "sampleRate": 8000, "payload": "<base64>"}}`. The stream's XML, events and debugging are in `plivo skill install audio-streaming`.
+- **Play a file.** Synthesize `wav` (`--sample-rate 8000` or `16000`) or `mp3`, host it at an HTTPS URL, and play it from the answer XML with `<Play>https://.../reminder.mp3</Play>`. `<Play>` takes mp3 or wav up to 10 MB, 8 or 16 kHz mono recommended; it does not take raw mu-law. A raw `.ulaw` file is for the stream below. To speak plain text inside a call with no file, use the `<Speak>` element instead (`plivo skill install voice-xml`).
+- **Send it down an audio stream.** For a voice agent on `<Stream>` with `bidirectional="true"` and `contentType="audio/x-mulaw;rate=8000"`, synthesize raw mu-law at 8000 Hz (`--format mulaw --sample-rate 8000`). Base64 the bytes in pieces of 12,000 raw bytes or fewer (16,000 base64 characters, 75 frames of 160 bytes) and send each as `{"event": "playAudio", "media": {"contentType": "audio/x-mulaw", "sampleRate": 8000, "payload": "<base64>"}}`. Send at real-time pace: bursting overflows the playback buffer (see the audio-streaming skill). The stream's XML, events and debugging are in `plivo skill install audio-streaming`.
 - **Live replies from a model.** Use the realtime WebSocket below with the same raw mu-law 8000 `output_format`, and forward each audio frame's bytes as a `playAudio` payload.
 
 ## Realtime: speak text as it is produced (WebSocket)
