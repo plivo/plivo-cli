@@ -72,6 +72,7 @@ Pick the right command:
 
 - Spend or usage over a period: `plivo account usage` (v1.3.0+; before that, `plivo api GET /UsageSummary/`). Its `--until` is exclusive (that day is left out), unlike on the `list` commands. Never add up call or message records for it.
 - Balance: `cash_credits` in `plivo auth whoami -o json`.
+- Calls and connect rate per number (v1.3.4+): `voice calls stats --since <date> -o json`, worked out from the call list over at most 31 days (7 by default). A call is connected when it was answered, child legs are left out (`legs_excluded`), and a run that stops early (`--max-calls`, a failed page) sets `data.truncated`: check it before quoting a rate. It reports no spend: use `account usage`.
 - Why a call failed: `voice calls diagnose <call_uuid>` for a Voice API call, `sip calls diagnose <call_uuid>` for a SIP trunk call.
 - Call quality: `sip calls insights <call_uuid>` (v1.2.0+).
 - How a feature works: `plivo docs show <path or title>`, then `plivo ask "<question>"`.
