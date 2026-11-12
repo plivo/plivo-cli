@@ -32,6 +32,7 @@ var skills = []struct{ src, dir string }{
 	{"cli-skill/SKILL.md", "plivo-cli"},
 	{"audio-streaming-skill/SKILL.md", "plivo-audio-streaming"},
 	{"sip-trunking-skill/SKILL.md", "plivo-sip-trunking"},
+	{"tts-skill/SKILL.md", "plivo-tts"},
 	{"voice-xml-skill/SKILL.md", "plivo-voice-xml"},
 	{"call-forwarding-skill/SKILL.md", "plivo-call-forwarding"},
 }
@@ -111,6 +112,13 @@ func history(ref, path string) (map[string]bool, error) {
 			return nil, err
 		}
 		sums[digest(blob)] = true
+	}
+	if len(sums) == 0 {
+		// A skill this branch adds is not in ref yet: only its bundled version counts.
+		if exec.Command("git", "cat-file", "-e", ref+":"+path).Run() != nil {
+			return sums, nil
+		}
+		return nil, fmt.Errorf("no versions of %s in %s; run `git fetch origin` first", path, ref)
 	}
 	return sums, nil
 }

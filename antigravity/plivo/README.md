@@ -8,6 +8,7 @@ Build Plivo CX agents, put your voice agent on real phone calls and run Plivo ta
 - **plivo-cli**: run Plivo tasks with the Plivo CLI
 - **plivo-sip-trunking**: connect LiveKit, ElevenLabs, Retell, Vapi, xAI or a self-hosted SIP stack to phone calls over Plivo SIP trunking
 - **plivo-audio-streaming**: a voice agent on real calls through audio streaming
+- **plivo-tts**: turn text into speech with Plivo voices: voices, audio files, pronunciation lexicons, realtime
 - **plivo-voice-xml**: write, check and test Plivo Voice XML
 - **plivo-call-forwarding**: debug forwarded calls into a Plivo number, out of Plivo or into a SIP trunk
 

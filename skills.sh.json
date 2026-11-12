@@ -21,6 +21,11 @@
       "title": "Call forwarding",
       "description": "Debug forwarded calls into a Plivo number, out of Plivo or into a SIP trunk.",
       "skills": ["plivo-call-forwarding"]
+    },
+    {
+      "title": "Text-to-speech",
+      "description": "Turn text into speech with Plivo voices from the command line.",
+      "skills": ["plivo-tts"]
     }
   ]
 }

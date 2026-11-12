@@ -140,6 +140,13 @@ const (
 	headerMinVersion      = "X-Plivo-CLI-Min-Version"
 )
 
+// BinaryBody, passed as Do's out, takes a 2xx body as it came, for an answer
+// that is not JSON (synthesized audio), and asks for any content type.
+type BinaryBody struct {
+	Data        []byte
+	ContentType string
+}
+
 type Client struct {
 	BaseURL      string
 	AdminBaseURL string // optional admin-override base URL
@@ -312,7 +319,12 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	req.Header.Set("Accept", "application/json")
+	bin, wantBinary := out.(*BinaryBody)
+	if wantBinary {
+		req.Header.Set("Accept", "*/*")
+	} else {
+		req.Header.Set("Accept", "application/json")
+	}
 	req.Header.Set("User-Agent", version.UserAgent())
 	c.addCLIHeaders(req)
 
@@ -340,6 +352,10 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 		return nil, nil
 	}
 
+	if wantBinary {
+		bin.Data, bin.ContentType = respBytes, resp.Header.Get("Content-Type")
+		return nil, nil
+	}
 	if out != nil {
 		if err := json.Unmarshal(respBytes, out); err != nil {
 			return nil, fmt.Errorf("decode response: %w (body: %s)", err, string(respBytes))

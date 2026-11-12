@@ -5,7 +5,7 @@
     "email": "cx-tech@plivo.com"
   },
   "metadata": {
-    "description": "Official Plivo plugin: skills for CX agents, voice agents, SIP trunking, Voice XML and the Plivo CLI."
+    "description": "Official Plivo plugin: skills for CX agents, voice agents, SIP trunking, Voice XML, text-to-speech and the Plivo CLI."
   },
   "plugins": [
     {
