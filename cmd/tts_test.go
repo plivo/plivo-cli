@@ -170,6 +170,11 @@ func TestTTSSpeak_apiErrorWritesNothing(t *testing.T) {
 	if _, err := os.Stat(out); r.err == nil || err == nil || !strings.Contains(r.stderr, "language_not_supported") {
 		t.Errorf("err %v, file written %v, stderr %q", r.err, err == nil, r.stderr)
 	}
+	// A 2xx that is not audio is no success either.
+	r = ttsRun(t, newQAServer(t, map[string]string{"POST TTS/": `200 {"error": "voice overloaded"}`}), "", "speak", "--voice", "v", "--text", "hi", "--out", out, "--yes")
+	if _, err := os.Stat(out); ttsCode(r.err) != clierr.CodeUpstreamError || err == nil || !strings.Contains(r.stderr, "voice overloaded") {
+		t.Errorf("JSON 200: err %v, file written %v, stderr %q", r.err, err == nil, r.stderr)
+	}
 }
 
 const ttsVoicesJSON = `{"api_id": "x", "meta": {"total_count": 3}, "objects": [

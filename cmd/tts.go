@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"mime"
 	"os"
 	"path/filepath"
 	"slices"
@@ -291,8 +292,8 @@ func runTTSSpeak(cmd *cobra.Command, args []string) error {
 	if client.DryRun {
 		return nil
 	}
-	if len(audio.Data) == 0 {
-		return ttsNotSaved(fmt.Errorf("Plivo returned no audio"))
+	if e := ttsCheckAudio(audio); e != nil {
+		return e
 	}
 	if ttsOut == "-" {
 		if _, err := os.Stdout.Write(audio.Data); err != nil {
@@ -366,6 +367,26 @@ func ttsSave(f *os.File, dest string, data []byte) error {
 		err = os.Rename(f.Name(), dest)
 	}
 	return err
+}
+
+// ttsCheckAudio refuses a 2xx answer that is not audio: a JSON or HTML body
+// saved as an audio file would be a billed success that plays nothing.
+func ttsCheckAudio(a api.BinaryBody) *clierr.Error {
+	mt, _, _ := mime.ParseMediaType(a.ContentType)
+	var msg string
+	switch {
+	case len(a.Data) == 0:
+		msg = "Plivo returned no audio"
+	case mt == "application/json" || strings.HasSuffix(mt, "+json") || strings.HasPrefix(mt, "text/"):
+		body := strings.TrimSpace(strings.ToValidUTF8(string(a.Data[:min(len(a.Data), 200)]), ""))
+		msg = fmt.Sprintf("Plivo returned %s, not audio: %s", mt, body)
+	default:
+		return nil
+	}
+	e := clierr.Upstream(msg)
+	e.Retryable = false
+	e.Hint = "The request was sent and may have been billed. Check `plivo tts usage` before you send it again."
+	return e
 }
 
 // ttsNotSaved marks an error from after the send: Plivo already billed it.
