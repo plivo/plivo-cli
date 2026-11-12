@@ -3923,7 +3923,7 @@ plivo verify sessions create [flags]
 Flags:
 
 ```
-      --app-uuid string    Verify application uuid (required)
+      --app-uuid string    Verify application uuid (default: your default Verify application)
       --channel string     delivery channel: sms|voice|whatsapp (default "sms")
       --explain            narrate in plain English before executing
       --locale string      BCP-47 locale, e.g. en-US

@@ -43,6 +43,20 @@ echo "--> version + help"
 "$BIN" --version
 "$BIN" --help > /dev/null
 
+# --version and -v answer next to any global flag, in either order. The flag
+# comes first in the failing cases: cobra adds it late and reads the next word
+# as a command.
+for flags in "--version --profile smoke" "-v --profile smoke" "--version -o json" \
+  "--profile smoke --version" "--profile=smoke --version" "--version --profile=smoke" \
+  "--version --timeout 5s" "--version --query data"; do
+  read -ra parts <<< "$flags"
+  out=$("$BIN" "${parts[@]}" 2>&1) || { echo "✗ plivo $flags failed:"; echo "$out"; exit 1; }
+  case "$out" in
+    "plivo version "*) echo "✓ plivo $flags" ;;
+    *) echo "✗ plivo $flags did not print the version:"; echo "$out"; exit 1 ;;
+  esac
+done
+
 # ─── shell completion renders ────────────────────────────────────────────────
 # Generated from the live command tree, so it catches broken registrations.
 echo "--> completion"
