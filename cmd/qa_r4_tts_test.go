@@ -20,7 +20,7 @@ func r4TtsCases() []qaCase {
 			id: "r4/tts-pronounce-needs-a-kind", title: "tts speak --pronounce with no --pronounce-kind is refused and says the kind is required, with no silent default",
 			args:   qaArgs("tts speak --voice r4_ashley --text Hello --out x.wav --yes --pronounce Plivo=PLEE-voh"),
 			exit:   ExitUserError,
-			stderr: []string{"--pronounce-kind: is required with --pronounce"},
+			stderr: []string{"--pronounce-kind: is required with --pronounce (ipa, arpa or respell)"},
 		},
 	}
 }

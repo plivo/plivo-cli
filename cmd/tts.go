@@ -616,9 +616,9 @@ func ttsPronunciations(cmd *cobra.Command) ([]map[string]string, error) {
 	case n == 0 && !kindGiven:
 		return nil, nil
 	case n == 0:
-		return nil, clierr.BadFlag("pronounce-kind", "applies to --pronounce; give at least one --pronounce word=value")
+		return nil, clierr.BadFlag("pronounce-kind", "only goes with --pronounce word=value; give at least one")
 	case !kindGiven:
-		return nil, clierr.BadFlag("pronounce-kind", "is required with --pronounce: ipa, arpa or respell")
+		return nil, clierr.BadFlag("pronounce-kind", "is required with --pronounce (ipa, arpa or respell)")
 	case !slices.Contains(ttsKinds, ttsPronKind):
 		return nil, clierr.BadFlag("pronounce-kind", fmt.Sprintf("%q is not ipa, arpa or respell", ttsPronKind))
 	case n > ttsMaxPronounce:
