@@ -133,6 +133,7 @@ func TestTTSSpeak_refusedBeforeAnyRequest(t *testing.T) {
 		{"--voice v --text caf\xe9 --yes", clierr.CodeBadInput},
 		{"--voice v --text hi --yes --out $DIR/nodir/a.wav", clierr.CodeBadFlag},
 		{"--voice v --text hi --yes --out $DIR", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --out $DIR/" + strings.Repeat("a", 300) + ".wav", clierr.CodeBadFlag},
 		{"--voice v --file $DIR/m.txt --yes --out $DIR/m.txt", clierr.CodeBadFlag},
 	} {
 		dir := t.TempDir()

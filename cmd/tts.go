@@ -267,10 +267,11 @@ func runTTSSpeak(cmd *cobra.Command, args []string) error {
 	}
 	applyDryRun(client, dryRun)
 
-	// Everything that can stop the audio being saved is checked before the
-	// billed send: a terminal for stdout, a folder that takes a file.
+	// A terminal for stdout and a folder that takes a file are checked before
+	// the billed send. The save can still fail after it: ttsNotSaved says so.
 	var staged *os.File
 	var dest string
+	var keep bool // only the final rename failed: the staged file holds all the audio
 	switch {
 	case dryRun:
 		fmt.Fprintf(os.Stderr, "[dry-run] %d characters, billed per character when sent with --yes\n", chars)
@@ -286,7 +287,9 @@ func runTTSSpeak(cmd *cobra.Command, args []string) error {
 		}
 		defer func() {
 			_ = staged.Close()
-			_ = os.Remove(staged.Name())
+			if !keep {
+				_ = os.Remove(staged.Name())
+			}
 		}()
 	}
 
@@ -317,15 +320,23 @@ func runTTSSpeak(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if err := ttsSave(staged, dest, audio.Data); err != nil {
-		return ttsNotSaved(err)
+		e := ttsNotSaved(err)
+		var le *os.LinkError // from the rename; a failed write or close is a PathError
+		if st, serr := os.Stat(staged.Name()); errors.As(err, &le) && serr == nil && st.Size() == int64(len(audio.Data)) {
+			keep = true
+			e.Hint = "The request was sent and billed; the audio could not be moved to " + ttsOut + " and is kept in " + staged.Name() + "."
+		}
+		return e
 	}
 	return emitWrite(fmt.Sprintf("Wrote %d bytes of %s to %s (%d characters)", len(audio.Data), audio.ContentType, ttsOut, chars),
 		map[string]any{"out": ttsOut, "bytes": len(audio.Data), "content_type": audio.ContentType, "characters": chars, "voice_id": ttsVoice})
 }
 
-// ttsCheckOut refuses an --out the audio can never be saved to, before
-// anything is billed. It runs on --dry-run too, so a preview does not pass
-// a command that would then fail. - is stdout and has no path to check.
+// ttsCheckOut refuses an --out that is plainly unusable, before anything is
+// billed: a path the system cannot look up, a directory, a missing folder, or
+// the file --file reads. It cannot promise the save works. It runs on --dry-run
+// too, so a preview does not pass a command that would then fail. - is stdout
+// and has no path to check.
 func ttsCheckOut() error {
 	if ttsOut == "-" {
 		return nil
@@ -334,6 +345,9 @@ func ttsCheckOut() error {
 		return clierr.BadFlag("out", "give a file name")
 	}
 	out, outErr := os.Stat(ttsOut)
+	if outErr != nil && !errors.Is(outErr, fs.ErrNotExist) {
+		return clierr.BadFlag("out", fmt.Sprintf("cannot use this path: %v", errors.Unwrap(outErr)))
+	}
 	if outErr == nil && out.IsDir() {
 		return clierr.BadFlag("out", ttsOut+" is a directory; give a file name")
 	}
