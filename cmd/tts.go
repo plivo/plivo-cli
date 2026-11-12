@@ -10,9 +10,11 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"unicode/utf8"
 
 	"github.com/plivo/plivo-cli/internal/api"
@@ -313,6 +315,9 @@ func runTTSSpeak(cmd *cobra.Command, args []string) error {
 		return e
 	}
 	if ttsOut == "-" {
+		// A closed pipe must come back as an error that says the send was billed,
+		// not kill the process with SIGPIPE and no message.
+		signal.Ignore(syscall.SIGPIPE)
 		if _, err := os.Stdout.Write(audio.Data); err != nil {
 			return ttsNotSaved(err)
 		}
