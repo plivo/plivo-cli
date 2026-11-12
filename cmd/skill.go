@@ -271,7 +271,13 @@ func installSkills(skills []bundledSkill) error {
 	if err != nil {
 		return err
 	}
-	return installSkillsIn(skills, root)
+	if err := installSkillsIn(skills, root); err != nil {
+		return err
+	}
+	if !dryRunFlag {
+		printBanner(os.Stderr)
+	}
+	return nil
 }
 
 // agentSkillsRoot returns the user skills directory the named agent reads.

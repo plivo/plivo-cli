@@ -190,6 +190,9 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	// nag the user that an upgrade is available.
 	_ = release.SaveCache(&release.Cache{LatestSeen: target, CheckedAt: time.Now()})
 
+	if !jsonOut {
+		printBanner(os.Stderr)
+	}
 	fmt.Fprintf(os.Stderr, "✓ Upgraded plivo to %s\n", target)
 	fmt.Fprintf(os.Stderr, "  Binary: %s\n", exePath)
 	if jsonOut {

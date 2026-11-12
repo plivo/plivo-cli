@@ -82,6 +82,8 @@ plivo upgrade --check   # check only, don't install
 
 The CLI also prints a one-line "newer version available" hint on stderr when a TTY is attached; the check runs at most once every 24h. Set `PLIVO_NO_UPDATE_CHECK=1` to silence it. Homebrew installs are detected and routed to `brew upgrade plivo` instead.
 
+After `plivo login`, `plivo upgrade` and `plivo skill install`, the CLI draws the Plivo logo on stderr when a terminal at least 56 columns wide is attached. It never appears in CI, a pipe or a script. Set `PLIVO_NO_BANNER=1` (or pass `--quiet`) to turn it off, or `NO_COLOR=1` to print it without colour.
+
 ## Quickstart
 
 Wire up a voice agent in a few minutes:
