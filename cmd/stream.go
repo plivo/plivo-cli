@@ -64,7 +64,7 @@ func init() {
 	_ = streamStartCmd.MarkFlagRequired("url")
 	streamStartCmd.Flags().StringVar(&streamStartTrack, "audio-track", "inbound", oneOf(streamTracks))
 	streamStartCmd.Flags().BoolVar(&streamStartBiDi, "bidirectional", false, "let the WebSocket send audio back into the call (needs --audio-track inbound)")
-	streamStartCmd.Flags().StringVar(&streamStartContentType, "content-type", streamDefaultContentType, "audio codec content-type, the API's own default (pass it to pin the codec)")
+	streamStartCmd.Flags().StringVar(&streamStartContentType, "content-type", streamDefaultContentType, "audio codec content-type; the API's own default, so pass it to pin the codec")
 	streamStartCmd.Flags().StringVar(&streamStartCallbackURL, "stream-status-callback", "", "URL hit when stream starts/ends")
 	streamStartCmd.Flags().StringVar(&streamStartStatusURL, "callback-url", "", "alias for --stream-status-callback")
 	streamStartCmd.Flags().StringVar(&streamStartExtraHeaders, "extra-headers", "", "comma-separated extra WebSocket headers (k1=v1,k2=v2)")
