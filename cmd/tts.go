@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"unicode/utf8"
@@ -40,25 +41,42 @@ const (
 
 var ttsLanguages = []string{"auto", "en", "hi", "bn", "ta", "te", "mr", "gu", "kn"}
 
+// ttsFormatNames is every --format name, for help and refusals.
+const ttsFormatNames = "wav, pcm, f32, wav-f32, mulaw, alaw, wav-mulaw, wav-alaw or mp3"
+
+// The sample rates the API takes: any of seven for 16-bit and 32-bit float PCM,
+// 8 kHz only for the telephony encodings.
+var (
+	ttsPCMRates  = []int{8000, 16000, 22050, 24000, 32000, 44100, 48000}
+	ttsG711Rates = []int{8000}
+)
+
 // ttsFormat is a --format preset: the output_format a batch request sends.
+// rates is what --sample-rate may be; nil for mp3, which the API checks with its bitrate.
 type ttsFormat struct {
 	container, encoding string
 	sampleRate          int
+	rates               []int
 }
 
 var ttsFormats = map[string]ttsFormat{
-	"wav":   {"wav", "pcm_s16le", 24000},
-	"mp3":   {"mp3", "mp3", 44100},
-	"mulaw": {"raw", "pcm_mulaw", 8000},
-	"alaw":  {"raw", "pcm_alaw", 8000},
-	"pcm":   {"raw", "pcm_s16le", 24000},
+	"wav":       {"wav", "pcm_s16le", 24000, ttsPCMRates},
+	"pcm":       {"raw", "pcm_s16le", 24000, ttsPCMRates},
+	"f32":       {"raw", "pcm_f32le", 24000, ttsPCMRates},
+	"wav-f32":   {"wav", "pcm_f32le", 24000, ttsPCMRates},
+	"mulaw":     {"raw", "pcm_mulaw", 8000, ttsG711Rates},
+	"alaw":      {"raw", "pcm_alaw", 8000, ttsG711Rates},
+	"wav-mulaw": {"wav", "pcm_mulaw", 8000, ttsG711Rates},
+	"wav-alaw":  {"wav", "pcm_alaw", 8000, ttsG711Rates},
+	"mp3":       {"mp3", "mp3", 44100, nil},
 }
 
 // ttsMP3Bitrates is the bitrate the API takes at each mp3 sample rate (the highest
 // where it takes more than one): 128000 is only valid at 44100 and 48000 Hz.
 var ttsMP3Bitrates = map[int]int{8000: 32000, 16000: 64000, 22050: 32000, 24000: 48000, 44100: 128000, 48000: 128000}
 
-// ttsExtFormats picks a --format from the --out extension.
+// ttsExtFormats picks a --format from the --out extension. f32 and the wav-*
+// formats are never inferred: a .wav name still means wav.
 var ttsExtFormats = map[string]string{
 	".wav": "wav", ".mp3": "mp3", ".ulaw": "mulaw", ".mulaw": "mulaw",
 	".alaw": "alaw", ".pcm": "pcm", ".raw": "pcm",
@@ -93,9 +111,14 @@ prints the request and sends nothing. Text is up to 5000 characters, from
 --text or --file (- reads stdin).
 
 --format picks the audio: wav (24 kHz), mp3 (44.1 kHz, 128 kbps), mulaw or alaw
-(8 kHz telephony, raw), pcm (24 kHz, raw). Without it the --out extension
-decides (.wav .mp3 .ulaw .alaw .pcm), and anything else is wav. --out - writes
-the audio to stdout, which is refused on a terminal.`,
+(8 kHz telephony, raw), pcm (24 kHz, raw), f32 (24 kHz, raw 32-bit float).
+wav-f32, wav-mulaw and wav-alaw are the same audio in a WAV file. Without
+--format the --out extension decides (.wav .mp3 .ulaw .alaw .pcm), anything else
+is wav, and the f32 and wav-* formats are never guessed from it. --sample-rate
+takes 8000, 16000, 22050, 24000, 32000, 44100 or 48000 for wav, pcm, f32 and
+wav-f32, and 8000 for the mulaw and alaw formats. --out - writes the audio to
+stdout, which is refused on a terminal.
+`,
 	Example: `  plivo tts speak --voice r4_ashley --text "Hello from Plivo" --out hello.wav --dry-run
   plivo tts speak --voice r4_ashley --text "Hello from Plivo" --out hello.wav --yes
   plivo tts speak --voice r4_riya --language hi --file msg.txt --out msg.ulaw --yes`,
@@ -184,7 +207,7 @@ func init() {
 	f.StringVar(&ttsFile, "file", "", "read the text from this file (- for stdin)")
 	f.StringVar(&ttsOut, "out", "", "file to write the audio to (- for stdout) (required)")
 	f.StringVar(&ttsLanguage, "language", "", "language code: "+strings.Join(ttsLanguages, ", ")+" (default auto)")
-	f.StringVar(&ttsFormatName, "format", "", "audio format: wav, mp3, mulaw, alaw or pcm (default from the --out extension)")
+	f.StringVar(&ttsFormatName, "format", "", "audio format: "+ttsFormatNames+" (default from the --out extension)")
 	f.IntVar(&ttsSampleRate, "sample-rate", 0, "sample rate in Hz (default from --format)")
 	f.IntVar(&ttsBitrate, "bitrate", 0, "mp3 bitrate in bits per second (default depends on the sample rate)")
 	f.Float64Var(&ttsPace, "pace", 1.0, "speaking pace, 0.7 to 1.2")
@@ -507,13 +530,20 @@ func ttsSpeakBody(cmd *cobra.Command, text string) (map[string]any, error) {
 	}
 	preset, ok := ttsFormats[name]
 	if !ok {
-		return nil, clierr.BadFlag("format", fmt.Sprintf("%q is not wav, mp3, mulaw, alaw or pcm", name))
+		return nil, clierr.BadFlag("format", fmt.Sprintf("%q is not %s", name, ttsFormatNames))
 	}
 	if ttsSampleRate < 0 || ttsBitrate < 0 {
 		return nil, clierr.BadInput("--sample-rate and --bitrate take a positive number")
 	}
 	if ttsSampleRate > 0 {
 		preset.sampleRate = ttsSampleRate
+	}
+	if preset.rates != nil && !slices.Contains(preset.rates, preset.sampleRate) {
+		rates := make([]string, len(preset.rates))
+		for i, r := range preset.rates {
+			rates[i] = strconv.Itoa(r)
+		}
+		return nil, clierr.BadFlag("sample-rate", fmt.Sprintf("%d Hz is not offered for --format %s; use %s", preset.sampleRate, name, strings.Join(rates, ", ")))
 	}
 	format := map[string]any{"container": preset.container, "encoding": preset.encoding, "sample_rate": preset.sampleRate}
 	switch {

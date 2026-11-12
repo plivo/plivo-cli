@@ -5,9 +5,13 @@ prints the request and sends nothing. Text is up to 5000 characters, from
 --text or --file (- reads stdin).
 
 --format picks the audio: wav (24 kHz), mp3 (44.1 kHz, 128 kbps), mulaw or alaw
-(8 kHz telephony, raw), pcm (24 kHz, raw). Without it the --out extension
-decides (.wav .mp3 .ulaw .alaw .pcm), and anything else is wav. --out - writes
-the audio to stdout, which is refused on a terminal.
+(8 kHz telephony, raw), pcm (24 kHz, raw), f32 (24 kHz, raw 32-bit float).
+wav-f32, wav-mulaw and wav-alaw are the same audio in a WAV file. Without
+--format the --out extension decides (.wav .mp3 .ulaw .alaw .pcm), anything else
+is wav, and the f32 and wav-* formats are never guessed from it. --sample-rate
+takes 8000, 16000, 22050, 24000, 32000, 44100 or 48000 for wav, pcm, f32 and
+wav-f32, and 8000 for the mulaw and alaw formats. --out - writes the audio to
+stdout, which is refused on a terminal.
 
 Usage:
   plivo tts speak [flags]
@@ -20,7 +24,7 @@ Examples:
 Flags:
       --bitrate int       mp3 bitrate in bits per second (default depends on the sample rate)
       --file string       read the text from this file (- for stdin)
-      --format string     audio format: wav, mp3, mulaw, alaw or pcm (default from the --out extension)
+      --format string     audio format: wav, pcm, f32, wav-f32, mulaw, alaw, wav-mulaw, wav-alaw or mp3 (default from the --out extension)
   -h, --help              help for speak
       --language string   language code: auto, en, hi, bn, ta, te, mr, gu, kn (default auto)
       --lexicon string    lexicon_id of a saved lexicon to apply
