@@ -130,9 +130,15 @@ func TestTTSSpeak_refusedBeforeAnyRequest(t *testing.T) {
 		{"--voice v --text hi --yes --language xx", clierr.CodeBadFlag},
 		{"--voice v --text hi --yes --format ogg", clierr.CodeBadFlag},
 		{"--voice v --text hi --yes --bitrate 64000", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --out $DIR/nodir/a.wav", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --out $DIR", clierr.CodeBadFlag},
+		{"--voice v --file $DIR/m.txt --yes --out $DIR/m.txt", clierr.CodeBadFlag},
 	} {
-		out := filepath.Join(t.TempDir(), "a.wav")
-		r := ttsRun(t, newQAServer(t, nil), "", append([]string{"speak", "--out", out}, strings.Fields(c.line)...)...)
+		dir := t.TempDir()
+		out := filepath.Join(dir, "a.wav")
+		_ = os.WriteFile(filepath.Join(dir, "m.txt"), []byte("hello"), 0o600)
+		line := strings.ReplaceAll(c.line, "$DIR", dir)
+		r := ttsRun(t, newQAServer(t, nil), "", append([]string{"speak", "--out", out}, strings.Fields(line)...)...)
 		if _, err := os.Stat(out); ttsCode(r.err) != c.want || len(r.reqs) != 0 || err == nil {
 			t.Errorf("%.60s: code %q, requests %v, file written %v; want %s, none, no", c.line, ttsCode(r.err), r.reqs, err == nil, c.want)
 		}

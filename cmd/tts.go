@@ -3,8 +3,10 @@ package cmd
 import (
 	"cmp"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -240,10 +242,8 @@ func runTTSSpeak(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if ttsOut == "-" && isTerminal(int(os.Stdout.Fd())) {
-		e := clierr.BadFlag("out", "refusing to write audio to a terminal")
-		e.Hint = "Give a file name, or pipe the output: plivo tts speak ... --out - --yes | afplay -"
-		return e
+	if err := ttsCheckOut(); err != nil {
+		return err
 	}
 
 	client, _, err := getClient()
@@ -255,6 +255,28 @@ func runTTSSpeak(cmd *cobra.Command, args []string) error {
 		return gerr
 	}
 	applyDryRun(client, dryRun)
+
+	// Everything that can stop the audio being saved is checked before the
+	// billed send: a terminal for stdout, a folder that takes a file.
+	var staged *os.File
+	var dest string
+	switch {
+	case dryRun:
+	case ttsOut == "-":
+		if isTerminal(int(os.Stdout.Fd())) {
+			e := clierr.BadFlag("out", "refusing to write audio to a terminal")
+			e.Hint = "Give a file name with --out, or pipe --out - into a program that reads audio from stdin."
+			return e
+		}
+	default:
+		if staged, dest, err = ttsStage(); err != nil {
+			return err
+		}
+		defer func() {
+			_ = staged.Close()
+			_ = os.Remove(staged.Name())
+		}()
+	}
 
 	var audio api.BinaryBody
 	apiErr, err := client.Do("POST", client.AccountURL("TTS"), body, nil, &audio)
@@ -268,18 +290,87 @@ func runTTSSpeak(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if len(audio.Data) == 0 {
-		return clierr.Wrap(fmt.Errorf("Plivo returned no audio"))
+		return ttsNotSaved(fmt.Errorf("Plivo returned no audio"))
 	}
 	if ttsOut == "-" {
-		_, err = os.Stdout.Write(audio.Data)
+		if _, err := os.Stdout.Write(audio.Data); err != nil {
+			return ttsNotSaved(err)
+		}
 		fmt.Fprintf(os.Stderr, "Wrote %d bytes of %s to stdout\n", len(audio.Data), audio.ContentType)
-		return err
+		return nil
 	}
-	if err := os.WriteFile(ttsOut, audio.Data, 0o644); err != nil {
-		return clierr.Wrap(err)
+	if err := ttsSave(staged, dest, audio.Data); err != nil {
+		return ttsNotSaved(err)
 	}
 	return emitWrite(fmt.Sprintf("Wrote %d bytes of %s to %s (%d characters)", len(audio.Data), audio.ContentType, ttsOut, chars),
 		map[string]any{"out": ttsOut, "bytes": len(audio.Data), "content_type": audio.ContentType, "characters": chars, "voice_id": ttsVoice})
+}
+
+// ttsCheckOut refuses an --out the audio can never be saved to, before
+// anything is billed. It runs on --dry-run too, so a preview does not pass
+// a command that would then fail. - is stdout and has no path to check.
+func ttsCheckOut() error {
+	if ttsOut == "-" {
+		return nil
+	}
+	if ttsOut == "" {
+		return clierr.BadFlag("out", "give a file name")
+	}
+	out, outErr := os.Stat(ttsOut)
+	if outErr == nil && out.IsDir() {
+		return clierr.BadFlag("out", ttsOut+" is a directory; give a file name")
+	}
+	if dir, err := os.Stat(filepath.Dir(ttsOut)); err != nil || !dir.IsDir() {
+		return clierr.BadFlag("out", "the folder "+filepath.Dir(ttsOut)+" does not exist")
+	}
+	if ttsFile != "" && ttsFile != "-" && outErr == nil {
+		if in, err := os.Stat(ttsFile); err == nil && os.SameFile(in, out) {
+			return clierr.BadFlag("out", "is the file --file reads; the audio would overwrite your text")
+		}
+	}
+	return nil
+}
+
+// ttsStage opens the temp file the audio is saved through, beside --out so
+// the final rename stays on one filesystem and a failed save never touches an
+// existing --out. dest is what it is renamed to: --out, or the file a link
+// there points at.
+func ttsStage() (f *os.File, dest string, err error) {
+	dest = ttsOut
+	if p, e := filepath.EvalSymlinks(ttsOut); e == nil {
+		dest = p
+	}
+	f, err = os.CreateTemp(filepath.Dir(dest), ".plivo-tts-*")
+	if err != nil {
+		var pe *fs.PathError
+		if errors.As(err, &pe) {
+			err = pe.Err
+		}
+		return nil, "", clierr.BadFlag("out", fmt.Sprintf("cannot write in %s: %v", filepath.Dir(dest), err))
+	}
+	return f, dest, nil
+}
+
+// ttsSave puts the audio at dest whole or not at all.
+func ttsSave(f *os.File, dest string, data []byte) error {
+	_, err := f.Write(data)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(f.Name(), 0o644)
+	}
+	if err == nil {
+		err = os.Rename(f.Name(), dest)
+	}
+	return err
+}
+
+// ttsNotSaved marks an error from after the send: Plivo already billed it.
+func ttsNotSaved(err error) *clierr.Error {
+	e := clierr.Wrap(err)
+	e.Hint = "The request was sent and billed; the audio was not saved."
+	return e
 }
 
 // ttsReadText returns the text from --text or --file, exactly one of them.
