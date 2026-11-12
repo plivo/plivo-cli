@@ -22,6 +22,7 @@ import (
 // Limits from the Plivo TTS API reference.
 const (
 	ttsMaxChars       = 5000
+	ttsMaxInputBytes  = 1 << 20 // the API's request body limit
 	ttsMaxRules       = 100
 	ttsMaxNameChars   = 100
 	ttsMaxWordChars   = 100
@@ -383,17 +384,21 @@ func ttsReadText() (string, error) {
 		var b []byte
 		var err error
 		if ttsFile == "-" {
-			b, err = io.ReadAll(io.LimitReader(os.Stdin, 1<<20))
+			b, err = ttsReadAll(os.Stdin, "the text")
 		} else {
-			b, err = os.ReadFile(ttsFile)
+			b, err = ttsReadPath(ttsFile, "the text")
 		}
 		if err != nil {
-			return "", clierr.Wrap(err)
+			return "", err
 		}
 		text = string(b)
 	}
-	// Padding is billed as characters and says nothing: a file ends in a newline.
-	if text = strings.TrimSpace(text); text == "" {
+	if !utf8.ValidString(text) {
+		return "", clierr.BadInput("the text must be UTF-8")
+	}
+	// Padding is billed as characters and says nothing: a file ends in a newline,
+	// and a byte order mark leads one that an editor saved.
+	if text = strings.TrimSpace(strings.TrimPrefix(text, "\uFEFF")); text == "" {
 		return "", clierr.BadInput("the text is empty")
 	}
 	if n := utf8.RuneCountInString(text); n > ttsMaxChars {
@@ -402,6 +407,29 @@ func ttsReadText() (string, error) {
 		return "", e
 	}
 	return text, nil
+}
+
+// ttsReadAll reads r whole and refuses more than the API's 1 MiB body: a cut-off
+// read would be billed as if it were everything the user gave. what names the
+// input in the refusal.
+func ttsReadAll(r io.Reader, what string) ([]byte, error) {
+	b, err := io.ReadAll(io.LimitReader(r, ttsMaxInputBytes+1))
+	if err != nil {
+		return nil, clierr.Wrap(err)
+	}
+	if len(b) > ttsMaxInputBytes {
+		return nil, clierr.BadInput(what + " is more than 1 MiB")
+	}
+	return b, nil
+}
+
+func ttsReadPath(path, what string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, clierr.Wrap(err)
+	}
+	defer f.Close()
+	return ttsReadAll(f, what)
 }
 
 // ttsSpeakBody checks the speak flags and builds the batch request body.
@@ -552,9 +580,9 @@ func runTTSLexiconCreate(cmd *cobra.Command, args []string) error {
 func ttsLexiconRules() ([]api.TTSLexiconRule, error) {
 	var rules []api.TTSLexiconRule
 	if ttsLexFile != "" {
-		b, err := os.ReadFile(ttsLexFile)
+		b, err := ttsReadPath(ttsLexFile, "the lexicon file")
 		if err != nil {
-			return nil, clierr.Wrap(err)
+			return nil, err
 		}
 		if err := json.Unmarshal(b, &rules); err != nil {
 			return nil, clierr.BadFlag("file", `must be a JSON array of {"word": ..., "value": ...}`)
