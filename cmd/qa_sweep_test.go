@@ -354,7 +354,7 @@ func TestQA_sweepUnconfirmed(t *testing.T) {
 			}
 		})
 	}
-	if checked < 30 { // 33 today
+	if checked < 30 { // 34 today
 		t.Errorf("only %d commands delete or spend; the samples have stopped reaching the API", checked)
 	}
 }
