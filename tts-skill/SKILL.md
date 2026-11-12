@@ -15,7 +15,7 @@ Take a developer, or their coding agent, from a Plivo account to speech audio: a
 - Ask every question with your agent's own structured question tool. In Claude Code it is AskUserQuestion: one call takes 1 to 4 questions with 2 to 4 options each, and it adds a free-text "Other" option itself, so do not add one. Without such a tool, ask a numbered list with an "Other" choice and wait for the answer.
 - Synthesis is billed per character, so it is a write: two commands, never one. First `plivo tts speak ... --dry-run` (prints the request, sends nothing), then, after you show the preview and the character count and the user agrees, the same command with `--yes`. Without either flag the CLI refuses. `plivo tts lexicons delete` also needs `--yes`, after a `--dry-run`. `plivo tts lexicons create` is free and writes at once, so its `--dry-run` preview is the only check: show it and ask before you run it for real. If a command rejects `--dry-run`, show the current state from `list` or `get` instead and ask.
 - Check the credit before every synthesis: `cash_credits` in `plivo auth whoami -o json`. At 0 or less, tell the user to add credits on the console home page, <https://cx.plivo.com/home>, and stop before the billed step. The docs do not say what a request returns on an empty balance, so never rely on the error to find out.
-- Never read, print or ask for the Auth ID or Auth Token in the chat: the user writes them into `.env` with an editor, and the realtime script reads them from the environment. Never run `plivo login` yourself (step 1).
+- Never read, print or ask for the Auth ID or Auth Token in the chat: the user writes them into `.env` with an editor, and the realtime script reads that file when run with `uv run --env-file .env`. Never read, cat or print `.env`. Never run `plivo login` yourself (step 1).
 - Report each step as observed, not known or failed. Observed means you saw the evidence in this session. You cannot hear audio: a file with the right size and type is not proof that it sounds right, so say what you checked and ask the user to listen.
 - Verdicts: **will break** when a documented rule or an observed failure says so (name the failure); **risky** when plausible or untested (say what to check); **style** when nothing changes. A rule here with no label is risky.
 
@@ -27,7 +27,7 @@ Take a developer, or their coding agent, from a Plivo account to speech audio: a
 
 ## Steps 1 to 6: from the account to a checked audio file
 
-Create these six tasks first, then run the steps in order. Stop at the first failed check and fix it before you go on. Only step 5 costs money.
+Create these six tasks first, then run the steps in order. Stop at the first failed check and fix it before you go on. Only step 5 and the realtime script (below) cost money.
 
 1. Check tools and login
 2. Check the credit
@@ -85,14 +85,16 @@ Ask "Which voice?" (header Voice) with up to three options, each "<name>: <gende
 
 ### Step 5: synthesize
 
-Put the text in the command, or in a file for anything long (`--file text.txt`, or `--file -` for stdin). The limit is 5,000 characters per request: for more, split at sentence ends and synthesize each part. Raw formats (`mulaw`, `alaw`, `pcm`) join byte for byte; `wav` and `mp3` need a tool such as `ffmpeg`.
+Put the text in the command, or in a file for anything long (`--file text.txt`, or `--file -` for stdin). The limit is 5,000 characters per request: for more, split at sentence ends and synthesize each part, and ask the consent question below once, for the total number of characters across all the parts. Long text takes longer to synthesize: pass a longer global `--timeout` in seconds (the default is 30), for example `--timeout 120`. Raw formats (`mulaw`, `alaw`, `pcm`) join byte for byte; `wav` and `mp3` need a tool such as `ffmpeg`.
 
 ```bash
 plivo tts speak --voice r4_riya --language hi --text "आपका पैकेज कल पहुंचेगा।" \
   --format mulaw --sample-rate 8000 --out reminder.ulaw --dry-run
 ```
 
-Show the preview and the character count, then ask: "Synthesize <N> characters now? Plivo bills per character." Synthesize / Not now (header Synthesize). On yes, run the same command with `--yes` in place of `--dry-run`.
+Show the preview and the character count, then ask: "Synthesize <N> characters now? Plivo bills per character." Synthesize / Not now (header Synthesize). On yes, take a reading with `plivo tts usage -o json`, then run the same command with `--yes` in place of `--dry-run`.
+
+If a billed run fails with `UPSTREAM_TIMEOUT`, `NETWORK_ERROR` or a 5xx, do not run it again: the request may have been billed. Read `plivo tts usage -o json` again, compare it with the reading from before the send, tell the user what changed, and ask before you send again. Take a usage reading before every billed run.
 
 Optional flags:
 
@@ -116,7 +118,7 @@ file reminder.wav        # WAV files report "RIFF ... WAVE audio"; raw files rep
 afplay reminder.wav      # macOS; ffplay -autoexit works on Linux and Windows; raw files need ffplay -f mulaw -ar 8000
 ```
 
-Report: the file path, its size, the format flags you used, and the character count. Ask "Does it sound right?" (header Listen), since you cannot hear it. Then `plivo tts usage -o json` shows the account's totals (see "Billing and usage").
+Report: the file path, its size, the format flags you used, and the character count. Ask "Does it sound right?" (header Listen), since you cannot hear it. Then read `plivo tts usage -o json` again and compare it with the reading from before the run (see "Billing and usage").
 
 ## Pronunciation and lexicons
 
@@ -151,7 +153,13 @@ Use `--file` or `--rule`, not both; `--rule` repeats. The create command prints 
 
 Use it when text arrives piece by piece, as a model writes it, and the audio must start before the text ends. It is not a CLI command. Endpoint: `wss://api.plivo.com/v1/Account/<auth_id>/TTS/Realtime/`, with the Auth ID and Auth Token as HTTP Basic auth on the upgrade request. A bad credential is refused with an HTTP status, so the socket never opens. There are no query parameters: every option goes in the first `text` message of a reply.
 
-A runnable start. The user puts `PLIVO_AUTH_ID`, `PLIVO_AUTH_TOKEN` and `VOICE_ID` in `.env`; run it once before you hand it over:
+A runnable start. Save it as `realtime_tts.py`. The user puts `PLIVO_AUTH_ID`, `PLIVO_AUTH_TOKEN` and `VOICE_ID` in `.env`; never read, cat or print that file. Running the script bills per character, like step 5: do the credit check (step 2) and take a `plivo tts usage -o json` reading, then ask "Run a <N>-character test now? Plivo bills per character." (header Synthesize; the script as written sends 16 characters, so count the new text if you change it), and run it only on yes. `uv run --script` alone does not load `.env`, so run:
+
+```bash
+uv run --env-file .env --script realtime_tts.py
+```
+
+The script:
 
 ```python
 # /// script
@@ -236,7 +244,7 @@ Rules that matter: keep reading the socket, because a client that reads nothing 
 
 ## Billing and usage
 
-Billing is per character: each `done` event and the usage report give the billed `characters`. Quote no price, because the docs give none. `plivo tts usage -o json` returns totals split by route: `http` is batch (`plivo tts speak`) and `live` is realtime. Each route has `requests` (batch requests or realtime replies), `characters` (billed), `spoken_chars` (characters spoken after normalization), `audio_seconds` and `tokens`. Use it to check that a test cost what you expected, not to predict a bill.
+Billing is per character: each `done` event and the usage report give the billed `characters`. Quote no price, because the docs give none. `plivo tts usage -o json` returns totals split by route: `http` is batch (`plivo tts speak`) and `live` is realtime. Each route has `requests` (batch requests or realtime replies), `characters` (billed), `spoken_chars` (characters spoken after normalization), `audio_seconds` and `tokens`. The report holds account totals with no time window, so what one run cost is the difference between a reading taken before the run and one taken after. Use it to check that a run cost what you expected, not to predict a bill.
 
 ## When a request fails
 

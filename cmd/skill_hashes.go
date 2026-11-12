@@ -119,7 +119,7 @@ var shippedSkillHashes = map[string][]string{
 		"eb91b59b40c0cf07ea08a819537c3a25f09dfc5200371b690b32a162001be4c5",
 	},
 	"plivo-tts": {
-		"a51377e879ae81a2bd67633f664579cceea987aaeb272281f5606a528e81796d",
+		"e27da82fa3f1d7eaa6a605d541eba0e5e0f1d7805559c3e34f307be34b2868b3",
 	},
 	"plivo-voice-xml": {
 		"06cbcb46eb85f558efdf5028ec73c3d0c31854725ae4b9e5773e2c85aee8b021",
