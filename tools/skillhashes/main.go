@@ -34,6 +34,7 @@ var skills = []struct{ src, dir string }{
 	{"sip-trunking-skill/SKILL.md", "plivo-sip-trunking"},
 	{"tts-skill/SKILL.md", "plivo-tts"},
 	{"voice-xml-skill/SKILL.md", "plivo-voice-xml"},
+	{"call-forwarding-skill/SKILL.md", "plivo-call-forwarding"},
 }
 
 func main() {
@@ -47,11 +48,14 @@ func main() {
 	b.WriteString("// shippedSkillHashes lists, per install folder, the sha256 of every SKILL.md\n")
 	b.WriteString("// version that has been on main, plus the bundled one (CRLF read as LF).\n")
 	b.WriteString("var shippedSkillHashes = map[string][]string{\n")
-	total := 0
+	total, onRef := 0, 0
 	for _, s := range skills {
 		sums, err := history(*ref, s.src)
 		if err != nil {
 			fail(err)
+		}
+		if len(sums) > 0 {
+			onRef++
 		}
 		current, err := os.ReadFile(s.src)
 		if err != nil {
@@ -72,6 +76,11 @@ func main() {
 		total += len(sorted)
 	}
 	b.WriteString("}\n")
+	// A skill new on this branch has no version on ref yet, but every skill
+	// missing means ref itself is missing or stale.
+	if onRef == 0 {
+		fail(fmt.Errorf("no skill has a version in %s; run `git fetch origin` first", *ref))
+	}
 
 	src, err := format.Source([]byte(b.String()))
 	if err != nil {
@@ -83,9 +92,9 @@ func main() {
 	fmt.Printf("wrote %s (%d hashes from %s)\n", *out, total, *ref)
 }
 
-// history returns the digest of every version of path in ref's history.
-// --full-history keeps commits on merged branches that history
-// simplification would skip.
+// history returns the digest of every version of path in ref's history, none
+// for a skill ref does not have yet. --full-history keeps commits on merged
+// branches that history simplification would skip.
 func history(ref, path string) (map[string]bool, error) {
 	revs, err := git("rev-list", "--full-history", ref, "--", path)
 	if err != nil {

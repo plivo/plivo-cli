@@ -8,6 +8,7 @@ Plivo skills for coding agents: build Plivo CX agents, put voice agents on real 
 - **plivo-audio-streaming**: a voice agent on real calls through audio streaming
 - **plivo-tts**: turn text into speech with Plivo voices: voices, audio files, pronunciation lexicons, realtime
 - **plivo-voice-xml**: write, check and test Plivo Voice XML
+- **plivo-call-forwarding**: debug forwarded calls into a Plivo number, out of Plivo or into a SIP trunk
 
 Install in Claude Code:
 
@@ -19,7 +20,7 @@ The skills drive the [Plivo CLI](https://github.com/plivo/plivo-cli#install). Do
 
 ## Data and services
 
-The plugin ships only these five skill files: it runs no code of its own and stores nothing. The skills have your agent run the Plivo CLI on your machine, signed in with your own Plivo account (`plivo login`). Data leaves your machine only to:
+The plugin ships only these six skill files: it runs no code of its own and stores nothing. The skills have your agent run the Plivo CLI on your machine, signed in with your own Plivo account (`plivo login`). Data leaves your machine only to:
 
 - **Plivo's API**, for what you ask: reading your numbers, applications, calls and messages, building, testing and publishing your CX agents, or sending a message, placing a call or changing a number after you confirm. Plivo keeps these records under its [privacy policy](https://www.plivo.com/legal/privacy/).
 - **Plivo, as CLI usage data**: each CLI request carries the CLI version, OS and architecture and, when you are signed in, your account's email, auth ID and region. `plivo config telemetry off` turns the account part off ([Privacy & telemetry](https://github.com/plivo/plivo-cli#privacy--telemetry)).

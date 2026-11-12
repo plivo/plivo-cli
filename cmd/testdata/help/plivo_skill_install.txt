@@ -9,6 +9,7 @@ They are bundled in the binary, so this writes them out without a network call.
   sip-trunking     connect an AI voice platform over SIP trunking
   tts              turn text into speech with Plivo voices from the CLI
   voice-xml        write and fix Plivo Voice XML
+  call-forwarding  debug forwarded calls, into Plivo or out of it
   all              every listed skill
 
 With no argument, installs the CLI skill (unchanged from previous releases).
@@ -27,7 +28,7 @@ it is kept unless you pass --force, as `plivo skill update` does. A retired
 skill that an install replaces keeps its file, renamed SKILL.md.retired.
 
 Usage:
-  plivo skill install [agents|cli|audio-streaming|sip-trunking|tts|voice-xml|all] [flags]
+  plivo skill install [agents|cli|audio-streaming|sip-trunking|tts|voice-xml|call-forwarding|all] [flags]
 
 Examples:
   plivo skill install                    # CLI skill -> ~/.claude/skills/plivo-cli/

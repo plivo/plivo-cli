@@ -16,6 +16,7 @@ import (
 
 	agentsskill "github.com/plivo/plivo-cli/agents-skill"
 	audiostreamingskill "github.com/plivo/plivo-cli/audio-streaming-skill"
+	callforwardingskill "github.com/plivo/plivo-cli/call-forwarding-skill"
 	cliskill "github.com/plivo/plivo-cli/cli-skill"
 	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/output"
@@ -50,6 +51,7 @@ var bundledSkills = []bundledSkill{
 	{selector: "sip-trunking", dirName: "plivo-sip-trunking", content: siptrunkingskill.SkillMD, summary: "connect an AI voice platform over SIP trunking"},
 	{selector: "tts", dirName: "plivo-tts", content: ttsskill.SkillMD, summary: "turn text into speech with Plivo voices from the CLI"},
 	{selector: "voice-xml", dirName: "plivo-voice-xml", content: voicexmlskill.SkillMD, summary: "write and fix Plivo Voice XML"},
+	{selector: "call-forwarding", dirName: "plivo-call-forwarding", content: callforwardingskill.SkillMD, summary: "debug forwarded calls, into Plivo or out of it"},
 }
 
 // defaultSkillSelector is the skill bare `plivo skill install` writes.
@@ -105,7 +107,7 @@ var skillCmd = &cobra.Command{
 // skillInstallCmd writes the embedded SKILL.md into the agent skills directory
 // (default ~/.claude/skills/plivo-cli; override with --dir, or --print to stdout).
 var skillInstallCmd = &cobra.Command{
-	Use:   "install [agents|cli|audio-streaming|sip-trunking|tts|voice-xml|all]",
+	Use:   "install [agents|cli|audio-streaming|sip-trunking|tts|voice-xml|call-forwarding|all]",
 	Short: "Install an agent skill so coding agents auto-load the reference",
 	Long: `Install a Plivo agent skill.
 
@@ -118,6 +120,7 @@ They are bundled in the binary, so this writes them out without a network call.
   sip-trunking     connect an AI voice platform over SIP trunking
   tts              turn text into speech with Plivo voices from the CLI
   voice-xml        write and fix Plivo Voice XML
+  call-forwarding  debug forwarded calls, into Plivo or out of it
   all              every listed skill
 
 With no argument, installs the CLI skill (unchanged from previous releases).
@@ -144,7 +147,7 @@ skill that an install replaces keeps its file, renamed SKILL.md.retired.`,
   plivo skill install all --agent codex  # -> ~/.agents/skills/, where Codex reads them
   plivo skill install all --dry-run      # show destinations, write nothing`,
 	Args:      cobra.MaximumNArgs(1),
-	ValidArgs: []string{"agents", "cli", "audio-streaming", "sip-trunking", "tts", "voice-xml", "all"},
+	ValidArgs: []string{"agents", "cli", "audio-streaming", "sip-trunking", "tts", "voice-xml", "call-forwarding", "all"},
 	RunE:      runSkillInstall,
 }
 
