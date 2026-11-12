@@ -29,6 +29,7 @@ const (
 	ttsMaxChars       = 5000
 	ttsMaxInputBytes  = 1 << 20 // the API's request body limit
 	ttsMaxRules       = 100
+	ttsMaxPronounce   = 100 // inline rules in one request
 	ttsMaxNameChars   = 100
 	ttsMaxWordChars   = 100
 	ttsMaxValueChars  = 120
@@ -50,6 +51,9 @@ var (
 	ttsPCMRates  = []int{8000, 16000, 22050, 24000, 32000, 44100, 48000}
 	ttsG711Rates = []int{8000}
 )
+
+// ttsKinds is how a pronunciation value can be written.
+var ttsKinds = []string{"ipa", "arpa", "respell"}
 
 // ttsFormat is a --format preset: the output_format a batch request sends.
 // rates is what --sample-rate may be; nil for mp3, which the API checks with its bitrate.
@@ -120,10 +124,14 @@ wav-f32, and 8000 for the mulaw and alaw formats. --out - writes the audio to
 stdout, which is refused on a terminal.
 
 --text-normalization=false reads numbers and dates as written, not as words
-(write =false: a space before false does not work).`,
+(write =false: a space before false does not work). --pronounce word=value
+(repeatable, up to 100) sets how a word is said for this request;
+--pronounce-kind (ipa, arpa or respell) says how every value is written and is
+required with it. Inline rules cannot be combined with --lexicon.`,
 	Example: `  plivo tts speak --voice r4_ashley --text "Hello from Plivo" --out hello.wav --dry-run
   plivo tts speak --voice r4_ashley --text "Hello from Plivo" --out hello.wav --yes
-  plivo tts speak --voice r4_riya --language hi --file msg.txt --out msg.ulaw --yes`,
+  plivo tts speak --voice r4_riya --language hi --file msg.txt --out msg.ulaw --yes
+  plivo tts speak --voice r4_ashley --text "Welcome to Plivo" --pronounce "Plivo=PLEE-voh" --pronounce-kind respell --out welcome.wav --dry-run`,
 	Args: cobra.NoArgs,
 	RunE: runTTSSpeak,
 }
@@ -193,6 +201,8 @@ var (
 	ttsLexicon    string
 	ttsSeed       int64
 	ttsTextNorm   bool
+	ttsPronounce  []string
+	ttsPronKind   string
 
 	ttsLexName  string
 	ttsLexKind  string
@@ -218,6 +228,8 @@ func init() {
 	f.StringVar(&ttsLexicon, "lexicon", "", "lexicon_id of a saved lexicon to apply")
 	f.Int64Var(&ttsSeed, "seed", 0, "repeatable output: the same text, voice and seed give identical audio")
 	f.BoolVar(&ttsTextNorm, "text-normalization", true, "read numbers and dates as words; turn it off with --text-normalization=false")
+	f.StringArrayVar(&ttsPronounce, "pronounce", nil, "how to say a word, as word=value (repeatable, up to 100; needs --pronounce-kind)")
+	f.StringVar(&ttsPronKind, "pronounce-kind", "", "how every --pronounce value is written: ipa, arpa or respell (required with --pronounce)")
 	_ = ttsSpeakCmd.MarkFlagRequired("voice")
 	_ = ttsSpeakCmd.MarkFlagRequired("out")
 
@@ -579,6 +591,13 @@ func ttsSpeakBody(cmd *cobra.Command, text string) (map[string]any, error) {
 	if cmd.Flags().Changed("text-normalization") {
 		body["text_normalization"] = ttsTextNorm
 	}
+	rules, err := ttsPronunciations(cmd)
+	if err != nil {
+		return nil, err
+	}
+	if rules != nil {
+		body["pronunciations"] = rules
+	}
 	if ttsLexicon != "" {
 		body["lexicon_id"] = ttsLexicon
 	}
@@ -587,6 +606,35 @@ func ttsSpeakBody(cmd *cobra.Command, text string) (map[string]any, error) {
 		body["seed"], body["continuation"] = ttsSeed, false
 	}
 	return body, nil
+}
+
+// ttsPronunciations turns --pronounce into the request's inline rules, nil when
+// there are none. It checks them here, so a bad one is named before anything is sent.
+func ttsPronunciations(cmd *cobra.Command) ([]map[string]string, error) {
+	kindGiven := cmd.Flags().Changed("pronounce-kind")
+	switch n := len(ttsPronounce); {
+	case n == 0 && !kindGiven:
+		return nil, nil
+	case n == 0:
+		return nil, clierr.BadFlag("pronounce-kind", "applies to --pronounce; give at least one --pronounce word=value")
+	case !kindGiven:
+		return nil, clierr.BadFlag("pronounce-kind", "is required with --pronounce: ipa, arpa or respell")
+	case !slices.Contains(ttsKinds, ttsPronKind):
+		return nil, clierr.BadFlag("pronounce-kind", fmt.Sprintf("%q is not ipa, arpa or respell", ttsPronKind))
+	case n > ttsMaxPronounce:
+		return nil, clierr.BadFlag("pronounce", fmt.Sprintf("one request takes up to %d rules; got %d", ttsMaxPronounce, n))
+	case ttsLexicon != "":
+		return nil, clierr.BadFlag("pronounce", "cannot be combined with --lexicon: use one or the other")
+	}
+	rules := make([]map[string]string, 0, len(ttsPronounce))
+	for _, s := range ttsPronounce {
+		word, value, ok := strings.Cut(s, "=")
+		if !ok || word == "" || value == "" || !utf8.ValidString(s) {
+			return nil, clierr.BadFlag("pronounce", fmt.Sprintf("%q is not word=value (UTF-8, both parts non-empty)", s))
+		}
+		rules = append(rules, map[string]string{"word": word, "value": value, "kind": ttsPronKind})
+	}
+	return rules, nil
 }
 
 func runTTSLexiconList(cmd *cobra.Command, args []string) error {
@@ -648,7 +696,7 @@ func runTTSLexiconGet(cmd *cobra.Command, args []string) error {
 }
 
 func runTTSLexiconCreate(cmd *cobra.Command, args []string) error {
-	if !slices.Contains([]string{"ipa", "arpa", "respell"}, ttsLexKind) {
+	if !slices.Contains(ttsKinds, ttsLexKind) {
 		return clierr.BadFlag("kind", fmt.Sprintf("%q is not ipa, arpa or respell", ttsLexKind))
 	}
 	if n := utf8.RuneCountInString(ttsLexName); n == 0 || n > ttsMaxNameChars {

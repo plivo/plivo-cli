@@ -31,7 +31,7 @@ func ttsRun(t *testing.T, srv *qaServer, stdin string, args ...string) qaResult 
 			f.Changed = false
 		})
 	}
-	ttsLexRules = nil
+	ttsLexRules, ttsPronounce = nil, nil
 	return srv.run(t, stdin, append([]string{"tts"}, args...)...)
 }
 
@@ -136,7 +136,7 @@ func TestTTSFormatNames_listEveryPreset(t *testing.T) {
 	}
 }
 
-func TestTTSSpeak_bodyTakesNormalization(t *testing.T) {
+func TestTTSSpeak_bodyTakesNormalizationAndInlineRules(t *testing.T) {
 	var accept string
 	srv := ttsAudioServer(t, &accept)
 	run := func(extra ...string) map[string]any {
@@ -148,7 +148,7 @@ func TestTTSSpeak_bodyTakesNormalization(t *testing.T) {
 		return r.reqs[0].Body
 	}
 	// Left alone the field is not sent; null would be a 422.
-	if b := run(); b["text_normalization"] != nil {
+	if b := run(); b["text_normalization"] != nil || b["pronunciations"] != nil {
 		t.Errorf("defaults were sent: %v", b)
 	}
 	if b := run("--text-normalization=false"); b["text_normalization"] != false {
@@ -163,6 +163,11 @@ func TestTTSSpeak_bodyTakesNormalization(t *testing.T) {
 		if r := ttsRun(t, srv, "", args...); r.err == nil || len(r.reqs) != 0 {
 			t.Errorf("%v: err %v, requests %v; want a refusal and none", bad, r.err, r.reqs)
 		}
+	}
+	// Each rule carries the one kind; a value may hold an =.
+	b := run("--pronounce", "Plivo=PLEE-voh", "--pronounce", "x=y=z", "--pronounce-kind", "respell")
+	if want := "[map[kind:respell value:PLEE-voh word:Plivo] map[kind:respell value:y=z word:x]]"; fmt.Sprint(b["pronunciations"]) != want {
+		t.Errorf("pronunciations %v, want %s", b["pronunciations"], want)
 	}
 }
 
@@ -184,6 +189,15 @@ func TestTTSSpeak_refusedBeforeAnyRequest(t *testing.T) {
 		{"--voice v --text hi --yes --format wav-alaw --sample-rate 16000", clierr.CodeBadFlag},
 		{"--voice v --text hi --yes --format wav --sample-rate 11025", clierr.CodeBadFlag},
 		{"--voice v --text hi --yes --format f32 --sample-rate 96000", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --pronounce a=b", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --pronounce-kind ipa", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --pronounce a=b --pronounce-kind IPA", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --pronounce ab --pronounce-kind ipa", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --pronounce =b --pronounce-kind ipa", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --pronounce a= --pronounce-kind ipa", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --pronounce caf\xe9=b --pronounce-kind ipa", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --pronounce-kind ipa --lexicon lx_1 --pronounce a=b", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --pronounce-kind ipa" + strings.Repeat(" --pronounce a=b", ttsMaxPronounce+1), clierr.CodeBadFlag},
 		{"--voice v --text hi --yes --bitrate 64000", clierr.CodeBadFlag},
 		{"--voice v --text caf\xe9 --yes", clierr.CodeBadInput},
 		{"--voice v --text hi --yes --out $DIR/nodir/a.wav", clierr.CodeBadFlag},
