@@ -520,16 +520,65 @@ func resolvesInside(repo, path string) bool {
 		}
 		near = filepath.Dir(near)
 	}
-	realRepo, err := filepath.EvalSymlinks(repo)
+	realRepo, err := evalLinks(repo)
 	if err != nil {
 		return false
 	}
-	realNear, err := filepath.EvalSymlinks(near)
+	realNear, err := evalLinks(near)
 	if err != nil {
 		return false
 	}
 	rel, err := filepath.Rel(realRepo, realNear)
 	return err == nil && filepath.IsLocal(rel)
+}
+
+// evalLinks is filepath.EvalSymlinks that also follows a Windows junction. Go
+// reports one as an irregular file: EvalSymlinks leaves it unresolved at the
+// end of a path and fails on one in the middle, so a path through one would be
+// judged by its own name, not by where it leads. A junction that cannot be
+// followed, or leads off the volume, is an error and resolvesInside refuses it.
+func evalLinks(path string) (string, error) {
+	for range 64 {
+		link, target, err := junctionIn(path)
+		if err != nil {
+			return "", err
+		}
+		if link == "" {
+			return filepath.EvalSymlinks(path)
+		}
+		path = filepath.Join(target, path[len(link):])
+	}
+	return "", errors.New("too many links in " + path)
+}
+
+// junctionIn returns the junction in path that is nearest the root, and where
+// it leads. link is "" when path holds none.
+func junctionIn(path string) (link, target string, err error) {
+	var prefixes []string
+	for q := path; ; q = filepath.Dir(q) {
+		prefixes = append(prefixes, q)
+		if filepath.Dir(q) == q {
+			break
+		}
+	}
+	for _, q := range slices.Backward(prefixes) {
+		fi, err := os.Lstat(q)
+		if err != nil {
+			return "", "", err
+		}
+		if fi.Mode()&fs.ModeIrregular == 0 {
+			continue
+		}
+		target, err := os.Readlink(q)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue // a reparse point that is no link, such as a cloud placeholder
+		}
+		if err != nil {
+			return "", "", err
+		}
+		return q, target, nil
+	}
+	return "", "", nil
 }
 
 // skillUpdateRow is one installed copy `skill update` looked at, and the JSON
@@ -581,7 +630,7 @@ func runSkillUpdate(cmd *cobra.Command, _ []string) error {
 			if err != nil {
 				return clierr.Wrap(fmt.Errorf("read %s: %w", path, err))
 			}
-			if resolved, err := filepath.EvalSymlinks(path); err == nil {
+			if resolved, err := evalLinks(path); err == nil {
 				if seen[resolved] {
 					continue
 				}
