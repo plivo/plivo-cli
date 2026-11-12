@@ -147,8 +147,8 @@ func TestTTSSpeak_bodyTakesNormalizationAndInlineRules(t *testing.T) {
 		}
 		return r.reqs[0].Body
 	}
-	// Left alone the field is not sent; null would be a 422.
-	if b := run(); b["text_normalization"] != nil || b["pronunciations"] != nil {
+	// Left alone the keys are absent, not null (a map read of null looks the same as absent; null is a 422).
+	if b := run(); slices.ContainsFunc([]string{"text_normalization", "pronunciations"}, func(k string) bool { _, ok := b[k]; return ok }) {
 		t.Errorf("defaults were sent: %v", b)
 	}
 	if b := run("--text-normalization=false"); b["text_normalization"] != false {
