@@ -297,10 +297,9 @@ func qaSnapshotDiff(before, after map[string][32]byte) []string {
 
 // ─── Deletes and spends need --yes ───────────────────────────────────────────
 
-// qaSpends match the requests that cost money. `plivo lookup` costs per
-// request too, but stays ungated by decision: it states its price instead.
+// qaSpends match the requests that cost money.
 var qaSpends = regexp.MustCompile(`^(POST Message/|POST Call/|POST PhoneNumber/\+?\d+/|GET CnamLookup/[^/]+/|` +
-	`POST Verify/Session/|POST Masking/Session/|POST 10dlc/Brand/|POST 10dlc/Campaign/|` +
+	`GET /v1/Lookup/Number/[^/?]+|POST Verify/Session/|POST Masking/Session/|POST 10dlc/Brand/|POST 10dlc/Campaign/|` +
 	`POST MultiPartyCall/[^/]+/Participant/)(\?.*)?$`)
 
 // qaUndoVerbs send a DELETE that only stops what is in progress; nothing is
@@ -355,7 +354,7 @@ func TestQA_sweepUnconfirmed(t *testing.T) {
 			}
 		})
 	}
-	if checked < 30 { // 33 today
+	if checked < 30 { // 34 today
 		t.Errorf("only %d commands delete or spend; the samples have stopped reaching the API", checked)
 	}
 }
