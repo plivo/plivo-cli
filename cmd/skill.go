@@ -537,6 +537,7 @@ func resolvesInside(repo, path string) bool {
 // end of a path and fails on one in the middle, so a path through one would be
 // judged by its own name, not by where it leads. A junction that cannot be
 // followed, or leads off the volume, is an error and resolvesInside refuses it.
+// It looks again at what EvalSymlinks returns, as a symlink can lead to one.
 func evalLinks(path string) (string, error) {
 	for range 64 {
 		link, target, err := junctionIn(path)
@@ -544,7 +545,12 @@ func evalLinks(path string) (string, error) {
 			return "", err
 		}
 		if link == "" {
-			return filepath.EvalSymlinks(path)
+			resolved, err := filepath.EvalSymlinks(path)
+			if err != nil || resolved == path {
+				return resolved, err
+			}
+			path = resolved
+			continue
 		}
 		path = filepath.Join(target, path[len(link):])
 	}
