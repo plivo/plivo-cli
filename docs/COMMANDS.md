@@ -3787,7 +3787,7 @@ Examples:
 Flags:
 
 ```
-      --bitrate int       mp3 bitrate in bits per second (default 128000)
+      --bitrate int       mp3 bitrate in bits per second (default depends on the sample rate)
       --file string       read the text from this file (- for stdin)
       --format string     audio format: wav, mp3, mulaw, alaw or pcm (default from the --out extension)
       --language string   language code: auto, en, hi, bn, ta, te, mr, gu, kn (default auto)

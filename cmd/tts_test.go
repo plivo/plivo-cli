@@ -87,6 +87,12 @@ func TestTTSSpeak_formatFromExtensionOrFlag(t *testing.T) {
 		{"a.bin", nil, "map[container:wav encoding:pcm_s16le sample_rate:24000]"},
 		{"a.wav", []string{"--format", "mulaw"}, "map[container:raw encoding:pcm_mulaw sample_rate:8000]"},
 		{"a.wav", []string{"--format", "mp3", "--bitrate", "64000"}, "map[bitrate:64000 container:mp3 encoding:mp3 sample_rate:44100]"},
+		// 128000 is only valid at 44100 and 48000 Hz: the default follows the rate.
+		{"a.mp3", []string{"--sample-rate", "8000"}, "map[bitrate:32000 container:mp3 encoding:mp3 sample_rate:8000]"},
+		{"a.mp3", []string{"--sample-rate", "16000"}, "map[bitrate:64000 container:mp3 encoding:mp3 sample_rate:16000]"},
+		{"a.mp3", []string{"--sample-rate", "22050"}, "map[bitrate:32000 container:mp3 encoding:mp3 sample_rate:22050]"},
+		{"a.mp3", []string{"--sample-rate", "24000"}, "map[bitrate:48000 container:mp3 encoding:mp3 sample_rate:24000]"},
+		{"a.mp3", []string{"--sample-rate", "48000"}, "map[bitrate:128000 container:mp3 encoding:mp3 sample_rate:48000]"},
 	} {
 		var accept string
 		args := append([]string{"speak", "--voice", "v", "--text", "hi", "--out", filepath.Join(t.TempDir(), c.out), "--yes"}, c.extra...)
@@ -185,7 +191,7 @@ func TestTTSSpeak_apiErrorWritesNothing(t *testing.T) {
 }
 
 const ttsVoicesJSON = `{"api_id": "x", "meta": {"total_count": 3}, "objects": [
- {"voice_id": "r4_ashley", "name": "Ashley", "gender": "female", "languages": ["en"], "accent_type": "American"},
+ {"voice_id": "r4_ashley", "name": "Ashley", "gender": "female", "languages": ["en"], "accent_type": "American", "description": "Warm", "sample_url": "https://example.test/ashley.mp3"},
  {"voice_id": "r4_riya", "name": "Riya", "gender": "female", "languages": ["hi"], "accent_type": "Indian"},
  {"voice_id": "r4_aditya", "name": "Aditya", "gender": "male", "languages": ["hi"], "accent_type": "Indian"}]}`
 
@@ -205,6 +211,9 @@ func TestTTSVoices_filterHere(t *testing.T) {
 	}
 	if err := json.Unmarshal([]byte(r.stdout), &out); err != nil || len(out.Data.Objects) != 1 || out.Data.Objects[0].VoiceID != "r4_riya" {
 		t.Errorf("--language HI --gender Female -o json: %v\n%s", err, r.stdout)
+	}
+	if r = ttsRun(t, srv, "", "voices", "--language", "en", "-o", "json"); r.err != nil || !strings.Contains(r.stdout, `"sample_url": "https://example.test/ashley.mp3"`) || !strings.Contains(r.stdout, `"description": "Warm"`) {
+		t.Errorf("a voice must keep its sample_url and description: err %v\n%s", r.err, r.stdout)
 	}
 	if r = ttsRun(t, srv, "", "voices", "--language", "kn", "-o", "json"); r.err != nil || !strings.Contains(r.stdout, `"objects": []`) {
 		t.Errorf("no match must be an empty list: err %v\n%s", r.err, r.stdout)

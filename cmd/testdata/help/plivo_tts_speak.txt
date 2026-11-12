@@ -18,7 +18,7 @@ Examples:
   plivo tts speak --voice r4_riya --language hi --file msg.txt --out msg.ulaw --yes
 
 Flags:
-      --bitrate int       mp3 bitrate in bits per second (default 128000)
+      --bitrate int       mp3 bitrate in bits per second (default depends on the sample rate)
       --file string       read the text from this file (- for stdin)
       --format string     audio format: wav, mp3, mulaw, alaw or pcm (default from the --out extension)
   -h, --help              help for speak

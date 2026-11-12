@@ -1098,11 +1098,13 @@ type UsageOtherCharge struct {
 
 // TTSVoice is one voice in /Account/{id}/TTS/Voices/. Each speaks one language.
 type TTSVoice struct {
-	VoiceID    string   `json:"voice_id"`
-	Name       string   `json:"name"`
-	Gender     string   `json:"gender"`
-	Languages  []string `json:"languages"`
-	AccentType string   `json:"accent_type"`
+	VoiceID     string   `json:"voice_id"`
+	Name        string   `json:"name"`
+	Gender      string   `json:"gender"`
+	Languages   []string `json:"languages"`
+	AccentType  string   `json:"accent_type"`
+	Description string   `json:"description,omitempty"`
+	SampleURL   string   `json:"sample_url,omitempty"`
 }
 
 // TTSVoiceList is what plivo tts voices prints: the voices, filtered here.

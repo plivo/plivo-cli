@@ -54,6 +54,10 @@ var ttsFormats = map[string]ttsFormat{
 	"pcm":   {"raw", "pcm_s16le", 24000},
 }
 
+// ttsMP3Bitrates is the bitrate the API takes at each mp3 sample rate (the highest
+// where it takes more than one): 128000 is only valid at 44100 and 48000 Hz.
+var ttsMP3Bitrates = map[int]int{8000: 32000, 16000: 64000, 22050: 32000, 24000: 48000, 44100: 128000, 48000: 128000}
+
 // ttsExtFormats picks a --format from the --out extension.
 var ttsExtFormats = map[string]string{
 	".wav": "wav", ".mp3": "mp3", ".ulaw": "mulaw", ".mulaw": "mulaw",
@@ -182,7 +186,7 @@ func init() {
 	f.StringVar(&ttsLanguage, "language", "", "language code: "+strings.Join(ttsLanguages, ", ")+" (default auto)")
 	f.StringVar(&ttsFormatName, "format", "", "audio format: wav, mp3, mulaw, alaw or pcm (default from the --out extension)")
 	f.IntVar(&ttsSampleRate, "sample-rate", 0, "sample rate in Hz (default from --format)")
-	f.IntVar(&ttsBitrate, "bitrate", 0, "mp3 bitrate in bits per second (default 128000)")
+	f.IntVar(&ttsBitrate, "bitrate", 0, "mp3 bitrate in bits per second (default depends on the sample rate)")
 	f.Float64Var(&ttsPace, "pace", 1.0, "speaking pace, 0.7 to 1.2")
 	f.Float64Var(&ttsVolume, "volume", 1.0, "volume, 0.5 to 2.0")
 	f.StringVar(&ttsLexicon, "lexicon", "", "lexicon_id of a saved lexicon to apply")
@@ -514,7 +518,7 @@ func ttsSpeakBody(cmd *cobra.Command, text string) (map[string]any, error) {
 	format := map[string]any{"container": preset.container, "encoding": preset.encoding, "sample_rate": preset.sampleRate}
 	switch {
 	case name == "mp3":
-		format["bitrate"] = cmp.Or(ttsBitrate, ttsDefaultBitrate)
+		format["bitrate"] = cmp.Or(ttsBitrate, ttsMP3Bitrates[preset.sampleRate], ttsDefaultBitrate)
 	case ttsBitrate > 0:
 		return nil, clierr.BadFlag("bitrate", "applies to --format mp3 only")
 	}
