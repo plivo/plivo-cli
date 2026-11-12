@@ -10,7 +10,8 @@ import (
 	"golang.org/x/term"
 )
 
-// The banner is the Plivo wordmark in blue, with "CLI" under it. It marks a
+// The banner is the Plivo wordmark in blue with a darker shadow, and "CLI"
+// under it. It marks a
 // moment worth a pause (a login, an upgrade, a skill install) and nothing
 // else: it goes to stderr, only on a terminal, and never in CI, so no script,
 // pipe or coding agent ever reads it.
@@ -39,26 +40,59 @@ var bannerLogo = [...]string{
 	"...###.........###..####......###.........######....",
 }
 
+// bannerCLI is "CLI" in the same pixels, as tall as the logo's lowercase
+// letters and as heavy as its bars.
+var bannerCLI = [...]string{
+	".#######...####.......####",
+	"#########..####.......####",
+	"#########..####.......####",
+	"#########..####.......####",
+	"####..###..####.......####",
+	"####.......####.......####",
+	"####.......####.......####",
+	"####..###..####.......####",
+	"#########..#########..####",
+	"#########..#########..####",
+	"#########..#########..####",
+	".#######...#########..####",
+}
+
 const (
-	bannerGap     = 2 // pixel rows between the logo and the label
-	bannerLabel   = "C L I"
+	bannerGap     = 2  // pixel rows between the logo and "CLI"
+	bannerCLIAt   = 2  // column "CLI" starts at: under the stem of the P
 	bannerMinCols = 56 // narrower terminals get the welcome lines alone
 )
 
-// The ink is #4d6aff where the terminal does 24-bit colour, else its nearest
-// 256-colour match, 63. Nothing is drawn behind the letters.
+// pixel is what one banner pixel shows: nothing, ink, or the shadow behind it.
+type pixel uint8
+
 const (
-	bannerInkTrue = "\x1b[38;2;77;106;255m"
-	bannerInk256  = "\x1b[38;5;63m"
-	bannerOff     = "\x1b[0m"
+	pxNone pixel = iota
+	pxInk
+	pxShadow
 )
 
-// bannerOn is the escape that starts a painted row.
-func bannerOn() string {
-	if c := os.Getenv("COLORTERM"); c == "truecolor" || c == "24bit" {
-		return bannerInkTrue
+// bannerPalette gives each pixel's colour: 24-bit where the terminal does it,
+// else the nearest colour of the 256 palette (c256). Ink is #4d6aff, the shadow
+// a darker blue. Nothing is drawn behind the letters.
+var bannerPalette = map[pixel]struct{ r, g, b, c256 int }{
+	pxInk:    {77, 106, 255, 63},
+	pxShadow: {38, 52, 140, 60},
+}
+
+const bannerOff = "\x1b[0m"
+
+// bannerEsc is the escape that sets the foreground, or with bg the background,
+// to p's colour.
+func bannerEsc(p pixel, bg bool) string {
+	c, plane := bannerPalette[p], 38
+	if bg {
+		plane = 48
 	}
-	return bannerInk256
+	if v := os.Getenv("COLORTERM"); v == "truecolor" || v == "24bit" {
+		return fmt.Sprintf("\x1b[%d;2;%d;%d;%dm", plane, c.r, c.g, c.b)
+	}
+	return fmt.Sprintf("\x1b[%d;5;%dm", plane, c.c256)
 }
 
 // termCols reports the terminal's width, or 0 when it can't tell. Tests stand
@@ -92,40 +126,99 @@ func bannerPaint() bool {
 	return runtime.GOOS != "windows" || os.Getenv("WT_SESSION") != ""
 }
 
-// renderBanner returns the logo and its label, one string per terminal row.
+// bannerCell is one terminal cell: two stacked pixels, drawn as a half block
+// with the top pixel as its foreground and, when the bottom one differs, as
+// its background.
+type bannerCell struct {
+	glyph  string
+	fg, bg pixel
+}
+
+func newBannerCell(top, bot pixel) bannerCell {
+	switch {
+	case top == pxNone && bot == pxNone:
+		return bannerCell{glyph: " "}
+	case top == bot:
+		return bannerCell{"█", top, pxNone}
+	case top == pxNone:
+		return bannerCell{"▄", bot, pxNone}
+	case bot == pxNone:
+		return bannerCell{"▀", top, pxNone}
+	}
+	return bannerCell{"▀", top, bot}
+}
+
+// renderBanner returns the logo with "CLI" under it, one string per terminal
+// row. Painted, each letter also casts a shadow one pixel down and right.
 func renderBanner(paint bool) []string {
 	logoH, logoW := len(bannerLogo), len(bannerLogo[0])
-	lit := func(py, x int) bool { return py < logoH && bannerLogo[py][x] == '#' }
-	labelRow := (logoH + bannerGap) / 2
-	labelAt := (logoW - len(bannerLabel)) / 2
-	on := bannerOn()
+	cliTop := logoH + bannerGap
+	h, w := cliTop+len(bannerCLI), logoW
+	if paint {
+		h, w = h+1, w+1
+	}
+	px := make([][]pixel, h)
+	for y := range px {
+		px[y] = make([]pixel, w)
+	}
+	for x := 0; x < logoW; x++ {
+		for y := 0; y < logoH; y++ {
+			if bannerLogo[y][x] == '#' {
+				px[y][x] = pxInk
+			}
+		}
+		for y := range bannerCLI {
+			if cx := x - bannerCLIAt; cx >= 0 && cx < len(bannerCLI[0]) && bannerCLI[y][cx] == '#' {
+				px[cliTop+y][x] = pxInk
+			}
+		}
+	}
+	if paint {
+		for y := 1; y < h; y++ {
+			for x := 1; x < w; x++ {
+				if px[y][x] == pxNone && px[y-1][x-1] == pxInk {
+					px[y][x] = pxShadow
+				}
+			}
+		}
+	}
 
-	rows := make([]string, 0, labelRow+1)
-	for tr := 0; tr <= labelRow; tr++ {
+	rows := make([]string, 0, (h+1)/2)
+	for y := 0; y < h; y += 2 {
+		cells := make([]bannerCell, w)
+		for x := range cells {
+			bot := pxNone
+			if y+1 < h {
+				bot = px[y+1][x]
+			}
+			cells[x] = newBannerCell(px[y][x], bot)
+		}
+		for len(cells) > 0 && cells[len(cells)-1].glyph == " " {
+			cells = cells[:len(cells)-1]
+		}
 		var sb strings.Builder
-		for x := 0; x < logoW; x++ {
-			cell := " "
-			switch top, bot := lit(2*tr, x), lit(2*tr+1, x); {
-			case top && bot:
-				cell = "█"
-			case top:
-				cell = "▀"
-			case bot:
-				cell = "▄"
+		fg, bg := pxNone, pxNone // the colours in effect
+		for _, c := range cells {
+			if paint {
+				if c.glyph != " " && c.fg != fg {
+					fg = c.fg
+					sb.WriteString(bannerEsc(fg, false))
+				}
+				if c.bg != bg {
+					bg = c.bg
+					if bg == pxNone {
+						sb.WriteString("\x1b[49m")
+					} else {
+						sb.WriteString(bannerEsc(bg, true))
+					}
+				}
 			}
-			if tr == labelRow && x >= labelAt && x < labelAt+len(bannerLabel) {
-				cell = string(bannerLabel[x-labelAt])
-			}
-			sb.WriteString(cell)
+			sb.WriteString(c.glyph)
 		}
-		row := strings.TrimRight(sb.String(), " ")
-		if paint {
-			if tr == labelRow {
-				row = "\x1b[1m" + row
-			}
-			row = on + row + bannerOff
+		if paint && len(cells) > 0 {
+			sb.WriteString(bannerOff)
 		}
-		rows = append(rows, row)
+		rows = append(rows, sb.String())
 	}
 	return rows
 }
