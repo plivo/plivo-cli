@@ -104,7 +104,7 @@ Optional flags:
 | `--pace` | 0.7 to 1.2 (default 1.0) | Speaking speed |
 | `--volume` | 0.5 to 2.0 (default 1.0) | Loudness |
 | `--lexicon <id>` | a saved lexicon, `lx_...` | Custom pronunciations (below) |
-| `--seed N` | integer | Same text, voice and seed give identical audio, for tests |
+| `--seed N` | whole number, 0 to 9007199254740991 | Same text, voice and seed give identical audio, for tests |
 | `--text-normalization=false` | v1.3.4+; write the `=` | Read numbers and dates as written, not as words |
 | `--pronounce word=value` | v1.3.4+; up to 100, needs `--pronounce-kind` | Inline pronunciation rules for this request (below) |
 
@@ -125,7 +125,7 @@ Report: the file path, its size, the format flags you used, and the character co
 
 ## Pronunciation and lexicons
 
-A lexicon is a saved list of rules that change how words are said. Use one when a brand, name or term comes out wrong. Before v1.3.4, `plivo tts speak` has no inline-rule flag: save the rules as a lexicon, then pass `--lexicon`. From v1.3.4, `--pronounce word=value` (repeatable) with one `--pronounce-kind` gives the rules for a single request, with no lexicon to save or delete (below).
+A lexicon is a saved list of rules that change how words are said. Use one when a brand, name or term comes out wrong. Before v1.3.4, `plivo tts speak` has no inline-rule flag: save the rules as a lexicon, then pass `--lexicon`. From v1.3.4, `--pronounce word=value` (repeatable) with one `--pronounce-kind` gives the rules for a single request, with no lexicon to save or delete (below). The API refuses rules for a voice whose model takes none, with a `422` that names the kind; nothing is spoken or billed.
 
 | `--kind` | A rule's `value` is written as |
 |---|---|

@@ -17,7 +17,9 @@ stdout, which is refused on a terminal.
 (write =false: a space before false does not work). --pronounce word=value
 (repeatable, up to 100) sets how a word is said for this request;
 --pronounce-kind (ipa, arpa or respell) says how every value is written and is
-required with it. Inline rules cannot be combined with --lexicon.
+required with it. Inline rules cannot be combined with --lexicon. The API
+refuses rules for a voice whose model takes none, with an error that names the
+kind.
 
 Usage:
   plivo tts speak [flags]
@@ -40,7 +42,7 @@ Flags:
       --pronounce stringArray   how to say a word, as word=value (repeatable, up to 100; needs --pronounce-kind)
       --pronounce-kind string   how every --pronounce value is written: ipa, arpa or respell (required with --pronounce)
       --sample-rate int         sample rate in Hz (default from --format)
-      --seed int                repeatable output: the same text, voice and seed give identical audio
+      --seed int                repeatable output: the same text, voice and seed give identical audio (0 to 9007199254740991)
       --text string             text to speak, up to 5000 characters
       --text-normalization      read numbers and dates as words; turn it off with --text-normalization=false (default true)
       --voice string            voice_id from plivo tts voices (required)

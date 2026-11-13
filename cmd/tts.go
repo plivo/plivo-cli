@@ -34,6 +34,7 @@ const (
 	ttsMaxWordChars   = 100
 	ttsMaxValueChars  = 120
 	ttsDefaultBitrate = 128000
+	ttsMaxSeed        = 1<<53 - 1 // the API's largest seed
 	ttsMinPace        = 0.7
 	ttsMaxPace        = 1.2
 	ttsMinVolume      = 0.5
@@ -127,7 +128,9 @@ stdout, which is refused on a terminal.
 (write =false: a space before false does not work). --pronounce word=value
 (repeatable, up to 100) sets how a word is said for this request;
 --pronounce-kind (ipa, arpa or respell) says how every value is written and is
-required with it. Inline rules cannot be combined with --lexicon.`,
+required with it. Inline rules cannot be combined with --lexicon. The API
+refuses rules for a voice whose model takes none, with an error that names the
+kind.`,
 	Example: `  plivo tts speak --voice r4_ashley --text "Hello from Plivo" --out hello.wav --dry-run
   plivo tts speak --voice r4_ashley --text "Hello from Plivo" --out hello.wav --yes
   plivo tts speak --voice r4_riya --language hi --file msg.txt --out msg.ulaw --yes
@@ -226,7 +229,7 @@ func init() {
 	f.Float64Var(&ttsPace, "pace", 1.0, "speaking pace, 0.7 to 1.2")
 	f.Float64Var(&ttsVolume, "volume", 1.0, "volume, 0.5 to 2.0")
 	f.StringVar(&ttsLexicon, "lexicon", "", "lexicon_id of a saved lexicon to apply")
-	f.Int64Var(&ttsSeed, "seed", 0, "repeatable output: the same text, voice and seed give identical audio")
+	f.Int64Var(&ttsSeed, "seed", 0, fmt.Sprintf("repeatable output: the same text, voice and seed give identical audio (0 to %d)", ttsMaxSeed))
 	f.BoolVar(&ttsTextNorm, "text-normalization", true, "read numbers and dates as words; turn it off with --text-normalization=false")
 	f.StringArrayVar(&ttsPronounce, "pronounce", nil, "how to say a word, as word=value (repeatable, up to 100; needs --pronounce-kind)")
 	f.StringVar(&ttsPronKind, "pronounce-kind", "", "how every --pronounce value is written: ipa, arpa or respell (required with --pronounce)")
@@ -602,6 +605,9 @@ func ttsSpeakBody(cmd *cobra.Command, text string) (map[string]any, error) {
 		body["lexicon_id"] = ttsLexicon
 	}
 	if cmd.Flags().Changed("seed") {
+		if ttsSeed < 0 || ttsSeed > ttsMaxSeed {
+			return nil, clierr.BadFlag("seed", fmt.Sprintf("must be 0 to %d", ttsMaxSeed))
+		}
 		// A seed only repeats the audio with continuation off.
 		body["seed"], body["continuation"] = ttsSeed, false
 	}

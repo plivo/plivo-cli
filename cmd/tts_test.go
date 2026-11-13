@@ -183,6 +183,8 @@ func TestTTSSpeak_refusedBeforeAnyRequest(t *testing.T) {
 		{"--voice v --text " + long + " --yes", clierr.CodeBadInput},
 		{"--voice v --text hi --yes --pace 2", clierr.CodeBadFlag},
 		{"--voice v --text hi --yes --volume 0.1", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --seed -1", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --seed 9007199254740992", clierr.CodeBadFlag},
 		{"--voice v --text hi --yes --language xx", clierr.CodeBadFlag},
 		{"--voice v --text hi --yes --format ogg", clierr.CodeBadFlag},
 		{"--voice v --text hi --yes --format mulaw --sample-rate 16000", clierr.CodeBadFlag},
