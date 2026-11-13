@@ -145,6 +145,7 @@ var qaSamples = map[string]string{
 	"tts usage":                     "",
 	"tts voices":                    "",
 	"voice calls speak":             "{uuid} --text hi",
+	"voice calls stats":             "",
 	"voice calls stop-play":         "{uuid}",
 	"voice calls stop-record":       "{uuid}",
 	"voice calls stop-speak":        "{uuid}",

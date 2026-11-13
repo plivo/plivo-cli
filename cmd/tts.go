@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"unicode/utf8"
@@ -28,10 +29,12 @@ const (
 	ttsMaxChars       = 5000
 	ttsMaxInputBytes  = 1 << 20 // the API's request body limit
 	ttsMaxRules       = 100
+	ttsMaxPronounce   = 100 // inline rules in one request
 	ttsMaxNameChars   = 100
 	ttsMaxWordChars   = 100
 	ttsMaxValueChars  = 120
 	ttsDefaultBitrate = 128000
+	ttsMaxSeed        = 1<<53 - 1 // the API's largest seed
 	ttsMinPace        = 0.7
 	ttsMaxPace        = 1.2
 	ttsMinVolume      = 0.5
@@ -40,25 +43,45 @@ const (
 
 var ttsLanguages = []string{"auto", "en", "hi", "bn", "ta", "te", "mr", "gu", "kn"}
 
+// ttsFormatNames is every --format name, for help and refusals.
+const ttsFormatNames = "wav, pcm, f32, wav-f32, mulaw, alaw, wav-mulaw, wav-alaw or mp3"
+
+// The sample rates the API takes: any of seven for 16-bit and 32-bit float PCM,
+// 8 kHz only for the telephony encodings.
+var (
+	ttsPCMRates  = []int{8000, 16000, 22050, 24000, 32000, 44100, 48000}
+	ttsG711Rates = []int{8000}
+)
+
+// ttsKinds is how a pronunciation value can be written.
+var ttsKinds = []string{"ipa", "arpa", "respell"}
+
 // ttsFormat is a --format preset: the output_format a batch request sends.
+// rates is what --sample-rate may be; nil for mp3, which the API checks with its bitrate.
 type ttsFormat struct {
 	container, encoding string
 	sampleRate          int
+	rates               []int
 }
 
 var ttsFormats = map[string]ttsFormat{
-	"wav":   {"wav", "pcm_s16le", 24000},
-	"mp3":   {"mp3", "mp3", 44100},
-	"mulaw": {"raw", "pcm_mulaw", 8000},
-	"alaw":  {"raw", "pcm_alaw", 8000},
-	"pcm":   {"raw", "pcm_s16le", 24000},
+	"wav":       {"wav", "pcm_s16le", 24000, ttsPCMRates},
+	"pcm":       {"raw", "pcm_s16le", 24000, ttsPCMRates},
+	"f32":       {"raw", "pcm_f32le", 24000, ttsPCMRates},
+	"wav-f32":   {"wav", "pcm_f32le", 24000, ttsPCMRates},
+	"mulaw":     {"raw", "pcm_mulaw", 8000, ttsG711Rates},
+	"alaw":      {"raw", "pcm_alaw", 8000, ttsG711Rates},
+	"wav-mulaw": {"wav", "pcm_mulaw", 8000, ttsG711Rates},
+	"wav-alaw":  {"wav", "pcm_alaw", 8000, ttsG711Rates},
+	"mp3":       {"mp3", "mp3", 44100, nil},
 }
 
 // ttsMP3Bitrates is the bitrate the API takes at each mp3 sample rate (the highest
 // where it takes more than one): 128000 is only valid at 44100 and 48000 Hz.
 var ttsMP3Bitrates = map[int]int{8000: 32000, 16000: 64000, 22050: 32000, 24000: 48000, 44100: 128000, 48000: 128000}
 
-// ttsExtFormats picks a --format from the --out extension.
+// ttsExtFormats picks a --format from the --out extension. f32 and the wav-*
+// formats are never inferred: a .wav name still means wav.
 var ttsExtFormats = map[string]string{
 	".wav": "wav", ".mp3": "mp3", ".ulaw": "mulaw", ".mulaw": "mulaw",
 	".alaw": "alaw", ".pcm": "pcm", ".raw": "pcm",
@@ -93,12 +116,25 @@ prints the request and sends nothing. Text is up to 5000 characters, from
 --text or --file (- reads stdin).
 
 --format picks the audio: wav (24 kHz), mp3 (44.1 kHz, 128 kbps), mulaw or alaw
-(8 kHz telephony, raw), pcm (24 kHz, raw). Without it the --out extension
-decides (.wav .mp3 .ulaw .alaw .pcm), and anything else is wav. --out - writes
-the audio to stdout, which is refused on a terminal.`,
+(8 kHz telephony, raw), pcm (24 kHz, raw), f32 (24 kHz, raw 32-bit float).
+wav-f32, wav-mulaw and wav-alaw are the same audio in a WAV file. Without
+--format the --out extension decides (.wav .mp3 .ulaw .alaw .pcm), anything else
+is wav, and the f32 and wav-* formats are never guessed from it. --sample-rate
+takes 8000, 16000, 22050, 24000, 32000, 44100 or 48000 for wav, pcm, f32 and
+wav-f32, and 8000 for the mulaw and alaw formats. --out - writes the audio to
+stdout, which is refused on a terminal.
+
+--text-normalization=false reads numbers and dates as written, not as words
+(write =false: a space before false does not work). --pronounce word=value
+(repeatable, up to 100) sets how a word is said for this request;
+--pronounce-kind (ipa, arpa or respell) says how every value is written and is
+required with it. Inline rules cannot be combined with --lexicon. The API
+refuses rules for a voice whose model takes none, with an error that names the
+kind.`,
 	Example: `  plivo tts speak --voice r4_ashley --text "Hello from Plivo" --out hello.wav --dry-run
   plivo tts speak --voice r4_ashley --text "Hello from Plivo" --out hello.wav --yes
-  plivo tts speak --voice r4_riya --language hi --file msg.txt --out msg.ulaw --yes`,
+  plivo tts speak --voice r4_riya --language hi --file msg.txt --out msg.ulaw --yes
+  plivo tts speak --voice r4_ashley --text "Welcome to Plivo" --pronounce "Plivo=PLEE-voh" --pronounce-kind respell --out welcome.wav --dry-run`,
 	Args: cobra.NoArgs,
 	RunE: runTTSSpeak,
 }
@@ -167,6 +203,9 @@ var (
 	ttsVolume     float64
 	ttsLexicon    string
 	ttsSeed       int64
+	ttsTextNorm   bool
+	ttsPronounce  []string
+	ttsPronKind   string
 
 	ttsLexName  string
 	ttsLexKind  string
@@ -184,13 +223,16 @@ func init() {
 	f.StringVar(&ttsFile, "file", "", "read the text from this file (- for stdin)")
 	f.StringVar(&ttsOut, "out", "", "file to write the audio to (- for stdout) (required)")
 	f.StringVar(&ttsLanguage, "language", "", "language code: "+strings.Join(ttsLanguages, ", ")+" (default auto)")
-	f.StringVar(&ttsFormatName, "format", "", "audio format: wav, mp3, mulaw, alaw or pcm (default from the --out extension)")
+	f.StringVar(&ttsFormatName, "format", "", "audio format: "+ttsFormatNames+" (default from the --out extension)")
 	f.IntVar(&ttsSampleRate, "sample-rate", 0, "sample rate in Hz (default from --format)")
 	f.IntVar(&ttsBitrate, "bitrate", 0, "mp3 bitrate in bits per second (default depends on the sample rate)")
 	f.Float64Var(&ttsPace, "pace", 1.0, "speaking pace, 0.7 to 1.2")
 	f.Float64Var(&ttsVolume, "volume", 1.0, "volume, 0.5 to 2.0")
 	f.StringVar(&ttsLexicon, "lexicon", "", "lexicon_id of a saved lexicon to apply")
-	f.Int64Var(&ttsSeed, "seed", 0, "repeatable output: the same text, voice and seed give identical audio")
+	f.Int64Var(&ttsSeed, "seed", 0, fmt.Sprintf("repeatable output: the same text, voice and seed give identical audio (0 to %d)", ttsMaxSeed))
+	f.BoolVar(&ttsTextNorm, "text-normalization", true, "read numbers and dates as words; turn it off with --text-normalization=false")
+	f.StringArrayVar(&ttsPronounce, "pronounce", nil, "how to say a word, as word=value (repeatable, up to 100; needs --pronounce-kind)")
+	f.StringVar(&ttsPronKind, "pronounce-kind", "", "how every --pronounce value is written: ipa, arpa or respell (required with --pronounce)")
 	_ = ttsSpeakCmd.MarkFlagRequired("voice")
 	_ = ttsSpeakCmd.MarkFlagRequired("out")
 
@@ -507,13 +549,20 @@ func ttsSpeakBody(cmd *cobra.Command, text string) (map[string]any, error) {
 	}
 	preset, ok := ttsFormats[name]
 	if !ok {
-		return nil, clierr.BadFlag("format", fmt.Sprintf("%q is not wav, mp3, mulaw, alaw or pcm", name))
+		return nil, clierr.BadFlag("format", fmt.Sprintf("%q is not %s", name, ttsFormatNames))
 	}
 	if ttsSampleRate < 0 || ttsBitrate < 0 {
 		return nil, clierr.BadInput("--sample-rate and --bitrate take a positive number")
 	}
 	if ttsSampleRate > 0 {
 		preset.sampleRate = ttsSampleRate
+	}
+	if preset.rates != nil && !slices.Contains(preset.rates, preset.sampleRate) {
+		rates := make([]string, len(preset.rates))
+		for i, r := range preset.rates {
+			rates[i] = strconv.Itoa(r)
+		}
+		return nil, clierr.BadFlag("sample-rate", fmt.Sprintf("%d Hz is not offered for --format %s; use %s", preset.sampleRate, name, strings.Join(rates, ", ")))
 	}
 	format := map[string]any{"container": preset.container, "encoding": preset.encoding, "sample_rate": preset.sampleRate}
 	switch {
@@ -542,14 +591,56 @@ func ttsSpeakBody(cmd *cobra.Command, text string) (map[string]any, error) {
 		}
 		body["volume"] = ttsVolume
 	}
+	if cmd.Flags().Changed("text-normalization") {
+		body["text_normalization"] = ttsTextNorm
+	}
+	rules, err := ttsPronunciations(cmd)
+	if err != nil {
+		return nil, err
+	}
+	if rules != nil {
+		body["pronunciations"] = rules
+	}
 	if ttsLexicon != "" {
 		body["lexicon_id"] = ttsLexicon
 	}
 	if cmd.Flags().Changed("seed") {
+		if ttsSeed < 0 || ttsSeed > ttsMaxSeed {
+			return nil, clierr.BadFlag("seed", fmt.Sprintf("must be 0 to %d", ttsMaxSeed))
+		}
 		// A seed only repeats the audio with continuation off.
 		body["seed"], body["continuation"] = ttsSeed, false
 	}
 	return body, nil
+}
+
+// ttsPronunciations turns --pronounce into the request's inline rules, nil when
+// there are none. It checks them here, so a bad one is named before anything is sent.
+func ttsPronunciations(cmd *cobra.Command) ([]map[string]string, error) {
+	kindGiven := cmd.Flags().Changed("pronounce-kind")
+	switch n := len(ttsPronounce); {
+	case n == 0 && !kindGiven:
+		return nil, nil
+	case n == 0:
+		return nil, clierr.BadFlag("pronounce-kind", "only goes with --pronounce word=value; give at least one")
+	case !kindGiven:
+		return nil, clierr.BadFlag("pronounce-kind", "is required with --pronounce (ipa, arpa or respell)")
+	case !slices.Contains(ttsKinds, ttsPronKind):
+		return nil, clierr.BadFlag("pronounce-kind", fmt.Sprintf("%q is not ipa, arpa or respell", ttsPronKind))
+	case n > ttsMaxPronounce:
+		return nil, clierr.BadFlag("pronounce", fmt.Sprintf("one request takes up to %d rules; got %d", ttsMaxPronounce, n))
+	case ttsLexicon != "":
+		return nil, clierr.BadFlag("pronounce", "cannot be combined with --lexicon: use one or the other")
+	}
+	rules := make([]map[string]string, 0, len(ttsPronounce))
+	for _, s := range ttsPronounce {
+		word, value, ok := strings.Cut(s, "=")
+		if !ok || word == "" || value == "" || !utf8.ValidString(s) {
+			return nil, clierr.BadFlag("pronounce", fmt.Sprintf("%q is not word=value (UTF-8, both parts non-empty)", s))
+		}
+		rules = append(rules, map[string]string{"word": word, "value": value, "kind": ttsPronKind})
+	}
+	return rules, nil
 }
 
 func runTTSLexiconList(cmd *cobra.Command, args []string) error {
@@ -611,7 +702,7 @@ func runTTSLexiconGet(cmd *cobra.Command, args []string) error {
 }
 
 func runTTSLexiconCreate(cmd *cobra.Command, args []string) error {
-	if !slices.Contains([]string{"ipa", "arpa", "respell"}, ttsLexKind) {
+	if !slices.Contains(ttsKinds, ttsLexKind) {
 		return clierr.BadFlag("kind", fmt.Sprintf("%q is not ipa, arpa or respell", ttsLexKind))
 	}
 	if n := utf8.RuneCountInString(ttsLexName); n == 0 || n > ttsMaxNameChars {
