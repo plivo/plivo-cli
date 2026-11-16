@@ -511,22 +511,25 @@ func restoreCommand(appID, answerURL, method string) string {
 // local listener, not the address Plivo signed. Verification therefore uses the
 // public tunnel URL the application's answer_url was set to.
 type streamAuth struct {
-	authToken string
-	answerURL string // public https URL Plivo POSTs the answer webhook to
-	wsURL     string // URL Plivo signs the stream upgrade over
-	skip      bool   // --insecure-skip-signature
+	authToken   string
+	answerURL   string // public https URL Plivo POSTs the answer webhook to
+	wsURL       string // wss:// stream URL from the XML, which Plivo signs
+	legacyWSURL string // http:// form Plivo signed the stream upgrade over before then
+	skip        bool   // --insecure-skip-signature
 }
 
 // newStreamAuth derives the signed URLs from the tunnel's public https URL.
-// Plivo signs the stream upgrade over http://, not over the wss:// URL in the
-// XML: seen on live calls, and Plivo's Node stream SDK validates the same way
-// behind a TLS-terminating proxy.
+// Plivo signs the stream upgrade over the <Stream> URL as
+// written, wss://<tunnel>/ws. Before that it signed http://<tunnel>/ws (seen
+// on live calls), so both are accepted during the transition. legacyWSURL can be
+// removed once the transition is over.
 func newStreamAuth(authToken, tunnelURL string, skip bool) *streamAuth {
 	return &streamAuth{
-		authToken: authToken,
-		answerURL: tunnelURL + "/answer",
-		wsURL:     strings.Replace(tunnelURL, "https://", "http://", 1) + "/ws",
-		skip:      skip,
+		authToken:   authToken,
+		answerURL:   tunnelURL + "/answer",
+		wsURL:       strings.Replace(tunnelURL, "https://", "wss://", 1) + "/ws",
+		legacyWSURL: strings.Replace(tunnelURL, "https://", "http://", 1) + "/ws",
+		skip:        skip,
 	}
 }
 
@@ -608,7 +611,7 @@ func buildLocalStreamServer(out io.Writer, wssTunnelURL, customerWS string, bidi
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		// Before the upgrade: once accepted, this bridges straight through to
 		// --to in both directions.
-		if !auth.ok(r, auth.wsURL) {
+		if !auth.ok(r, auth.wsURL) && !auth.ok(r, auth.legacyWSURL) {
 			auth.reject(w, out, jsonOut, events, "/ws")
 			return
 		}

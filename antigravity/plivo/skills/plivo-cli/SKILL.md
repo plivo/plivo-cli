@@ -123,7 +123,8 @@ voice       calls | conferences | endpoints | multiparty | recordings | streams
 
 ## Known issues
 
-- In v1.1.0 to v1.1.2, `voice streams forward` cannot carry a live call: it rejects Plivo's stream (it checks the signature against the `wss://` URL while Plivo signs the `http://` one), and its XML has no `keepCallAlive`, so the call ends at once with hangup cause 4010 (End Of XML Instructions). Fixed in v1.1.3; check `plivo --version`.
+- In v1.1.0 to v1.1.2, `voice streams forward` cannot carry a live call: it rejects Plivo's stream (it checks the signature against the `wss://` URL while Plivo signed the `http://` one at the time), and its XML has no `keepCallAlive`, so the call ends at once with hangup cause 4010 (End Of XML Instructions). Fixed in v1.1.3; check `plivo --version`.
+- Plivo now signs the stream upgrade over the `wss://` URL, so `voice streams forward` in v1.3.3 and earlier, which checks only the `http://` form, refuses every stream with 403 `invalid Plivo signature`. Later versions accept both forms; upgrade rather than pass `--insecure-skip-signature`.
 
 ## Workflows
 
