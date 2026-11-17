@@ -49,11 +49,13 @@ audio streams and for up to --duration seconds after, and times the first
 playAudio from the first frame sent (first_response_ms). --expect-audio
 does the same and exits 1 when no playAudio comes back.
 
-When a profile is logged in, the upgrade is signed as Plivo signs a
-stream: X-Plivo-Signature-V3, keyed with the profile's auth token over the
-http:// form of --to without its query, so an endpoint that checks
-Plivo's signature lets it in. --profile signs for another account. Logged
-out, the upgrade goes unsigned; -o json says which in signed.
+When a profile that holds an account key is logged in, the upgrade is signed
+as Plivo signs a stream: X-Plivo-Signature-V3, keyed with the profile's auth
+token over the http:// form of --to without its query, so an endpoint that
+checks Plivo's signature lets it in. --profile signs for another account.
+Logged out, or on a profile from a browser login (the 30-day sign-in, which
+holds no key), the upgrade goes unsigned, with a warning; -o json says which
+in signed.
 
 No call is placed: this checks that your handler accepts the Plivo stream
 shape before you wire it up to a real number.`,
@@ -123,7 +125,7 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	}
 	if dryRunFlag {
 		signed := "unsigned"
-		if signer.profile != "" {
+		if signer.signedBy() != "" {
 			signed = "signed for profile " + signer.profile
 		}
 		fmt.Fprintf(os.Stderr, "[dry-run] Would connect to %s (%s) and stream %ds of %s audio at %d Hz\n",
@@ -139,7 +141,7 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 	out := cmd.OutOrStdout()
 	jsonOut := effectiveFormat() == output.FormatJSON
 	result, err := streamsProbe{
-		url: streamsTestTo, header: header, profile: signer.profile,
+		url: streamsTestTo, header: header, signer: signer,
 		codec: streamsTestCodec, rate: streamsTestRate, duration: streamsTestDuration,
 		readBack: streamsTestBidirectional || streamsTestExpectAudio, insecure: streamsTestInsecure,
 		// Plivo's stream and call ids are UUIDs.
@@ -176,7 +178,7 @@ func runVoiceStreamsTest(cmd *cobra.Command, _ []string) error {
 type streamsProbe struct {
 	url      string
 	header   http.Header // the upgrade's signature, if any
-	profile  string      // the profile that signed it; "" when unsigned
+	signer   streamSigner
 	codec    string
 	rate     int
 	duration int  // seconds of audio
@@ -202,12 +204,15 @@ func (p streamsProbe) run(ctx context.Context, out io.Writer, quiet bool) (strea
 		}
 	}
 
-	result := streamsTestResult{Codec: p.codec, Rate: p.rate, Bidirectional: p.readBack, Signed: p.profile != "", Warnings: []string{}}
+	result := streamsTestResult{Codec: p.codec, Rate: p.rate, Bidirectional: p.readBack, Signed: p.signer.signedBy() != "", Warnings: []string{}}
 	warn := func(msg string) {
 		result.Warnings = append(result.Warnings, msg)
 		if !quiet {
 			fmt.Fprintf(out, "⚠ %s\n", msg)
 		}
+	}
+	if p.signer.keyless() {
+		warn("The upgrade went unsigned: " + keylessUnsigned)
 	}
 
 	// --- Phase 1: connect ---
@@ -218,7 +223,7 @@ func (p streamsProbe) run(ctx context.Context, out io.Writer, quiet bool) (strea
 	dialCancel()
 	if err != nil {
 		if resp != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
-			return result, streamsTestRefused(p.url, resp.StatusCode, p.profile)
+			return result, streamsTestRefused(p.url, resp.StatusCode, p.signer)
 		}
 		e := clierr.NetworkError(p.url, err)
 		if errors.Is(err, http.ErrSchemeMismatch) {
@@ -231,8 +236,8 @@ func (p streamsProbe) run(ctx context.Context, out io.Writer, quiet bool) (strea
 	result.LatencyMs = latency.Milliseconds()
 	if !quiet {
 		signedAs := ""
-		if p.profile != "" {
-			signedAs = fmt.Sprintf(", signed with profile %q", p.profile)
+		if p.signer.signedBy() != "" {
+			signedAs = fmt.Sprintf(", signed with profile %q", p.signer.profile)
 		}
 		fmt.Fprintf(out, "✓ Connection established (%dms%s)\n", result.LatencyMs, signedAs)
 	}
@@ -365,9 +370,26 @@ func (p streamsProbe) run(ctx context.Context, out io.Writer, quiet bool) (strea
 
 // streamSigner signs requests as Plivo signs its own (X-Plivo-Signature-V3),
 // keyed with the logged-in profile's auth token, so an endpoint that checks
-// the signature lets them in. Logged out, it is the zero value and signs
-// nothing.
+// the signature lets them in. Logged out it is the zero value and signs
+// nothing; a profile on the 30-day sign-in holds no token, so it signs nothing
+// either.
 type streamSigner struct{ profile, authID, token string }
+
+// signedBy is the profile that signs, "" when none can.
+func (s streamSigner) signedBy() string {
+	if s.token == "" {
+		return ""
+	}
+	return s.profile
+}
+
+// keyless is a profile in use that holds no key to sign with.
+func (s streamSigner) keyless() bool { return s.profile != "" && s.token == "" }
+
+// keylessUnsigned says why a request went unsigned, and what to do about it.
+const keylessUnsigned = "this profile runs on the 30-day sign-in and holds no account key to sign with, " +
+	"so a server that checks Plivo's signature refuses it. Use a profile that still holds a key from an earlier login, " +
+	"or turn the check off on the endpoint while you test."
 
 func resolveStreamSigner() (streamSigner, error) {
 	p, profile, err := config.Resolve(profileFlag)
@@ -403,17 +425,20 @@ func (s streamSigner) upgrade(u *url.URL) (http.Header, error) {
 
 // streamsTestRefused reports a 401 or 403 on the upgrade: the endpoint
 // refused it, most likely over the signature, so a network hint misleads.
-func streamsTestRefused(target string, status int, profile string) *clierr.Error {
+func streamsTestRefused(target string, status int, signer streamSigner) *clierr.Error {
 	hint := "No profile is logged in, so the upgrade was unsigned and an endpoint that checks Plivo's signature refuses it. Run `plivo login`, then test again."
-	if profile != "" {
-		hint = fmt.Sprintf("The upgrade was signed like Plivo's, with profile %q's auth token. If the endpoint checks another account's token, test again with --profile set to that account's profile.", profile)
+	switch {
+	case signer.keyless():
+		hint = "The upgrade was unsigned: " + keylessUnsigned
+	case signer.profile != "":
+		hint = fmt.Sprintf("The upgrade was signed like Plivo's, with profile %q's auth token. If the endpoint checks another account's token, test again with --profile set to that account's profile.", signer.profile)
 	}
 	return &clierr.Error{
 		Code:       clierr.CodeAuthForbidden,
 		Message:    target + " refused the WebSocket upgrade",
 		Hint:       hint,
 		StatusCode: status,
-		Context:    map[string]any{"target": target, "signed": profile != ""},
+		Context:    map[string]any{"target": target, "signed": signer.signedBy() != ""},
 	}
 }
 

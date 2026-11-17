@@ -311,11 +311,15 @@ func TestVoiceStreamsTest_signsLikePlivo(t *testing.T) {
 		{"signed", profileToken, ""},
 		{"another account's token", authTestToken, "--profile"},
 		{"logged out", profileToken, "plivo login"},
+		{"profile on the sign-in", profileToken, "30-day sign-in"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.name == "logged out" {
+			switch tc.name {
+			case "logged out":
 				setEmptyHome(t)
-			} else {
+			case "profile on the sign-in":
+				profileOn(t, "session_server = \"https://gateway.example.test\"\n")
+			default:
 				setFakeCreds(t)
 			}
 			plain := newStreamServer(t, nil)
@@ -342,5 +346,15 @@ func TestVoiceStreamsTest_signsLikePlivo(t *testing.T) {
 				t.Fatalf("err = %v; want AUTH_FORBIDDEN 403 with a hint naming %s", err, tc.wantHint)
 			}
 		})
+	}
+}
+
+// A profile on the sign-in holds no key, so the upgrade goes unsigned: signed is
+// false and a warning says why, rather than a silent difference.
+func TestVoiceStreamsTest_profileOnTheSignInGoesUnsignedWithAWarning(t *testing.T) {
+	profileOn(t, "session_server = \"https://gateway.example.test\"\n")
+	res, _, err := streamsTestJSON(t, "--to", newStreamServer(t, nil).wsURL()+"/ws")
+	if err != nil || !res.Connected || res.Signed || len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], "30-day sign-in") {
+		t.Errorf("err %v, result %+v; want a connection, signed false and one warning", err, res)
 	}
 }

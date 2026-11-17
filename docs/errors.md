@@ -42,8 +42,8 @@ Stable strings — switch on these, not on the message text.
 |---|---|---|
 | `AUTH_MISSING` | No Plivo creds configured | Run `plivo login` |
 | `AUTH_INVALID` | Upstream returned 401 | Re-check creds, run `plivo auth whoami` |
-| `AUTH_FORBIDDEN` | Upstream returned 403 (role/scope), or a `voice streams test` endpoint refused the upgrade (401/403) | Account lacks permission; for `streams test`, `plivo login` or `--profile` |
-| `AUTH_EXPIRED` | Cached session token TTL elapsed | Re-login |
+| `AUTH_FORBIDDEN` | Upstream returned 403 (role/scope), the account can't use the CLI with that organization (not ticked at login, a role without access to API credentials, or single sign-on), or a `voice streams test` endpoint refused the upgrade (401/403) | Account lacks permission; for an organization, tick it in `plivo login` or ask an organization admin; for `streams test`, `plivo login` or `--profile` |
+| `AUTH_EXPIRED` | The 30-day sign-in ran out, was revoked, or is gone from this machine | Run `plivo login` again; every profile on the sign-in fails until then |
 | `AUTH_2FA_REQUIRED` | Account has 2FA enabled | Disable for CLI account or use non-2FA path |
 | `AUTH_RECAPTCHA_REQUIRED` | Endpoint requires browser reCAPTCHA | Use `plivo login` (the browser-based flow) |
 
@@ -65,6 +65,7 @@ Stable strings — switch on these, not on the message text.
 | `GEO_PERMISSION_DENIED` | Destination country not enabled | Console → Messaging/Voice → Geo Permissions |
 | `OUTBOUND_DISABLED` | Account-level outbound off | Contact Plivo support to enable |
 | `INSUFFICIENT_FUNDS` | Cash balance too low | Top up the account |
+| `RAW_KEY_REQUIRED` | The command needs the account key, which a profile on the 30-day sign-in does not hold (`voice streams forward`) | Use a profile that holds a key, or pass `--insecure-skip-signature` only if you accept an unverified tunnel |
 
 ### Transport / upstream
 

@@ -5,11 +5,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
+	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/version"
 )
 
@@ -30,6 +32,25 @@ type SSEHandler func(SSEEvent) bool
 type SSEHTTPError struct {
 	StatusCode int
 	Body       []byte
+	gate       *clierr.Error // the sign-in gate's answer, when it was one
+}
+
+// SSEFailure classifies what StreamSSE returned as a response to any other
+// request is classified: an HTTP refusal by its status, or the sign-in gate's
+// answer, and a request it refused to send as that refusal. nil for a transport
+// failure.
+func SSEFailure(err error) *clierr.Error {
+	var h *SSEHTTPError
+	var ce *clierr.Error
+	switch {
+	case errors.As(err, &h) && h.gate != nil:
+		return h.gate
+	case errors.As(err, &h):
+		return clierr.FromHTTP(h.StatusCode, "", h.Body)
+	case errors.As(err, &ce):
+		return ce
+	}
+	return nil
 }
 
 func (e *SSEHTTPError) Error() string {
@@ -38,7 +59,7 @@ func (e *SSEHTTPError) Error() string {
 
 // StreamSSE opens an SSE connection to fullURL with the given method/body
 // and dispatches each decoded event to onEvent. The connection uses the
-// client's normal auth path (Bearer for scoped tokens, Basic otherwise).
+// client's normal auth path (see ApplyAuth).
 //
 // The underlying http.Client is used with Timeout=0 to allow long streams.
 func (c *Client) StreamSSE(ctx context.Context, method, fullURL string, body any, onEvent SSEHandler) error {
@@ -55,10 +76,9 @@ func (c *Client) StreamSSE(ctx context.Context, method, fullURL string, body any
 	if err != nil {
 		return fmt.Errorf("new SSE request: %w", err)
 	}
-	if c.IsScopedToken() {
-		req.Header.Set("Authorization", "Bearer "+c.AuthToken)
-	} else {
-		req.SetBasicAuth(c.AuthID, c.AuthToken)
+	auth, err := c.ApplyAuth(req)
+	if err != nil {
+		return err
 	}
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Cache-Control", "no-cache")
@@ -83,7 +103,7 @@ func (c *Client) StreamSSE(ctx context.Context, method, fullURL string, body any
 
 	if resp.StatusCode >= 300 { // a redirect too, as none is followed
 		b, _ := io.ReadAll(resp.Body)
-		return &SSEHTTPError{StatusCode: resp.StatusCode, Body: b}
+		return &SSEHTTPError{StatusCode: resp.StatusCode, Body: b, gate: c.GateError(auth, resp, b)}
 	}
 
 	// 1 MiB read buffer — Buddy narration frames can be a few KB; default 4 KiB

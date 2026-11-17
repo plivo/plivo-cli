@@ -1,9 +1,11 @@
 Log out a profile. With no argument, logs out the active profile.
 
 Removes the profile row from ~/.plivo/config.toml and best-effort deletes
-the auth_token from the OS keychain. If the active profile was logged
-out, no profile becomes active until you `plivo auth use <name>` (or
-log in again).
+any auth_token it holds from the OS keychain. The 30-day sign-in the
+other profiles run on goes with the last profile, and is revoked on the
+server then (best effort; the command says whether it was ended). If the
+active profile was logged out, no profile becomes active until you
+`plivo auth use <name>` (or log in again).
 
 Usage:
   plivo logout [profile] [flags]

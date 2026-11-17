@@ -1,4 +1,7 @@
-Remove a profile (use `plivo logout` for the active profile)
+Remove a profile from ~/.plivo/config.toml and best-effort delete any
+auth_token it holds from the OS keychain. The 30-day sign-in the other
+profiles run on goes with the last profile, and is revoked on the server
+then (best effort; the command says whether it was ended).
 
 Usage:
   plivo auth remove <profile> [flags]

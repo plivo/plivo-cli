@@ -1,23 +1,37 @@
-Log in to Plivo via the default browser and save credentials for
+Log in to Plivo via the default browser and save a profile for
 subsequent commands.
 
 The flow:
   1. The CLI opens your default browser to the Plivo Console.
   2. You sign in (the password never touches the CLI).
   3. The Console hands the CLI a short-lived authorization code which is
-     exchanged for your account's auth_id and auth_token over a local
-     loopback listener (PKCE — the token leaves the browser only over
-     this transient pipe).
-  4. The auth_token is stored in your OS keychain (macOS Keychain,
-     Windows Credential Manager, Linux Secret Service). The CLI falls
-     back to writing it inline in ~/.plivo/config.toml (chmod 0600) only
-     when no keychain is available.
+     exchanged for a 30-day sign-in over a local loopback listener (PKCE:
+     the sign-in leaves the browser only over this transient pipe).
+  4. The sign-in is stored in your OS keychain (macOS Keychain, Windows
+     Credential Manager, Linux Secret Service). The CLI falls back to
+     writing it inline in ~/.plivo/config.toml (chmod 0600) only when no
+     keychain is available.
+
+No account key (auth_token) is stored: commands run on the sign-in, which
+the CLI sends only to the server that issued it. It lasts 30 days, then
+every profile that runs on it stops until you run `plivo login` again. That
+includes scripts and CI: they must log in again on that machine every 30
+days, as the CLI has no environment variable, flag or paste route for a key.
 
 Multiple organizations:
-  Logging in again for a different org saves a second profile (named
-  after that org) instead of overwriting the first. Run `plivo auth list`
-  to see every saved profile, and `plivo auth use <name>` to switch. Pass
-  -n/--name to choose the profile name yourself.
+  If you belong to several organizations, the approval page lists them and
+  you tick the ones this machine may use. `plivo org use <name>` then switches
+  between them without a browser (see `plivo org --help`). Logging in again
+  replaces the sign-in, and revokes the old one on the server (best effort;
+  the command says whether it was ended), so it is also how you add or remove
+  organizations: a profile for an organization the new sign-in does not cover
+  is refused. Each login saves a profile named after the organization (pass
+  -n/--name to choose the name); `plivo auth list` shows every saved
+  profile and `plivo auth use <name>` switches between them.
+
+A profile saved by an earlier version holds a key and keeps using it. Logging
+in as that organization again, or `plivo org use` for it, removes its stored key
+after the new sign-in is saved; the other profiles are never touched.
 
 Browser can't reach this terminal:
   When the CLI runs in a container, WSL, a VM or over SSH, the page the
@@ -26,8 +40,9 @@ Browser can't reach this terminal:
   this login's URL.
 
 Headless / CI use:
-  Not supported. Browser OAuth (PKCE) is the only credential source, so
-  scripts and CI need a profile that was logged in on that machine already.
+  Not supported beyond that: browser OAuth (PKCE) is the only credential
+  source, so scripts and CI need a profile that was logged in on that machine
+  within the last 30 days.
 
 Inside a coding agent:
   Run inside Claude Code, Cursor or Codex, a login asks once per machine
@@ -36,9 +51,6 @@ Inside a coding agent:
   each other agent once it has asked, it prints that agent's install
   command instead, once. --yes installs them without asking, and --quiet
   skips the offer.
-
-By default the CLI validates credentials with GET /Account/ before
-saving. Pass --no-verify to skip (offline / mock use only).
 
 Usage:
   plivo login [flags]
@@ -50,7 +62,7 @@ Examples:
 Flags:
   -h, --help          help for login
   -n, --name string   profile name to save under; auto-derived from the org when omitted (default "default")
-      --no-verify     skip the GET /Account/ validation hit (offline / mock use only)
+      --no-verify     no effect; accepted so existing scripts keep working
 
 Global Flags:
       --dry-run            preview requests and local changes without sending or writing anything

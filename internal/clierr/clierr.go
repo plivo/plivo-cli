@@ -48,6 +48,10 @@ const (
 	CodeOutboundDisabled    Code = "OUTBOUND_DISABLED"
 	CodeInsufficientFunds   Code = "INSUFFICIENT_FUNDS"
 
+	// The command needs the account's raw key, which a profile on the 30-day
+	// sign-in does not hold.
+	CodeRawKeyRequired Code = "RAW_KEY_REQUIRED"
+
 	// CLI version is below the server's min_block threshold; server returned 426.
 	CodeCLITooOld Code = "CLI_TOO_OLD"
 
@@ -107,7 +111,7 @@ func (e *Error) ExitCode() int {
 		return 6
 	case CodeNetworkError, CodeUpstreamTimeout, CodeUpstreamUnavailable, CodeUpstreamError, CodeInternalError:
 		return 3
-	case CodeGeoPermissionDenied, CodeOutboundDisabled, CodeInsufficientFunds,
+	case CodeGeoPermissionDenied, CodeOutboundDisabled, CodeInsufficientFunds, CodeRawKeyRequired,
 		CodeResourceNotFound, CodeResourceConflict, CodeValidation,
 		CodeBadFlag, CodeBadInput, CodeUserError:
 		return 1
@@ -124,6 +128,30 @@ func AuthMissing() *Error {
 		Code:    CodeAuthMissing,
 		Message: "No Plivo credentials configured",
 		Hint:    "Run `plivo login`.",
+	}
+}
+
+// SessionExpired is a request the 30-day sign-in cannot make: it ran out, the
+// server revoked it, or this machine no longer holds it.
+func SessionExpired() *Error {
+	return &Error{
+		Code:    CodeAuthExpired,
+		Message: "the 30-day sign-in has expired or was revoked",
+		Hint:    "Run `plivo login` again. Until then every profile that runs on the sign-in fails; a profile that holds its own key is not affected.",
+	}
+}
+
+// OrgNotAllowed is the sign-in gate's one answer for an organization the account
+// cannot use the CLI with: not ticked at login, no longer a member, a role
+// without access to API credentials, or an organization
+// that requires single sign-on. The answer does not say which, so the hint
+// names every cause a person can act on.
+func OrgNotAllowed() *Error {
+	return &Error{
+		Code:       CodeAuthForbidden,
+		StatusCode: 403,
+		Message:    "this account can't use the CLI with that organization",
+		Hint:       "If it is not ticked on the approval page, run `plivo login` and tick it. Otherwise your role there may not allow API credentials, or it may require single sign-on: ask an organization admin.",
 	}
 }
 

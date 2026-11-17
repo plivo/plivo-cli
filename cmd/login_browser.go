@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -27,23 +28,28 @@ import (
 
 // cliTokenEnvelope is the response shape from the auth server's
 // /v1/accounts/cli/token endpoint. Standard Plivo envelope (api_id +
-// data); we only need the `data` block. The session JWT is intentionally
-// NOT part of the bundle.
+// data); we only need the `data` block. An account key the reply may still
+// carry (plivo_auth_token, for older clients) is deliberately not read.
 //
 // Keep this as a package-level type — the round-trip test in
 // login_browser_test.go uses it to lock in the wire shape and fail fast
 // if the envelope wrapper drifts.
 type cliTokenEnvelope struct {
-	Data struct {
-		PlivoAuthID    string `json:"plivo_auth_id"`
-		PlivoAuthToken string `json:"plivo_auth_token"`
-		AomUUID        string `json:"aom_uuid"`
-		Region         string `json:"region"`
-		Email          string `json:"email,omitempty"`    // populated by the auth server when the dashboard session has it — may be empty
-		Name           string `json:"name,omitempty"`     // human display name from the user record
-		OrgName        string `json:"org_name,omitempty"` // organization display name — drives profile auto-naming; may be empty (older server, or an org with no name)
-		OrgUUID        string `json:"org_uuid,omitempty"` // organization's stable identifier; may be empty alongside org_name
-	} `json:"data"`
+	Data cliTokenEnvelopeData `json:"data"`
+}
+
+type cliTokenEnvelopeData struct {
+	PlivoAuthID string `json:"plivo_auth_id"`
+	AomUUID     string `json:"aom_uuid"` // optional
+	Region      string `json:"region"`
+	Email       string `json:"email,omitempty"`    // populated by the auth server when the dashboard session has it — may be empty
+	Name        string `json:"name,omitempty"`     // human display name from the user record
+	OrgName     string `json:"org_name,omitempty"` // organization display name — drives profile auto-naming; may be empty (older server, or an org with no name)
+	OrgUUID     string `json:"org_uuid,omitempty"` // organization's stable identifier; may be empty alongside org_name
+	// AccessToken and ExpiresAt are the 30-day sign-in every profile runs on
+	// (see org_session.go). A reply without them saves nothing.
+	AccessToken string          `json:"access_token,omitempty"`
+	ExpiresAt   json.RawMessage `json:"expires_at,omitempty"` // an RFC 3339 time; read leniently (expiryOf) so a bad one costs the sign-in, not the login
 }
 
 // runLoginBrowser implements `plivo login --browser`: the loopback-OAuth
@@ -60,7 +66,8 @@ type cliTokenEnvelope struct {
 //     ?state=…&code=…. Matches the auth server's 10-min state TTL with
 //     comfortable headroom for login / 2FA / consent click-through.
 //  5. Validate state; POST /v1/accounts/cli/token with the verifier.
-//  6. Persist the bundle to ~/.plivo/config.toml + OS keychain.
+//  6. Save the profile to ~/.plivo/config.toml and the 30-day sign-in to the
+//     OS keychain; no account key is stored.
 func runLoginBrowser(nameExplicit bool) error {
 	verifier, challenge, err := pkcePair()
 	if err != nil {
@@ -139,36 +146,64 @@ func redeemAndPersist(client *api.Client, state, code, verifier, requestedName s
 	var resp cliTokenEnvelope
 	apiErr, gerr := client.Do("POST", tokenURL, body, nil, &resp)
 	if gerr != nil {
-		return clierr.NetworkError("redeeming CLI token", gerr)
+		return serviceError("redeeming CLI token", gerr)
 	}
 	if apiErr != nil {
 		return apiErr
 	}
-	if resp.Data.PlivoAuthID == "" || resp.Data.PlivoAuthToken == "" {
+	if resp.Data.PlivoAuthID == "" {
 		return fmt.Errorf("token redemption returned an empty bundle")
+	}
+	exp, err := sessionFrom(resp.Data, time.Now())
+	if err != nil {
+		return err
 	}
 
 	// Shared persistence — same code path as the manual + email flows so
 	// storage layer changes don't drift between methods.
+	server := serverKey(client.BuddyBaseURL)
 	b := loginBundle{
-		AuthID:    resp.Data.PlivoAuthID,
-		AuthToken: resp.Data.PlivoAuthToken,
-		Email:     resp.Data.Email,
-		Name:      resp.Data.Name,
-		AomUUID:   resp.Data.AomUUID,
-		Region:    resp.Data.Region,
-		OrgName:   resp.Data.OrgName,
-		OrgUUID:   resp.Data.OrgUUID,
+		AuthID:        resp.Data.PlivoAuthID,
+		Email:         resp.Data.Email,
+		Name:          resp.Data.Name,
+		AomUUID:       resp.Data.AomUUID,
+		Region:        resp.Data.Region,
+		OrgName:       resp.Data.OrgName,
+		OrgUUID:       resp.Data.OrgUUID,
+		SessionServer: server,
 	}
 	var name string
+	var hadKey keyPlace
+	var holders []string
 	var inKeychain bool
+	var prev *config.UserSession // the sign-in this login replaces, and its token, read before the keychain takes the new one
+	var prevTok string
+	prevSession, _ := config.GetSessionToken()
 	if err := config.Update(func(cfg *config.Config) (err error) {
-		name, inKeychain, err = persistProfile(cfg, requestedName, nameExplicit, b)
-		return err
+		if name, hadKey, err = persistProfile(cfg, requestedName, nameExplicit, b); err != nil {
+			return err
+		}
+		if prev = cfg.User; prev != nil {
+			prevTok, _ = prev.Secret()
+		}
+		inKeychain = config.SetSession(cfg, resp.Data.AccessToken, config.UserSession{
+			ExpiresAt: exp, Email: b.Email, Name: b.Name, Server: server,
+		})
+		holders = keyHolders(cfg, name)
+		return nil
 	}); err != nil {
+		restoreSessionToken(prevSession) // the closure may have written the keychain before the save failed
 		return err
 	}
-	printProfileSaved(name, inKeychain, b)
+	printProfileSaved(name, inKeychain, exp, b)
+	if prevTok != resp.Data.AccessToken { // never end the sign-in just issued
+		endSignIn(prev, prevTok, true)
+	}
+	removeKey(name, hadKey)
+	if len(holders) > 0 {
+		fmt.Fprintf(os.Stderr, "  Still holding a raw key: %s. They keep working and are not deleted: `plivo logout <name>` removes one, `plivo org use <name>` moves one to the 30-day sign-in.\n", strings.Join(holders, ", "))
+	}
+	fmt.Fprintln(os.Stderr, "  The sign-in lasts 30 days. Other organizations you approved: `plivo org list`, then `plivo org use <name>`.")
 	return nil
 }
 
@@ -205,6 +240,7 @@ func buildAuthorizeURL(buddyBase string, port int, state, challenge, device stri
 	q.Set("state", state)
 	q.Set("code_challenge", challenge)
 	q.Set("code_challenge_method", "S256")
+	q.Set("client", cliClient)
 	if device != "" {
 		q.Set("device", device)
 	}

@@ -42,7 +42,8 @@ var voiceStreamsSimulateCmd = &cobra.Command{
 	Long: `Do what Plivo does when a call reaches your answer URL, from this machine
 and without placing a call: request --answer-url with --answer-method and
 the fields Plivo sends (CallUUID, From, To, Direction, CallStatus), signed
-with X-Plivo-Signature-V3 when a profile is logged in; check the reply (a
+with X-Plivo-Signature-V3 when the profile in use holds an account key
+(unsigned, with a warning, on the 30-day sign-in); check the reply (a
 2xx within Plivo's 15 seconds, its content type, and Plivo XML with a
 <Stream>); then open the <Stream>'s WebSocket and stream --duration seconds
 of a 1 kHz tone in its contentType, as ` + "`voice streams test`" + ` does, reading back
@@ -248,6 +249,9 @@ const maxAnswerXML = 100 << 10
 func simulateCall(ctx context.Context, o simulateOpts, signer streamSigner) *simulation {
 	s := &simulation{AnswerURL: o.answerURL, Method: o.method, Params: o.params, Signed: signer.token != "", Checks: []streamsCheck{}}
 	u, _ := url.Parse(o.answerURL) // checked with the flags
+	if signer.keyless() {
+		s.add("signature", "warn", "The answer URL request goes unsigned: "+keylessUnsigned)
+	}
 	if !o.strict || s.hostCheck("answer_url", u) {
 		if body := s.fetch(ctx, o, signer); body != nil {
 			if doc, ok := s.checkXML(body); ok {
@@ -330,7 +334,7 @@ func (s *simulation) fetch(ctx context.Context, o simulateOpts, signer streamSig
 		}
 		hint := ""
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			hint = signatureHint(signer.profile)
+			hint = signatureHint(signer)
 		}
 		s.fail("answer_url", streamCheckFailed(msg+": Plivo treats a non-2xx answer as 7011 (Error Reaching Answer URL)", hint))
 		return nil
@@ -352,11 +356,14 @@ func (s *simulation) fetch(ctx context.Context, o simulateOpts, signer streamSig
 
 // signatureHint explains a 401 or 403 from a server that checks Plivo's
 // signature.
-func signatureHint(profile string) string {
-	if profile == "" {
+func signatureHint(signer streamSigner) string {
+	switch {
+	case signer.keyless():
+		return "The request was unsigned: " + keylessUnsigned
+	case signer.profile == "":
 		return "No profile is logged in, so the request went unsigned, and a server that checks Plivo's signature refuses it. Run `plivo login`, then try again."
 	}
-	return fmt.Sprintf("The request was signed like Plivo's, with profile %q's auth token. If the server checks another account's token, pass --profile for that account.", profile)
+	return fmt.Sprintf("The request was signed like Plivo's, with profile %q's auth token. If the server checks another account's token, pass --profile for that account.", signer.profile)
 }
 
 // answerXML is what the checks read from an answer document: its top-level
@@ -577,7 +584,7 @@ func (s *simulation) stream(ctx context.Context, st streamVerb, codec string, ra
 	}
 	bidi := strings.EqualFold(st.attrs["bidirectional"], "true")
 	res, err := streamsProbe{
-		url: st.url, header: header, profile: signer.profile, codec: codec, rate: rate,
+		url: st.url, header: header, signer: signer, codec: codec, rate: rate,
 		duration: o.duration, readBack: bidi || o.expectAudio, insecure: o.insecure,
 		streamID: uuid.NewString(), callID: o.params["CallUUID"], accountID: account,
 	}.run(ctx, io.Discard, true)
@@ -608,7 +615,10 @@ func (s *simulation) stream(ctx context.Context, st streamVerb, codec string, ra
 // what it would check, with nothing sent.
 func printSimulatePlan(o simulateOpts, signer streamSigner) {
 	signed := "unsigned: no profile is logged in"
-	if signer.profile != "" {
+	switch {
+	case signer.keyless():
+		signed = fmt.Sprintf("unsigned: profile %q holds no key", signer.profile)
+	case signer.signedBy() != "":
 		signed = fmt.Sprintf("signed with profile %q", signer.profile)
 	}
 	keys := make([]string, 0, len(o.params))

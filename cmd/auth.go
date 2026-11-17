@@ -40,8 +40,12 @@ var authUseCmd = &cobra.Command{
 var authRemoveCmd = &cobra.Command{
 	Use:   "remove <profile>",
 	Short: "Remove a profile (use `plivo logout` for the active profile)",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runAuthRemove,
+	Long: `Remove a profile from ~/.plivo/config.toml and best-effort delete any
+auth_token it holds from the OS keychain. The 30-day sign-in the other
+profiles run on goes with the last profile, and is revoked on the server
+then (best effort; the command says whether it was ended).`,
+	Args: cobra.ExactArgs(1),
+	RunE: runAuthRemove,
 }
 
 var authWhoamiCmd = &cobra.Command{
@@ -64,26 +68,27 @@ func runAuthList(cmd *cobra.Command, args []string) error {
 	}
 	if effectiveFormat() == output.FormatJSON {
 		type item struct {
-			Name    string `json:"name"`
-			AuthID  string `json:"auth_id"`
-			OrgName string `json:"org_name"`
-			Active  bool   `json:"active"`
+			Name       string `json:"name"`
+			AuthID     string `json:"auth_id"`
+			OrgName    string `json:"org_name"`
+			Active     bool   `json:"active"`
+			Credential string `json:"credential"` // "session" (the 30-day sign-in) or "key"
 		}
 		items := []item{}
 		for _, name := range sortedProfileNames(cfg) {
 			p := cfg.Profiles[name]
-			items = append(items, item{Name: name, AuthID: p.AuthID, OrgName: p.OrgName, Active: name == cfg.Active})
+			items = append(items, item{Name: name, AuthID: p.AuthID, OrgName: p.OrgName, Active: name == cfg.Active, Credential: p.Credential()})
 		}
 		return output.JSONSuccess(os.Stdout, items, nil)
 	}
-	rows := [][]string{{"ACTIVE", "NAME", "ORG", "AUTH_ID"}}
+	rows := [][]string{{"ACTIVE", "NAME", "ORG", "AUTH_ID", "CREDENTIAL"}}
 	for _, name := range sortedProfileNames(cfg) {
 		p := cfg.Profiles[name]
 		active := ""
 		if name == cfg.Active {
 			active = "*"
 		}
-		rows = append(rows, []string{active, name, p.OrgName, p.AuthID})
+		rows = append(rows, []string{active, name, p.OrgName, p.AuthID, p.Credential()})
 	}
 	if len(rows) == 1 {
 		fmt.Fprintln(os.Stderr, "no profiles configured. Run `plivo login`.")
@@ -106,7 +111,7 @@ func runAuthUse(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if org != "" {
-		org = " (" + org + ")"
+		org = " (" + output.SafeText(org) + ")"
 	}
 	if dryRunFlag {
 		fmt.Fprintf(os.Stderr, "[dry-run] Would set the active profile to %s%s\n", name, org)
@@ -180,8 +185,18 @@ func alsoKeychain(name string) string {
 	return " and delete its keychain token"
 }
 
+// alsoSignIn names, for a dry run, the sign-in that removing the last profile
+// ends: dropped is the one dropSessionWithLastProfile took, nil for none.
+func alsoSignIn(dropped *config.UserSession) string {
+	if dropped == nil {
+		return ""
+	}
+	return "; it is the last profile, so the 30-day sign-in would end too, on the server as well"
+}
+
 func runAuthRemove(cmd *cobra.Command, args []string) error {
 	name := args[0]
+	var dropped, kept *config.UserSession
 	if err := updateConfig(func(cfg *config.Config) error {
 		if _, ok := cfg.Profiles[name]; !ok {
 			return fmt.Errorf("profile %q not found", name)
@@ -190,18 +205,22 @@ func runAuthRemove(cmd *cobra.Command, args []string) error {
 		if cfg.Active == name {
 			cfg.Active = ""
 		}
+		dropped = dropSessionWithLastProfile(cfg)
+		kept = cfg.User
 		return nil
 	}); err != nil {
 		return err
 	}
 	if dryRunFlag {
-		fmt.Fprintf(os.Stderr, "[dry-run] Would remove profile %q%s\n", name, alsoKeychain(name))
+		fmt.Fprintf(os.Stderr, "[dry-run] Would remove profile %q%s%s\n", name, alsoKeychain(name), alsoSignIn(dropped))
 		return nil
 	}
 	// Best-effort removal from the OS keychain (no-op if the token lived in
 	// the config file instead), once the profile is gone.
 	_ = config.DeleteToken(name)
 	fmt.Fprintf(os.Stderr, "Removed profile %q\n", name)
+	reportDroppedSession(dropped)
+	reportKeptSession(kept)
 	return nil
 }
 

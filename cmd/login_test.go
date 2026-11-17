@@ -100,9 +100,8 @@ func TestPersistProfile_derivesNameFromOrg(t *testing.T) {
 	cfg := &config.Config{Profiles: map[string]config.Profile{}}
 
 	_, _, err := persistProfile(cfg, "default", false, loginBundle{
-		AuthID:    "MA_ACME",
-		AuthToken: "tok-1",
-		OrgName:   "Acme, Inc.",
+		AuthID:  "MA_ACME",
+		OrgName: "Acme, Inc.",
 	})
 	if err != nil {
 		t.Fatalf("persistProfile: %v", err)
@@ -122,8 +121,7 @@ func TestPersistProfile_missingOrgName_fallsBackToDefault(t *testing.T) {
 	// OrgName intentionally empty — simulates an auth server that hasn't
 	// shipped org_name yet (or an org with no name).
 	_, _, err := persistProfile(cfg, "default", false, loginBundle{
-		AuthID:    "MA_NOORG",
-		AuthToken: "tok-1",
+		AuthID: "MA_NOORG",
 	})
 	if err != nil {
 		t.Fatalf("persistProfile: %v", err)
@@ -138,9 +136,8 @@ func TestPersistProfile_explicitName_overridesOrgDerivedName(t *testing.T) {
 	cfg := &config.Config{Profiles: map[string]config.Profile{}}
 
 	_, _, err := persistProfile(cfg, "staging", true, loginBundle{
-		AuthID:    "MA_ACME",
-		AuthToken: "tok-1",
-		OrgName:   "Acme Inc",
+		AuthID:  "MA_ACME",
+		OrgName: "Acme Inc",
 	})
 	if err != nil {
 		t.Fatalf("persistProfile: %v", err)
@@ -167,10 +164,9 @@ func TestPersistProfile_sameOrg_updatesInPlace(t *testing.T) {
 	// Re-login to the same org (same auth_id, same org name → same derived
 	// slug "acme") — the normal token-refresh path.
 	_, _, err := persistProfile(cfg, "default", false, loginBundle{
-		AuthID:    "MA_ACME",
-		AuthToken: "tok-refreshed",
-		Region:    "ap-south-1",
-		OrgName:   "Acme",
+		AuthID:  "MA_ACME",
+		Region:  "ap-south-1",
+		OrgName: "Acme",
 	})
 	if err != nil {
 		t.Fatalf("persistProfile: %v", err)
@@ -200,9 +196,8 @@ func TestPersistProfile_differentOrg_explicitName_refuses(t *testing.T) {
 	}
 
 	_, _, err := persistProfile(cfg, "staging", true, loginBundle{
-		AuthID:    "MA_OTHERCO",
-		AuthToken: "tok-otherco",
-		OrgName:   "OtherCo",
+		AuthID:  "MA_OTHERCO",
+		OrgName: "OtherCo",
 	})
 	if err == nil {
 		t.Fatal("expected a conflict error, got nil")
@@ -238,9 +233,8 @@ func TestPersistProfile_differentOrg_derivedName_suffixes(t *testing.T) {
 	// the same "acme" slug despite looking different on screen, and no -n
 	// was given — the CLI picked the name, so it can pick a free one too.
 	_, _, err := persistProfile(cfg, "default", false, loginBundle{
-		AuthID:    "MA_ACME_TWO",
-		AuthToken: "tok-2",
-		OrgName:   "ACME!!!",
+		AuthID:  "MA_ACME_TWO",
+		OrgName: "ACME!!!",
 	})
 	if err != nil {
 		t.Fatalf("persistProfile: %v", err)
@@ -274,9 +268,8 @@ func TestPersistProfile_reLoginAfterSuffix_reusesSameSuffixedSlot(t *testing.T) 
 	}
 
 	_, _, err := persistProfile(cfg, "default", false, loginBundle{
-		AuthID:    "MA_ACME_TWO",
-		AuthToken: "tok-refreshed-2",
-		OrgName:   "ACME!!!",
+		AuthID:  "MA_ACME_TWO",
+		OrgName: "ACME!!!",
 	})
 	if err != nil {
 		t.Fatalf("persistProfile: %v", err)
@@ -297,14 +290,14 @@ func TestPersistProfile_secondLogin_doesNotStealActive(t *testing.T) {
 	setFakeCreds(t)
 	cfg := &config.Config{Profiles: map[string]config.Profile{}}
 
-	if _, _, err := persistProfile(cfg, "default", false, loginBundle{AuthID: "MA_ONE", AuthToken: "tok"}); err != nil {
+	if _, _, err := persistProfile(cfg, "default", false, loginBundle{AuthID: "MA_ONE"}); err != nil {
 		t.Fatalf("persistProfile (first): %v", err)
 	}
 	if cfg.Active != "default" {
 		t.Fatalf("cfg.Active = %q, want %q", cfg.Active, "default")
 	}
 
-	if _, _, err := persistProfile(cfg, "default", false, loginBundle{AuthID: "MA_TWO", AuthToken: "tok2", OrgName: "Second Org"}); err != nil {
+	if _, _, err := persistProfile(cfg, "default", false, loginBundle{AuthID: "MA_TWO", OrgName: "Second Org"}); err != nil {
 		t.Fatalf("persistProfile (second): %v", err)
 	}
 	if cfg.Active != "default" {

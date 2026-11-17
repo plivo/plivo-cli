@@ -230,3 +230,14 @@ func TestVoiceStreamsReadiness_outboundCanBeReady(t *testing.T) {
 		t.Errorf("result %q, exit %d, simulate %+v, checks %+v; want ready", result, exit, sim, checks)
 	}
 }
+
+// Readiness builds its signer from the client it checks with: on a profile with no
+// key the request to the answer URL is planned unsigned, not signed with nothing.
+func TestVoiceStreamsReadiness_profileOnTheSignInGoesUnsigned(t *testing.T) {
+	setFakeCreds(t)
+	readinessAPI(t, map[string]apiReply{usNumberPath: ok(usNumberRecord), usAppPath: ok(streamApp)})
+	clientForTest.AuthToken = ""
+	if err, _, stderr := execCmd(t, "voice", "streams", "readiness", "+14155551234", "--dry-run"); err != nil || !strings.Contains(stderr, `unsigned: profile "test" holds no key`) {
+		t.Errorf("err %v, stderr %q; want the plan to say the request is unsigned", err, stderr)
+	}
+}

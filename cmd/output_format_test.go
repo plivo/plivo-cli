@@ -188,8 +188,8 @@ func TestOutputFormats_listCommandsHonourEveryFormat(t *testing.T) {
 
 // notSwept are list commands the sweep cannot run: docs list reads the
 // public docs site, not the API, and the internal build's auth token list
-// needs a session of its own.
-var notSwept = map[string]bool{"plivo docs list": true, "plivo auth token list": true}
+// and org list need a sign-in of their own.
+var notSwept = map[string]bool{"plivo docs list": true, "plivo auth token list": true, "plivo org list": true}
 
 // listCommandPaths finds every list command that runs with no argument and
 // no required flag, minus notSwept.

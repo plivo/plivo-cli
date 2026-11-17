@@ -279,7 +279,7 @@ func r2HostOnlyInSRV(t *testing.T) {
 }
 
 // r2TokenBundle is the auth server's answer to the login's code.
-const r2TokenBundle = `{"api_id": "qa", "data": {"plivo_auth_id": "` + qaAuthID + `", "plivo_auth_token": "qa-not-a-real-token"}}`
+const r2TokenBundle = `{"api_id": "qa", "data": {"plivo_auth_id": "` + qaAuthID + `", "access_token": "stk_qa-not-a-real-token", "expires_at": "2099-01-01T00:00:00Z"}}`
 
 // r2LoginInCodexAfterCursor runs `plivo login` in Codex, on a terminal, on a
 // machine whose login in Cursor was asked about the skills already. A

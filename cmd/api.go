@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -186,6 +187,10 @@ func runAPI(cmd *cobra.Command, args []string) error {
 	}
 
 	resp, respBytes, err := doAPIRequest(client, method, fullURL, bodyBytes, headers)
+	var ce *clierr.Error
+	if errors.As(err, &ce) { // the sign-in's own answer, or a refusal to send it
+		return ce
+	}
 	if err != nil {
 		// Transport-level failure — map to NETWORK_ERROR so the renderer +
 		// exit code stay consistent with the rest of the CLI.
@@ -358,7 +363,9 @@ func isValidHTTPMethod(method string) bool {
 // doAPIRequest builds + sends the HTTP request, returning the *http.Response
 // (already-closed body) and the body bytes. Auth + default headers replicate
 // (*api.Client).Do so the transport behaviour is identical; custom headers are
-// layered on top so callers can override.
+// layered on top so callers can override. An Authorization given there replaces
+// the sign-in: the reply then answers the caller's token, and the sign-in gate
+// does not read it as the sign-in's.
 //
 // We don't go through (*api.Client).Do because Do hard-codes Content-Type
 // application/json + Accept JSON + unmarshals the response — none of which fit
@@ -375,13 +382,11 @@ func doAPIRequest(c *api.Client, method, fullURL string, body []byte, extraHeade
 		return nil, nil, err
 	}
 
-	// Auth — mirrors client.Do exactly (scoped token → Bearer, otherwise
-	// HTTP Basic). Unauthenticated requests aren't supported here: a
-	// missing profile would have failed in getClient.
-	if c.IsScopedToken() {
-		req.Header.Set("Authorization", "Bearer "+c.AuthToken)
-	} else {
-		req.SetBasicAuth(c.AuthID, c.AuthToken)
+	// Auth — the same helper client.Do uses. Unauthenticated requests aren't
+	// supported here: a missing profile would have failed in getClient.
+	auth, err := c.ApplyAuth(req)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	// Default headers — caller can override via --header.
@@ -398,6 +403,13 @@ func doAPIRequest(c *api.Client, method, fullURL string, body []byte, extraHeade
 
 	// Layer caller-supplied headers last so they win over the defaults.
 	for k, vs := range extraHeaders {
+		if http.CanonicalHeaderKey(k) == "Authorization" {
+			// The caller's token replaces the sign-in, so the reply is to that
+			// token. Read as the sign-in's, a 401 invalid_token for it would end
+			// the sign-in, which every keyless profile on this machine runs on.
+			// With no sign-in on the request, GateError keeps the usual mapping.
+			auth = api.Auth{}
+		}
 		req.Header.Del(k)
 		for _, v := range vs {
 			req.Header.Add(k, v)
@@ -412,6 +424,9 @@ func doAPIRequest(c *api.Client, method, fullURL string, body []byte, extraHeade
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return resp, nil, err
+	}
+	if e := c.GateError(auth, resp, respBytes); e != nil {
+		return resp, respBytes, e
 	}
 	return resp, respBytes, nil
 }

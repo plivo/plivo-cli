@@ -426,3 +426,79 @@ func TestTelemetryEnabled_envVarTakesEveryOffSpelling(t *testing.T) {
 		}
 	}
 }
+
+// ─── org-switching sign-in ───────────────────────────────────────────────────
+
+// The sign-in token goes to the keychain, never into config.toml; with no
+// keychain it falls back to the 0600 file. Either way Secret returns it, and
+// it never lands in a profile's account.
+func TestSession_keychainThenInlineFallback(t *testing.T) {
+	home := withHomeDir(t)
+	defer keyring.MockInit()
+	sess := UserSession{ExpiresAt: time.Now().Add(time.Hour), Server: "https://auth.example.test"}
+
+	cfg := &Config{Profiles: map[string]Profile{}}
+	if !SetSession(cfg, "stk_secret", sess) {
+		t.Fatal("SetSession: want the keychain used")
+	}
+	if err := Save(cfg); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(home, ".plivo", "config.toml"))
+	if strings.Contains(string(raw), "stk_secret") {
+		t.Errorf("token written to config.toml:\n%s", raw)
+	}
+	if tok, err := cfg.User.Secret(); err != nil || tok != "stk_secret" {
+		t.Errorf("Secret = %q, %v", tok, err)
+	}
+	if tok, _ := GetToken("user"); tok != "" {
+		t.Errorf("sign-in token readable as profile %q's token", "user")
+	}
+
+	keyring.MockInitWithError(errors.New("no keychain"))
+	if SetSession(cfg, "stk_inline", sess) || cfg.User.Token != "stk_inline" {
+		t.Fatalf("no keychain: want the token inline, got %+v", cfg.User)
+	}
+	if tok, _ := cfg.User.Secret(); tok != "stk_inline" {
+		t.Errorf("inline Secret = %q", tok)
+	}
+}
+
+func TestSession_expiredAndCleared(t *testing.T) {
+	withHomeDir(t)
+	now := time.Now()
+	s := &UserSession{ExpiresAt: now.Add(time.Minute)}
+	if s.Expired(now) || !s.Expired(now.Add(time.Minute)) || !(&UserSession{}).Expired(now) {
+		t.Error("Expired: want live before ExpiresAt, expired at it, and a zero time expired")
+	}
+	cfg := &Config{}
+	SetSession(cfg, "stk_x", *s)
+	ClearSession(cfg)
+	if tok, _ := GetSessionToken(); cfg.User != nil || tok != "" {
+		t.Errorf("ClearSession left user=%v token=%q", cfg.User, tok)
+	}
+}
+
+// A profile on the sign-in never asks the keychain for a key: with no keychain
+// at all (headless Linux, a container) it still resolves, and a key left in the
+// keychain is not picked up. A keyed profile still fails loudly.
+func TestResolve_keylessProfileIgnoresTheKeychain(t *testing.T) {
+	withHomeDir(t)
+	_ = Save(&Config{Active: "k", Profiles: map[string]Profile{
+		"k": {AuthID: "MAk", SessionServer: "https://auth.example.test"},
+		"c": {AuthID: "MAc"},
+	}})
+	_ = SetToken("k", "left-behind")
+	t.Cleanup(func() { _ = DeleteToken("k") })
+	if p, _, err := Resolve("k"); err != nil || p.AuthToken != "" {
+		t.Errorf("leftover keychain key: %+v, %v; want none picked up", p, err)
+	}
+	keyring.MockInitWithError(errors.New("dbus: no secret service"))
+	t.Cleanup(keyring.MockInit)
+	if p, _, err := Resolve("k"); err != nil || p.AuthID != "MAk" {
+		t.Errorf("no keychain, keyless profile: %+v, %v; want it resolved", p, err)
+	}
+	if _, _, err := Resolve("c"); err == nil {
+		t.Error("no keychain, keyed profile: want the keychain error")
+	}
+}

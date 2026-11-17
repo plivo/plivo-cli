@@ -152,10 +152,13 @@ type Client struct {
 	AdminBaseURL string // optional admin-override base URL
 	BuddyBaseURL string // endpoint for /v1/aiassist/buddy-ext (Plivo Basic auth) — see applyBuddyURL
 	AuthID       string
-	AuthToken    string
+	AuthToken    string // a raw account key, sent as Basic: never the sign-in
 	Email        string // optional human email from the profile; sent as X-Plivo-CLI-Email for per-user analytics
 	Region       string // optional resolved region from the profile; sent as X-Plivo-CLI-Region so unauthenticated analytics routes (feedback) can tag events
 	AomUUID      string // optional per-user identity row UUID from the profile; sent as X-Plivo-CLI-AOM-UUID for per-human analytics
+
+	// Session is the 30-day sign-in a profile without a key runs on (see ApplyAuth).
+	Session *Session
 
 	// TelemetryEnabled gates the Email/AuthID/Region/AomUUID headers.
 	// Defaults true via New(); cmd/root.go overrides it from the user's
@@ -170,12 +173,6 @@ type Client struct {
 	// DoMultipart return it instead of sending or printing anything, so the
 	// commands building those URLs need no check of their own.
 	badPart *clierr.Error
-}
-
-// IsScopedToken reports whether AuthToken is a scoped token (stk_ prefix).
-// Scoped tokens are sent as Bearer; regular tokens use HTTP Basic.
-func (c *Client) IsScopedToken() bool {
-	return strings.HasPrefix(c.AuthToken, "stk_")
 }
 
 func New(authID, authToken string, timeout time.Duration) *Client {
@@ -303,18 +300,13 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
-	// Skip auth-header injection when both creds are empty: lets callers
-	// hit unauthenticated endpoints (e.g. `plivo login --browser`'s
-	// /v1/accounts/cli/token, which uses PKCE state+code+verifier as
-	// the credential triple) without sending a stray `Authorization:
-	// Basic Og==`.
-	switch {
-	case c.IsScopedToken():
-		req.Header.Set("Authorization", "Bearer "+c.AuthToken)
-	case c.AuthID == "" && c.AuthToken == "":
-		// no-op — unauthenticated request
-	default:
-		req.SetBasicAuth(c.AuthID, c.AuthToken)
+	// With no credentials at all, no header is set: lets callers hit
+	// unauthenticated endpoints (e.g. `plivo login --browser`'s
+	// /v1/accounts/cli/token, which uses PKCE state+code+verifier as the
+	// credential triple) without sending a stray `Authorization: Basic Og==`.
+	auth, err := c.ApplyAuth(req)
+	if err != nil {
+		return nil, err
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -342,6 +334,9 @@ func (c *Client) Do(method, fullURL string, body any, queryParams url.Values, ou
 	}
 
 	if resp.StatusCode >= 300 { // a redirect too, as none is followed
+		if e := c.GateError(auth, resp, respBytes); e != nil {
+			return e, nil
+		}
 		return parseError(resp, respBytes), nil
 	}
 	if method != http.MethodGet {
@@ -427,10 +422,9 @@ func (c *Client) DoMultipart(method, fullURL string, dataJSON []byte, files map[
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
-	if c.IsScopedToken() {
-		req.Header.Set("Authorization", "Bearer "+c.AuthToken)
-	} else {
-		req.SetBasicAuth(c.AuthID, c.AuthToken)
+	auth, err := c.ApplyAuth(req)
+	if err != nil {
+		return nil, err
 	}
 	req.Header.Set("Content-Type", w.FormDataContentType())
 	req.Header.Set("Accept", "application/json")
@@ -450,6 +444,9 @@ func (c *Client) DoMultipart(method, fullURL string, dataJSON []byte, files map[
 		return nil, transportError(method, req.URL.Host, fmt.Errorf("read response: %w", err))
 	}
 	if resp.StatusCode >= 300 { // a redirect too, as none is followed
+		if e := c.GateError(auth, resp, respBytes); e != nil {
+			return e, nil
+		}
 		return parseError(resp, respBytes), nil
 	}
 	if method != http.MethodGet {

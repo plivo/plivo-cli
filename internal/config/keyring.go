@@ -36,3 +36,35 @@ func DeleteToken(profile string) error {
 	}
 	return err
 }
+
+// The org-switching sign-in token lives under its own service, not as a profile
+// account: a profile can be named anything, so no name can collide with it.
+const (
+	sessionService = "plivo-cli-session"
+	sessionAccount = "user"
+)
+
+// SetSessionToken stores the sign-in token in the OS keychain.
+func SetSessionToken(token string) error {
+	return keyring.Set(sessionService, sessionAccount, token)
+}
+
+// GetSessionToken reads the sign-in token from the OS keychain; a missing entry
+// is ("", nil), as for GetToken.
+func GetSessionToken() (string, error) {
+	tok, err := keyring.Get(sessionService, sessionAccount)
+	if errors.Is(err, keyring.ErrNotFound) {
+		return "", nil
+	}
+	return tok, err
+}
+
+// DeleteSessionToken removes the sign-in token from the OS keychain; a missing
+// entry is not an error.
+func DeleteSessionToken() error {
+	err := keyring.Delete(sessionService, sessionAccount)
+	if errors.Is(err, keyring.ErrNotFound) {
+		return nil
+	}
+	return err
+}

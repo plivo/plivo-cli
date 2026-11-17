@@ -670,3 +670,26 @@ func TestVoiceStreamsForward_stoppedTunnelRestoresAndFails(t *testing.T) {
 		t.Errorf("restore body = %v, want the original answer URL back", body)
 	}
 }
+
+// voice streams forward needs a key to verify Plivo's signature with. Without
+// one it refuses before the app is read, a tunnel started, anything saved or
+// the app changed; --insecure-skip-signature is the human's explicit choice.
+func TestForward_refusedWithoutAKeyBeforeAnyRequest(t *testing.T) {
+	h := newGateway(t)
+	keylessOn(t, h)
+	args := []string{"voice", "streams", "forward", "--number", "+14155550142", "--app", "app1", "--to", "ws://127.0.0.1:9/ws", "--yes"}
+	for _, extra := range [][]string{nil, {"--dry-run"}} {
+		err, _, _ := execCmd(t, append(args, extra...)...)
+		var ce *clierr.Error
+		if !errors.As(err, &ce) || ce.Code != clierr.CodeRawKeyRequired || ce.ExitCode() != 1 || !strings.Contains(ce.Hint, "without asking the human") || h.count() != 0 {
+			t.Fatalf("%v: err %v, requests %d; want RAW_KEY_REQUIRED (exit 1) and no request", extra, err, h.count())
+		}
+	}
+	state, _ := forwardStatePath("app1")
+	if _, err := os.Stat(state); err == nil {
+		t.Errorf("a refused forward saved state at %s", state)
+	}
+	if err, _, _ := execCmd(t, append(args, "--dry-run", "--insecure-skip-signature")...); err != nil || h.count() != 1 || h.reqs[0].Method != "GET" {
+		t.Errorf("with --insecure-skip-signature: err %v, requests %d; want the app read and nothing more", err, h.count())
+	}
+}

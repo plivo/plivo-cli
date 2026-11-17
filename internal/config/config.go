@@ -52,14 +52,86 @@ type Profile struct {
 	// case a future feature needs the org's own id rather than the
 	// credential's.
 	OrgUUID string `toml:"org_uuid,omitempty"`
+	// SessionServer, when set, says the profile has no key of its own and runs on
+	// the browser sign-in ([user]). It names the server that issued that sign-in:
+	// the profile is refused, locally, under a sign-in from any other server.
+	SessionServer string `toml:"session_server,omitempty"`
+}
+
+// CredentialSession and CredentialKey are what a profile authenticates with, as
+// auth list and org current show it.
+const (
+	CredentialSession = "session"
+	CredentialKey     = "key"
+)
+
+// Credential says what the profile authenticates with, from the config alone: a
+// profile with a session reference and no key in the config runs on the
+// sign-in. No secret is read.
+func (p Profile) Credential() string {
+	if p.SessionServer != "" && p.AuthToken == "" {
+		return CredentialSession
+	}
+	return CredentialKey
 }
 
 type Config struct {
 	Active    string             `toml:"active"`
 	Profiles  map[string]Profile `toml:"profiles"`
+	User      *UserSession       `toml:"user,omitempty"`
 	Buddy     BuddyConfig        `toml:"buddy,omitempty"`
 	Telemetry TelemetryConfig    `toml:"telemetry,omitempty"`
 	Skills    SkillsConfig       `toml:"skills,omitempty"`
+}
+
+// UserSession is the optional [user] table: the 30-day browser sign-in. A
+// profile with a session reference (Profile.SessionServer) and no key runs on
+// it, and `plivo org` lists and switches between the organizations it covers.
+type UserSession struct {
+	// Token is the sign-in token, inline only when no OS keychain is available
+	// (the file is 0600); otherwise it is in the keychain.
+	Token     string    `toml:"token,omitempty"`
+	ExpiresAt time.Time `toml:"expires_at"`
+	Email     string    `toml:"email,omitempty"`
+	Name      string    `toml:"name,omitempty"`
+	// Server is the auth server that issued the token. The token is sent there
+	// and nowhere else.
+	Server string `toml:"server"`
+}
+
+// Secret returns the sign-in token, from the config when it is inline and
+// otherwise from the OS keychain. "" means there is none.
+func (u *UserSession) Secret() (string, error) {
+	if u == nil {
+		return "", nil
+	}
+	if u.Token != "" {
+		return u.Token, nil
+	}
+	return GetSessionToken()
+}
+
+// Expired reports whether the sign-in has run out at now.
+func (u *UserSession) Expired(now time.Time) bool { return !now.Before(u.ExpiresAt) }
+
+// SetSession records a sign-in in cfg, its token in the OS keychain, and
+// reports whether it went there (if not, it is inline in cfg). The caller saves
+// cfg.
+func SetSession(cfg *Config, token string, s UserSession) (inKeychain bool) {
+	s.Token = ""
+	inKeychain = true
+	if err := SetSessionToken(token); err != nil {
+		s.Token = token
+		inKeychain = false
+	}
+	cfg.User = &s
+	return inKeychain
+}
+
+// ClearSession drops the sign-in from cfg and the keychain. The caller saves cfg.
+func ClearSession(cfg *Config) {
+	cfg.User = nil
+	_ = DeleteSessionToken()
 }
 
 // SkillsConfig is the optional [skills] table in ~/.plivo/config.toml.
@@ -272,7 +344,8 @@ func lockWithin(f *os.File, wait time.Duration, try func(*os.File) (bool, error)
 // Resolve returns the credentials to use.
 // Order: explicit --profile → active profile. Both read a profile written by
 // `plivo login`; there is deliberately no env-var or flag route for a raw
-// auth_id/auth_token.
+// auth_id/auth_token. A profile with no key, which runs on the sign-in, comes
+// back with an empty AuthToken.
 // The second return value is the source label (the profile name).
 func Resolve(profileName string) (Profile, string, error) {
 	cfg, err := Load()
@@ -287,6 +360,9 @@ func Resolve(profileName string) (Profile, string, error) {
 		}
 		if ok {
 			return p, profileName, nil
+		}
+		if cfg.Profiles[profileName].AuthID != "" { // saved, with neither a key nor a sign-in
+			return Profile{}, "", clierr.AuthMissing()
 		}
 		return Profile{}, "", fmt.Errorf("profile %q not found or has no stored token in %s", profileName, mustPath())
 	}
@@ -303,8 +379,10 @@ func Resolve(profileName string) (Profile, string, error) {
 	return Profile{}, "", clierr.AuthMissing()
 }
 
-// profileWithToken loads a named profile and fills in its token. Reports
-// ok=false when the profile is absent or has no usable token.
+// profileWithToken loads a named profile and fills in its key, if it has one.
+// A profile with no key but a session reference is usable on the sign-in, so it
+// comes back with an empty AuthToken. Reports ok=false when the profile is
+// absent or has neither.
 func profileWithToken(cfg *Config, name string) (Profile, bool, error) {
 	p, exists := cfg.Profiles[name]
 	if !exists || p.AuthID == "" {
@@ -312,7 +390,10 @@ func profileWithToken(cfg *Config, name string) (Profile, bool, error) {
 	}
 	// A token in config.toml (legacy, or the fallback when no OS keychain is
 	// available) wins; otherwise pull it from the keychain where login stores it.
-	if p.AuthToken == "" {
+	// A profile that names a sign-in has no key to look for, so the keychain is
+	// not asked: a machine without one (headless Linux, a container) still runs
+	// it, and a key left behind there is never sent.
+	if p.AuthToken == "" && p.SessionServer == "" {
 		tok, err := GetToken(name)
 		if err != nil {
 			// A real keychain failure (locked / access denied) — not a plain
@@ -322,7 +403,7 @@ func profileWithToken(cfg *Config, name string) (Profile, bool, error) {
 		}
 		p.AuthToken = tok
 	}
-	if p.AuthToken == "" {
+	if p.AuthToken == "" && p.SessionServer == "" {
 		return Profile{}, false, nil
 	}
 	return p, true, nil
