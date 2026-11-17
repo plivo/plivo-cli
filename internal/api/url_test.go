@@ -164,26 +164,3 @@ func TestBuddyURL_routing(t *testing.T) {
 		})
 	}
 }
-
-func TestIsScopedToken(t *testing.T) {
-	cases := []struct {
-		token string
-		want  bool
-	}{
-		{"stk_abc123", true},
-		{"stk_", true},
-		{"stk", false},
-		{"", false},
-		{"abc", false},
-		{"Stk_abc", false}, // case-sensitive prefix per HasPrefix
-		{"prefix-stk_abc", false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.token, func(t *testing.T) {
-			c := &Client{AuthToken: tc.token}
-			if got := c.IsScopedToken(); got != tc.want {
-				t.Errorf("IsScopedToken(%q) = %v, want %v", tc.token, got, tc.want)
-			}
-		})
-	}
-}

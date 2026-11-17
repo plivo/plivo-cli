@@ -89,7 +89,7 @@ After `plivo login`, `plivo upgrade` and `plivo skill install`, the CLI draws th
 Wire up a voice agent in a few minutes:
 
 ```bash
-# 1. Authenticate — saves a profile per org in ~/.plivo/config.toml, token in the OS keychain
+# 1. Authenticate — saves a profile per org in ~/.plivo/config.toml, and a 30-day sign-in in the OS keychain (no account key is stored)
 plivo login
 
 # 2. Confirm your account and see your numbers
@@ -131,6 +131,19 @@ Tokens stream as they arrive; long voice-debug runs (2–5 min) print live statu
 `plivo login` is the only way to authenticate. There is no environment
 variable or flag that accepts a raw `auth_id` / `auth_token`, so a headless
 machine needs a profile that was logged in on it already.
+
+A login stores no account key. Commands run on a 30-day sign-in, sent as a
+Bearer token to the server that issued it and nowhere else, so a headless
+machine or CI job must log in again on that machine every 30 days. Once it
+runs out every profile that uses it fails with `AUTH_EXPIRED` until the next
+`plivo login`. A profile saved by an earlier version still holds its key and
+keeps using it, until `plivo login` or `plivo org use` lands on that profile
+and removes the key. Profiles that run on the sign-in differ in two ways:
+`voice streams forward` refuses with `RAW_KEY_REQUIRED` (pass
+`--insecure-skip-signature` only if you accept that anyone with the tunnel URL
+can drive your handler), and `voice streams test`, `simulate` and `readiness`
+send unsigned requests. The sign-in is accepted by the global API only, not by
+a regional base. `plivo auth list` shows which credential each profile uses.
 
 ## Output
 

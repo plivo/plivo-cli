@@ -306,6 +306,11 @@ func getClient() (*api.Client, string, error) {
 	credAuthID = p.AuthID
 	c := api.New(p.AuthID, p.AuthToken, timeoutFlag)
 	c.BaseURL = base
+	if p.AuthToken == "" { // no key: the profile runs on the 30-day sign-in
+		if err := runOnSession(c, p, name); err != nil {
+			return nil, "", err
+		}
+	}
 	c.AdminBaseURL = adminServer
 	c.Email = p.Email
 	c.Region = p.Region

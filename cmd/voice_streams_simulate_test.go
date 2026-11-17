@@ -235,3 +235,19 @@ func TestPlivoHosted(t *testing.T) {
 		}
 	}
 }
+
+// On a profile with no key the answer URL request goes unsigned, with a warning.
+func TestVoiceStreamsSimulate_profileOnTheSignInGoesUnsigned(t *testing.T) {
+	profileOn(t, "session_server = \"https://gateway.example.test\"\n")
+	var signature string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		signature = r.Header.Get(plivosig.HeaderSignature)
+		w.Header().Set("Content-Type", "text/xml")
+		_, _ = w.Write([]byte(`<Response><Stream bidirectional="true" keepCallAlive="true" contentType="audio/x-mulaw;rate=8000">wss://agent.example.com/ws</Stream></Response>`))
+	}))
+	t.Cleanup(srv.Close)
+	res, ce := simulateJSON(t, "--answer-url", srv.URL, "--xml-only")
+	if ce != nil || res.Signed || signature != "" || statusOf(res.Checks, "signature") != "warn" {
+		t.Errorf("err %v, signed %v, signature %q, checks %+v; want unsigned with a signature warning", ce, res.Signed, signature, res.Checks)
+	}
+}

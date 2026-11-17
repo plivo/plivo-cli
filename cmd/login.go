@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/plivo/plivo-cli/internal/config"
@@ -21,27 +22,41 @@ var (
 // handshake against Plivo, and saves the resulting credentials.
 var loginCmd = &cobra.Command{
 	Use:   "login",
-	Short: "Log in to Plivo (browser-based; saves credentials securely to the OS keychain)",
-	Long: `Log in to Plivo via the default browser and save credentials for
+	Short: "Log in to Plivo (browser-based; keeps a 30-day sign-in in the OS keychain, no account key)",
+	Long: `Log in to Plivo via the default browser and save a profile for
 subsequent commands.
 
 The flow:
   1. The CLI opens your default browser to the Plivo Console.
   2. You sign in (the password never touches the CLI).
   3. The Console hands the CLI a short-lived authorization code which is
-     exchanged for your account's auth_id and auth_token over a local
-     loopback listener (PKCE — the token leaves the browser only over
-     this transient pipe).
-  4. The auth_token is stored in your OS keychain (macOS Keychain,
-     Windows Credential Manager, Linux Secret Service). The CLI falls
-     back to writing it inline in ~/.plivo/config.toml (chmod 0600) only
-     when no keychain is available.
+     exchanged for a 30-day sign-in over a local loopback listener (PKCE:
+     the sign-in leaves the browser only over this transient pipe).
+  4. The sign-in is stored in your OS keychain (macOS Keychain, Windows
+     Credential Manager, Linux Secret Service). The CLI falls back to
+     writing it inline in ~/.plivo/config.toml (chmod 0600) only when no
+     keychain is available.
+
+No account key (auth_token) is stored: commands run on the sign-in, which
+the CLI sends only to the server that issued it. It lasts 30 days, then
+every profile that runs on it stops until you run ` + "`plivo login`" + ` again. That
+includes scripts and CI: they must log in again on that machine every 30
+days, as the CLI has no environment variable, flag or paste route for a key.
 
 Multiple organizations:
-  Logging in again for a different org saves a second profile (named
-  after that org) instead of overwriting the first. Run ` + "`plivo auth list`" + `
-  to see every saved profile, and ` + "`plivo auth use <name>`" + ` to switch. Pass
-  -n/--name to choose the profile name yourself.
+  If you belong to several organizations, the approval page lists them and
+  you tick the ones this machine may use. ` + "`plivo org use <name>`" + ` then switches
+  between them without a browser (see ` + "`plivo org --help`" + `). Logging in again
+  replaces the sign-in, and revokes the old one on the server (best effort;
+  the command says whether it was ended), so it is also how you add or remove
+  organizations: a profile for an organization the new sign-in does not cover
+  is refused. Each login saves a profile named after the organization (pass
+  -n/--name to choose the name); ` + "`plivo auth list`" + ` shows every saved
+  profile and ` + "`plivo auth use <name>`" + ` switches between them.
+
+A profile saved by an earlier version holds a key and keeps using it. Logging
+in as that organization again, or ` + "`plivo org use`" + ` for it, removes its stored key
+after the new sign-in is saved; the other profiles are never touched.
 
 Browser can't reach this terminal:
   When the CLI runs in a container, WSL, a VM or over SSH, the page the
@@ -50,8 +65,9 @@ Browser can't reach this terminal:
   this login's URL.
 
 Headless / CI use:
-  Not supported. Browser OAuth (PKCE) is the only credential source, so
-  scripts and CI need a profile that was logged in on that machine already.
+  Not supported beyond that: browser OAuth (PKCE) is the only credential
+  source, so scripts and CI need a profile that was logged in on that machine
+  within the last 30 days.
 
 Inside a coding agent:
   Run inside Claude Code, Cursor or Codex, a login asks once per machine
@@ -59,26 +75,25 @@ Inside a coding agent:
   current copies are there already. Without a terminal to ask on, and in
   each other agent once it has asked, it prints that agent's install
   command instead, once. --yes installs them without asking, and --quiet
-  skips the offer.
-
-By default the CLI validates credentials with GET /Account/ before
-saving. Pass --no-verify to skip (offline / mock use only).`,
+  skips the offer.`,
 	Example: `  plivo login
   plivo login --name staging`,
 	Args: cobra.NoArgs,
 	RunE: runLogin,
 }
 
-// logoutCmd removes a profile and its keychain entry.
+// logoutCmd removes a profile and any key it holds.
 var logoutCmd = &cobra.Command{
 	Use:   "logout [profile]",
-	Short: "Log out a profile (deletes its entry + removes the auth_token from the OS keychain)",
+	Short: "Log out a profile (deletes its entry + removes any auth_token from the OS keychain)",
 	Long: `Log out a profile. With no argument, logs out the active profile.
 
 Removes the profile row from ~/.plivo/config.toml and best-effort deletes
-the auth_token from the OS keychain. If the active profile was logged
-out, no profile becomes active until you ` + "`plivo auth use <name>`" + ` (or
-log in again).`,
+any auth_token it holds from the OS keychain. The 30-day sign-in the
+other profiles run on goes with the last profile, and is revoked on the
+server then (best effort; the command says whether it was ended). If the
+active profile was logged out, no profile becomes active until you
+` + "`plivo auth use <name>`" + ` (or log in again).`,
 	Example: `  plivo logout              # active profile
   plivo logout staging      # named profile`,
 	Args: cobra.MaximumNArgs(1),
@@ -89,7 +104,7 @@ func init() {
 	loginCmd.Flags().StringVarP(&loginName, "name", "n", "default",
 		"profile name to save under; auto-derived from the org when omitted")
 	loginCmd.Flags().BoolVar(&loginNoVerify, "no-verify", false,
-		"skip the GET /Account/ validation hit (offline / mock use only)")
+		"no effect; accepted so existing scripts keep working")
 
 	rootCmd.AddCommand(loginCmd, logoutCmd)
 }
@@ -116,22 +131,23 @@ func runLogin(cmd *cobra.Command, args []string) error {
 // time. SaveEnv stays on the struct (zero value = prod) so the schema is
 // forward-compatible if env switching returns.
 type loginBundle struct {
-	AuthID    string
-	AuthToken string
-	Email     string // human email — sent as X-Plivo-CLI-Email per request
-	Name      string // display name shown in "Logged in as …"
-	AomUUID   string // account-org-member UUID; ties human identity to this org
-	Region    string // resolved login region (use1 / aps1 / …)
-	SaveEnv   string // non-prod env tag persisted on the profile; empty = prod
-	OrgName   string // org display name; drives profile auto-naming + status lines. May be empty (older auth server).
-	OrgUUID   string // org's stable identifier, when the auth server sends one. Informational only today.
+	AuthID        string
+	Email         string // human email — sent as X-Plivo-CLI-Email per request
+	Name          string // display name shown in "Logged in as …"
+	AomUUID       string // account-org-member UUID; ties human identity to this org
+	Region        string // resolved login region (use1 / aps1 / …)
+	SaveEnv       string // non-prod env tag persisted on the profile; empty = prod
+	OrgName       string // org display name; drives profile auto-naming + status lines. May be empty (older auth server).
+	OrgUUID       string // org's stable identifier, when the auth server sends one. Informational only today.
+	SessionServer string // the server that issued the sign-in the profile runs on
 }
 
-// persistProfile adds the credential bundle to cfg, with the token in the OS
-// keychain, and returns the profile name it picked and whether the token went
-// to the keychain (if not, it is inline in cfg). Shared by every login method
-// (today only browser; kept generic). The caller saves cfg under the config
-// lock, so the name is picked from the config as it is saved.
+// persistProfile adds the profile to cfg, a keyless one: it names the sign-in
+// it runs on and holds no key. It returns the name it picked and where the
+// profile it replaced held a key, which the caller deletes with removeKey once
+// cfg is saved. Shared by every login method (today only browser; kept
+// generic). The caller saves cfg under the config lock, so the name is picked
+// from the config as it is saved.
 //
 // requestedName is the -n/--name flag value; nameExplicit reports whether
 // the caller actually passed -n (cmd.Flags().Changed("name")) rather than
@@ -141,12 +157,12 @@ type loginBundle struct {
 //
 // Never silently overwrites a different org's credentials under a name:
 // re-authorizing the SAME org (same auth_id) updates that profile in
-// place — the normal token-refresh path. Landing on a name that already
+// place — the normal refresh path. Landing on a name that already
 // belongs to a DIFFERENT org either refuses (explicit -n — it's the
 // user's naming choice, so we ask rather than guess) or auto-suffixes
 // (auto-derived name — the CLI picked the name, so it can also pick a
 // free one without bothering the user).
-func persistProfile(cfg *config.Config, requestedName string, nameExplicit bool, b loginBundle) (string, bool, error) {
+func persistProfile(cfg *config.Config, requestedName string, nameExplicit bool, b loginBundle) (string, keyPlace, error) {
 	profileName := requestedName
 	if !nameExplicit {
 		if slug := slugifyOrgName(b.OrgName); slug != "" {
@@ -156,7 +172,7 @@ func persistProfile(cfg *config.Config, requestedName string, nameExplicit bool,
 
 	if existing, ok := cfg.Profiles[profileName]; ok && existing.AuthID != "" && existing.AuthID != b.AuthID {
 		if nameExplicit {
-			return "", false, &clierr.Error{
+			return "", noKey, &clierr.Error{
 				Code:    clierr.CodeResourceConflict,
 				Message: fmt.Sprintf("profile %q already holds different credentials (%s)", profileName, describeProfile(existing)),
 				Hint:    fmt.Sprintf("Log in with a different name (-n/--name), or replace it first with `plivo logout %s`.", profileName),
@@ -166,42 +182,88 @@ func persistProfile(cfg *config.Config, requestedName string, nameExplicit bool,
 		profileName = nextAvailableProfileName(cfg, profileName, b.AuthID)
 	}
 
-	prof := config.Profile{
-		AuthID:  b.AuthID,
-		Email:   b.Email,
-		Name:    b.Name,
-		AomUUID: b.AomUUID,
-		Region:  b.Region,
-		Env:     b.SaveEnv,
-		OrgName: b.OrgName,
-		OrgUUID: b.OrgUUID,
+	had := savedKey(profileName, cfg.Profiles[profileName])
+	cfg.Profiles[profileName] = config.Profile{
+		AuthID:        b.AuthID,
+		Email:         b.Email,
+		Name:          b.Name,
+		AomUUID:       b.AomUUID,
+		Region:        b.Region,
+		Env:           b.SaveEnv,
+		OrgName:       b.OrgName,
+		OrgUUID:       b.OrgUUID,
+		SessionServer: b.SessionServer,
 	}
-	inKeychain := true
-	if err := config.SetToken(profileName, b.AuthToken); err != nil {
-		// Headless Linux without Secret Service, or other keychain miss.
-		// Fall back to storing the token inline in config.toml (file is 0600).
-		prof.AuthToken = b.AuthToken
-		inKeychain = false
-	}
-	cfg.Profiles[profileName] = prof
 	if cfg.Active == "" {
 		cfg.Active = profileName
 	}
-	return profileName, inKeychain, nil
+	return profileName, had, nil
 }
 
-// printProfileSaved confirms which profile a login saved, and where.
-func printProfileSaved(profileName string, inKeychain bool, b loginBundle) {
+// keyPlace is where a profile, as saved, holds a raw key.
+type keyPlace int
+
+const (
+	noKey       keyPlace = iota
+	inlineKey            // in config.toml: the save that converts the profile removes it
+	keychainKey          // in the OS keychain: removeKey deletes it after that save
+)
+
+// savedKey says where profile name, as saved, holds a raw key.
+func savedKey(name string, p config.Profile) keyPlace {
+	if p.AuthToken != "" {
+		return inlineKey
+	}
+	if tok, err := config.GetToken(name); err == nil && tok != "" {
+		return keychainKey
+	}
+	return noKey
+}
+
+// holdsKey reports whether profile name, as saved, holds a raw key: inline in
+// the config or in the OS keychain.
+func holdsKey(name string, p config.Profile) bool { return savedKey(name, p) != noKey }
+
+// keyHolders names the profiles other than except that hold a raw key.
+func keyHolders(cfg *config.Config, except string) []string {
+	var names []string
+	for _, name := range sortedProfileNames(cfg) {
+		if name != except && holdsKey(name, cfg.Profiles[name]) {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// removeKey deletes the key a login or `org use` replaced, once the new profile
+// is saved: the profile now runs on the sign-in. Never before the save, which
+// could still fail and leave the old profile with no key. An inline key went
+// with the save, so the keychain is cleared only in case a stale copy is there,
+// and a machine with no keychain is not reported.
+func removeKey(name string, had keyPlace) {
+	if had == noKey {
+		return
+	}
+	if err := config.DeleteToken(name); err != nil && had == keychainKey {
+		fmt.Fprintf(os.Stderr, "  Profile %q now uses the 30-day sign-in. Its old key is no longer used but could not be removed from the OS keychain (%v): delete the plivo-cli entry %q there.\n", name, err, name)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "  Profile %q: its stored key was removed; it now uses the 30-day sign-in.\n", name)
+}
+
+// printProfileSaved confirms which profile a login saved, and where its sign-in
+// is.
+func printProfileSaved(profileName string, inKeychain bool, expires time.Time, b loginBundle) {
 	cfgPath, _ := config.Path()
 	if printBanner(os.Stderr) {
 		printWelcome(os.Stderr, b.Name, b.Email, b.OrgName)
 	}
 	fmt.Fprintf(os.Stderr, "✓ %s\n", loginConfirmationLine(profileName, b))
-	if inKeychain {
-		fmt.Fprintf(os.Stderr, "  Profile: %s\n  Token:   OS keychain\n", cfgPath)
-	} else {
-		fmt.Fprintf(os.Stderr, "  Profile: %s\n  Token:   inline in config (OS keychain unavailable)\n", cfgPath)
+	where := "OS keychain"
+	if !inKeychain {
+		where = "inline in config (OS keychain unavailable)"
 	}
+	fmt.Fprintf(os.Stderr, "  Profile: %s\n  Sign-in: %s, valid until %s\n", cfgPath, where, expires.Local().Format("2006-01-02"))
 }
 
 // loginConfirmationLine renders the one-line "who/what got saved where"
@@ -287,6 +349,7 @@ func runLogout(cmd *cobra.Command, args []string) error {
 		name = args[0]
 	}
 	noneActive := false
+	var dropped, kept *config.UserSession
 	if err := updateConfig(func(cfg *config.Config) error {
 		if len(args) == 0 {
 			if name = cfg.Active; name == "" {
@@ -301,12 +364,14 @@ func runLogout(cmd *cobra.Command, args []string) error {
 			cfg.Active = ""
 		}
 		noneActive = cfg.Active == "" && len(cfg.Profiles) > 0
+		dropped = dropSessionWithLastProfile(cfg)
+		kept = cfg.User
 		return nil
 	}); err != nil {
 		return err
 	}
 	if dryRunFlag {
-		fmt.Fprintf(os.Stderr, "[dry-run] Would log out profile %q%s\n", name, alsoKeychain(name))
+		fmt.Fprintf(os.Stderr, "[dry-run] Would log out profile %q%s%s\n", name, alsoKeychain(name), alsoSignIn(dropped))
 		return nil
 	}
 
@@ -314,6 +379,8 @@ func runLogout(cmd *cobra.Command, args []string) error {
 	// the profile is gone.
 	_ = config.DeleteToken(name)
 	fmt.Fprintf(os.Stderr, "✓ Logged out profile %q.\n", name)
+	reportDroppedSession(dropped)
+	reportKeptSession(kept)
 	if noneActive {
 		fmt.Fprintln(os.Stderr, "  No active profile — pick one with `plivo auth use <name>`.")
 	}

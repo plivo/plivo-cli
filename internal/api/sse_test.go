@@ -222,16 +222,17 @@ func TestStreamSSE_authHeader_basic(t *testing.T) {
 }
 
 func TestStreamSSE_authHeader_bearer(t *testing.T) {
-	var seenAuth string
+	var seenAuth, seenOrg string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seenAuth = r.Header.Get("Authorization")
+		seenAuth, seenOrg = r.Header.Get("Authorization"), r.Header.Get("X-Plivo-Org")
 		_, _ = w.Write([]byte(""))
 	}))
 	defer srv.Close()
-	c := New("MAabc", "stk_scoped", time.Second)
+	c := New("MAabc", "", time.Second)
+	c.Session = &Session{Token: "stk_scoped", Org: "MAabc", Issuer: Origin(srv.URL), Origins: []string{Origin(srv.URL)}}
 	_ = c.StreamSSE(context.Background(), "GET", srv.URL, nil, func(ev SSEEvent) bool { return true })
-	if seenAuth != "Bearer stk_scoped" {
-		t.Errorf("Authorization = %q, want Bearer stk_scoped", seenAuth)
+	if seenAuth != "Bearer stk_scoped" || seenOrg != "MAabc" {
+		t.Errorf("Authorization = %q, X-Plivo-Org = %q, want Bearer stk_scoped and MAabc", seenAuth, seenOrg)
 	}
 }
 

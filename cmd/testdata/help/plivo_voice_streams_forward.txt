@@ -18,6 +18,13 @@ Force either with --tunnel.
 Nothing is purchased, created, or deleted — the only mutation is one
 field on one app, restored on exit.
 
+Requests on the tunnel are checked against Plivo's signature, which needs the
+account key. A profile on the 30-day sign-in (from `plivo login`) holds no key, so
+forward refuses it with RAW_KEY_REQUIRED, before sending anything. A profile
+that still holds a key from an earlier login works as before.
+--insecure-skip-signature skips the check: pass it only if you accept that
+anyone with the tunnel URL can drive your handler.
+
 Usage:
   plivo voice streams forward [flags]
 

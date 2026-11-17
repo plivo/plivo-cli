@@ -45,9 +45,6 @@ func TestCLITokenEnvelope_unmarshalsResponse(t *testing.T) {
 	if got.Data.PlivoAuthID != "MA_TEST_FIXTURE" {
 		t.Errorf("PlivoAuthID = %q", got.Data.PlivoAuthID)
 	}
-	if got.Data.PlivoAuthToken != "tok-xyz" {
-		t.Errorf("PlivoAuthToken = %q", got.Data.PlivoAuthToken)
-	}
 	if got.Data.AomUUID != "aom-uuid-1" {
 		t.Errorf("AomUUID = %q", got.Data.AomUUID)
 	}
@@ -65,7 +62,7 @@ func TestCLITokenEnvelope_emptyDataYieldsBlankBundle(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"api_id":"x","data":{}}`), &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if got.Data.PlivoAuthID != "" || got.Data.PlivoAuthToken != "" {
+	if got.Data.PlivoAuthID != "" {
 		t.Errorf("expected blank fields on empty data block, got: %+v", got)
 	}
 }
@@ -165,13 +162,16 @@ func TestBuildAuthorizeURL_hasRequiredParams(t *testing.T) {
 		t.Errorf("path = %q", u.Path)
 	}
 	q := u.Query()
-	for _, k := range []string{"cb_port", "state", "code_challenge", "code_challenge_method", "device"} {
+	for _, k := range []string{"cb_port", "state", "code_challenge", "code_challenge_method", "device", "client"} {
 		if q.Get(k) == "" {
 			t.Errorf("missing query param: %s", k)
 		}
 	}
 	if q.Get("code_challenge_method") != "S256" {
 		t.Errorf("code_challenge_method = %q, want S256", q.Get("code_challenge_method"))
+	}
+	if q.Get("client") != "cli" {
+		t.Errorf("client = %q, want cli", q.Get("client"))
 	}
 	if got := q.Get("device"); got != "Mac MacBook-Pro" {
 		t.Errorf("device = %q, want %q", got, "Mac MacBook-Pro")
@@ -399,13 +399,15 @@ func TestRedeemAndPersist_happyPath(t *testing.T) {
 		region   = "us-east-1"
 	)
 
+	// The reply still carries a key, as it does for older clients: it is ignored.
 	mock := newTokenServerMock(t, http.StatusOK, `{
 		"api_id": "req-id-1",
 		"data": {
 			"plivo_auth_id":   "`+authID+`",
 			"plivo_auth_token": "`+token+`",
 			"aom_uuid":         "`+aomUUID+`",
-			"region":           "`+region+`"
+			"region":           "`+region+`",
+			`+signInFields()+`
 		},
 		"errors": null,
 		"message": ""
@@ -457,18 +459,13 @@ func TestRedeemAndPersist_happyPath(t *testing.T) {
 		t.Errorf("cfg.Active = %q, want %q (first profile wins)", cfg.Active, profileName)
 	}
 
-	// 3. The auth_token went into the OS keychain (the mock one), NOT
-	//    inline in config.toml. This is the security promise — losing it
-	//    would silently regress to plaintext-token storage.
-	if prof.AuthToken != "" {
-		t.Errorf("Profile.AuthToken = %q on disk, want empty (token should be in keychain only)", prof.AuthToken)
+	// 3. No key is stored anywhere, inline or in the keychain: the profile
+	//    names the sign-in it runs on, and the sign-in is in the keychain.
+	if got, _ := config.GetToken(profileName); got != "" || prof.AuthToken != "" {
+		t.Errorf("a key was stored: keychain %q, inline %q", got, prof.AuthToken)
 	}
-	got, err := config.GetToken(profileName)
-	if err != nil {
-		t.Fatalf("GetToken: %v", err)
-	}
-	if got != token {
-		t.Errorf("GetToken = %q, want %q", got, token)
+	if tok, _ := config.GetSessionToken(); tok != "stk_fake" || cfg.User == nil || prof.SessionServer != cfg.User.Server || prof.Credential() != config.CredentialSession {
+		t.Errorf("sign-in %q, user %+v, profile %+v: want a keyless profile on the sign-in", tok, cfg.User, prof)
 	}
 }
 
@@ -482,11 +479,11 @@ func TestRedeemAndPersist_derivesProfileNameFromOrg(t *testing.T) {
 		"api_id": "req-id-org",
 		"data": {
 			"plivo_auth_id":    "MA_ACME_FIXTURE",
-			"plivo_auth_token": "fake_token_for_testing",
 			"aom_uuid":         "aom-uuid-9",
 			"region":           "us-east-1",
 			"org_name":         "Acme, Inc.",
-			"org_uuid":         "org-uuid-9"
+			"org_uuid":         "org-uuid-9",
+			`+signInFields()+`
 		},
 		"errors": null,
 		"message": ""
@@ -605,6 +602,23 @@ func TestRedeemAndPersist_4xxWithGlobalError(t *testing.T) {
 	}
 }
 
+// A login the gate refuses with organization_not_allowed (a role without access to
+// API credentials) says the account can't use the CLI
+// with that organization, not the generic "lacks permission", and saves nothing.
+func TestRedeemAndPersist_organizationNotAllowed(t *testing.T) {
+	mock := newTokenServerMock(t, http.StatusForbidden, `{"api_id":"x","errors":{"error":"organization_not_allowed","global_error":"x"}}`)
+	client, profileName := setupBrowserLoginTestEnv(t, mock.srv.URL)
+
+	err := redeemAndPersist(client, "s", "c", "v", profileName, true)
+	var ce *clierr.Error
+	if !errorsAs(err, &ce) || ce.Code != clierr.CodeAuthForbidden || !strings.Contains(ce.Message, "can't use the CLI") || !strings.Contains(ce.Hint, "API credentials") {
+		t.Fatalf("err = %v, want the organization refusal", err)
+	}
+	if cfg, _ := config.Load(); len(cfg.Profiles) != 0 || cfg.User != nil {
+		t.Errorf("refused login saved %+v", cfg)
+	}
+}
+
 // errorsAs is a tiny shim to keep the test file's import surface small
 // (errors.As would otherwise require importing "errors", which collides
 // optically with internal/clierr.Error). Behaviour matches stdlib errors.As
@@ -623,4 +637,50 @@ func errorsAs(err error, target **clierr.Error) bool {
 		err = w.Unwrap()
 	}
 	return false
+}
+
+// signInFields is the 30-day sign-in a login's reply carries.
+func signInFields() string {
+	return `"access_token":"stk_fake","expires_at":"` + time.Now().Add(24*time.Hour).UTC().Format(time.RFC3339) + `"`
+}
+
+// A login whose reply carries no usable sign-in saves nothing, and never falls
+// back to the key the reply may hold.
+func TestRedeemAndPersist_noUsableSignInSavesNothing(t *testing.T) {
+	future := time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)
+	past := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
+	for _, c := range []struct{ name, extra string }{
+		{"none returned", `"region":"r"`},
+		{"not a bearer token", `"access_token":"abc","expires_at":"` + future + `"`},
+		{"no expiry", `"access_token":"stk_fake"`},
+		{"already expired", `"access_token":"stk_fake","expires_at":"` + past + `"`},
+		{"expiry without a zone", `"access_token":"stk_fake","expires_at":"2099-12-01T10:00:00.123456"`},
+		{"expiry as a number", `"access_token":"stk_fake","expires_at":4070908800`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			mock := newTokenServerMock(t, http.StatusOK, `{"data":{"plivo_auth_id":"MA_FAKE_ID","plivo_auth_token":"fake_token","org_name":"Acme",`+c.extra+`}}`)
+			client, name := setupBrowserLoginTestEnv(t, mock.srv.URL)
+			var ce *clierr.Error
+			err := redeemAndPersist(client, "s", "c", "v", name, true)
+			if !errorsAs(err, &ce) || ce.Code != clierr.CodeUpstreamError || ce.ExitCode() != 3 {
+				t.Fatalf("err = %v, want UPSTREAM_ERROR (exit 3)", err)
+			}
+			cfg, _ := config.Load()
+			key, _ := config.GetToken(name)
+			tok, _ := config.GetSessionToken()
+			if len(cfg.Profiles) != 0 || cfg.User != nil || key != "" || tok != "" {
+				t.Errorf("saved something: profiles %v, user %v, key %q, sign-in %q", cfg.Profiles, cfg.User, key, tok)
+			}
+		})
+	}
+}
+
+// A reply the CLI cannot decode must not be echoed back: it can hold credentials.
+func TestServiceReplyThatDoesNotDecodeIsNotEchoed(t *testing.T) {
+	mock := newTokenServerMock(t, http.StatusOK, `{"data":{"plivo_auth_id":"MA_FAKE_ID","plivo_auth_token":"SECRET_ORG_TOKEN","aom_uuid":12345}}`)
+	client, name := setupBrowserLoginTestEnv(t, mock.srv.URL)
+	err := redeemAndPersist(client, "s", "c", "v", name, true)
+	if err == nil || strings.Contains(err.Error(), "SECRET_ORG_TOKEN") {
+		t.Errorf("err = %v, want a failure that does not quote the reply", err)
+	}
 }

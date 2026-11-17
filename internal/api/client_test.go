@@ -46,6 +46,7 @@ type captured struct {
 	path        string
 	query       url.Values
 	authHeader  string
+	org         string // X-Plivo-Org
 	contentType string
 	accept      string
 	userAgent   string
@@ -62,6 +63,7 @@ func newCapturingServer(t *testing.T, status int, respBody string, extraHeaders 
 		c.path = r.URL.Path
 		c.query = r.URL.Query()
 		c.authHeader = r.Header.Get("Authorization")
+		c.org = r.Header.Get("X-Plivo-Org")
 		c.contentType = r.Header.Get("Content-Type")
 		c.accept = r.Header.Get("Accept")
 		c.userAgent = r.Header.Get("User-Agent")
@@ -94,17 +96,33 @@ func TestDo_basicAuth_onRegularToken(t *testing.T) {
 	}
 }
 
-func TestDo_bearerAuth_onScopedToken(t *testing.T) {
+// A raw key is Basic, even one that looks like a sign-in token; the sign-in is
+// Bearer beside X-Plivo-Org, never beside Basic, and only to its origins.
+func TestDo_credentialSchemes(t *testing.T) {
 	srv, cap := newCapturingServer(t, 200, `{}`, nil)
-	c := New("MAabc", "stk_scoped123", time.Second)
-	c.BaseURL = srv.URL
-
-	_, err := c.Do("GET", srv.URL+"/v1/agent/token", nil, nil, nil)
-	if err != nil {
-		t.Fatal(err)
+	session := func(token string, origins ...string) *Client {
+		c := New("MAabc", "", time.Second)
+		c.Session = &Session{Token: token, Org: "MAabc", Issuer: Origin(srv.URL), Origins: origins}
+		return c
 	}
-	if cap.authHeader != "Bearer stk_scoped123" {
-		t.Errorf("Authorization = %q, want Bearer stk_scoped123", cap.authHeader)
+	for _, tc := range []struct {
+		name     string
+		c        *Client
+		wantAuth string
+		wantOrg  string
+		sent     bool
+	}{
+		{"raw key", New("MAabc", "stk_looks_like_a_session", time.Second), "Basic ", "", true},
+		{"sign-in", session("stk_session", Origin(srv.URL)), "Bearer stk_session", "MAabc", true},
+		{"sign-in to another origin", session("stk_session", "https://issuer.example.test"), "", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			*cap = captured{}
+			_, err := tc.c.Do("GET", srv.URL+"/v1/x", nil, nil, nil)
+			if (err == nil) != tc.sent || !strings.HasPrefix(cap.authHeader, tc.wantAuth) || cap.org != tc.wantOrg {
+				t.Errorf("err %v, Authorization %q, X-Plivo-Org %q; want %q and %q", err, cap.authHeader, cap.org, tc.wantAuth, tc.wantOrg)
+			}
+		})
 	}
 }
 

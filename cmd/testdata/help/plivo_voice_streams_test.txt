@@ -8,11 +8,13 @@ audio streams and for up to --duration seconds after, and times the first
 playAudio from the first frame sent (first_response_ms). --expect-audio
 does the same and exits 1 when no playAudio comes back.
 
-When a profile is logged in, the upgrade is signed as Plivo signs a
-stream: X-Plivo-Signature-V3, keyed with the profile's auth token over the
-http:// form of --to without its query, so an endpoint that checks
-Plivo's signature lets it in. --profile signs for another account. Logged
-out, the upgrade goes unsigned; -o json says which in signed.
+When a profile that holds an account key is logged in, the upgrade is signed
+as Plivo signs a stream: X-Plivo-Signature-V3, keyed with the profile's auth
+token over the http:// form of --to without its query, so an endpoint that
+checks Plivo's signature lets it in. --profile signs for another account.
+Logged out, or on a profile from a browser login (the 30-day sign-in, which
+holds no key), the upgrade goes unsigned, with a warning; -o json says which
+in signed.
 
 No call is placed: this checks that your handler accepts the Plivo stream
 shape before you wire it up to a real number.

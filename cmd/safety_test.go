@@ -480,8 +480,6 @@ func TestOutputFormat_acceptsSupportedValues(t *testing.T) {
 	}
 }
 
-// ─── Sanity: api.Client.IsScopedToken consistency under destructive flow ────
-
 // TestCompliance_dryRunNoNetwork exercises the create (multipart) and link
 // (JSON) command paths end-to-end in dry-run: no network, no file opened, and
 // the compliance URL is printed.
@@ -501,23 +499,6 @@ func TestCompliance_dryRunNoNetwork(t *testing.T) {
 	err, _, _ = execCmd(t, "numbers", "compliance", "link", "--link", "+14155551234=CMP1", "--dry-run")
 	if err != nil {
 		t.Errorf("compliance link --dry-run: unexpected err: %v", err)
-	}
-}
-
-func TestNew_clientPicksAuthMode(t *testing.T) {
-	// Sanity check that the helper api.New respects the token shape so the
-	// authToken commands ultimately send the right auth header.
-	c := api.New("MA", "stk_xyz", time.Second)
-	if !c.IsScopedToken() {
-		t.Error("stk_ token should be detected as scoped")
-	}
-	c = api.New("MA", "regular", time.Second)
-	if c.IsScopedToken() {
-		t.Error("regular token should NOT be detected as scoped")
-	}
-	// Cross-check the clierr surface tests still see the same code constant.
-	if clierr.CodeDestructiveRefused == "" {
-		t.Error("DESTRUCTIVE_REFUSED code constant unexpectedly empty")
 	}
 }
 

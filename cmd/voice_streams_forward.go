@@ -75,7 +75,14 @@ install and no account. Uses ngrok instead when it is already on PATH
 Force either with --tunnel.
 
 Nothing is purchased, created, or deleted — the only mutation is one
-field on one app, restored on exit.`,
+field on one app, restored on exit.
+
+Requests on the tunnel are checked against Plivo's signature, which needs the
+account key. A profile on the 30-day sign-in (from ` + "`plivo login`" + `) holds no key, so
+forward refuses it with RAW_KEY_REQUIRED, before sending anything. A profile
+that still holds a key from an earlier login works as before.
+--insecure-skip-signature skips the check: pass it only if you accept that
+anyone with the tunnel URL can drive your handler.`,
 	Example: `  plivo voice streams forward \
     --number +14155550142 \
     --app abc-uuid-def-456 \
@@ -133,6 +140,16 @@ func runVoiceStreamsForward(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 		client = c
+	}
+	// The tunnel verifies Plivo's signature with the account key, which a profile
+	// on the 30-day sign-in does not hold. Refused before anything is sent or saved.
+	if client.AuthToken == "" && !streamsFwdSkipSignature {
+		return &clierr.Error{
+			Code:    clierr.CodeRawKeyRequired,
+			Message: "this profile holds no account key, so the tunnel cannot verify Plivo's signature on the requests it forwards",
+			Hint: "Nothing was sent or changed. --insecure-skip-signature forwards them without the check, so anyone with the tunnel URL can drive your handler: " +
+				"never pass it without asking the human first. A profile that holds a key from an earlier login verifies signatures.",
+		}
 	}
 
 	// --- Read current app + save the answer_url ---

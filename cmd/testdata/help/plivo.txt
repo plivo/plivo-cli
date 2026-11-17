@@ -26,12 +26,13 @@ Available Commands:
   docs        Read the Plivo docs from the terminal
   feedback    Share feedback about the Plivo CLI (rating + optional comment)
   help        Help about any command
-  login       Log in to Plivo (browser-based; saves credentials securely to the OS keychain)
-  logout      Log out a profile (deletes its entry + removes the auth_token from the OS keychain)
+  login       Log in to Plivo (browser-based; keeps a 30-day sign-in in the OS keychain, no account key)
+  logout      Log out a profile (deletes its entry + removes any auth_token from the OS keychain)
   lookup      Carrier + format lookup for an E.164 number (lookup.plivo.com)
   messaging   Send messages (SMS / MMS / WhatsApp) — channel-split surface
   numbers     Manage account phone numbers
   open        Open the console or docs page for a call, the call logs, or the docs
+  org         List and switch between your organizations (list / use / current)
   sip         SIP Trunking — trunks, CDRs, access control
   skill       Manage the plivo-cli agent skill
   support     List your past support escalations (filed via `plivo ask`)

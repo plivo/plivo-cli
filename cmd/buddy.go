@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -169,6 +168,9 @@ func runAsk(cmd *cobra.Command, args []string) error {
 	if err := applyBuddyURL(client); err != nil {
 		return err
 	}
+	if err := pinToIssuer(client); err != nil {
+		return err
+	}
 	url := client.BuddyURL("/v1/aiassist/buddy-ext/chat")
 
 	if askInteractive {
@@ -248,9 +250,8 @@ func runAsk(cmd *cobra.Command, args []string) error {
 	if sseErr != nil {
 		// An HTTP error status from the server is not a connectivity problem —
 		// classify by status; only genuine transport failures are network errors.
-		var httpErr *api.SSEHTTPError
-		if errors.As(sseErr, &httpErr) {
-			return clierr.FromHTTP(httpErr.StatusCode, "", httpErr.Body)
+		if ce := api.SSEFailure(sseErr); ce != nil {
+			return ce
 		}
 		return clierr.NetworkError("buddy", sseErr)
 	}
@@ -438,12 +439,11 @@ func (s *buddySession) sendTurn(message string) (answer string, ok bool) {
 		fmt.Fprintf(os.Stderr, "buddy error: %s\n", askTimedOut(s.limit).Message)
 		return "", false
 	case sseErr != nil:
-		var httpErr *api.SSEHTTPError
-		if errors.As(sseErr, &httpErr) {
-			fmt.Fprintf(os.Stderr, "buddy error: %s\n", clierr.FromHTTP(httpErr.StatusCode, "", httpErr.Body).Error())
-		} else {
-			fmt.Fprintf(os.Stderr, "buddy error: %s\n", clierr.NetworkError("buddy", sseErr).Error())
+		ce := api.SSEFailure(sseErr)
+		if ce == nil {
+			ce = clierr.NetworkError("buddy", sseErr)
 		}
+		fmt.Fprintf(os.Stderr, "buddy error: %s\n", ce.Error())
 		return "", false
 	case r.errorSeen:
 		// the renderer already printed "buddy error: ..." for the error event.
@@ -1087,9 +1087,10 @@ func runSupport(cmd *cobra.Command, args []string) error {
 	}
 	// "Your past escalations" needs a human identity to scope by, and only a
 	// browser `plivo login` populates one. Older manually-entered profiles
-	// can't be attributed to a person.
+	// can't be attributed to a person. A profile on the sign-in needs none: the
+	// server takes the person from the sign-in.
 	// --dry-run sends nothing, so it still previews the request.
-	if client.AomUUID == "" && !dryRunFlag {
+	if client.AomUUID == "" && client.Session == nil && !dryRunFlag {
 		return &clierr.Error{
 			Code:    clierr.CodeAuthForbidden,
 			Message: "support needs a browser-login profile to scope escalations to you",
@@ -1097,6 +1098,9 @@ func runSupport(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if err := applyBuddyURL(client); err != nil {
+		return err
+	}
+	if err := pinToIssuer(client); err != nil {
 		return err
 	}
 
