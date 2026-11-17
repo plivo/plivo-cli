@@ -5,6 +5,46 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-11-17
+
+### Added
+
+- `plivo org list`, `plivo org use <organization>` and `plivo org current`
+  switch between the organizations you approved in one login, with no new
+  login. `auth list` and `org current` show a `credential` field.
+- `plivo auth use` accepts an organization name or an auth ID, and `auth
+  list` shows profiles in name order.
+- A Plivo logo banner after `login`, `upgrade` and `skill install`. It prints
+  only on an interactive terminal at least 56 columns wide, never in CI, with
+  `--quiet`, or with `PLIVO_NO_BANNER` set.
+
+### Changed
+
+- `plivo login` and `plivo org use` no longer store an account key on your
+  machine. The profile runs on a 30-day sign-in through the Plivo gateway, so
+  a CI runner, container or coding agent must log in again at least every 30
+  days. There is no environment variable, flag or paste route for a raw key.
+- A `login` or `org use` that lands on a profile that holds a key converts
+  it: the key is deleted after the save and one line says so.
+- `org use` makes one request as the organization before it removes a key, so
+  a refusal (a role that cannot view API credentials, or required single
+  sign-on) leaves the profile and its key as they were.
+- `plivo logout` of the last profile, and a fresh `plivo login`, end the
+  previous sign-in on Plivo's side (best effort) and say whether it was ended.
+  Logging out one of several profiles leaves the sign-in the others use.
+- A member whose role cannot view API credentials can no longer sign in to or
+  select that organization (`AUTH_FORBIDDEN`).
+- `voice streams forward` on a profile with no key refuses with
+  `RAW_KEY_REQUIRED` before any request, unless `--insecure-skip-signature`
+  is passed. `voice streams test`, `simulate` and `readiness` send unsigned
+  requests.
+- On a keyless profile, the regional `agents` generate command, the agent
+  token commands and regional API bases are not available yet. Each refuses
+  with an error code and a hint.
+- Downgrading: an older CLI treats a keyless profile as logged out, and when it
+  rewrites `config.toml` it drops `[user]`, which orphans the keychain
+  sign-in. Log in again after a downgrade.
+
 ## [1.3.3] - 2026-11-12
 
 ### Added
