@@ -7,7 +7,7 @@ Usage:
 Available Commands:
   list        List configured profiles
   remove      Remove a profile (use `plivo logout` for the active profile)
-  use         Set the active profile
+  use         Set the active profile (by profile name, organization name or auth ID)
   whoami      Verify credentials and print active account
 
 Flags:

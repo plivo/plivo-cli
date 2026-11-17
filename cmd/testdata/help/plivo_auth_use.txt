@@ -1,7 +1,7 @@
-Set the active profile
+Set the active profile (by profile name, organization name or auth ID)
 
 Usage:
-  plivo auth use <profile> [flags]
+  plivo auth use <profile|org> [flags]
 
 Flags:
   -h, --help   help for use

@@ -107,3 +107,37 @@ func TestLocalChanges_dryRunChangesNothing(t *testing.T) {
 		t.Errorf("dry runs say %q for a and %q for b; want the keychain named for a alone", withToken, without)
 	}
 }
+
+// auth use takes a profile name, an organization name or an auth ID, and never
+// guesses between two matches.
+func TestAuthUse_byOrgNameOrAuthID(t *testing.T) {
+	home := setEmptyHome(t)
+	writeProfile(t, home, "active = \"a\"\n\n[profiles.a]\nauth_id = \"CIFAKEA\"\norg_name = \"Acme Inc\"\n\n"+
+		"[profiles.b]\nauth_id = \"CIFAKEB\"\norg_name = \"Beta Ltd\"\n\n[profiles.b2]\nauth_id = \"CIFAKEC\"\norg_name = \"Beta Ltd\"\n")
+	for _, c := range []struct{ arg, want string }{{"b", "b"}, {"CIFAKEA", "a"}, {"acme inc", "a"}} {
+		if err, _, _ := execCmd(t, "auth", "use", c.arg); err != nil {
+			t.Fatalf("auth use %q: %v", c.arg, err)
+		}
+		if cfg, _ := config.Load(); cfg.Active != c.want {
+			t.Errorf("auth use %q: active = %q, want %q", c.arg, cfg.Active, c.want)
+		}
+	}
+	err, _, _ := execCmd(t, "auth", "use", "Beta Ltd")
+	if err == nil || !strings.Contains(err.Error(), "b2") {
+		t.Errorf("auth use on two matching orgs: err = %v, want both candidates named", err)
+	}
+	if cfg, _ := config.Load(); cfg.Active != "a" {
+		t.Errorf("an ambiguous auth use changed the active profile to %q", cfg.Active)
+	}
+}
+
+func TestAuthList_isSortedByName(t *testing.T) {
+	home := setEmptyHome(t)
+	writeProfile(t, home, "active = \"m\"\n\n[profiles.z]\nauth_id = \"CIFAKEZ\"\n\n[profiles.m]\nauth_id = \"CIFAKEM\"\n\n[profiles.a]\nauth_id = \"CIFAKEA\"\n")
+	for i := 0; i < 5; i++ {
+		_, stdout, _ := execCmd(t, "-o", "table", "auth", "list")
+		if a, m, z := strings.Index(stdout, "CIFAKEA"), strings.Index(stdout, "CIFAKEM"), strings.Index(stdout, "CIFAKEZ"); !(a < m && m < z) {
+			t.Fatalf("run %d: rows are not in name order:\n%s", i, stdout)
+		}
+	}
+}
