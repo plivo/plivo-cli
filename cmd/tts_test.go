@@ -134,6 +134,7 @@ func TestTTSSpeak_refusedBeforeAnyRequest(t *testing.T) {
 		{"--voice v --text hi --yes --pace 2", clierr.CodeBadFlag},
 		{"--voice v --text hi --yes --volume 0.1", clierr.CodeBadFlag},
 		{"--voice v --text hi --yes --language xx", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --language en", clierr.CodeBadFlag},
 		{"--voice v --text hi --yes --format ogg", clierr.CodeBadFlag},
 		{"--voice v --text hi --yes --bitrate 64000", clierr.CodeBadFlag},
 		{"--voice v --text caf\xe9 --yes", clierr.CodeBadInput},
@@ -278,5 +279,51 @@ func TestTTSUsage_namesBatchAndRealtime(t *testing.T) {
 	batch, realtime := strings.Index(r.stdout, "batch"), strings.Index(r.stdout, "realtime")
 	if r.err != nil || batch < 0 || realtime < batch || !strings.Contains(r.stdout, "12011") || !strings.Contains(r.stdout, "39948") || !strings.Contains(r.stdout, "2760.9") {
 		t.Errorf("err %v\n%s", r.err, r.stdout)
+	}
+}
+
+func TestTTSSpeak_regionalEnglishCodes(t *testing.T) {
+	var accept string
+	srv := ttsAudioServer(t, &accept)
+	out := filepath.Join(t.TempDir(), "a.wav")
+	for in, want := range map[string]string{"en-US": "en-US", "en-gb": "en-GB", "EN-IN": "en-IN", "en-AU": "en-AU"} {
+		r := ttsRun(t, srv, "", "speak", "--voice", "v", "--text", "hi", "--out", out, "--yes", "--language", in)
+		if r.err != nil || len(r.reqs) == 0 || r.reqs[len(r.reqs)-1].Body["language"] != want {
+			t.Errorf("--language %s: err %v, requests %v; want language %s sent", in, r.err, r.reqs, want)
+		}
+	}
+	r := ttsRun(t, srv, "", "speak", "--voice", "v", "--text", "hi", "--out", out, "--yes", "--language", "en")
+	var ce *clierr.Error
+	if !errors.As(r.err, &ce) || !strings.Contains(ce.Hint, "en-US") {
+		t.Errorf("bare en: err %v; want a hint naming the regional codes", r.err)
+	}
+}
+
+func TestTTSVoices_englishFamilyAndLexicon(t *testing.T) {
+	srv := newQAServer(t, map[string]string{"GET TTS/Voices/": `{"objects": [
+ {"voice_id": "a", "languages": ["en-US"], "lexicon": true}, {"voice_id": "b", "languages": ["en-GB"]}, {"voice_id": "c", "languages": ["hi"]}]}`})
+	r := ttsRun(t, srv, "", "voices", "--language", "en", "-o", "table")
+	if r.err != nil || !strings.Contains(r.stdout, "a ") || !strings.Contains(r.stdout, "b ") || strings.Contains(r.stdout, "c ") {
+		t.Errorf("--language en: err %v\n%s", r.err, r.stdout)
+	}
+	r = ttsRun(t, srv, "", "voices", "--language", "en-GB", "-o", "json")
+	if r.err != nil || !strings.Contains(r.stdout, `"voice_id": "b"`) || strings.Contains(r.stdout, `"voice_id": "a"`) || !strings.Contains(r.stdout, `"lexicon": false`) {
+		t.Errorf("--language en-GB: err %v\n%s", r.err, r.stdout)
+	}
+}
+
+func TestTTSVoice_showsOne(t *testing.T) {
+	srv := newQAServer(t, map[string]string{"GET TTS/Voices/v1/": `{"api_id": "x1", "voice_id": "v1", "name": "Hailey", "gender": "female",
+ "languages": ["en-US"], "accent_type": "American", "description": "Warm", "lexicon": true, "sample_url": "https://example.test/h.mp3"}`})
+	r := ttsRun(t, srv, "", "voice", "v1", "-o", "table")
+	if r.err != nil || len(r.reqs) != 1 || r.reqs[0].String() != "GET TTS/Voices/v1/" || !strings.Contains(r.stdout, "Hailey") ||
+		!strings.Contains(r.stdout, "en-US") || !strings.Contains(r.stdout, "true") {
+		t.Errorf("table: err %v, requests %v\n%s", r.err, r.reqs, r.stdout)
+	}
+	if r = ttsRun(t, srv, "", "voice", "v1", "-o", "json"); r.err != nil || !strings.Contains(r.stdout, `"api_id": "x1"`) || !strings.Contains(r.stdout, `"lexicon": true`) {
+		t.Errorf("json: err %v\n%s", r.err, r.stdout)
+	}
+	if r = ttsRun(t, srv, "", "voice"); r.err == nil || len(r.reqs) != 0 {
+		t.Errorf("no voice_id: err %v, requests %v; want an error and no request", r.err, r.reqs)
 	}
 }

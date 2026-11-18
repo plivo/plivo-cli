@@ -1,18 +1,20 @@
 List the voices you can speak with: Plivo's public voices and any your
 organization owns. Each voice speaks one language. --language and --gender
-filter the list here; the API has no filters.
+filter the list here; the API has no filters. --language en lists every English
+voice; en-US, en-GB, en-IN and en-AU list one accent.
 
 Usage:
   plivo tts voices [flags]
 
 Examples:
   plivo tts voices --language hi
-  plivo tts voices --gender female -o json
+  plivo tts voices --language en-US --gender female
+  plivo tts voice 6uWzc4xFj31t4jNJUaED
 
 Flags:
       --gender string     only voices of this gender (male or female)
   -h, --help              help for voices
-      --language string   only voices for this language code (en, hi, bn, ta, te, mr, gu, kn)
+      --language string   only voices for this language code (en, en-US, en-GB, en-IN, en-AU, hi, bn, ta, te, mr, gu, kn)
 
 Global Flags:
       --dry-run            preview requests and local changes without sending or writing anything

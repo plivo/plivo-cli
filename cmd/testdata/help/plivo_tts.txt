@@ -8,6 +8,7 @@ Available Commands:
   lexicons    Manage pronunciation lexicons
   speak       Turn text into an audio file (billed per character)
   usage       Show characters and audio generated, batch and realtime
+  voice       Show one voice
   voices      List the voices you can speak with
 
 Flags:

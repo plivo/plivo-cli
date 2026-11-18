@@ -1104,6 +1104,21 @@ type TTSVoice struct {
 	Languages   []string `json:"languages"`
 	AccentType  string   `json:"accent_type"`
 	Description string   `json:"description,omitempty"`
+	Lexicon     bool     `json:"lexicon"`
+	SampleURL   string   `json:"sample_url,omitempty"`
+}
+
+// TTSVoiceDetail is one voice from /Account/{id}/TTS/Voices/{voice_id}/.
+type TTSVoiceDetail struct {
+	RawBody
+	APIID       string   `json:"api_id"`
+	VoiceID     string   `json:"voice_id"`
+	Name        string   `json:"name"`
+	Gender      string   `json:"gender"`
+	Languages   []string `json:"languages"`
+	AccentType  string   `json:"accent_type"`
+	Description string   `json:"description,omitempty"`
+	Lexicon     bool     `json:"lexicon"`
 	SampleURL   string   `json:"sample_url,omitempty"`
 }
 

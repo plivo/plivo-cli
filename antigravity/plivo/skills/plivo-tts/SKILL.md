@@ -57,7 +57,7 @@ Check: `cash_credits` in the step 1 output is above 0. If it is not, send the us
 
 Ask in plain text what the speech should say (or which file holds it). Then ask, in one structured call:
 
-- Language: infer it from the text, and ask only if it is unclear. Ask "Which language is the text in?" with English, Hindi and Detect from the text (recommended); the tool's own free-text Other covers Bengali, Tamil, Telugu, Marathi, Gujarati and Kannada. Codes: `en`, `hi`, `bn`, `ta`, `te`, `mr`, `gu`, `kn`. Each voice speaks one language, so this decides the voice list. For Detect from the text, leave `--language` out (it defaults to `auto`) and use the language you inferred to filter the voices in step 4.
+- Language: infer it from the text, and ask only if it is unclear. Ask "Which language is the text in?" with English, Hindi and Detect from the text (recommended); the tool's own free-text Other covers Bengali, Tamil, Telugu, Marathi, Gujarati and Kannada. Codes: `en-US`, `en-GB`, `en-IN`, `en-AU`, `hi`, `bn`, `ta`, `te`, `mr`, `gu`, `kn`. English has four regional codes and there is no plain `en`: for English, the voice's accent decides which one it speaks. Each voice speaks one language, so this decides the voice list. For Detect from the text, leave `--language` out (it defaults to `auto`) and use the language you inferred to filter the voices in step 4.
 - Use: "Where will the audio play?" Play on a call with Voice XML, Stream to a voice agent on Plivo, A file or web.
 
 Each answer to Use is one row, and sets the format:
@@ -79,7 +79,7 @@ plivo tts voices --language hi -o json     # add --gender male|female to narrow 
 plivo tts voices -o json                   # every voice
 ```
 
-Each voice has `voice_id`, `name`, `gender`, `languages`, `accent_type`, `description` and, when Plivo has set one, `sample_url`, a link to a short sample (the CLI leaves it out while it is empty). When the user wants to hear voices before choosing, show the `sample_url` of each option that has one, or point them to Voice Studio in the console (https://cx.plivo.com/voice-studio/explore). The list holds Plivo's public voices and any voices the organization owns, so take it from the CLI and do not hardcode one. Public voice IDs start with `r4_` (for example `r4_riya` speaks Hindi and `r4_ashley` speaks English); a voice marked legacy still works, but prefer the others.
+Each voice has `voice_id`, `name`, `gender`, `languages`, `accent_type`, `description`, `lexicon` (whether the voice takes custom pronunciations) and, when Plivo has set one, `sample_url`, a link to a short sample that stops working after about an hour, so fetch the list again instead of saving it (the CLI leaves it out while it is empty). `plivo tts voice <voice_id>` shows one voice, and `plivo tts voices --language en` lists every English voice. When the user wants to hear voices before choosing, show the `sample_url` of each option that has one, or point them to Voice Studio in the console (https://cx.plivo.com/voice-studio/explore). The list holds Plivo's public voices and any voices the organization owns, so take it from the CLI and do not hardcode one. Voice IDs are opaque strings (for example `6uWzc4xFj31t4jNJUaED` speaks Hindi and `lC7qzMoRE7SSjaNCVeff` speaks US English), and the catalogue changes, so never reuse an ID from this page without checking it is in the list.
 
 Ask "Which voice?" (header Voice) with up to three options, each "<name>: <gender>, <accent>" for a voice whose `languages` contain the language. Check: the chosen `voice_id` appears in the list with that language. **Will break:** text in a language the voice does not speak, which returns `400 language_not_supported`.
 
@@ -88,7 +88,7 @@ Ask "Which voice?" (header Voice) with up to three options, each "<name>: <gende
 Put the text in the command, or in a file for anything long (`--file text.txt`). `--file -` reads stdin once, so keep it for a one-shot pipe, never for the `--dry-run` then `--yes` pair: the second command would find nothing to read. The limit is 5,000 characters per request: for more, split at sentence ends and synthesize each part, and ask the consent question below once, for the total number of characters across all the parts. Long text takes longer to synthesize: pass a longer global `--timeout` in seconds (the default is 30), for example `--timeout 120`. Raw formats (`mulaw`, `alaw`, `pcm`) join byte for byte; `wav` and `mp3` need a tool such as `ffmpeg`.
 
 ```bash
-plivo tts speak --voice r4_riya --language hi --text "आपका पैकेज कल पहुंचेगा।" \
+plivo tts speak --voice 6uWzc4xFj31t4jNJUaED --language hi --text "आपका पैकेज कल पहुंचेगा।" \
   --format mulaw --sample-rate 8000 --out reminder.ulaw --dry-run
 ```
 
@@ -100,7 +100,7 @@ Optional flags:
 
 | Flag | Range | Use |
 |---|---|---|
-| `--language` | `auto`, `en`, `hi`, `bn`, `ta`, `te`, `mr`, `gu`, `kn` | Default `auto`; the voice must speak it |
+| `--language` | `auto`, `en-US`, `en-GB`, `en-IN`, `en-AU`, `hi`, `bn`, `ta`, `te`, `mr`, `gu`, `kn` | Default `auto`; the voice must speak it. A plain `en` is refused |
 | `--pace` | 0.7 to 1.2 (default 1.0) | Speaking speed |
 | `--volume` | 0.5 to 2.0 (default 1.0) | Loudness |
 | `--lexicon <id>` | a saved lexicon, `lx_...` | Custom pronunciations (below) |
@@ -137,7 +137,7 @@ plivo tts lexicons create --name brands --kind respell --file rules.json --dry-r
 plivo tts lexicons create --name brands --kind respell --rule "Plivo=plee-voh"       # or the rules inline; --rule repeats
 plivo tts lexicons list -o json
 plivo tts lexicons get lx_... -o json
-plivo tts speak --voice r4_ashley --text "Welcome to Plivo" --format mp3 --sample-rate 44100 \
+plivo tts speak --voice lC7qzMoRE7SSjaNCVeff --text "Welcome to Plivo" --format mp3 --sample-rate 44100 \
   --bitrate 128000 --lexicon lx_... --out welcome.mp3 --dry-run
 plivo tts lexicons delete lx_... --dry-run      # then --yes, after the user agrees
 ```
@@ -152,7 +152,7 @@ plivo tts lexicons delete lx_... --dry-run      # then --yes, after the user agr
 
 ## Realtime: speak text as it is produced (WebSocket)
 
-Use it when text arrives piece by piece, as a model writes it, and the audio must start before the text ends. It is not a CLI command. Endpoint: `wss://api.plivo.com/v1/Account/<auth_id>/TTS/Realtime/`, with the Auth ID and Auth Token as HTTP Basic auth on the upgrade request. A bad credential is refused with an HTTP status, so the socket never opens. There are no query parameters: every option goes in the first `text` message of a reply.
+Use it when text arrives piece by piece, as a model writes it, and the audio must start before the text ends. It is not a CLI command. Endpoint: `wss://api.plivo.com/v1/Account/<auth_id>/TTS/Realtime/`, with the Auth ID and Auth Token as HTTP Basic auth on the upgrade request. A bad credential is refused with an HTTP status, so the socket never opens. There are no query parameters: one returns `422 invalid_request` and the socket does not open, and a plain GET with no upgrade returns `426`. Every option goes in the first `text` message of a reply.
 
 A runnable start. Save it as `realtime_tts.py`. The user puts `PLIVO_AUTH_ID`, `PLIVO_AUTH_TOKEN` and `VOICE_ID` in `.env`; never read, cat or print that file. Running the script bills per character, like step 5: do the credit check (step 2) and take a `plivo tts usage -o json` reading, then ask "Run a <N>-character test now? Plivo bills per character." (header Synthesize; the script as written sends 16 characters, so count the new text if you change it), and run it only on yes. `uv run --script` alone does not load `.env`, so run:
 
@@ -213,7 +213,7 @@ Messages you send (JSON text frames, up to 64 KiB each):
 
 | `type` | Fields | Meaning |
 |---|---|---|
-| `text` | `context_id`, `text` (up to 5,000 characters), `finish` (default `false`), `timestamps` (default `false`); on a reply's first message also `voice_id` (required), `language`, `output_format`, `pace`, `volume`, `pronunciations`, `lexicon_id`, `continuation`, `seed` | A new `context_id` opens a reply. Send the text in pieces, and `finish: true` on the last |
+| `text` | `context_id`, `text` (up to 5,000 characters), `finish` (default `false`), `timestamps` (default `false`); on a reply's first message also `voice_id` (required), `language`, `output_format`, `pace`, `volume`, `pronunciations`, `lexicon_id`, `continuation`, `seed` | A new `context_id` opens a reply, and each `context_id` can be used once per socket. Send the text in pieces, and `finish: true` on the last |
 | `flush` | `context_id` | Speak everything received so far for that reply; the server answers `flush_done` |
 | `cancel` | optional `context_id` | Stop that reply now; with no `context_id`, stop all replies |
 
@@ -224,7 +224,7 @@ Messages you receive:
 | binary | A 2-byte little-endian length, then that many bytes of `context_id`, then audio in that reply's `output_format` |
 | `timestamps` | Character timings for audio already sent, only when you set `timestamps: true` |
 | `flush_done` | A flush has been spoken |
-| `done` | The reply's audio is complete; carries the billed `characters`. Sent once per reply |
+| `done` | The reply's audio is complete. Sent once per reply, with `reason`, `continued`, `normalized_text`, the billed `characters`, `spoken_chars`, `audio_seconds`, `ttfb_ms` and `connection_id` |
 | `warning` | A problem that does not stop the reply |
 | `error` | `type`, `code`, `message`, `param`, `context_id`, `connection_id` |
 
@@ -242,7 +242,7 @@ mp3 takes a bitrate only in these pairs: 44100 and 48000 Hz take 32000, 64000, 9
 
 Only `raw` `pcm_mulaw` at 8000 is exercised by the script above; **risky:** the other combinations are untested on the socket. A `seed` repeats the audio only with `continuation` set to `false`, which is what `--seed` sends. The shape of `pronunciations` is not documented here, so use `lexicon_id`.
 
-Rules that matter: keep reading the socket, because a client that reads nothing for 30 s is dropped. One socket carries up to 8 replies at once, each with its own `context_id`. The realtime messages use the same field names as the batch request, so `pace`, `volume` and `lexicon_id` mean what they mean for `plivo tts speak`; the batch-only `--file`, `--out` and `--format` flags have no counterpart. Omit an optional field rather than send `null`, which returns `422`. Close codes: `1013` is a retryable error (reconnect with a short, growing wait), `1011` is a server (5xx) error, `1008` is any other error (read the `error` message first). The India regional host `wss://in.api.plivo.com` serves the same paths; the docs do not say which accounts need it, so use it only when the default host refuses the account and the user confirms.
+Rules that matter: keep reading the socket, because a client that reads nothing for 30 s is dropped. One socket carries up to 8 replies at once, each with its own `context_id`. The realtime messages use the same field names as the batch request, so `pace`, `volume` and `lexicon_id` mean what they mean for `plivo tts speak`; the batch-only `--file`, `--out` and `--format` flags have no counterpart. Omit an optional field rather than send `null`, which returns `422`. Close codes: `1013` is a retryable error (reconnect with a short, growing wait), `1011` is a server (5xx) error, `1008` is any other error (read the `error` message first).
 
 ## Limits
 
@@ -273,7 +273,7 @@ With the CLI, add `-o json`: the error envelope prints on stderr. Its `error.cod
 | `language_not_supported` (400) | The voice does not speak the text's language | Pick a voice from `plivo tts voices --language <code>`, or set `--language` |
 | `empty_text`, `text_too_long` (400) | Nothing to speak, or over 5,000 characters | Send 1 to 5,000 characters; split longer text |
 | `unsupported_format` (400) | That format, rate or bitrate pair is not offered; nothing is billed | Fix `--format`, `--sample-rate` and `--bitrate` (mp3 pairs are above) |
-| `invalid_request` (422; 400 if not JSON, 413 over 1 MiB) | A bad value; `param` names the field (`lexicon_id` for a deleted lexicon). A `null` for an optional field also returns it | Fix that field, or omit it |
+| `invalid_request` (422; 400 if not JSON, 413 over 1 MiB) | A bad value; `param` names the field (`lexicon_id` for a deleted lexicon, `language` for a plain `en` or an unknown code, or a query parameter, which no TTS route takes). A `null` for an optional field also returns it | Fix that field, or omit it |
 | `not_found` (404), `method_not_allowed` (405) | A wrong path or method, or a lexicon ID that does not exist | `plivo tts lexicons list` |
 | `concurrency_limit` (429) | More than 50 open connections on the account | Close idle sockets, wait 1 s, then retry |
 | `at_capacity`, `draining`, `auth_unavailable` (503) | Busy right now | Wait 1 s, then retry (see the billed-run rule in step 5) |
