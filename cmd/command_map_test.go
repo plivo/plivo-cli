@@ -168,6 +168,7 @@ func TestSchema_describesWithoutRunning(t *testing.T) {
 		{[]string{"sip", "calls", "diagnose", "--schema"}, "plivo sip calls diagnose", ownNote, fieldSchema{"call_uuid", "string"}, "", 1},
 		{[]string{"sip", "test", "--schema"}, "plivo sip test", ownNote, fieldSchema{"checks[].status", "string"}, "uri", 0},
 		{[]string{"sip", "connect", "plan", "--schema"}, "plivo sip connect plan", ownNote, fieldSchema{"requests[].command", "string"}, "platform", 0},
+		{[]string{"voice", "calls", "stats", "--schema"}, "plivo voice calls stats", ownNote, fieldSchema{"groups[].connect_rate_pct", "number"}, "max-calls", 0},
 		{[]string{"voice", "streams", "test", "--schema"}, "plivo voice streams test", ownNote, fieldSchema{"first_response_ms", "number"}, "to", 0},
 		// A write: no registered output type.
 		{[]string{"numbers", "update", "--schema"}, "plivo numbers update", "", fieldSchema{}, "app-id", 1},

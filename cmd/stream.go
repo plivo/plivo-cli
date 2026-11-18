@@ -32,6 +32,9 @@ var streamGetCmd = &cobra.Command{
 	RunE:  runStreamGet,
 }
 
+// streamDefaultContentType is the API's default codec (8 kHz linear PCM).
+const streamDefaultContentType = "audio/x-l16;rate=8000"
+
 var (
 	streamStartURL          string
 	streamStartTrack        string
@@ -61,7 +64,7 @@ func init() {
 	_ = streamStartCmd.MarkFlagRequired("url")
 	streamStartCmd.Flags().StringVar(&streamStartTrack, "audio-track", "inbound", oneOf(streamTracks))
 	streamStartCmd.Flags().BoolVar(&streamStartBiDi, "bidirectional", false, "let the WebSocket send audio back into the call (needs --audio-track inbound)")
-	streamStartCmd.Flags().StringVar(&streamStartContentType, "content-type", "audio/x-l16;rate=16000", "audio codec content-type")
+	streamStartCmd.Flags().StringVar(&streamStartContentType, "content-type", streamDefaultContentType, "audio codec content-type; the API's own default, so pass it to pin the codec")
 	streamStartCmd.Flags().StringVar(&streamStartCallbackURL, "stream-status-callback", "", "URL hit when stream starts/ends")
 	streamStartCmd.Flags().StringVar(&streamStartStatusURL, "callback-url", "", "alias for --stream-status-callback")
 	streamStartCmd.Flags().StringVar(&streamStartExtraHeaders, "extra-headers", "", "comma-separated extra WebSocket headers (k1=v1,k2=v2)")
@@ -176,6 +179,9 @@ func runStreamStart(cmd *cobra.Command, args []string) error {
 	}
 	if apiErr != nil {
 		return apiErr
+	}
+	if !cmd.Flags().Changed("content-type") && !quietFlag {
+		fmt.Fprintf(os.Stderr, "No --content-type: sending %s (v1.3.3 and earlier sent audio/x-l16;rate=16000)\n", streamDefaultContentType)
 	}
 	if dryRunFlag {
 		return nil

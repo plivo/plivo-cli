@@ -148,7 +148,7 @@ func r3Cases() []qaCase {
 		},
 		{
 			id: "r3/O6", title: "lookup is billed per request (USD 0.004) but said nothing about it",
-			args:   qaArgs("lookup +14155550100"),
+			args:   qaArgs("lookup +14155550100 --yes"),
 			sent:   []string{"GET /v1/Lookup/Number/+14155550100?type=carrier"},
 			stderr: []string{"USD 0.004"},
 		},

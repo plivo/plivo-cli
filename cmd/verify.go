@@ -75,8 +75,7 @@ var verifySessionValidateCmd = &cobra.Command{
 func init() {
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateRecipient, "recipient", "", "E.164 destination number (required)")
 	_ = verifySessionCreateCmd.MarkFlagRequired("recipient")
-	verifySessionCreateCmd.Flags().StringVar(&vsCreateAppUUID, "app-uuid", "", "Verify application uuid (required)")
-	_ = verifySessionCreateCmd.MarkFlagRequired("app-uuid")
+	verifySessionCreateCmd.Flags().StringVar(&vsCreateAppUUID, "app-uuid", "", "Verify application uuid (default: your default Verify application)")
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateChannel, "channel", "sms", "delivery channel: sms|voice|whatsapp")
 	ignoredFlag(verifySessionCreateCmd, "alpha-sender", false, "the API never read it; drop it")
 	verifySessionCreateCmd.Flags().StringVar(&vsCreateLocale, "locale", "", "BCP-47 locale, e.g. en-US")
@@ -102,8 +101,10 @@ func runVerifySessionCreate(cmd *cobra.Command, args []string) error {
 	}
 	body := map[string]any{
 		"recipient": vsCreateRecipient,
-		"app_uuid":  vsCreateAppUUID,
 		"channel":   vsCreateChannel,
+	}
+	if vsCreateAppUUID != "" {
+		body["app_uuid"] = vsCreateAppUUID
 	}
 	if vsCreateLocale != "" {
 		body["locale"] = vsCreateLocale

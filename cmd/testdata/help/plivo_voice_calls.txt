@@ -17,6 +17,7 @@ Available Commands:
   play        Play audio file(s) into a live call
   record      Start recording a live call
   speak       Speak text into a live call via TTS
+  stats       Show calls and connect rate per number over a window
   stop-play   Stop any audio currently playing in a live call
   stop-record Stop the active recording on a live call
   stop-speak  Stop any TTS currently playing in a live call

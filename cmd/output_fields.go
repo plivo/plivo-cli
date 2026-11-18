@@ -95,6 +95,7 @@ var resultTypes = map[string]reflect.Type{
 	"plivo sip connect plan":            reflect.TypeFor[connectPlan](),
 	"plivo sip test":                    reflect.TypeFor[sipTestResult](),
 	"plivo voice calls diagnose":        reflect.TypeFor[diagnoseResult](),
+	"plivo voice calls stats":           reflect.TypeFor[statsResult](),
 	"plivo voice streams test":          reflect.TypeFor[streamsTestResult](),
 }
 

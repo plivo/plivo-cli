@@ -14,6 +14,9 @@ import (
 // the command that ran, or the one the arguments reached, which handleError
 // records for `feedback --bug`.
 func execute(args []string) (*cobra.Command, error) {
+	// cobra adds --version lazily, inside ExecuteC and after Find. Until it
+	// exists Find reads `--version --profile smoke` as a command named smoke.
+	rootCmd.InitDefaultVersionFlag()
 	if done, err := scanArgs(args); done {
 		cmd, _, _ := rootCmd.Find(args)
 		return cmd, err

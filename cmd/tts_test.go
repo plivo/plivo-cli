@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -29,7 +31,7 @@ func ttsRun(t *testing.T, srv *qaServer, stdin string, args ...string) qaResult 
 			f.Changed = false
 		})
 	}
-	ttsLexRules = nil
+	ttsLexRules, ttsPronounce = nil, nil
 	return srv.run(t, stdin, append([]string{"tts"}, args...)...)
 }
 
@@ -86,6 +88,11 @@ func TestTTSSpeak_formatFromExtensionOrFlag(t *testing.T) {
 		{"a.pcm", []string{"--sample-rate", "16000"}, "map[container:raw encoding:pcm_s16le sample_rate:16000]"},
 		{"a.bin", nil, "map[container:wav encoding:pcm_s16le sample_rate:24000]"},
 		{"a.wav", []string{"--format", "mulaw"}, "map[container:raw encoding:pcm_mulaw sample_rate:8000]"},
+		// The new names are picked by --format only; a .wav name still means wav.
+		{"a.wav", []string{"--format", "f32"}, "map[container:raw encoding:pcm_f32le sample_rate:24000]"},
+		{"a.wav", []string{"--format", "wav-f32", "--sample-rate", "48000"}, "map[container:wav encoding:pcm_f32le sample_rate:48000]"},
+		{"a.ulaw", []string{"--format", "wav-mulaw"}, "map[container:wav encoding:pcm_mulaw sample_rate:8000]"},
+		{"a.wav", []string{"--format", "wav-alaw", "--sample-rate", "8000"}, "map[container:wav encoding:pcm_alaw sample_rate:8000]"},
 		{"a.wav", []string{"--format", "mp3", "--bitrate", "64000"}, "map[bitrate:64000 container:mp3 encoding:mp3 sample_rate:44100]"},
 		// 128000 is only valid at 44100 and 48000 Hz: the default follows the rate.
 		{"a.mp3", []string{"--sample-rate", "8000"}, "map[bitrate:32000 container:mp3 encoding:mp3 sample_rate:8000]"},
@@ -121,6 +128,49 @@ func TestTTSSpeak_sendsOnlyTheOptionsGiven(t *testing.T) {
 	}
 }
 
+func TestTTSFormatNames_listEveryPreset(t *testing.T) {
+	names := strings.Split(strings.Replace(ttsFormatNames, " or ", ", ", 1), ", ")
+	slices.Sort(names)
+	if want := slices.Sorted(maps.Keys(ttsFormats)); !slices.Equal(names, want) {
+		t.Errorf("the help and refusal list %v, the presets are %v", names, want)
+	}
+}
+
+func TestTTSSpeak_bodyTakesNormalizationAndInlineRules(t *testing.T) {
+	var accept string
+	srv := ttsAudioServer(t, &accept)
+	run := func(extra ...string) map[string]any {
+		args := append([]string{"speak", "--voice", "v", "--text", "hi", "--out", filepath.Join(t.TempDir(), "a.wav"), "--yes"}, extra...)
+		r := ttsRun(t, srv, "", args...)
+		if r.err != nil || len(r.reqs) != 1 {
+			t.Fatalf("%v: err %v, requests %v", extra, r.err, r.reqs)
+		}
+		return r.reqs[0].Body
+	}
+	// Left alone the keys are absent, not null (a map read of null looks the same as absent; null is a 422).
+	if b := run(); slices.ContainsFunc([]string{"text_normalization", "pronunciations"}, func(k string) bool { _, ok := b[k]; return ok }) {
+		t.Errorf("defaults were sent: %v", b)
+	}
+	if b := run("--text-normalization=false"); b["text_normalization"] != false {
+		t.Errorf("=false: %v", b)
+	}
+	if b := run("--text-normalization"); b["text_normalization"] != true {
+		t.Errorf("bare flag: %v", b)
+	}
+	// Only =false works: a space leaves "false" as an argument, and "maybe" is no boolean.
+	for _, bad := range [][]string{{"--text-normalization", "false"}, {"--text-normalization=maybe"}} {
+		args := append([]string{"speak", "--voice", "v", "--text", "hi", "--out", "a.wav", "--yes"}, bad...)
+		if r := ttsRun(t, srv, "", args...); r.err == nil || len(r.reqs) != 0 {
+			t.Errorf("%v: err %v, requests %v; want a refusal and none", bad, r.err, r.reqs)
+		}
+	}
+	// Each rule carries the one kind; a value may hold an =.
+	b := run("--pronounce", "Plivo=PLEE-voh", "--pronounce", "x=y=z", "--pronounce-kind", "respell")
+	if want := "[map[kind:respell value:PLEE-voh word:Plivo] map[kind:respell value:y=z word:x]]"; fmt.Sprint(b["pronunciations"]) != want {
+		t.Errorf("pronunciations %v, want %s", b["pronunciations"], want)
+	}
+}
+
 func TestTTSSpeak_refusedBeforeAnyRequest(t *testing.T) {
 	long := strings.Repeat("a", ttsMaxChars+1)
 	for _, c := range []struct {
@@ -133,8 +183,23 @@ func TestTTSSpeak_refusedBeforeAnyRequest(t *testing.T) {
 		{"--voice v --text " + long + " --yes", clierr.CodeBadInput},
 		{"--voice v --text hi --yes --pace 2", clierr.CodeBadFlag},
 		{"--voice v --text hi --yes --volume 0.1", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --seed -1", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --seed 9007199254740992", clierr.CodeBadFlag},
 		{"--voice v --text hi --yes --language xx", clierr.CodeBadFlag},
 		{"--voice v --text hi --yes --format ogg", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --format mulaw --sample-rate 16000", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --format wav-alaw --sample-rate 16000", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --format wav --sample-rate 11025", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --format f32 --sample-rate 96000", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --pronounce a=b", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --pronounce-kind ipa", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --pronounce a=b --pronounce-kind IPA", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --pronounce ab --pronounce-kind ipa", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --pronounce =b --pronounce-kind ipa", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --pronounce a= --pronounce-kind ipa", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --pronounce caf\xe9=b --pronounce-kind ipa", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --pronounce-kind ipa --lexicon lx_1 --pronounce a=b", clierr.CodeBadFlag},
+		{"--voice v --text hi --yes --pronounce-kind ipa" + strings.Repeat(" --pronounce a=b", ttsMaxPronounce+1), clierr.CodeBadFlag},
 		{"--voice v --text hi --yes --bitrate 64000", clierr.CodeBadFlag},
 		{"--voice v --text caf\xe9 --yes", clierr.CodeBadInput},
 		{"--voice v --text hi --yes --out $DIR/nodir/a.wav", clierr.CodeBadFlag},

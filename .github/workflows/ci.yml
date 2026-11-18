@@ -134,6 +134,13 @@ jobs:
         shell: bash
         run: ./scripts/smoke.sh "${{ matrix.bin }}"
 
+      # Go leaves a Windows junction unresolved, and the test job runs on
+      # ubuntu only, so run the tests that make junctions here.
+      - name: skill --project through junctions
+        if: runner.os == 'Windows'
+        shell: bash
+        run: go test ./cmd -run Junction -count=1
+
   # Install the latest published release on a clean machine. Asserts install
   # mechanics (download, checksum, PATH, idempotency), not the command tree.
   install-test:

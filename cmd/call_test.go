@@ -36,6 +36,7 @@ func TestIgnoredFlags_acceptedNeverSent(t *testing.T) {
 		"voice conferences record room --transcribe":     "POST file_format time_limit",
 		"numbers masking sessions create --first-party +14155550100 --second-party +14155550101 --mode voice --virtual-number +14155550102 --yes": "POST first_party record second_party",
 		"verify sessions create --recipient +14155550100 --app-uuid a1 --alpha-sender ACME --yes":                                                 "POST app_uuid channel recipient",
+		"verify sessions create --recipient +14155550100 --alpha-sender ACME --yes":                                                               "POST channel recipient",
 		"voice multiparty participant list m1 --limit 5 --offset 5 --all":                                                                         "GET ",
 	} {
 		setFakeCreds(t)
