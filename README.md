@@ -5,21 +5,25 @@
 ## Install
 
 ```sh
-# macOS / Linux
+# macOS / Linux, with Homebrew
 brew install plivo/tap/plivo
 
-# Windows
+# macOS, Linux, WSL, Git Bash, without Homebrew
+curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | bash
+```
+
+```powershell
+# Windows, with Scoop
 scoop bucket add plivo https://github.com/plivo/homebrew-tap
 scoop install plivo
 
-# No package manager: macOS, Linux, WSL, Git Bash
-curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | bash
-
-# No package manager: Windows PowerShell
+# Windows, without Scoop
 irm https://raw.githubusercontent.com/plivo/plivo-cli/main/install.ps1 | iex
 ```
 
-Check it with `plivo --version`. Upgrade with `plivo upgrade` (Homebrew: `brew upgrade plivo`). To pin a version or folder for the installer, run `export PLIVO_CLI_VERSION=v1.4.1` or `export PLIVO_INSTALL_DIR=<dir>` first. The installers check checksums and Plivo's signature. To check a download by hand, see [Verifying a release](SECURITY.md#verifying-a-release).
+Check it with `plivo --version`. Upgrade with `plivo upgrade` (Homebrew: `brew upgrade plivo`).
+
+To pin a version or install folder, set `PLIVO_CLI_VERSION` or `PLIVO_INSTALL_DIR` before running the installer: `export PLIVO_CLI_VERSION=v1.4.1` in a shell, or `$env:PLIVO_CLI_VERSION = 'v1.4.1'` in PowerShell. The installers check checksums and Plivo's signature. To check a download by hand, see [Verifying a release](SECURITY.md#verifying-a-release).
 
 ## Get started
 
