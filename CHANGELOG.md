@@ -5,6 +5,36 @@ All notable changes to the Plivo CLI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-11-18
+
+### Added
+
+- `plivo tts voice <voice_id>` shows one voice: its languages, accent,
+  description, whether it supports lexicons, and a sample URL that works for
+  an hour. `tts voices -o json` carries the same `lexicon` flag.
+
+### Changed
+
+- `tts speak --language` takes `en-US`, `en-GB`, `en-IN` and `en-AU` along
+  with `auto` and the Indian-language codes, in any letter case. A bare `en`
+  is refused before any request, with a hint to pick the regional code the
+  voice speaks. `tts voices --language en` still lists every English voice.
+- The text-to-speech skill (`skill install tts`) matches the live API: the
+  current voice IDs, the regional English codes, the `lexicon` flag and the
+  fields of the realtime `done` event.
+
+### Fixed
+
+- `voice streams forward` accepts the signature Plivo puts on a stream from
+  23 November 2026, computed over the `wss://` address, and still accepts the
+  earlier `http://` one. v1.4.0 and earlier refuse every stream with 403
+  `invalid Plivo signature` from that date, so upgrade before then. The voice
+  and audio-streaming skills say so.
+- `voice streams forward` opens its default localhost.run tunnel again. It
+  failed with `localhost.run did not announce a URL within 25s` because
+  localhost.run now issues `*.app.lhr.life` addresses. Setups with ngrok on
+  the path were not affected.
+
 ## [1.4.0] - 2026-11-17
 
 ### Added
