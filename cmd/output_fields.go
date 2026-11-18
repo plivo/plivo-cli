@@ -52,6 +52,7 @@ var outputTypes = map[string]reflect.Type{
 	"plivo tts lexicons list":                     reflect.TypeFor[api.TTSLexiconList](),
 	"plivo tts usage":                             reflect.TypeFor[api.TTSUsage](),
 	"plivo tts voices":                            reflect.TypeFor[api.TTSVoiceList](),
+	"plivo tts voice":                             reflect.TypeFor[api.TTSVoiceDetail](),
 	"plivo sip calls insights":                    reflect.TypeFor[api.SIPCallInsights](),
 	"plivo sip calls list":                        reflect.TypeFor[api.SIPTrunkCallList](),
 	"plivo sip credentials get":                   reflect.TypeFor[api.SIPTrunkCredential](),

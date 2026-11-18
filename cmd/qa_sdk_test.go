@@ -475,6 +475,7 @@ var qaDocsRequests = func() []qaSDKRequest {
 		{"PATCH", "PhoneNumber/Compliance/{}", none},
 		{"POST", "TTS", []string{"voice_id", "text", "language", "output_format", "pace", "volume", "pronunciations", "lexicon_id", "continuation", "seed"}},
 		{"GET", "TTS/Voices", none},
+		{"GET", "TTS/Voices/{}", none},
 		{"GET", "TTS/Usage", none},
 		{"GET", "TTS/Lexicons", none},
 		{"POST", "TTS/Lexicons", []string{"name", "kind", "rules"}},

@@ -38,7 +38,21 @@ const (
 	ttsMaxVolume      = 2.0
 )
 
-var ttsLanguages = []string{"auto", "en", "hi", "bn", "ta", "te", "mr", "gu", "kn"}
+// ttsLanguages are the codes the API takes. English comes in four regional codes;
+// there is no plain "en".
+var ttsLanguages = []string{"auto", "en-US", "en-GB", "en-IN", "en-AU", "hi", "bn", "ta", "te", "mr", "gu", "kn"}
+
+// ttsLanguageMatches reports whether a voice that speaks langs matches a --language
+// filter. A code with no region ("en") matches every region of that language.
+func ttsLanguageMatches(langs []string, want string) bool {
+	return slices.ContainsFunc(langs, func(l string) bool {
+		if strings.EqualFold(l, want) {
+			return true
+		}
+		base, _, _ := strings.Cut(l, "-")
+		return !strings.Contains(want, "-") && strings.EqualFold(base, want)
+	})
+}
 
 // ttsFormat is a --format preset: the output_format a batch request sends.
 type ttsFormat struct {
@@ -76,11 +90,21 @@ var ttsVoicesCmd = &cobra.Command{
 	Short: "List the voices you can speak with",
 	Long: `List the voices you can speak with: Plivo's public voices and any your
 organization owns. Each voice speaks one language. --language and --gender
-filter the list here; the API has no filters.`,
+filter the list here; the API has no filters. --language en lists every English
+voice; en-US, en-GB, en-IN and en-AU list one accent.`,
 	Example: `  plivo tts voices --language hi
-  plivo tts voices --gender female -o json`,
+  plivo tts voices --language en-US --gender female
+  plivo tts voice 6uWzc4xFj31t4jNJUaED`,
 	Args: cobra.NoArgs,
 	RunE: runTTSVoices,
+}
+
+var ttsVoiceGetCmd = &cobra.Command{
+	Use:     "voice <voice_id>",
+	Short:   "Show one voice",
+	Example: `  plivo tts voice 6uWzc4xFj31t4jNJUaED`,
+	Args:    cobra.ExactArgs(1),
+	RunE:    runTTSVoiceGet,
 }
 
 var ttsSpeakCmd = &cobra.Command{
@@ -96,9 +120,9 @@ prints the request and sends nothing. Text is up to 5000 characters, from
 (8 kHz telephony, raw), pcm (24 kHz, raw). Without it the --out extension
 decides (.wav .mp3 .ulaw .alaw .pcm), and anything else is wav. --out - writes
 the audio to stdout, which is refused on a terminal.`,
-	Example: `  plivo tts speak --voice r4_ashley --text "Hello from Plivo" --out hello.wav --dry-run
-  plivo tts speak --voice r4_ashley --text "Hello from Plivo" --out hello.wav --yes
-  plivo tts speak --voice r4_riya --language hi --file msg.txt --out msg.ulaw --yes`,
+	Example: `  plivo tts speak --voice lC7qzMoRE7SSjaNCVeff --text "Hello from Plivo" --out hello.wav --dry-run
+  plivo tts speak --voice lC7qzMoRE7SSjaNCVeff --text "Hello from Plivo" --out hello.wav --yes
+  plivo tts speak --voice 6uWzc4xFj31t4jNJUaED --language hi --file msg.txt --out msg.ulaw --yes`,
 	Args: cobra.NoArgs,
 	RunE: runTTSSpeak,
 }
@@ -175,7 +199,7 @@ var (
 )
 
 func init() {
-	ttsVoicesCmd.Flags().StringVar(&ttsVoicesLanguage, "language", "", "only voices for this language code (en, hi, bn, ta, te, mr, gu, kn)")
+	ttsVoicesCmd.Flags().StringVar(&ttsVoicesLanguage, "language", "", "only voices for this language code (en, en-US, en-GB, en-IN, en-AU, hi, bn, ta, te, mr, gu, kn)")
 	ttsVoicesCmd.Flags().StringVar(&ttsVoicesGender, "gender", "", "only voices of this gender (male or female)")
 
 	f := ttsSpeakCmd.Flags()
@@ -203,7 +227,7 @@ func init() {
 	_ = ttsLexiconCreateCmd.MarkFlagRequired("kind")
 
 	ttsLexiconCmd.AddCommand(ttsLexiconListCmd, ttsLexiconGetCmd, ttsLexiconCreateCmd, ttsLexiconDeleteCmd)
-	ttsCmd.AddCommand(ttsVoicesCmd, ttsSpeakCmd, ttsLexiconCmd, ttsUsageCmd)
+	ttsCmd.AddCommand(ttsVoicesCmd, ttsVoiceGetCmd, ttsSpeakCmd, ttsLexiconCmd, ttsUsageCmd)
 	rootCmd.AddCommand(ttsCmd)
 }
 
@@ -234,7 +258,7 @@ func runTTSVoices(cmd *cobra.Command, args []string) error {
 		voices = resp.Voices
 	}
 	for _, v := range voices {
-		if ttsVoicesLanguage != "" && !slices.ContainsFunc(v.Languages, func(l string) bool { return strings.EqualFold(l, ttsVoicesLanguage) }) {
+		if ttsVoicesLanguage != "" && !ttsLanguageMatches(v.Languages, ttsVoicesLanguage) {
 			continue
 		}
 		if ttsVoicesGender != "" && !strings.EqualFold(v.Gender, ttsVoicesGender) {
@@ -247,6 +271,32 @@ func runTTSVoices(cmd *cobra.Command, args []string) error {
 		return listJSON(os.Stdout, mustJSON(map[string]any{"objects": rows}), "objects")
 	}
 	return output.Table(os.Stdout, table)
+}
+
+func runTTSVoiceGet(cmd *cobra.Command, args []string) error {
+	client, _, err := getClient()
+	if err != nil {
+		return err
+	}
+	var v api.TTSVoiceDetail
+	apiErr, err := client.Do("GET", client.AccountURL("TTS", "Voices", args[0]), nil, nil, &v)
+	if err != nil {
+		return err
+	}
+	if apiErr != nil {
+		return apiErr
+	}
+	if dryRunFlag {
+		return nil
+	}
+	if effectiveFormat() == output.FormatJSON {
+		return output.JSONRaw(os.Stdout, v.Raw())
+	}
+	return output.KV(os.Stdout, [][2]string{
+		{"voice_id", v.VoiceID}, {"name", v.Name}, {"gender", v.Gender},
+		{"languages", strings.Join(v.Languages, ",")}, {"accent", v.AccentType},
+		{"description", v.Description}, {"lexicon", fmt.Sprint(v.Lexicon)}, {"sample_url", v.SampleURL},
+	})
 }
 
 func runTTSSpeak(cmd *cobra.Command, args []string) error {
@@ -525,10 +575,15 @@ func ttsSpeakBody(cmd *cobra.Command, text string) (map[string]any, error) {
 
 	body := map[string]any{"voice_id": ttsVoice, "text": text, "output_format": format}
 	if ttsLanguage != "" {
-		if !slices.Contains(ttsLanguages, ttsLanguage) {
-			return nil, clierr.BadFlag("language", fmt.Sprintf("%q is not one of %s", ttsLanguage, strings.Join(ttsLanguages, ", ")))
+		i := slices.IndexFunc(ttsLanguages, func(l string) bool { return strings.EqualFold(l, ttsLanguage) })
+		if i < 0 {
+			e := clierr.BadFlag("language", fmt.Sprintf("%q is not one of %s", ttsLanguage, strings.Join(ttsLanguages, ", ")))
+			if strings.EqualFold(ttsLanguage, "en") {
+				e.Hint = "There is no plain en. Pick en-US, en-GB, en-IN or en-AU, the one the voice speaks (plivo tts voices --language en)."
+			}
+			return nil, e
 		}
-		body["language"] = ttsLanguage
+		body["language"] = ttsLanguages[i]
 	}
 	if cmd.Flags().Changed("pace") {
 		if ttsPace < ttsMinPace || ttsPace > ttsMaxPace {
