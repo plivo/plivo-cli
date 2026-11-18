@@ -1,20 +1,17 @@
 # Plivo CLI
 
-**The official Plivo developer CLI — built for the terminal, scriptable for AI coding agents.**
+**Use Plivo from your terminal.** Rent phone numbers, send texts, place calls, check what happened on a call, and ask Plivo's AI assistant for help, without opening the console.
 
-A single static Go binary for provisioning numbers, wiring voice-agent applications, inspecting calls, sending messages, and running everything in the Plivo platform from a terminal — with JSON-native output, stable exit codes, and a command grammar designed to be invoked by both humans and AI coding agents.
-
-**With the CLI, you can:**
-
-- Provision phone numbers, applications, and 10DLC registrations
-- Wire numbers to your voice-agent webhook handlers
-- Inspect call records, audio streams, recordings, and conferences
-- Send messages, run number lookups, manage verify sessions
-- Script everything — table for humans, JSON for pipelines, predictable exit codes for retries
+- Find, rent and manage phone numbers
+- Send SMS, MMS and WhatsApp messages
+- Place calls and look back at your call history
+- Turn text into speech
+- Ask the assistant a question, or have it debug a call
+- Switch between your Plivo organizations
 
 ## Install
 
-**Homebrew (macOS / Linux)** — recommended:
+**Homebrew (macOS / Linux):**
 
 ```bash
 brew install plivo/tap/plivo
@@ -27,29 +24,47 @@ scoop bucket add plivo https://github.com/plivo/homebrew-tap
 scoop install plivo
 ```
 
-Or install the binary directly, no package manager needed.
+**No package manager?** Install the binary directly.
 
-**macOS / Linux / WSL / Git Bash** — auto-detects OS and architecture:
+macOS, Linux, WSL or Git Bash:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/install.sh | bash
 ```
 
-**Windows (PowerShell):**
+Windows (PowerShell):
 
 ```powershell
 irm https://raw.githubusercontent.com/plivo/plivo-cli/main/install.ps1 | iex
 ```
 
-### Verifying a release
+The installers pick the right build for your system. To pin a version or choose where it goes, set `PLIVO_CLI_VERSION` (a release tag such as `v1.4.1`) or `PLIVO_INSTALL_DIR` in your shell first, for example `export PLIVO_CLI_VERSION=v1.4.1`. A variable typed in front of `curl` never reaches the installer.
 
-Both installers check the SHA-256 checksums, and also verify who signed them
-when [cosign](https://docs.sigstore.dev/cosign/system_config/installation/) is present. To
-check by hand:
+Check it worked:
 
 ```bash
-# /releases/latest/ resolves to the newest release, so this cannot go stale.
-# For a specific release swap `latest` for `download/vX.Y.Z`.
+plivo --version
+```
+
+If you installed with the script first and later switch to Homebrew, the old copy in `~/.local/bin` can keep winning. Delete `~/.local/bin/plivo` to switch over.
+
+### Upgrade
+
+```bash
+plivo upgrade           # install the latest release
+plivo upgrade --check   # just check, don't install
+```
+
+Homebrew installs upgrade with `brew upgrade plivo` instead. The CLI checks for a newer version at most once a day and prints a short hint while one is out. Set `PLIVO_NO_UPDATE_CHECK=1` to turn the hint off.
+
+<details>
+<summary>Verify your download (optional)</summary>
+
+Both installers check the SHA-256 checksums. They also check that Plivo signed the release, when [cosign](https://docs.sigstore.dev/cosign/system_config/installation/) is installed. To check by hand:
+
+```bash
+# /releases/latest/ always points at the newest release.
+# For a specific release, swap `latest` for `download/vX.Y.Z`.
 for f in SHA256SUMS SHA256SUMS.sig SHA256SUMS.pem; do
   curl -fsSLO "https://github.com/plivo/plivo-cli/releases/latest/download/$f"
 done
@@ -60,237 +75,159 @@ cosign verify-blob SHA256SUMS \
   --certificate-oidc-issuer https://accounts.google.com
 ```
 
-`Verified OK` means the checksums genuinely came from Plivo. Pinning both the
-identity and the issuer is the point — without them, any valid Sigstore
-signature would pass.
+`Verified OK` means the checksums came from Plivo. Keep both the identity and the issuer in the command: without them, any valid Sigstore signature would pass. Releases before v0.3.0 are unsigned, so the check is skipped for them.
 
-Releases before v0.3.0 are unsigned, so verification is skipped rather than
-failed for those.
+</details>
 
-If you installed with `curl | bash` first and later switch to Homebrew, the
-older copy in `~/.local/bin` stays earlier on your `PATH` and keeps winning.
-Homebrew warns when it spots this — remove `~/.local/bin/plivo` to switch over.
+## Get started
 
-Both installers fetch the matching release binary (`darwin`/`linux`/`windows` × `amd64`/`arm64`). Override with `PLIVO_CLI_VERSION` (a release tag) or `PLIVO_INSTALL_DIR` (target directory).
-
-### Upgrade
+**1. Sign in.** Your browser opens, you sign in to Plivo, and the CLI saves the session in your OS keychain. Your password never goes through the CLI.
 
 ```bash
-plivo upgrade           # fetch latest release, atomic in-place replace
-plivo upgrade --check   # check only, don't install
+plivo login
 ```
 
-The CLI also prints a one-line "newer version available" hint on stderr when a TTY is attached; the check runs at most once every 24h. Set `PLIVO_NO_UPDATE_CHECK=1` to silence it. Homebrew installs are detected and routed to `brew upgrade plivo` instead.
+The sign-in lasts 30 days. After that, run `plivo login` again.
 
-After `plivo login`, `plivo upgrade` and `plivo skill install`, the CLI draws the Plivo logo on stderr when a terminal at least 56 columns wide is attached. It never appears in CI, a pipe or a script. Set `PLIVO_NO_BANNER=1` (or pass `--quiet`) to turn it off, or `NO_COLOR=1` to print it without colour.
-
-## Quickstart
-
-Wire up a voice agent in a few minutes:
+**2. Check who you are and what you have.**
 
 ```bash
-# 1. Authenticate — saves a profile per org in ~/.plivo/config.toml, and a 30-day sign-in in the OS keychain (no account key is stored)
-plivo login
-
-# 2. Confirm your account and see your numbers
 plivo auth whoami
 plivo numbers list
+```
 
-# 3. Create an application pointing at your bot's answer URL
-plivo account applications create \
-  --app-name "my-voice-agent" \
-  --answer-url https://my-bot.example.com/answer \
-  --yes
+**3. Send a test text.** Commands that spend money, such as sending a text, placing a call or renting a number, do nothing until you add `--yes`. Start with `--dry-run` to see exactly what would be sent:
 
-# 4. Attach a number to the application
-plivo numbers update +14155550100 --app-id <app_uuid> --yes
+```bash
+plivo messaging sms send --src <your-plivo-number> --dst <your-phone> --text "Hello from Plivo" --dry-run
+plivo messaging sms send --src <your-plivo-number> --dst <your-phone> --text "Hello from Plivo" --yes
+```
 
-# 5. Make a test call to verify everything's wired
-plivo voice calls make --from +14155550100 --to <your-phone> --yes
+**4. Place a test call.** Without an `--answer-url`, Plivo plays its hello demo when you pick up:
 
-# 6. Inspect what happened
+```bash
+plivo voice calls make --from <your-plivo-number> --to <your-phone> --yes
+```
+
+**5. See what happened.**
+
+```bash
+plivo voice calls list
 plivo voice calls get <call_uuid>
 ```
 
-Once you have a working setup, the same flow scripts cleanly into CI, integration tests, and AI-agent-driven workflows.
+## Common tasks
 
-Logging in again for a different organization saves a second profile (named after that org) instead of overwriting the first — `plivo auth list` shows every saved profile, `plivo auth use <name>` switches between them, and `--profile <name>` overrides per-command.
+Commands read `plivo <area> <thing> <action>`. Add `--help` to any of them to see its options.
 
-## Ask the assistant
+| I want to | Run |
+|---|---|
+| Find a number to rent | `plivo numbers search --country US --type local` |
+| Rent it | `plivo numbers buy <number> --yes` |
+| Send a text | `plivo messaging sms send --src ... --dst ... --text ... --yes` |
+| Place a call | `plivo voice calls make --from ... --to ... --yes` |
+| Route a number's calls to my own app | `plivo account applications create --app-name my-app --answer-url https://example.com/answer --yes`, then `plivo numbers update <number> --app-id <app_id> --yes` |
+| See my recent calls | `plivo voice calls list` |
+| Turn text into speech | `plivo tts speak --voice <voice_id> --text "Hello" --out hello.wav --yes` (find a voice with `plivo tts voices --language en-US`) |
+| Send a one-time passcode | `plivo verify sessions create --help` |
+| Look up a number's carrier (each lookup is billed and has no `--yes`, so preview with `--dry-run`) | `plivo lookup <number>` |
+| See what I spent | `plivo account usage` |
+| Switch organization | `plivo org list`, then `plivo org use <name>` |
 
-Plivo's AI assistant lives in the terminal too — for docs / pricing questions, or to debug a specific call:
+The full list of commands is in [`docs/COMMANDS.md`](docs/COMMANDS.md).
+
+## Getting help
+
+```bash
+plivo --help                  # every command
+plivo voice calls make --help # one command in detail
+plivo docs search sip trunk   # search the Plivo docs without leaving the terminal
+plivo open                    # open the Plivo console in your browser
+```
+
+**Ask the assistant.** It answers docs and pricing questions, and can look into a specific call:
 
 ```bash
 plivo ask "What does Plivo SMS error 30007 mean?"
-plivo ask --call-uuid <uuid> "Debug what happened on this call"
-plivo support           # list your past support escalations
+plivo ask --call-uuid <uuid> "Why did this call fail?"
+plivo ask -i                  # chat, with follow-up questions
+plivo support                 # your past support escalations
 ```
 
-Tokens stream as they arrive; long voice-debug runs (2–5 min) print live status until the root cause lands. Ctrl-C cancels cleanly. `-o json` emits one JSONL event per SSE frame for scripting and AI agents.
+Answers stream as they arrive. Debugging a call can take a few minutes, and Ctrl-C cancels cleanly.
 
-`plivo login` is the only way to authenticate. There is no environment
-variable or flag that accepts a raw `auth_id` / `auth_token`, so a headless
-machine needs a profile that was logged in on it already.
+## More than one organization
 
-A login stores no account key. Commands run on a 30-day sign-in, sent as a
-Bearer token to the server that issued it and nowhere else, so a headless
-machine or CI job must log in again on that machine every 30 days. Once it
-runs out every profile that uses it fails with `AUTH_EXPIRED` until the next
-`plivo login`. A profile saved by an earlier version still holds its key and
-keeps using it, until `plivo login` or `plivo org use` lands on that profile
-and removes the key. Profiles that run on the sign-in differ in two ways:
-`voice streams forward` refuses with `RAW_KEY_REQUIRED` (pass
-`--insecure-skip-signature` only if you accept that anyone with the tunnel URL
-can drive your handler), and `voice streams test`, `simulate` and `readiness`
-send unsigned requests. The sign-in is accepted by the global API only, not by
-a regional base. `plivo auth list` shows which credential each profile uses.
-
-## Output
-
-Output is a human table on a TTY and JSON when piped, so you can do:
+`plivo login` lists every organization you belong to and lets you tick the ones this machine may use. Switch between them without opening the browser again:
 
 ```bash
-plivo voice calls list --limit 20 | jq '.data.objects[] | {call_uuid, hangup_cause_name}'
+plivo org list
+plivo org use <name>
+plivo voice calls list --profile <name>   # or pick one for a single command
 ```
 
-Force either format with `-o table|json`. Spend operations default to a dry run and require `--yes` to execute.
+To add or remove organizations later, run `plivo login` again. `plivo auth list` shows the saved profiles.
 
-## Exit codes
+## Scripts and automation
+
+On a terminal the CLI prints tables. When its output is piped or captured, it prints JSON. Pick a format with `-o table|json|jsonl|yaml|csv`, and filter results with `--query` instead of piping to another tool:
+
+```bash
+plivo voice calls list --query 'data.objects[].call_uuid'
+```
+
+Exit codes are stable, so a script can react to them:
 
 | Code | Meaning |
 |---|---|
 | 0 | OK |
-| 1 | User error (bad input, missing credentials, validation) |
-| 2 | Authentication error (401/403) |
-| 3 | Network / upstream error (5xx, transport) |
-| 4 | Rate limit (429) |
-| 5 | Destructive operation refused (missing `--yes`) |
+| 1 | Bad input, or Plivo refused the request (not found, not enough balance, not allowed) |
+| 2 | Not signed in, or Plivo rejected your credentials |
+| 3 | Network problem or an error on Plivo's side |
+| 4 | Rate limited |
+| 5 | Refused because `--yes` was missing |
+| 6 | This CLI version is too old for Plivo: run `plivo upgrade` |
 
-Stable per category — scripts and AI-agent driver loops can branch on them.
+Things to know before you automate:
 
-## Command grammar
+- `plivo login` is the only way to sign in. There is no environment variable or flag for an `auth_id` / `auth_token`, so a CI job or server needs a login on that machine, repeated every 30 days.
+- Set `PLIVO_FEEDBACK_PROMPT=0` and `PLIVO_NO_UPDATE_CHECK=1` to keep the "rate the CLI?" prompt and the update hint out of your logs.
+- [`examples/`](examples/) has runnable scripts.
 
-Commands follow `plivo <service> <resource> <verb>` — for example `plivo voice calls list`, `plivo numbers buy`, `plivo account applications create`. Messaging is the shorter `plivo messaging send` (protocol via `--type sms|mms|whatsapp`). Cobra-level aliases (`call` on `voice calls`, `msg`/`sms` on `messaging`) keep familiar short forms.
+## Using an AI coding agent?
 
-For the full command reference, see [`docs/COMMANDS.md`](docs/COMMANDS.md) (auto-generated from the live command tree).
-
-## For LLM agents
-
-If you're an LLM (Claude, Codex, Cursor, Aider, custom agent) and the user has asked you to do anything Plivo-related — **read [`cli-skill/SKILL.md`](cli-skill/SKILL.md) first**. It's the single-file reference written for agent consumption: the rules (`--dry-run` before `--yes` for spend and destructive verbs, the stable error-envelope codes, JSON-output rules), a command map, and the behaviour `--help` does not show. For flags, `plivo <command> --help` is the source of truth.
-
-**TL;DR for an agent starting cold:**
+Install the Plivo skill once and your agent (Claude Code, Cursor, Codex and others) will use the CLI correctly instead of guessing at the API:
 
 ```bash
-# 1. Is the CLI installed?
-command -v plivo || echo "Install instructions: cli-skill/SKILL.md → Installation"
-
-# 2. Is there an active credential profile?
-plivo auth whoami    # exit 2 + AUTH_MISSING means no creds — point user at `plivo login`
-
-# 3. Force JSON output for parsing (default on non-TTY, explicit for safety)
-plivo voice calls list -o json | jq '.data.objects[] | {call_uuid, duration}'
-
-# 4. NEVER spend money without --yes — the CLI refuses with exit 5 anyway,
-#    but check with --dry-run first to confirm the request shape.
-plivo voice calls make --from +1... --to +1... --dry-run    # preview
-plivo voice calls make --from +1... --to +1... --yes        # actually call
+npx skills add plivo/plivo-cli      # works with 60+ agents, no Plivo install needed
+plivo skill install                 # or, with the CLI installed
 ```
 
-**Three rules of thumb:**
+The skill is a single reference file, [`cli-skill/SKILL.md`](cli-skill/SKILL.md), and it only loads when you mention Plivo. It installs to `~/.claude/skills/plivo-cli` by default. For another agent, use `plivo skill install --dir <path>`. Run `plivo skill update` after you upgrade the CLI to refresh it.
 
-1. Don't curl `api.plivo.com` directly. The CLI does it 10× cheaper for both you and the user (stable JSON envelope, retry semantics, error mapping).
-2. Branch on `error.code` (e.g. `AUTH_MISSING`, `DESTRUCTIVE_REFUSED`, `RATE_LIMITED`), never on `error.message` — message text drifts; codes are committed.
-3. For scripted use: set `PLIVO_FEEDBACK_PROMPT=0` and `PLIVO_NO_UPDATE_CHECK=1` so the post-success "rate the CLI?" prompt and update-check banner don't surprise stdin/stderr.
+## Privacy and telemetry
 
-**Plivo skills.** Each is a `SKILL.md` your coding agent loads when a request matches it:
+Each CLI request carries the CLI version, OS and architecture, and the name of the command you ran (for example `plivo voice calls make`). Plivo uses these for the upgrade hint and usage stats. When you are signed in, it also carries your email, auth ID, region and organization membership ID (AOM UUID), so Plivo can attribute usage to your account. It never carries flag values, argument values or message text. Those only go to the Plivo API request you asked for.
 
-| Skill | `plivo skill install` | What it covers |
-|---|---|---|
-| [`plivo-cx-agents`](agents-skill/SKILL.md) | `agents` | Build, test and publish Plivo CX agents: AI conversation flows for calls and messages |
-| [`plivo-cli`](cli-skill/SKILL.md) | `cli` (the default) | Run any Plivo task with the CLI instead of raw API calls |
-| [`plivo-audio-streaming`](audio-streaming-skill/SKILL.md) | `audio-streaming` | A voice bot on real calls with `<Stream>`, from setup to go-live |
-| [`plivo-sip-trunking`](sip-trunking-skill/SKILL.md) | `sip-trunking` | Connect an AI voice platform over SIP trunking |
-| [`plivo-tts`](tts-skill/SKILL.md) | `tts` | Turn text into speech with Plivo voices: voices, audio files, lexicons, realtime |
-| [`plivo-voice-xml`](voice-xml-skill/SKILL.md) | `voice-xml` | Write and fix Plivo Voice XML |
-| [`plivo-call-forwarding`](call-forwarding-skill/SKILL.md) | `call-forwarding` | Debug forwarded calls into a Plivo number, out of Plivo or into a SIP trunk |
-
-`plivo skill install all` installs every one, and `npx skills add plivo/plivo-cli --skill <skill>` installs one without the CLI.
-
-**Install the skill once** so future agent sessions auto-load it — a few ways:
+Turn the identity details off:
 
 ```bash
-# Via the open skills ecosystem (skills.sh) — Claude Code, Cursor, Codex, and
-# 60+ agents, no Plivo binary required:
-npx skills add plivo/plivo-cli
-
-# With the CLI installed — writes the bundled skill, no network needed:
-plivo skill install                 # → ~/.claude/skills/plivo-cli/SKILL.md
-
-# Without the binary — one-line installer fetches SKILL.md from GitHub:
-curl -fsSL https://raw.githubusercontent.com/plivo/plivo-cli/main/skills.sh | sh
+plivo config telemetry off      # saved in ~/.plivo/config.toml
+export PLIVO_CLI_TELEMETRY=0    # or for one shell session or CI job
 ```
 
-`plivo skill install` and the one-line installer default to the Claude Code skills directory (`~/.claude/skills/plivo-cli`). For another agent, point it elsewhere — `plivo skill install --dir <path>` or `PLIVO_SKILL_DIR=<path>` for the installer. To capture the skill for an agent that loads it differently, `plivo skill install --print` writes it to stdout.
-
-As a Claude Code plugin, with all seven product skills kept current with this repository, type this inside Claude Code (2.1.275+; on older versions run `/plugin marketplace add plivo/plivo-cli`, then `/plugin install plivo@plivo`):
-
-```
-/plugin install plivo --marketplace plivo/plivo-cli
-```
-
-Owners of a Claude organization can add `https://github.com/plivo/plivo-cli` under Organization settings > Plugins & skills to give every member the skills.
-
-For Google Antigravity (app, IDE and CLI), install the same seven skills as a plugin:
-
-```
-agy plugin install https://github.com/plivo/plivo-cli/tree/main/antigravity/plivo
-```
-
-For Codex, add this repository as a plugin marketplace, then install the plugin:
-
-```
-codex plugin marketplace add plivo/plivo-cli
-codex plugin add plivo@plivo
-```
-
-Run `plivo login` inside Claude Code, Cursor or Codex and it offers, once per machine, to install every Plivo skill where that agent reads them. Codex reads `~/.agents/skills`, which `plivo skill install all --agent codex` installs into.
-
-The skill file lazy-loads on relevance — it only enters your context window when the user mentions Plivo / `auth_id`, etc.
+`plivo config telemetry status` shows the current setting. The version, OS, architecture and command name stay on either way. What `plivo feedback` collects is described in [`docs/cli/feedback.md`](docs/cli/feedback.md).
 
 ## Documentation
 
-- [`cli-skill/SKILL.md`](cli-skill/SKILL.md) — single-file reference tuned for LLM agents (recommended starting point even for humans)
-- [`docs/COMMANDS.md`](docs/COMMANDS.md) — full command reference (auto-generated)
-- [`examples/`](examples/) — runnable scripts for common tasks
-- [`CHANGELOG.md`](CHANGELOG.md) — release-by-release changes
-- [plivo.com/docs](https://www.plivo.com/docs) — platform docs (XML grammar, webhooks, REST API reference)
-
-## Privacy & telemetry
-
-Every CLI request carries a small set of `X-Plivo-CLI-*` headers: CLI
-version / OS / arch (used for the upgrade nudge and usage stats), plus,
-when you're logged in, identity headers (email, auth ID, region, AOM
-UUID) so Plivo can attribute usage per account. These headers never
-carry flag values, argument values, or free-text bodies — those only
-travel in the actual Plivo API request you asked the CLI to make.
-
-To see exactly what the CLI sends, point it at a capture server on this machine with `PLIVO_API_URL=http://127.0.0.1:18555/v1/cli/api` (any port; host localhost, 127.0.0.0/8 or ::1, http or https only, with no user, query or fragment; anything else is refused).
-
-Turn the identity headers off entirely:
-
-```bash
-plivo config telemetry off      # persists in ~/.plivo/config.toml
-export PLIVO_CLI_TELEMETRY=0    # or, for one shell session / CI job
-```
-
-`plivo config telemetry status` shows the current state. Version/OS/arch
-stay on either way — that's how the CLI knows when to nudge an upgrade.
-See [`docs/cli/feedback.md`](docs/cli/feedback.md) for what `plivo
-feedback` collects specifically.
+- [`docs/COMMANDS.md`](docs/COMMANDS.md): every command and flag
+- [`examples/`](examples/): runnable scripts for common tasks
+- [`CHANGELOG.md`](CHANGELOG.md): what changed in each release
+- [plivo.com/docs](https://www.plivo.com/docs): platform docs (Voice XML, webhooks, REST API reference)
 
 ## Support
 
-Open an issue at [github.com/plivo/plivo-cli/issues](https://github.com/plivo/plivo-cli/issues). For security reports, see [SECURITY.md](SECURITY.md). This repository is read-only for users; please file an issue rather than a pull request — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Open an issue at [github.com/plivo/plivo-cli/issues](https://github.com/plivo/plivo-cli/issues). For security reports, see [SECURITY.md](SECURITY.md). This repository is read-only for users, so please file an issue rather than a pull request. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
