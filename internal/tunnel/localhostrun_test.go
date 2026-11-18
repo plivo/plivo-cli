@@ -90,6 +90,9 @@ func TestLhrURL_matchesTheAnnouncementLine(t *testing.T) {
 	if got := lhrURL.FindString(line); got != "https://83dc5fcbd06c3b.lhr.life" {
 		t.Errorf("got %q", got)
 	}
+	if got := lhrURL.FindString("x.app.lhr.life tunneled with tls termination, https://x.app.lhr.life"); got != "https://x.app.lhr.life" {
+		t.Errorf("app subdomain: got %q", got)
+	}
 	if lhrURL.FindString("no url here") != "" {
 		t.Error("matched a line with no URL")
 	}
