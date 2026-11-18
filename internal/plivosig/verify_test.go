@@ -159,3 +159,33 @@ func TestGenerateURL_matchesReferenceOnQueryEdgeCases(t *testing.T) {
 		})
 	}
 }
+
+// Stream signatures from Plivo's server signing code, which
+// signs the <Stream> URL as written: scheme kept, decoded path, query decoded
+// and sorted by key. A repeated query key is left out: the server signs only
+// its first value, while this package keeps every value, as plivo-python
+// does for HTTP callbacks (see the query edge cases above).
+func TestStreamURLVectorsFromPlivoServer(t *testing.T) {
+	const token, nonce = "test-auth-token", "12345678901234567890"
+	cases := []struct{ uri, sig string }{
+		{"wss://example.com/media/stream?tenant=42&env=prod", "Ni6eSQI9zg/LjUt95Nlt5nTYA7FpL6CQuY2F+Yy3jyc="},
+		{"ws://example.com/media/stream?tenant=42&env=prod", "De3cjnXuPrS4pSTyrva6wFEYh9CpRgvlyaQ1gct9auo="},
+		{"wss://example.com/media/stream", "paNuAIW+AAlyCT4lFH8ZrCvzj3gkNuvrX0r877mN3nM="},
+		{"wss://example.com:8443/ws/?b=2&a=1", "d4mqJrd9gtwO+Dfc7IT4u144WmmoPrnCjYUTmM3HBSk="},
+		{"wss://example.com/s?sig=abc%3D%3D&name=John+Doe", "WkbN9mLc0kqBHtOjlD4GiUIvDkZ+cSfqUsEKrF8ixmY="},
+		{"wss://example.com/my%20stream/ws?id=1", "5hGH/IknEopkorKviPg1OTVLJvkZ/oqs3GBHF9Si4mw="},
+		{"wss://example.com/s?name=Jos%C3%A9", "j0fffZVummAvqXtvGPkEVhnNDmDeFaTPXDP4CedUaow="},
+		{"wss://example.com/s?flag&x=1", "EZ6eDWNK9Elkw49HS/1NHdZH/ItKIISoqPVbfhgM7tE="},
+		{"wss://example.com/media/stream?", "paNuAIW+AAlyCT4lFH8ZrCvzj3gkNuvrX0r877mN3nM="},
+		{"wss://example.com/media/stream#frag", "paNuAIW+AAlyCT4lFH8ZrCvzj3gkNuvrX0r877mN3nM="},
+		{"wss://example.com", "mXPltZtATpEE0xZ2FUiuVHgIis/d14y8t/rtESnFGjU="},
+		{"wss://example.com/a%2Fb/ws?q=1", "ZnGd8sbUoc4m+gsJK4smUKQF51bEy5S2dSEYnS/FZdc="},
+	}
+	for _, c := range cases {
+		t.Run(c.uri, func(t *testing.T) {
+			if !Validate(token, c.uri, "GET", nonce, c.sig, map[string]string{}) {
+				t.Errorf("rejected Plivo's signature for %s", c.uri)
+			}
+		})
+	}
+}
