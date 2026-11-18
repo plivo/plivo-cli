@@ -27,6 +27,25 @@ We aim to acknowledge reports within two business days and ship a fix or workaro
 - Issues in third-party dependencies that are already publicly disclosed (please report to the upstream maintainer)
 - Issues that require physical access to the user's machine or already-compromised credentials
 
+## Verifying a release
+
+Both installers check the SHA-256 checksums. They also check that Plivo signed the release, when [cosign](https://docs.sigstore.dev/cosign/system_config/installation/) is installed. To check by hand:
+
+```bash
+# /releases/latest/ always points at the newest release.
+# For a specific release, swap `latest` for `download/vX.Y.Z`.
+for f in SHA256SUMS SHA256SUMS.sig SHA256SUMS.pem; do
+  curl -fsSLO "https://github.com/plivo/plivo-cli/releases/latest/download/$f"
+done
+
+cosign verify-blob SHA256SUMS \
+  --signature SHA256SUMS.sig --certificate SHA256SUMS.pem \
+  --certificate-identity cx-tech@plivo.com \
+  --certificate-oidc-issuer https://accounts.google.com
+```
+
+`Verified OK` means the checksums came from Plivo. Keep both the identity and the issuer in the command: without them, any valid Sigstore signature would pass. Releases before v0.3.0 are unsigned, so the check is skipped for them.
+
 ## Disclosure
 
 Please do not file public GitHub issues for security vulnerabilities. We will publicly disclose the issue after a fix is shipped and users have had reasonable time to upgrade.
