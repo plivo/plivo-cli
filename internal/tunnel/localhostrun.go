@@ -28,7 +28,9 @@ const (
 // It announces the tunnel in a banner line such as:
 //
 //	abc123.lhr.life tunneled with tls termination, https://abc123.lhr.life
-var lhrURL = regexp.MustCompile(`https://[a-z0-9-]+\.lhr\.life`)
+//
+// The host has been abc123.app.lhr.life since Nov 2026, so subdomains nest.
+var lhrURL = regexp.MustCompile(`https://(?:[a-z0-9-]+\.)+lhr\.life`)
 
 // knownHostsPath returns the dedicated known-hosts file for tunnel providers.
 //
