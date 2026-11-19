@@ -170,6 +170,108 @@ if (-not ($userPath -split ';' | Where-Object { $_ -eq $InstallDir })) {
     Write-Host "-> Added $InstallDir to your user PATH (restart other shells to pick it up)."
 }
 
+# --- Banner ------------------------------------------------------------------
+# The logo the CLI draws after login, upgrade and skill install (cmd/banner.go;
+# cmd/banner_test.go keeps these rows in step). Terminal only, never in CI, and
+# it never fails an install that has already succeeded. ASCII only: the block
+# characters are built at run time.
+function Show-PlivoBanner {
+    try {
+        if ($env:PLIVO_NO_BANNER -or $env:CI -or [Console]::IsOutputRedirected) { return }
+        if ($Host.UI.RawUI.WindowSize.Width -lt 56) { return }
+        $art = @(
+            '..##..........####...##.............................',
+            '..####........####..####............................',
+            '..######......####..####............................',
+            '..#########...####...###............................',
+            '...##########.####..................................',
+            '.....########.####..####..####....#####...######....',
+            '.##....######.####..####..####....####...#########..',
+            '####....#####.####..####..#####...####..###########.',
+            '..#...#######.####..####...####..#####.############.',
+            '....#########.####..####...####..####..#####...#####',
+            '..##########..####..####...##########..####.....####',
+            '..########....####..####....########..#####.....####',
+            '..######......####..####....########...####.....####',
+            '..####........####..####.....######....#####...#####',
+            '..####........####..####.....######....############.',
+            '..####........####..####.....#####......###########.',
+            '..####........####..####......####.......#########..',
+            '...###.........###..####......###.........######....'
+        )
+        # Colour only where escapes work (Windows Terminal), as the CLI does.
+        $paint = [bool]$env:WT_SESSION -and -not $env:NO_COLOR -and ($env:TERM -ne 'dumb')
+        $tc = ($env:COLORTERM -eq 'truecolor') -or ($env:COLORTERM -eq '24bit')
+        $esc = [string][char]27
+        $full = [string][char]0x2588
+        $upper = [string][char]0x2580
+        $lower = [string][char]0x2584
+        $rgb = @{ 1 = @(77, 106, 255, 63); 2 = @(38, 52, 140, 60) }
+        $seq = {
+            param($p, $isbg)
+            $c = $rgb[$p]
+            $plane = if ($isbg) { 48 } else { 38 }
+            if ($tc) { "$esc[$plane;2;$($c[0]);$($c[1]);$($c[2])m" } else { "$esc[$plane;5;$($c[3])m" }
+        }
+        # Pixels: 0 none, 1 ink, 2 shadow. Painted, each letter casts a shadow
+        # one pixel down and right.
+        $h = $art.Count + [int]$paint
+        $w = $art[0].Length + [int]$paint
+        $px = New-Object 'object[]' $h
+        for ($y = 0; $y -lt $h; $y++) { $px[$y] = New-Object 'int[]' $w }
+        for ($y = 0; $y -lt $art.Count; $y++) {
+            for ($x = 0; $x -lt $art[$y].Length; $x++) {
+                if ($art[$y][$x] -eq [char]'#') { $px[$y][$x] = 1 }
+            }
+        }
+        if ($paint) {
+            for ($y = 1; $y -lt $h; $y++) {
+                for ($x = 1; $x -lt $w; $x++) {
+                    if ($px[$y][$x] -eq 0 -and $px[$y - 1][$x - 1] -eq 1) { $px[$y][$x] = 2 }
+                }
+            }
+        }
+        Write-Host ""
+        for ($y = 0; $y -lt $h; $y += 2) {
+            $cells = @()
+            for ($x = 0; $x -lt $w; $x++) {
+                $top = $px[$y][$x]
+                $bot = if ($y + 1 -lt $h) { $px[$y + 1][$x] } else { 0 }
+                if ($top -eq 0 -and $bot -eq 0) { $g = ' '; $f = 0; $b = 0 }
+                elseif ($top -eq $bot) { $g = $full; $f = $top; $b = 0 }
+                elseif ($top -eq 0) { $g = $lower; $f = $bot; $b = 0 }
+                elseif ($bot -eq 0) { $g = $upper; $f = $top; $b = 0 }
+                else { $g = $upper; $f = $top; $b = $bot }
+                $cells += , @($g, $f, $b)
+            }
+            $n = $cells.Count
+            while ($n -gt 0 -and $cells[$n - 1][0] -eq ' ') { $n-- }
+            $line = ''
+            $fg = 0
+            $bg = 0
+            for ($i = 0; $i -lt $n; $i++) {
+                $g, $f, $b = $cells[$i]
+                if ($paint) {
+                    if ($g -ne ' ' -and $f -ne $fg) {
+                        $fg = $f
+                        $s = & $seq $fg $false
+                        $line += $s
+                    }
+                    if ($b -ne $bg) {
+                        $bg = $b
+                        $s = if ($bg -eq 0) { "$esc[49m" } else { & $seq $bg $true }
+                        $line += $s
+                    }
+                }
+                $line += $g
+            }
+            if ($paint -and $n -gt 0) { $line += "$esc[0m" }
+            Write-Host $line
+        }
+    } catch { }
+}
+Show-PlivoBanner
+
 Write-Host ""
 $ver = & $Target --version 2>$null
 Write-Host "OK Installed: $(if ($ver) { $ver } else { 'plivo (run plivo --version)' })"

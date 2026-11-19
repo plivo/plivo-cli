@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -23,6 +24,28 @@ func bannerSession(t *testing.T, tty bool, cols int) {
 }
 
 var ansiRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+// The installers draw the same logo before the CLI exists, so the rows they
+// carry must be the ones in bannerLogo.
+func TestInstallersCarryTheLogo(t *testing.T) {
+	row := regexp.MustCompile(`^[\s'",]*([.#]{40,})[\s'",]*$`)
+	want := strings.Join(bannerLogo[:], "\n")
+	for _, script := range []string{"install.sh", "install.ps1"} {
+		src, err := os.ReadFile("../" + script)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, line := range strings.Split(string(src), "\n") {
+			if m := row.FindStringSubmatch(line); m != nil {
+				got = append(got, m[1])
+			}
+		}
+		if strings.Join(got, "\n") != want {
+			t.Errorf("%s carries different logo rows than bannerLogo in cmd/banner.go:\n%s", script, strings.Join(got, "\n"))
+		}
+	}
+}
 
 func TestBannerGridIsRectangular(t *testing.T) {
 	for i, row := range bannerLogo {
