@@ -10,8 +10,7 @@ import (
 	"golang.org/x/term"
 )
 
-// The banner is the Plivo wordmark in blue with a darker shadow, and "CLI"
-// under it. It marks a
+// The banner is the Plivo wordmark in blue with a darker shadow. It marks a
 // moment worth a pause (a login, an upgrade, a skill install) and nothing
 // else: it goes to stderr, only on a terminal, and never in CI, so no script,
 // pipe or coding agent ever reads it.
@@ -40,28 +39,9 @@ var bannerLogo = [...]string{
 	"...###.........###..####......###.........######....",
 }
 
-// bannerCLI is "CLI" in the same pixels, as tall as the logo's lowercase
-// letters and as heavy as its bars.
-var bannerCLI = [...]string{
-	".#######...####.......####",
-	"#########..####.......####",
-	"#########..####.......####",
-	"#########..####.......####",
-	"####..###..####.......####",
-	"####.......####.......####",
-	"####.......####.......####",
-	"####..###..####.......####",
-	"#########..#########..####",
-	"#########..#########..####",
-	"#########..#########..####",
-	".#######...#########..####",
-}
-
-const (
-	bannerGap     = 2  // pixel rows between the logo and "CLI"
-	bannerCLIAt   = 2  // column "CLI" starts at: under the stem of the P
-	bannerMinCols = 56 // narrower terminals get the welcome lines alone
-)
+// bannerMinCols is the narrowest terminal that gets the logo; narrower ones get
+// the welcome lines alone.
+const bannerMinCols = 56
 
 // pixel is what one banner pixel shows: nothing, ink, or the shadow behind it.
 type pixel uint8
@@ -148,12 +128,10 @@ func newBannerCell(top, bot pixel) bannerCell {
 	return bannerCell{"▀", top, bot}
 }
 
-// renderBanner returns the logo with "CLI" under it, one string per terminal
-// row. Painted, each letter also casts a shadow one pixel down and right.
+// renderBanner returns the logo, one string per terminal row. Painted, each
+// letter also casts a shadow one pixel down and right.
 func renderBanner(paint bool) []string {
-	logoH, logoW := len(bannerLogo), len(bannerLogo[0])
-	cliTop := logoH + bannerGap
-	h, w := cliTop+len(bannerCLI), logoW
+	h, w := len(bannerLogo), len(bannerLogo[0])
 	if paint {
 		h, w = h+1, w+1
 	}
@@ -161,15 +139,10 @@ func renderBanner(paint bool) []string {
 	for y := range px {
 		px[y] = make([]pixel, w)
 	}
-	for x := 0; x < logoW; x++ {
-		for y := 0; y < logoH; y++ {
-			if bannerLogo[y][x] == '#' {
+	for y, row := range bannerLogo {
+		for x := 0; x < len(row); x++ {
+			if row[x] == '#' {
 				px[y][x] = pxInk
-			}
-		}
-		for y := range bannerCLI {
-			if cx := x - bannerCLIAt; cx >= 0 && cx < len(bannerCLI[0]) && bannerCLI[y][cx] == '#' {
-				px[cliTop+y][x] = pxInk
 			}
 		}
 	}
