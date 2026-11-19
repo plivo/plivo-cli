@@ -261,6 +261,98 @@ fi
 trap - EXIT
 rm -rf "$TMPDIR"
 
+# ─── Banner ──────────────────────────────────────────────────────────────────
+# The logo the CLI draws after login, upgrade and skill install (cmd/banner.go;
+# cmd/banner_test.go keeps these rows in step). Terminal only, on stderr, never
+# in CI, and it never fails an install that has already succeeded.
+banner_art() {
+  cat <<'ART'
+..##..........####...##.............................
+..####........####..####............................
+..######......####..####............................
+..#########...####...###............................
+...##########.####..................................
+.....########.####..####..####....#####...######....
+.##....######.####..####..####....####...#########..
+####....#####.####..####..#####...####..###########.
+..#...#######.####..####...####..#####.############.
+....#########.####..####...####..####..#####...#####
+..##########..####..####...##########..####.....####
+..########....####..####....########..#####.....####
+..######......####..####....########...####.....####
+..####........####..####.....######....#####...#####
+..####........####..####.....######....############.
+..####........####..####.....#####......###########.
+..####........####..####......####.......#########..
+...###.........###..####......###.........######....
+ART
+}
+
+# banner_render PAINT TRUECOLOR: half blocks, as banner.go draws them. Painted,
+# each letter also casts a darker shadow one pixel down and right.
+banner_render() {
+  banner_art | awk -v paint="$1" -v tc="$2" '
+    function esc(p, isbg,   plane) {
+      plane = isbg ? 48 : 38
+      if (T) return sprintf("\033[%d;2;%d;%d;%dm", plane, R[p], G[p], B[p])
+      return sprintf("\033[%d;5;%dm", plane, C[p])
+    }
+    BEGIN {
+      P = paint + 0; T = tc + 0
+      R[1] = 77; G[1] = 106; B[1] = 255; C[1] = 63
+      R[2] = 38; G[2] = 52;  B[2] = 140; C[2] = 60
+    }
+    { rows[NR] = $0 }
+    END {
+      h = NR; w = length(rows[1])
+      if (P) { h++; w++ }
+      for (y = 0; y < h; y++) for (x = 0; x < w; x++) px[y, x] = 0
+      for (y = 1; y <= NR; y++)
+        for (x = 1; x <= length(rows[y]); x++)
+          if (substr(rows[y], x, 1) == "#") px[y - 1, x - 1] = 1
+      if (P) for (y = 1; y < h; y++) for (x = 1; x < w; x++)
+        if (px[y, x] == 0 && px[y - 1, x - 1] == 1) px[y, x] = 2
+      for (y = 0; y < h; y += 2) {
+        for (x = 0; x < w; x++) {
+          top = px[y, x]; bot = (y + 1 < h) ? px[y + 1, x] : 0
+          if (top == 0 && bot == 0)  { g[x] = " ";   f[x] = 0;   b[x] = 0 }
+          else if (top == bot)       { g[x] = "█"; f[x] = top; b[x] = 0 }
+          else if (top == 0)         { g[x] = "▄"; f[x] = bot; b[x] = 0 }
+          else if (bot == 0)         { g[x] = "▀"; f[x] = top; b[x] = 0 }
+          else                       { g[x] = "▀"; f[x] = top; b[x] = bot }
+        }
+        n = w
+        while (n > 0 && g[n - 1] == " ") n--
+        line = ""; fg = 0; bg = 0
+        for (x = 0; x < n; x++) {
+          if (P) {
+            if (g[x] != " " && f[x] != fg) { fg = f[x]; line = line esc(fg, 0) }
+            if (b[x] != bg) { bg = b[x]; line = line (bg == 0 ? "\033[49m" : esc(bg, 1)) }
+          }
+          line = line g[x]
+        }
+        if (P && n > 0) line = line "\033[0m"
+        print line
+      }
+    }'
+}
+
+# print_banner draws the logo when stderr is a terminal at least 56 columns
+# wide and nobody opted out (CI, PLIVO_NO_BANNER). Without colour support
+# (NO_COLOR, TERM=dumb) it prints in the terminal's own colour.
+print_banner() {
+  [ -z "${PLIVO_NO_BANNER:-}" ] && [ -z "${CI:-}" ] && [ -t 2 ] || return 0
+  local cols paint=1 tc=0
+  cols=$(stty size <&2 2>/dev/null | awk '{print $2}') || cols=0
+  [ "${cols:-0}" -ge 56 ] 2>/dev/null || return 0
+  if [ -n "${NO_COLOR:-}" ] || [ "${TERM:-}" = dumb ]; then paint=0; fi
+  case "${COLORTERM:-}" in truecolor | 24bit) tc=1 ;; esac
+  echo >&2
+  banner_render "$paint" "$tc" >&2
+}
+# end of banner functions
+print_banner || true
+
 echo
 echo "✓ Installed: $("$TARGET" --version 2>/dev/null || echo "plivo (run 'plivo --version')")"
 echo "✓ Location:  $TARGET"
