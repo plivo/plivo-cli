@@ -10,8 +10,10 @@ Aliases:
   caller-ids, caller-id
 
 Available Commands:
+  create      Start verifying a caller ID: sends a one-time passcode (requires --yes)
   get         Get a verified caller ID by its number
   list        List the account's verified caller IDs
+  verify      Finish verifying a caller ID with the passcode it was sent
 
 Flags:
   -h, --help   help for caller-ids
