@@ -65,6 +65,8 @@ var outputTypes = map[string]reflect.Type{
 	"plivo sip uris list":                         reflect.TypeFor[api.SIPTrunkURIList](),
 	"plivo verify sessions get":                   reflect.TypeFor[api.VerifySession](),
 	"plivo verify sessions list":                  reflect.TypeFor[api.VerifySessionList](),
+	"plivo voice caller-ids get":                  reflect.TypeFor[api.VerifiedCallerID](),
+	"plivo voice caller-ids list":                 reflect.TypeFor[api.VerifiedCallerIDList](),
 	"plivo voice calls get":                       reflect.TypeFor[api.Call](),
 	"plivo voice calls list":                      reflect.TypeFor[api.CallList](),
 	"plivo voice calls streams get":               reflect.TypeFor[api.AudioStream](),

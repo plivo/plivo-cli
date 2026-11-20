@@ -139,6 +139,22 @@ func TestVoiceStreamsReadiness_accountChecks(t *testing.T) {
 	}
 }
 
+// A caller ID that is neither on the account nor verified fails the call with
+// 3030; the error's hint says how to verify it.
+func TestVoiceStreamsReadiness_unknownCallerIDNamesHowToVerifyIt(t *testing.T) {
+	setFakeCreds(t)
+	readinessAPI(t, map[string]apiReply{
+		"/VerifiedCallerId/+14155551234/": {http.StatusBadRequest, `{"error":"Phone Number not found"}`},
+		accountPath:                       ok(fundedPaid),
+	})
+	err, _, _ := execCmd(t, "voice", "streams", "readiness", "-o", "json", "--dry-run",
+		"--from", "+14155551234", "--to", "+14155555678", "--answer-url", "https://agent.example.com/answer")
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || !strings.Contains(ce.Hint, "plivo voice caller-ids create +14155551234") {
+		t.Errorf("want a hint naming `plivo voice caller-ids create +14155551234`, got %v", err)
+	}
+}
+
 // Without --dry-run the number's answer URL is simulated, but a host Plivo
 // cannot reach fails before anything is sent to it.
 func TestVoiceStreamsReadiness_localAnswerURLFails(t *testing.T) {

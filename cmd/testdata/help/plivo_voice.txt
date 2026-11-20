@@ -1,10 +1,11 @@
-Voice — calls, conferences, multiparty, recordings, endpoints
+Voice — calls, caller IDs, conferences, multiparty, recordings, endpoints
 
 Usage:
   plivo voice [flags]
   plivo voice [command]
 
 Available Commands:
+  caller-ids  Verified caller IDs: numbers you may show as the caller of an outbound call
   calls       Make and inspect voice calls
   conferences Inspect and control live audio conferences
   endpoints   Manage SIP endpoints (registered SIP devices/usernames)

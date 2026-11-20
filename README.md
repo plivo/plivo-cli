@@ -56,6 +56,7 @@ Commands that spend money, such as sending, calling and renting a number, do not
 | Send a one-time passcode | `plivo verify sessions create --help` |
 | Look up a number's carrier (billed, no `--yes`) | `plivo lookup <number>`; preview with `--dry-run` |
 | See what I spent | `plivo account usage` |
+| Show a number I own elsewhere as my caller ID | `plivo voice caller-ids create +14155550100 --yes` sends a passcode; then `plivo voice caller-ids verify <verification_uuid> --otp <code>` |
 | See what Plivo charges in a country | `plivo account pricing --country IN` |
 | Switch organization | `plivo org list`, then `plivo org use <name>` |
 

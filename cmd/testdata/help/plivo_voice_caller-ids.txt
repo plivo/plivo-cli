@@ -1,0 +1,34 @@
+A verified caller ID is a number you do not rent from Plivo, proved yours with
+a one-time passcode, that you may then show as the caller of an outbound call.
+A number rented from Plivo needs no verification.
+
+Usage:
+  plivo voice caller-ids [flags]
+  plivo voice caller-ids [command]
+
+Aliases:
+  caller-ids, caller-id
+
+Available Commands:
+  create      Start verifying a caller ID: sends a one-time passcode (requires --yes)
+  get         Get a verified caller ID by its number
+  list        List the account's verified caller IDs
+  verify      Finish verifying a caller ID with the passcode it was sent
+
+Flags:
+  -h, --help   help for caller-ids
+
+Global Flags:
+      --dry-run            preview requests and local changes without sending or writing anything
+      --log-level string   log level: debug|info|warn|error|none (default "warn")
+      --no-color           disable colored output
+  -o, --output string      output format: table|json|jsonl|yaml|csv (default: table for TTY, json otherwise)
+      --profile string     named profile from ~/.plivo/config.toml
+      --query string       JMESPath filter on the JSON output, e.g. 'data.objects[].call_uuid' (implies -o json)
+  -q, --quiet              suppress non-data output
+      --schema             describe the command (arguments, flags, output fields) instead of running it
+      --show-secrets       show auth tokens and passwords in API responses instead of [REDACTED]
+      --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
+  -y, --yes                skip confirmation prompts
+
+Use "plivo voice caller-ids [command] --help" for more information about a command.
