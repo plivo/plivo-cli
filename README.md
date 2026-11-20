@@ -56,6 +56,7 @@ Commands that spend money, such as sending, calling and renting a number, do not
 | Send a one-time passcode | `plivo verify sessions create --help` |
 | Look up a number's carrier (billed, no `--yes`) | `plivo lookup <number>`; preview with `--dry-run` |
 | See what I spent | `plivo account usage` |
+| See what Plivo charges in a country | `plivo account pricing --country IN` |
 | Switch organization | `plivo org list`, then `plivo org use <name>` |
 
 Commands read `plivo <area> <thing> <action>`. Every command is listed in [`docs/COMMANDS.md`](docs/COMMANDS.md).

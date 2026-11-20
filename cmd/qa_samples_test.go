@@ -19,6 +19,7 @@ var qaSamples = map[string]string{
 	"account applications list":   "",
 	"account applications update": "{app} --app-name qa",
 	"account get":                 "",
+	"account pricing":             "--country US",
 	"account subaccounts create":  "--name qa",
 	"account subaccounts delete":  "{sub}",
 	"account subaccounts get":     "{sub}",
