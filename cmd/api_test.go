@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -107,6 +108,56 @@ func TestExpandAPIPath(t *testing.T) {
 				t.Errorf("expandAPIPath(%q) = %q, want %q", tc.path, got, tc.want)
 			}
 		})
+	}
+}
+
+// Git Bash rewrites an argument that starts with / into a path under its own
+// install folder, so the CLI sees C:/Program Files/Git/Application/ and, not
+// finding /v1/, puts the account prefix in front of it.
+func TestUndoMSYSPath(t *testing.T) {
+	cases := []struct {
+		name, exepath, path, want string
+		fixed                     bool
+	}{
+		{"default install, account-relative", "", "C:/Program Files/Git/Application/", "/Application/", true},
+		{"default install, absolute", "", "C:/Program Files/Git/v1/Account/MA1/Application/", "/v1/Account/MA1/Application/", true},
+		{"default install, query kept", "", "C:/Program Files/Git/Application/?app_name=x", "/Application/?app_name=x", true},
+		{"x86 install", "", "C:/Program Files (x86)/Git/Pricing/", "/Pricing/", true},
+		{"per-user install", "", "C:/Users/dev/AppData/Local/Programs/Git/Number/", "/Number/", true},
+		{"install folder in any case", "", "c:/program files/git/Application/", "/Application/", true},
+		{"EXEPATH names a custom install", `D:\tools\Git`, "D:/tools/Git/Application/", "/Application/", true},
+		{"EXEPATH with backslashes in the path", `D:\tools\Git`, `D:\tools\Git\Application\`, "/Application/", true},
+		{"the install folder alone", "", "C:/Program Files/Git/", "/", true},
+		{"unknown install, no EXEPATH", "", "C:/Users/me/scoop/apps/git/current/Application/", "C:/Users/me/scoop/apps/git/current/Application/", false},
+		{"another drive path", "", "D:/data/file.json", "D:/data/file.json", false},
+		{"already right", "", "/Application/", "/Application/", false},
+		{"no leading slash", "", "Application/", "Application/", false},
+		{"colon later in the path", "", "/Number/+1415:5551234", "/Number/+1415:5551234", false},
+		{"folder name only prefixes another", "", "C:/Program Files/GitHub/Application/", "C:/Program Files/GitHub/Application/", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("EXEPATH", tc.exepath)
+			got, fixed := undoMSYSPath(tc.path)
+			if got != tc.want || fixed != tc.fixed {
+				t.Errorf("undoMSYSPath(%q) = %q, %v; want %q, %v", tc.path, got, fixed, tc.want, tc.fixed)
+			}
+		})
+	}
+}
+
+func TestRefuseDrivePath(t *testing.T) {
+	for _, p := range []string{"C:/Users/me/scoop/apps/git/current/Application/", `D:\data\Application\`} {
+		err := refuseDrivePath(p)
+		var ce *clierr.Error
+		if !errors.As(err, &ce) || !strings.Contains(ce.Hint, "MSYS_NO_PATHCONV=1") {
+			t.Errorf("refuseDrivePath(%q) = %v, want a bad-input error whose hint names MSYS_NO_PATHCONV=1", p, err)
+		}
+	}
+	for _, p := range []string{"/Application/", "Application/", "/v1/Account/MA1/", "/Number/+1415:5551234"} {
+		if err := refuseDrivePath(p); err != nil {
+			t.Errorf("refuseDrivePath(%q) = %v, want nil", p, err)
+		}
 	}
 }
 
@@ -358,6 +409,35 @@ func TestAPICmd_GET_passthroughJSON(t *testing.T) {
 	// Default JSON output (non-TTY) wraps the upstream body in {"data": ...}
 	if !strings.Contains(stdout, `"name"`) || !strings.Contains(stdout, `"acme"`) {
 		t.Errorf("stdout missing upstream payload, got: %s", stdout)
+	}
+}
+
+func TestAPICmd_GET_gitBashPath(t *testing.T) {
+	setFakeCreds(t)
+	t.Setenv("EXEPATH", "")
+	srv, hits := startAPIServer(t, 200, "application/json", `{}`)
+	pointAPIAtTestServer(t, srv)
+
+	// What Git Bash hands the CLI for `plivo api GET /Application/`.
+	err, _, stderr := execCmd(t, "api", "GET", "C:/Program Files/Git/Application/", "--query", "app_name=x")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := hits()
+	if len(got) != 1 || got[0].URL.Path != "/v1/Account/MAFAKEFORTEST/Application/" || got[0].URL.Query().Get("app_name") != "x" {
+		t.Fatalf("want one GET of /v1/Account/MAFAKEFORTEST/Application/?app_name=x, got %v", got)
+	}
+	if !strings.Contains(stderr, "MSYS_NO_PATHCONV=1") {
+		t.Errorf("stderr should say how to stop Git Bash rewriting the path, got: %s", stderr)
+	}
+
+	// A drive path the CLI cannot place is refused before any request.
+	err, _, _ = execCmd(t, "api", "GET", "C:/Users/me/scoop/apps/git/current/Application/")
+	if err == nil || !strings.Contains(err.Error(), "drive letter") {
+		t.Errorf("want a drive-letter error, got %v", err)
+	}
+	if len(hits()) != 1 {
+		t.Errorf("a drive path reached the network: %d hits", len(hits()))
 	}
 }
 

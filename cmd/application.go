@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/plivo/plivo-cli/internal/api"
 	"github.com/plivo/plivo-cli/internal/clierr"
@@ -41,6 +42,7 @@ var applicationCreateCmd = &cobra.Command{
 var (
 	appListLimit  int
 	appListOffset int
+	appListName   string
 )
 
 var applicationListCmd = &cobra.Command{
@@ -102,6 +104,7 @@ func init() {
 	applicationCreateCmd.Flags().BoolVar(&appCreateLogIncoming, "log-incoming-messages", true, "log inbound SMS content")
 	registerExplainFlag(applicationCreateCmd)
 
+	applicationListCmd.Flags().StringVar(&appListName, "app-name", "", "only the applications with this name")
 	registerListFlags(applicationListCmd, &appListLimit, &appListOffset)
 
 	applicationUpdateCmd.Flags().StringVar(&appUpdateName, "app-name", "", "new application name")
@@ -179,6 +182,9 @@ func runAppList(cmd *cobra.Command, args []string) error {
 	q := url.Values{}
 	q.Set("limit", strconv.Itoa(appListLimit))
 	q.Set("offset", strconv.Itoa(appListOffset))
+	if name := strings.TrimSpace(appListName); name != "" {
+		q.Set("app_name", name)
+	}
 
 	var resp api.ApplicationList
 	if err := fetchList(client, client.AccountURL("Application"), q, "objects", &resp); err != nil {

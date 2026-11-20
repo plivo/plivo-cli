@@ -1166,3 +1166,88 @@ type TTSUsage struct {
 	AuthID string                   `json:"auth_id"`
 	Routes map[string]TTSUsageRoute `json:"routes"`
 }
+
+// Price is a rate as the API sends it: a string such as "0.08000", or "" when
+// it sends null.
+type Price string
+
+func (p *Price) UnmarshalJSON(b []byte) error {
+	s := strings.TrimSpace(string(b))
+	switch {
+	case s == "null":
+		*p = ""
+	case strings.HasPrefix(s, `"`):
+		var v string
+		if err := json.Unmarshal(b, &v); err != nil {
+			return err
+		}
+		*p = Price(v)
+	default:
+		*p = Price(s) // a bare number
+	}
+	return nil
+}
+
+// PricingRate wraps the one price an object of the Pricing answer holds.
+type PricingRate struct {
+	Rate Price `json:"rate"`
+}
+
+// Pricing is the answer of GET /Pricing/ for one country. -o json passes the
+// whole body through, including the fields not read here.
+type Pricing struct {
+	RawBody
+	APIID        string                   `json:"api_id,omitempty"`
+	Country      string                   `json:"country"`
+	CountryCode  json.Number              `json:"country_code"`
+	CountryISO   string                   `json:"country_iso"`
+	Message      PricingMessage           `json:"message"`
+	MMS          PricingMessage           `json:"mms"`
+	PhoneNumbers map[string]PricingNumber `json:"phone_numbers"`
+	Voice        PricingVoice             `json:"voice"`
+	WhatsApp     map[string]PricingRate   `json:"whatsapp"`
+}
+
+type PricingMessage struct {
+	Inbound  PricingRate      `json:"inbound"`
+	Outbound PricingRate      `json:"outbound"`
+	Networks []PricingNetwork `json:"outbound_networks_list"`
+}
+
+type PricingNetwork struct {
+	GroupName string `json:"group_name"`
+	Rate      Price  `json:"rate"`
+}
+
+// PricingNumber is the price of one number type: local, tollfree, mobile or
+// national.
+type PricingNumber struct {
+	Rate  Price `json:"rate"`
+	Rates []struct {
+		Capabilities []string `json:"capabilities"`
+		RentalRate   Price    `json:"rental_rate"`
+		SetupRate    Price    `json:"setup_rate"`
+	} `json:"rates"`
+}
+
+type PricingVoice struct {
+	Inbound  PricingVoiceSide `json:"inbound"`
+	Outbound PricingVoiceSide `json:"outbound"`
+}
+
+// PricingVoiceSide is one direction of voice: a rate for each kind of number,
+// and, outbound, one for each prefix.
+type PricingVoiceSide struct {
+	IP       PricingRate        `json:"ip"`
+	Local    PricingRate        `json:"local"`
+	Tollfree PricingRate        `json:"tollfree"`
+	Rates    []PricingVoiceRate `json:"rates"`
+}
+
+type PricingVoiceRate struct {
+	OriginationPrefix []string `json:"origination_prefix"`
+	Prefix            []string `json:"prefix"`
+	Rate              Price    `json:"rate"`
+	NetworkGroup      string   `json:"voice_network_group"`
+	Unit              int      `json:"voice_unit"`
+}

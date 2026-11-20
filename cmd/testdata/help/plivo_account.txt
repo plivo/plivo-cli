@@ -7,6 +7,7 @@ Usage:
 Available Commands:
   applications Manage Plivo applications (voice/messaging webhooks)
   get          Get account details (name, billing mode, credits, address)
+  pricing      Show Plivo's rates for a country: SMS, MMS, voice, numbers, WhatsApp
   subaccounts  Manage subaccounts under the master account
   update       Update account profile fields
   usage        Show usage and spend for a date window: by product, other charges, total
