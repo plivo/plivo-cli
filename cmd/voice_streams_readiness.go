@@ -247,7 +247,7 @@ func (r *readiness) outbound(client *api.Client) *simulateOpts {
 		// An unverified number answers 400 "Phone Number not found" (seen live).
 		case ve.StatusCode == http.StatusNotFound || strings.Contains(strings.ToLower(ve.Message), "not found"):
 			r.fail("caller_id", src, streamCheckFailed(r.From+" is neither a number on this account nor a verified caller ID: the call would fail with 3030 (Unknown Caller ID)",
-				"`plivo numbers list` shows the numbers on this account."))
+				"`plivo numbers list` shows the numbers on this account; `plivo voice caller-ids create "+r.From+" --yes` starts verifying it as a caller ID."))
 		default:
 			r.fail("caller_id", src, ve)
 		}
