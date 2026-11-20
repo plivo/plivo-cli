@@ -176,6 +176,7 @@ func TestListFilters_documentedValuesReachTheQuery(t *testing.T) {
 		{[]string{"messaging", "sms", "tollfree", "list", "--status", "UPDATE_REQUIRED"}, []string{"status=UPDATE_REQUIRED"}},
 		{[]string{"verify", "sessions", "list", "--status", "in-progress"}, []string{"status=in-progress"}},
 		{[]string{"agents", "list", "--state", "PAUSED"}, []string{"state=PAUSED"}},
+		{[]string{"account", "applications", "list", "--app-name", " my app "}, []string{"app_name=my+app"}},
 		{[]string{"numbers", "compliance", "list", "--status", "accepted", "--number-type", "national", "--user-type", "individual"},
 			[]string{"status=accepted", "number_type=national", "user_type=individual"}},
 	}

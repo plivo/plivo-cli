@@ -419,9 +419,10 @@ plivo account applications list [flags]
 Flags:
 
 ```
-      --all          fetch every page (stops after 100 pages)
-      --limit int    results per page (1-20) (default 20)
-      --offset int   pagination offset
+      --all               fetch every page (stops after 100 pages)
+      --app-name string   only the applications with this name
+      --limit int         results per page (1-20) (default 20)
+      --offset int        pagination offset
 ```
 
 ---
