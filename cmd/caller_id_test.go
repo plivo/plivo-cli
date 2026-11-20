@@ -404,3 +404,15 @@ func TestCallerIDsVerify_anInactiveVerificationSaysWhatToDo(t *testing.T) {
 		t.Errorf("want a hint that names create and the 15 minutes, got %v", err)
 	}
 }
+
+// Seen live: Plivo refuses an Indian number before it sends anything.
+func TestCallerIDsCreate_anIndianNumberSaysWhatToUseInstead(t *testing.T) {
+	setFakeCreds(t)
+	captureServer(t, http.StatusBadRequest, `{"api_id":"a","error":"verification of Indian number is not allowed, use Plivo's India numbers for traffic in India."}`)
+
+	err, _, _ := execCmd(t, "voice", "caller-ids", "create", "+919876543210", "--yes")
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || !strings.Contains(ce.Hint, "Plivo India number") || !strings.Contains(ce.Hint, "numbers search --country IN") {
+		t.Errorf("want a hint that points at a Plivo India number, got %v", err)
+	}
+}

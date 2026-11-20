@@ -4189,7 +4189,8 @@ verification_uuid. Finish with plivo voice caller-ids verify <verification_uuid>
 --otp <code>. The passcode is valid for 15 minutes.
 
 The number is in E.164; the + is added if you leave it off. A number rented from
-Plivo needs no verification.
+Plivo needs no verification. Plivo does not verify Indian (+91) numbers: it
+refuses before sending anything.
 
 ```
 plivo voice caller-ids create <number> [flags]

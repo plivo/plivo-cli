@@ -66,7 +66,8 @@ verification_uuid. Finish with plivo voice caller-ids verify <verification_uuid>
 --otp <code>. The passcode is valid for 15 minutes.
 
 The number is in E.164; the + is added if you leave it off. A number rented from
-Plivo needs no verification.`,
+Plivo needs no verification. Plivo does not verify Indian (+91) numbers: it
+refuses before sending anything.`,
 	Example: `  plivo voice caller-ids create +14155550100 --alias "front desk" --yes
   plivo voice caller-ids create +14155550100 --channel call --yes`,
 	Args: cobra.ExactArgs(1),
@@ -261,6 +262,12 @@ func runCallerIDCreate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if apiErr != nil {
+		// Seen live: HTTP 400 "verification of Indian number is not allowed,
+		// use Plivo's India numbers for traffic in India." Nothing is sent.
+		if apiErr.StatusCode == http.StatusBadRequest && strings.Contains(strings.ToLower(apiErr.Message), "indian number is not allowed") {
+			apiErr.Hint = "Plivo does not verify Indian (+91) numbers as caller IDs. For traffic in India use a Plivo India number: " +
+				"`plivo numbers search --country IN` finds one."
+		}
 		return apiErr
 	}
 	if dryRun {
