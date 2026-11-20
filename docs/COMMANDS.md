@@ -912,6 +912,10 @@ Paths come in two flavours:
   /Message/                       account-scoped — expanded to
                                   /v1/Account/<active auth_id>/Message/
 
+On Git Bash for Windows, a path that starts with / is rewritten before the CLI
+sees it. The CLI undoes that for a default Git install; otherwise set
+MSYS_NO_PATHCONV=1, or leave the leading slash off (Application/).
+
 Mutating verbs (POST, PUT, PATCH, DELETE) require --yes (matches the rest of
 the CLI). Use --dry-run to preview without sending. GET and HEAD pass through.
 

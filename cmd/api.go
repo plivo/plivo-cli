@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/plivo/plivo-cli/internal/api"
@@ -67,6 +68,10 @@ Paths come in two flavours:
   /Message/                       account-scoped — expanded to
                                   /v1/Account/<active auth_id>/Message/
 
+On Git Bash for Windows, a path that starts with / is rewritten before the CLI
+sees it. The CLI undoes that for a default Git install; otherwise set
+MSYS_NO_PATHCONV=1, or leave the leading slash off (Application/).
+
 Mutating verbs (POST, PUT, PATCH, DELETE) require --yes (matches the rest of
 the CLI). Use --dry-run to preview without sending. GET and HEAD pass through.
 
@@ -104,6 +109,15 @@ func runAPI(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if fixed, ok := undoMSYSPath(path); ok {
+		if !quietFlag {
+			fmt.Fprintf(os.Stderr, "Git Bash turned the path into %q; using %q. Set MSYS_NO_PATHCONV=1 to stop it.\n", path, fixed)
+		}
+		path = fixed
+	}
+	if err := refuseDrivePath(path); err != nil {
+		return err
+	}
 	if err := validateAPIPath(path); err != nil {
 		return err
 	}
@@ -242,6 +256,46 @@ func resolveAPIMethodAndPath(args []string, methodFlag string) (string, string, 
 		return "", "", clierr.BadInput("path is required")
 	}
 	return method, path, nil
+}
+
+// drivePath starts a Windows path: C:/ or C:\.
+var drivePath = regexp.MustCompile(`^[A-Za-z]:[/\\]`)
+
+// gitInstallRoot matches where Git for Windows installs by default: for all
+// users (Program Files, or its x86 twin) or for one (under AppData).
+var gitInstallRoot = regexp.MustCompile(`(?i)^[A-Za-z]:/(?:Program Files(?: \(x86\))?|Users/[^/]+/AppData/Local/Programs)/Git/`)
+
+// undoMSYSPath puts back a path Git Bash rewrote. Git Bash (MSYS2) turns an
+// argument that starts with / into a path under its install folder, so
+// /Application/ reaches the CLI as C:/Program Files/Git/Application/. It cuts
+// that folder off, naming it by EXEPATH, which Git Bash sets to its install
+// folder, or else by where Git installs by default. fixed reports whether
+// the path was one.
+func undoMSYSPath(path string) (string, bool) {
+	if !drivePath.MatchString(path) {
+		return path, false
+	}
+	p := strings.ReplaceAll(path, `\`, "/")
+	if root := strings.TrimRight(strings.ReplaceAll(os.Getenv("EXEPATH"), `\`, "/"), "/"); root != "" &&
+		len(p) >= len(root) && strings.EqualFold(p[:len(root)], root) && (len(p) == len(root) || p[len(root)] == '/') {
+		return "/" + strings.TrimLeft(p[len(root):], "/"), true
+	}
+	if root := gitInstallRoot.FindString(p); root != "" {
+		return "/" + p[len(root):], true
+	}
+	return path, false
+}
+
+// refuseDrivePath stops a path that still starts with a drive letter. No API
+// path does, so it is Git Bash's rewrite of one that undoMSYSPath could not
+// place; sent, it would only come back 404.
+func refuseDrivePath(path string) error {
+	if !drivePath.MatchString(path) {
+		return nil
+	}
+	e := clierr.BadInput(fmt.Sprintf("path %q starts with a drive letter, which no API path does", path))
+	e.Hint = "On Git Bash, set MSYS_NO_PATHCONV=1 so it leaves /Application/ alone, or write the path without its leading slash (Application/)."
+	return e
 }
 
 // validateAPIPath rejects any path that looks like a full URL. `plivo api`
