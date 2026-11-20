@@ -1251,3 +1251,25 @@ type PricingVoiceRate struct {
 	NetworkGroup      string   `json:"voice_network_group"`
 	Unit              int      `json:"voice_unit"`
 }
+
+// VerifiedCallerID is a number the account may show as the caller of an
+// outbound call: /Account/{id}/VerifiedCallerId/{number}/.
+type VerifiedCallerID struct {
+	RawBody
+	APIID            string `json:"api_id,omitempty"`
+	PhoneNumber      string `json:"phone_number"`
+	Alias            string `json:"alias"`
+	Country          string `json:"country"`
+	VerificationUUID string `json:"verification_uuid"`
+	CreatedAt        string `json:"created_at"`
+	ModifiedAt       string `json:"modified_at"`
+	ResourceURI      string `json:"resource_uri,omitempty"`
+	Subaccount       string `json:"subaccount,omitempty"`
+}
+
+type VerifiedCallerIDList struct {
+	RawBody
+	APIID   string             `json:"api_id,omitempty"`
+	Meta    ListMeta           `json:"meta"`
+	Objects []VerifiedCallerID `json:"objects"`
+}

@@ -107,6 +107,14 @@ assert_url "account pricing" \
   "GET ${BASE}/api/v1/Account/[A-Z0-9]+/Pricing/\?country_iso=IN" \
   "$BIN" account pricing --country in --dry-run
 
+assert_url "voice caller-ids list" \
+  "GET ${BASE}/api/v1/Account/[A-Z0-9]+/VerifiedCallerId/\?country=IN&limit=20&offset=0" \
+  "$BIN" voice caller-ids list --country in --dry-run
+
+assert_url "voice caller-ids get" \
+  "GET ${BASE}/api/v1/Account/[A-Z0-9]+/VerifiedCallerId/\+14155550100/" \
+  "$BIN" voice caller-ids get +14155550100 --dry-run
+
 assert_url "account subaccounts list" \
   "GET ${BASE}/api/v1/Account/[A-Z0-9]+/Subaccount/" \
   "$BIN" account subaccounts list --dry-run --limit 5

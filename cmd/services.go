@@ -11,7 +11,7 @@ import "github.com/spf13/cobra"
 
 var voiceCmd = &cobra.Command{
 	Use:   "voice",
-	Short: "Voice — calls, conferences, multiparty, recordings, endpoints",
+	Short: "Voice — calls, caller IDs, conferences, multiparty, recordings, endpoints",
 	Args:  cobra.NoArgs,
 	RunE:  groupRunE,
 }

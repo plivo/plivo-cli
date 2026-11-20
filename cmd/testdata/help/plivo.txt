@@ -39,7 +39,7 @@ Available Commands:
   tts         Text-to-speech: list voices, speak text to an audio file, manage lexicons
   upgrade     Upgrade plivo to the latest release
   verify      Plivo Verify — OTP / phone-number verification sessions
-  voice       Voice — calls, conferences, multiparty, recordings, endpoints
+  voice       Voice — calls, caller IDs, conferences, multiparty, recordings, endpoints
 
 Flags:
       --dry-run            preview requests and local changes without sending or writing anything

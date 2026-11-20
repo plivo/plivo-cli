@@ -133,6 +133,8 @@ var qaSamples = map[string]string{
 
 	"voice calls diagnose":          "{uuid}",
 	"voice calls dtmf":              "{uuid} --digits 12",
+	"voice caller-ids get":          "{number}",
+	"voice caller-ids list":         "",
 	"voice calls get":               "{uuid}",
 	"voice calls hangup":            "{uuid}",
 	"voice calls list":              "",
