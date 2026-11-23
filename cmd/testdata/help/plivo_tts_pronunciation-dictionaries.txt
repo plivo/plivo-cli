@@ -1,10 +1,20 @@
-Delete a lexicon (requires --yes)
+Manage pronunciation dictionaries
 
 Usage:
-  plivo tts lexicons delete <lexicon_id> [flags]
+  plivo tts pronunciation-dictionaries [flags]
+  plivo tts pronunciation-dictionaries [command]
+
+Aliases:
+  pronunciation-dictionaries, pronunciation-dictionary
+
+Available Commands:
+  create      Create a pronunciation dictionary
+  delete      Delete a pronunciation dictionary (requires --yes)
+  get         Get a pronunciation dictionary and its rules
+  list        List pronunciation dictionaries
 
 Flags:
-  -h, --help   help for delete
+  -h, --help   help for pronunciation-dictionaries
 
 Global Flags:
       --dry-run            preview requests and local changes without sending or writing anything
@@ -18,3 +28,5 @@ Global Flags:
       --show-secrets       show auth tokens and passwords in API responses instead of [REDACTED]
       --timeout duration   request timeout: seconds, or a duration such as 90s or 2m (default 30s)
   -y, --yes                skip confirmation prompts
+
+Use "plivo tts pronunciation-dictionaries [command] --help" for more information about a command.

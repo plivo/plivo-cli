@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+	"time"
 	"unicode/utf8"
 
 	"github.com/plivo/plivo-cli/internal/api"
@@ -25,7 +27,7 @@ import (
 
 // Limits from the Plivo TTS API reference.
 const (
-	ttsMaxChars       = 5000
+	ttsMaxChars       = 20000
 	ttsMaxInputBytes  = 1 << 20 // the API's request body limit
 	ttsMaxRules       = 100
 	ttsMaxNameChars   = 100
@@ -41,6 +43,9 @@ const (
 // ttsLanguages are the codes the API takes. English comes in four regional codes;
 // there is no plain "en".
 var ttsLanguages = []string{"auto", "en-US", "en-GB", "en-IN", "en-AU", "hi", "bn", "ta", "te", "mr", "gu", "kn"}
+
+// ttsKinds is how a pronunciation rule's value can be written.
+var ttsKinds = []string{"ipa", "arpa", "respell"}
 
 // ttsLanguageMatches reports whether a voice that speaks langs matches a --language
 // filter. A code with no region ("en") matches every region of that language.
@@ -80,7 +85,7 @@ var ttsExtFormats = map[string]string{
 
 var ttsCmd = &cobra.Command{
 	Use:   "tts",
-	Short: "Text-to-speech: list voices, speak text to an audio file, manage lexicons",
+	Short: "Text-to-speech: list voices, speak text to an audio file, manage pronunciation dictionaries",
 	Args:  cobra.NoArgs,
 	RunE:  groupRunE,
 }
@@ -90,8 +95,8 @@ var ttsVoicesCmd = &cobra.Command{
 	Short: "List the voices you can speak with",
 	Long: `List the voices you can speak with: Plivo's public voices and any your
 organization owns. Each voice speaks one language. --language and --gender
-filter the list here; the API has no filters. --language en lists every English
-voice; en-US, en-GB, en-IN and en-AU list one accent.`,
+narrow the list. --language en lists every English voice; en-US, en-GB, en-IN
+and en-AU list one accent.`,
 	Example: `  plivo tts voices --language hi
   plivo tts voices --language en-US --gender female
   plivo tts voice 6uWzc4xFj31t4jNJUaED`,
@@ -113,8 +118,10 @@ var ttsSpeakCmd = &cobra.Command{
 	Long: `Turn text into an audio file with a Plivo voice.
 
 Batch text-to-speech is billed per character, so it needs --yes; --dry-run
-prints the request and sends nothing. Text is up to 5000 characters, from
---text or --file (- reads stdin).
+prints the request and sends nothing. Text is up to 20000 characters, from
+--text or --file (- reads stdin). Without --timeout, speak waits long enough
+for the text's length (30 seconds plus one second for every 50 characters);
+--timeout sets your own limit.
 
 --format picks the audio: wav (24 kHz), mp3 (44.1 kHz, 128 kbps), mulaw or alaw
 (8 kHz telephony, raw), pcm (24 kHz, raw). Without it the --out extension
@@ -127,45 +134,49 @@ the audio to stdout, which is refused on a terminal.`,
 	RunE: runTTSSpeak,
 }
 
-var ttsLexiconCmd = &cobra.Command{
-	Use:     "lexicons",
-	Aliases: []string{"lexicon"},
-	Short:   "Manage pronunciation lexicons",
+var ttsDictionaryCmd = &cobra.Command{
+	Use:     "pronunciation-dictionaries",
+	Aliases: []string{"pronunciation-dictionary"},
+	Short:   "Manage pronunciation dictionaries",
 	Args:    cobra.NoArgs,
 	RunE:    groupRunE,
 }
 
-var ttsLexiconListCmd = &cobra.Command{
+var ttsDictionaryListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List pronunciation lexicons",
+	Short: "List pronunciation dictionaries",
 	Args:  cobra.NoArgs,
-	RunE:  runTTSLexiconList,
+	RunE:  runTTSDictionaryList,
 }
 
-var ttsLexiconGetCmd = &cobra.Command{
-	Use:   "get <lexicon_id>",
-	Short: "Get a lexicon and its rules",
+var ttsDictionaryGetCmd = &cobra.Command{
+	Use:   "get <pronunciation_dictionary_id>",
+	Short: "Get a pronunciation dictionary and its rules",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runTTSLexiconGet,
+	RunE:  runTTSDictionaryGet,
 }
 
-var ttsLexiconCreateCmd = &cobra.Command{
+var ttsDictionaryCreateCmd = &cobra.Command{
 	Use:   "create",
-	Short: "Create a lexicon of word pronunciations",
-	Long: `Create a lexicon: up to 100 rules, each a word and how to say it. --kind sets
-how every value is written: ipa, arpa or respell. Give the rules with --rule
-word=value (repeatable) or --file, a JSON array of {"word": ..., "value": ...}.
-Use the lexicon with plivo tts speak --lexicon <lexicon_id>.`,
-	Example: `  plivo tts lexicon create --name brands --kind respell --rule "Plivo=PLEE-voh"`,
+	Short: "Create a pronunciation dictionary",
+	Long: `Create a pronunciation dictionary: up to 100 rules, each a word, how to say it
+and the kind that value is written in: ipa, arpa or respell. Give the rules
+with --rule word=value (repeatable) or --file, a JSON array of
+{"word": ..., "kind": ..., "value": ...}; a rule in the file may also set
+"case_sensitive": true. --kind is the kind of every --rule, and of a rule in
+the file that names none. Each create makes a new dictionary, also with a name
+you already use. Use the dictionary with
+plivo tts speak --pronunciation-dictionary <pronunciation_dictionary_id>.`,
+	Example: `  plivo tts pronunciation-dictionaries create --name brands --kind respell --rule "Plivo=PLEE-voh"`,
 	Args:    cobra.NoArgs,
-	RunE:    runTTSLexiconCreate,
+	RunE:    runTTSDictionaryCreate,
 }
 
-var ttsLexiconDeleteCmd = &cobra.Command{
-	Use:   "delete <lexicon_id>",
-	Short: "Delete a lexicon (requires --yes)",
+var ttsDictionaryDeleteCmd = &cobra.Command{
+	Use:   "delete <pronunciation_dictionary_id>",
+	Short: "Delete a pronunciation dictionary (requires --yes)",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runTTSLexiconDelete,
+	RunE:  runTTSDictionaryDelete,
 }
 
 var ttsUsageCmd = &cobra.Command{
@@ -189,13 +200,13 @@ var (
 	ttsBitrate    int
 	ttsPace       float64
 	ttsVolume     float64
-	ttsLexicon    string
+	ttsDictionary string
 	ttsSeed       int64
 
-	ttsLexName  string
-	ttsLexKind  string
-	ttsLexFile  string
-	ttsLexRules []string
+	ttsDictName  string
+	ttsDictKind  string
+	ttsDictFile  string
+	ttsDictRules []string
 )
 
 func init() {
@@ -204,7 +215,7 @@ func init() {
 
 	f := ttsSpeakCmd.Flags()
 	f.StringVar(&ttsVoice, "voice", "", "voice_id from plivo tts voices (required)")
-	f.StringVar(&ttsText, "text", "", "text to speak, up to 5000 characters")
+	f.StringVar(&ttsText, "text", "", "text to speak, up to 20000 characters")
 	f.StringVar(&ttsFile, "file", "", "read the text from this file (- for stdin)")
 	f.StringVar(&ttsOut, "out", "", "file to write the audio to (- for stdout) (required)")
 	f.StringVar(&ttsLanguage, "language", "", "language code: "+strings.Join(ttsLanguages, ", ")+" (default auto)")
@@ -213,21 +224,20 @@ func init() {
 	f.IntVar(&ttsBitrate, "bitrate", 0, "mp3 bitrate in bits per second (default depends on the sample rate)")
 	f.Float64Var(&ttsPace, "pace", 1.0, "speaking pace, 0.7 to 1.2")
 	f.Float64Var(&ttsVolume, "volume", 1.0, "volume, 0.5 to 2.0")
-	f.StringVar(&ttsLexicon, "lexicon", "", "lexicon_id of a saved lexicon to apply")
+	f.StringVar(&ttsDictionary, "pronunciation-dictionary", "", "pronunciation_dictionary_id of a saved pronunciation dictionary to apply")
 	f.Int64Var(&ttsSeed, "seed", 0, "repeatable output: the same text, voice and seed give identical audio")
 	_ = ttsSpeakCmd.MarkFlagRequired("voice")
 	_ = ttsSpeakCmd.MarkFlagRequired("out")
 
-	g := ttsLexiconCreateCmd.Flags()
-	g.StringVar(&ttsLexName, "name", "", "lexicon name, up to 100 characters (required)")
-	g.StringVar(&ttsLexKind, "kind", "", "how the values are written: ipa, arpa or respell (required)")
-	g.StringVar(&ttsLexFile, "file", "", "JSON file: an array of {\"word\": ..., \"value\": ...}")
-	g.StringArrayVar(&ttsLexRules, "rule", nil, "a rule as word=value (repeatable)")
-	_ = ttsLexiconCreateCmd.MarkFlagRequired("name")
-	_ = ttsLexiconCreateCmd.MarkFlagRequired("kind")
+	g := ttsDictionaryCreateCmd.Flags()
+	g.StringVar(&ttsDictName, "name", "", "dictionary name, up to 100 characters (required)")
+	g.StringVar(&ttsDictKind, "kind", "", "how a value is written: ipa, arpa or respell (required for --rule)")
+	g.StringVar(&ttsDictFile, "file", "", "JSON file: an array of {\"word\": ..., \"kind\": ..., \"value\": ...}")
+	g.StringArrayVar(&ttsDictRules, "rule", nil, "a rule as word=value, written in --kind (repeatable)")
+	_ = ttsDictionaryCreateCmd.MarkFlagRequired("name")
 
-	ttsLexiconCmd.AddCommand(ttsLexiconListCmd, ttsLexiconGetCmd, ttsLexiconCreateCmd, ttsLexiconDeleteCmd)
-	ttsCmd.AddCommand(ttsVoicesCmd, ttsVoiceGetCmd, ttsSpeakCmd, ttsLexiconCmd, ttsUsageCmd)
+	ttsDictionaryCmd.AddCommand(ttsDictionaryListCmd, ttsDictionaryGetCmd, ttsDictionaryCreateCmd, ttsDictionaryDeleteCmd)
+	ttsCmd.AddCommand(ttsVoicesCmd, ttsVoiceGetCmd, ttsSpeakCmd, ttsDictionaryCmd, ttsUsageCmd)
 	rootCmd.AddCommand(ttsCmd)
 }
 
@@ -236,11 +246,7 @@ func runTTSVoices(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	// The docs list the voices under "voices", the live API under "objects".
-	var resp struct {
-		api.TTSVoiceList
-		Voices []api.TTSVoice `json:"voices"`
-	}
+	var resp api.TTSVoiceList
 	apiErr, err := client.Do("GET", client.AccountURL("TTS", "Voices"), nil, nil, &resp)
 	if err != nil {
 		return err
@@ -253,11 +259,7 @@ func runTTSVoices(cmd *cobra.Command, args []string) error {
 	}
 	var rows []api.TTSVoice
 	table := [][]string{{"VOICE_ID", "NAME", "GENDER", "LANGUAGES", "ACCENT"}}
-	voices := resp.Objects
-	if len(voices) == 0 {
-		voices = resp.Voices
-	}
-	for _, v := range voices {
+	for _, v := range resp.Objects {
 		if ttsVoicesLanguage != "" && !ttsLanguageMatches(v.Languages, ttsVoicesLanguage) {
 			continue
 		}
@@ -295,7 +297,8 @@ func runTTSVoiceGet(cmd *cobra.Command, args []string) error {
 	return output.KV(os.Stdout, [][2]string{
 		{"voice_id", v.VoiceID}, {"name", v.Name}, {"gender", v.Gender},
 		{"languages", strings.Join(v.Languages, ",")}, {"accent", v.AccentType},
-		{"description", v.Description}, {"lexicon", fmt.Sprint(v.Lexicon)}, {"sample_url", v.SampleURL},
+		{"description", v.Description}, {"is_owner", fmt.Sprint(v.IsOwner)}, {"sample_url", v.SampleURL},
+		{"created_at", v.CreatedAt},
 	})
 }
 
@@ -316,6 +319,12 @@ func runTTSSpeak(cmd *cobra.Command, args []string) error {
 	client, _, err := getClient()
 	if err != nil {
 		return err
+	}
+	if !cmd.Flags().Changed("timeout") {
+		// The timeout covers the whole response, and the audio arrives at about 64
+		// to 100 characters of text a second: the default would cut a long text
+		// after it was billed.
+		client.HTTP.Timeout = max(timeoutFlag, time.Duration(chars/50+30)*time.Second)
 	}
 	proceed, dryRun, gerr := guardSpend(fmt.Sprintf("speak %d characters with voice %s", chars, ttsVoice))
 	if !proceed {
@@ -579,7 +588,7 @@ func ttsSpeakBody(cmd *cobra.Command, text string) (map[string]any, error) {
 		if i < 0 {
 			e := clierr.BadFlag("language", fmt.Sprintf("%q is not one of %s", ttsLanguage, strings.Join(ttsLanguages, ", ")))
 			if strings.EqualFold(ttsLanguage, "en") {
-				e.Hint = "There is no plain en. Pick en-US, en-GB, en-IN or en-AU, the one the voice speaks (plivo tts voices --language en)."
+				e.Hint = "There is no plain en. Pick en-US, en-GB, en-IN or en-AU: on an English voice the code sets how numbers and dates are read, and the voice keeps its accent."
 			}
 			return nil, e
 		}
@@ -597,8 +606,8 @@ func ttsSpeakBody(cmd *cobra.Command, text string) (map[string]any, error) {
 		}
 		body["volume"] = ttsVolume
 	}
-	if ttsLexicon != "" {
-		body["lexicon_id"] = ttsLexicon
+	if ttsDictionary != "" {
+		body["pronunciation_dictionary_id"] = ttsDictionary
 	}
 	if cmd.Flags().Changed("seed") {
 		// A seed only repeats the audio with continuation off.
@@ -607,13 +616,13 @@ func ttsSpeakBody(cmd *cobra.Command, text string) (map[string]any, error) {
 	return body, nil
 }
 
-func runTTSLexiconList(cmd *cobra.Command, args []string) error {
+func runTTSDictionaryList(cmd *cobra.Command, args []string) error {
 	client, _, err := getClient()
 	if err != nil {
 		return err
 	}
-	var resp api.TTSLexiconList
-	apiErr, err := client.Do("GET", client.AccountURL("TTS", "Lexicons"), nil, nil, &resp)
+	var resp api.TTSPronunciationDictionaryList
+	apiErr, err := client.Do("GET", client.AccountURL("TTS", "PronunciationDictionaries"), nil, nil, &resp)
 	if err != nil {
 		return err
 	}
@@ -626,20 +635,20 @@ func runTTSLexiconList(cmd *cobra.Command, args []string) error {
 	if effectiveFormat() == output.FormatJSON {
 		return listJSON(os.Stdout, resp.Raw(), "objects")
 	}
-	table := [][]string{{"LEXICON_ID", "NAME", "KIND", "RULES", "VERSION"}}
-	for _, l := range resp.Objects {
-		table = append(table, []string{l.LexiconID, l.Name, l.Kind, fmt.Sprint(len(l.Rules)), fmt.Sprint(l.Version)})
+	table := [][]string{{"PRONUNCIATION_DICTIONARY_ID", "NAME", "RULES", "VERSION"}}
+	for _, d := range resp.Objects {
+		table = append(table, []string{d.PronunciationDictionaryID, d.Name, fmt.Sprint(len(d.Rules)), fmt.Sprint(d.Version)})
 	}
 	return output.Table(os.Stdout, table)
 }
 
-func runTTSLexiconGet(cmd *cobra.Command, args []string) error {
+func runTTSDictionaryGet(cmd *cobra.Command, args []string) error {
 	client, _, err := getClient()
 	if err != nil {
 		return err
 	}
-	var l api.TTSLexicon
-	apiErr, err := client.Do("GET", client.AccountURL("TTS", "Lexicons", args[0]), nil, nil, &l)
+	var d api.TTSPronunciationDictionary
+	apiErr, err := client.Do("GET", client.AccountURL("TTS", "PronunciationDictionaries", args[0]), nil, nil, &d)
 	if err != nil {
 		return err
 	}
@@ -650,29 +659,30 @@ func runTTSLexiconGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	if effectiveFormat() == output.FormatJSON {
-		return output.JSONRaw(os.Stdout, l.Raw())
+		return output.JSONRaw(os.Stdout, d.Raw())
 	}
 	if err := output.KV(os.Stdout, [][2]string{
-		{"lexicon_id", l.LexiconID}, {"name", l.Name}, {"kind", l.Kind}, {"version", fmt.Sprint(l.Version)},
+		{"pronunciation_dictionary_id", d.PronunciationDictionaryID}, {"name", d.Name}, {"description", d.Description},
+		{"version", fmt.Sprint(d.Version)}, {"created_at", d.CreatedAt},
 	}); err != nil {
 		return err
 	}
-	table := [][]string{{"WORD", "VALUE"}}
-	for _, r := range l.Rules {
-		table = append(table, []string{r.Word, r.Value})
+	table := [][]string{{"WORD", "KIND", "VALUE", "CASE_SENSITIVE"}}
+	for _, r := range d.Rules {
+		table = append(table, []string{r.Word, r.Kind, r.Value, fmt.Sprint(r.CaseSensitive)})
 	}
 	fmt.Println()
 	return output.Table(os.Stdout, table)
 }
 
-func runTTSLexiconCreate(cmd *cobra.Command, args []string) error {
-	if !slices.Contains([]string{"ipa", "arpa", "respell"}, ttsLexKind) {
-		return clierr.BadFlag("kind", fmt.Sprintf("%q is not ipa, arpa or respell", ttsLexKind))
+func runTTSDictionaryCreate(cmd *cobra.Command, args []string) error {
+	if ttsDictKind != "" && !slices.Contains(ttsKinds, ttsDictKind) {
+		return clierr.BadFlag("kind", fmt.Sprintf("%q is not ipa, arpa or respell", ttsDictKind))
 	}
-	if n := utf8.RuneCountInString(ttsLexName); n == 0 || n > ttsMaxNameChars {
+	if n := utf8.RuneCountInString(ttsDictName); n == 0 || n > ttsMaxNameChars {
 		return clierr.BadFlag("name", fmt.Sprintf("must be 1 to %d characters", ttsMaxNameChars))
 	}
-	rules, err := ttsLexiconRules()
+	rules, err := ttsDictionaryRules()
 	if err != nil {
 		return err
 	}
@@ -680,9 +690,9 @@ func runTTSLexiconCreate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	var l api.TTSLexicon
-	apiErr, err := client.Do("POST", client.AccountURL("TTS", "Lexicons"),
-		map[string]any{"name": ttsLexName, "kind": ttsLexKind, "rules": rules}, nil, &l)
+	var d api.TTSPronunciationDictionary
+	apiErr, err := client.Do("POST", client.AccountURL("TTS", "PronunciationDictionaries"),
+		map[string]any{"name": ttsDictName, "rules": rules}, nil, &d)
 	if err != nil {
 		return err
 	}
@@ -692,49 +702,60 @@ func runTTSLexiconCreate(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	return emitResponse(fmt.Sprintf("Created lexicon %s (%d rules)", l.LexiconID, len(rules)), l.Raw())
+	return emitResponse(fmt.Sprintf("Created pronunciation dictionary %s (%d rules)", d.PronunciationDictionaryID, len(rules)), d.Raw())
 }
 
-// ttsLexiconRules collects the rules from --file and --rule and checks the
-// API's limits, so a bad one is named here and not by a 422.
-func ttsLexiconRules() ([]api.TTSLexiconRule, error) {
-	var rules []api.TTSLexiconRule
-	if ttsLexFile != "" {
-		b, err := ttsReadPath(ttsLexFile, "the lexicon file")
+// ttsDictionaryRules collects the rules from --file and --rule and checks the
+// API's limits, so a bad one is named here and not by a 400. A rule's kind is
+// its own, from the file, else --kind.
+func ttsDictionaryRules() ([]api.TTSPronunciationRule, error) {
+	var rules []api.TTSPronunciationRule
+	if ttsDictFile != "" {
+		b, err := ttsReadPath(ttsDictFile, "the rules file")
 		if err != nil {
 			return nil, err
 		}
-		if err := json.Unmarshal(b, &rules); err != nil {
-			return nil, clierr.BadFlag("file", `must be a JSON array of {"word": ..., "value": ...}`)
+		// The API refuses a key it does not know. Dropping one here would send a
+		// rule that means something else, such as a misspelt case_sensitive.
+		dec := json.NewDecoder(bytes.NewReader(b))
+		dec.DisallowUnknownFields()
+		if err = dec.Decode(&rules); err == nil && dec.More() {
+			err = errors.New("more than one JSON value")
+		}
+		if err != nil {
+			return nil, clierr.BadFlag("file", fmt.Sprintf(`must be a JSON array of {"word": ..., "kind": ..., "value": ...}: %v`, err))
 		}
 	}
-	for _, s := range ttsLexRules {
+	for _, s := range ttsDictRules {
 		word, value, ok := strings.Cut(s, "=")
 		if !ok {
 			return nil, clierr.BadFlag("rule", fmt.Sprintf("%q is not word=value", s))
 		}
-		rules = append(rules, api.TTSLexiconRule{Word: word, Value: value})
+		rules = append(rules, api.TTSPronunciationRule{Word: word, Value: value})
 	}
 	if len(rules) == 0 || len(rules) > ttsMaxRules {
-		return nil, clierr.BadInput(fmt.Sprintf("a lexicon takes 1 to %d rules, from --rule or --file; got %d", ttsMaxRules, len(rules)))
+		return nil, clierr.BadInput(fmt.Sprintf("a pronunciation dictionary takes 1 to %d rules, from --rule or --file; got %d", ttsMaxRules, len(rules)))
 	}
-	for _, r := range rules {
+	for i, r := range rules {
 		if w, v := utf8.RuneCountInString(r.Word), utf8.RuneCountInString(r.Value); w == 0 || w > ttsMaxWordChars || v == 0 || v > ttsMaxValueChars {
 			return nil, clierr.BadInput(fmt.Sprintf("rule %q: the word takes 1 to %d characters and the value 1 to %d", r.Word, ttsMaxWordChars, ttsMaxValueChars))
+		}
+		if rules[i].Kind = cmp.Or(r.Kind, ttsDictKind); !slices.Contains(ttsKinds, rules[i].Kind) {
+			return nil, clierr.BadFlag("kind", fmt.Sprintf("rule %q needs a kind of ipa, arpa or respell, from --kind or its own in --file; got %q", r.Word, rules[i].Kind))
 		}
 	}
 	return rules, nil
 }
 
-func runTTSLexiconDelete(cmd *cobra.Command, args []string) error {
-	if err := confirmDestructive("delete lexicon " + args[0]); err != nil {
+func runTTSDictionaryDelete(cmd *cobra.Command, args []string) error {
+	if err := confirmDestructive("delete pronunciation dictionary " + args[0]); err != nil {
 		return err
 	}
 	client, _, err := getClient()
 	if err != nil {
 		return err
 	}
-	apiErr, err := client.Do("DELETE", client.AccountURL("TTS", "Lexicons", args[0]), nil, nil, nil)
+	apiErr, err := client.Do("DELETE", client.AccountURL("TTS", "PronunciationDictionaries", args[0]), nil, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -744,7 +765,7 @@ func runTTSLexiconDelete(cmd *cobra.Command, args []string) error {
 	if dryRunFlag {
 		return nil
 	}
-	return emitWrite("Deleted lexicon "+args[0], map[string]any{"lexicon_id": args[0], "deleted": true})
+	return emitWrite("Deleted pronunciation dictionary "+args[0], map[string]any{"pronunciation_dictionary_id": args[0], "deleted": true})
 }
 
 func runTTSUsage(cmd *cobra.Command, args []string) error {

@@ -1,15 +1,15 @@
-Text-to-speech: list voices, speak text to an audio file, manage lexicons
+Text-to-speech: list voices, speak text to an audio file, manage pronunciation dictionaries
 
 Usage:
   plivo tts [flags]
   plivo tts [command]
 
 Available Commands:
-  lexicons    Manage pronunciation lexicons
-  speak       Turn text into an audio file (billed per character)
-  usage       Show characters and audio generated, batch and realtime
-  voice       Show one voice
-  voices      List the voices you can speak with
+  pronunciation-dictionaries Manage pronunciation dictionaries
+  speak                      Turn text into an audio file (billed per character)
+  usage                      Show characters and audio generated, batch and realtime
+  voice                      Show one voice
+  voices                     List the voices you can speak with
 
 Flags:
   -h, --help   help for tts
