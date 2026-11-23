@@ -267,7 +267,7 @@ With the CLI, add `-o json`: the error envelope prints on stderr. Its `error.cod
 
 | `upstream.body.code` (HTTP status) | Meaning | Fix |
 |---|---|---|
-| `unauthorized` (401) | Bad or missing Auth ID or Auth Token | `plivo whoami`, then log in again |
+| `unauthorized` (401) | Bad or missing Auth ID or Auth Token | `plivo auth whoami`, then log in again |
 | `forbidden` (403) | The credentials are not for the Auth ID in the request path | Use the account that owns the credentials |
 | `voice_not_found` (404) | Unknown voice, or one the account may not use | `plivo tts voices` |
 | `language_not_supported` (400) | The voice does not speak the text's language | Pick a voice from `plivo tts voices --language <code>`, or set `--language` |
