@@ -90,8 +90,12 @@ has no single result, so -o yaml, -o csv and --query are refused.`,
 }
 
 var supportCmd = &cobra.Command{
-	Use:     "support",
-	Short:   "List your past support escalations (filed via `plivo ask`)",
+	Use:   "support",
+	Short: "List your past support tickets raised through Buddy",
+	Long: `List the support tickets you raised through Buddy, Plivo's AI assistant.
+
+Tickets are raised by asking Buddy in the CX Console (https://cx.plivo.com).
+plivo ask answers questions and debugs; it does not raise tickets.`,
 	Example: "  plivo support\n  plivo support -o json",
 	Args:    cobra.NoArgs,
 	RunE:    runSupport,
