@@ -1,7 +1,7 @@
 List the voices you can speak with: Plivo's public voices and any your
 organization owns. Each voice speaks one language. --language and --gender
-filter the list here; the API has no filters. --language en lists every English
-voice; en-US, en-GB, en-IN and en-AU list one accent.
+narrow the list. --language en lists every English voice; en-US, en-GB, en-IN
+and en-AU list one accent.
 
 Usage:
   plivo tts voices [flags]

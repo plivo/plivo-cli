@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/plivo/plivo-cli/internal/clierr"
 	"github.com/spf13/cobra"
@@ -21,7 +22,7 @@ const ttsAudio = "RIFF\x00\x01audio"
 func ttsRun(t *testing.T, srv *qaServer, stdin string, args ...string) qaResult {
 	t.Helper()
 	setFakeCreds(t)
-	for _, c := range []*cobra.Command{ttsVoicesCmd, ttsSpeakCmd, ttsLexiconCreateCmd} {
+	for _, c := range []*cobra.Command{ttsVoicesCmd, ttsSpeakCmd, ttsDictionaryCreateCmd} {
 		c.Flags().VisitAll(func(f *pflag.Flag) {
 			if f.Value.Type() != "stringArray" {
 				_ = f.Value.Set(f.DefValue)
@@ -29,7 +30,7 @@ func ttsRun(t *testing.T, srv *qaServer, stdin string, args ...string) qaResult 
 			f.Changed = false
 		})
 	}
-	ttsLexRules = nil
+	ttsDictRules = nil
 	return srv.run(t, stdin, append([]string{"tts"}, args...)...)
 }
 
@@ -108,15 +109,15 @@ func TestTTSSpeak_sendsOnlyTheOptionsGiven(t *testing.T) {
 	srv := ttsAudioServer(t, &accept)
 	out := filepath.Join(t.TempDir(), "a.wav")
 	r := ttsRun(t, srv, "", "speak", "--voice", "v", "--text", "hi", "--out", out, "--yes",
-		"--language", "hi", "--pace", "1.1", "--volume", "0.8", "--lexicon", "lx_1", "--seed", "7")
+		"--language", "hi", "--pace", "1.1", "--volume", "0.8", "--pronunciation-dictionary", "pd_1", "--seed", "7")
 	b := r.reqs[0].Body
-	if r.err != nil || b["language"] != "hi" || b["pace"] != 1.1 || b["volume"] != 0.8 || b["lexicon_id"] != "lx_1" ||
+	if r.err != nil || b["language"] != "hi" || b["pace"] != 1.1 || b["volume"] != 0.8 || b["pronunciation_dictionary_id"] != "pd_1" ||
 		b["seed"] != float64(7) || b["continuation"] != false {
 		t.Fatalf("err %v, body %v", r.err, b)
 	}
 	// The flags are package state: a second run must not inherit the first's.
 	r = ttsRun(t, srv, "", "speak", "--voice", "v", "--text", "hi", "--out", out, "--yes")
-	if b := r.reqs[0].Body; b["pace"] != nil || b["seed"] != nil || b["continuation"] != nil || b["lexicon_id"] != nil {
+	if b := r.reqs[0].Body; b["pace"] != nil || b["seed"] != nil || b["continuation"] != nil || b["pronunciation_dictionary_id"] != nil {
 		t.Errorf("second run inherited flags: %v", b)
 	}
 }
@@ -150,6 +151,51 @@ func TestTTSSpeak_refusedBeforeAnyRequest(t *testing.T) {
 		r := ttsRun(t, newQAServer(t, nil), "", append([]string{"speak", "--out", out}, strings.Fields(line)...)...)
 		if _, err := os.Stat(out); ttsCode(r.err) != c.want || len(r.reqs) != 0 || err == nil {
 			t.Errorf("%.60s: code %q, requests %v, file written %v; want %s, none, no", c.line, ttsCode(r.err), r.reqs, err == nil, c.want)
+		}
+	}
+}
+
+// The API takes 20,000 characters of text. The numbers are written out, so the
+// test fails if the CLI's own limit moves away from the API's.
+func TestTTSSpeak_textLimitIsTheAPIs(t *testing.T) {
+	var accept string
+	out := filepath.Join(t.TempDir(), "a.wav")
+	r := ttsRun(t, ttsAudioServer(t, &accept), "", "speak", "--voice", "v", "--text", strings.Repeat("a", 20000), "--out", out, "--yes")
+	if r.err != nil || len(r.reqs) != 1 || len(fmt.Sprint(r.reqs[0].Body["text"])) != 20000 {
+		t.Errorf("20,000 characters: err %v, %d requests; want the text sent whole", r.err, len(r.reqs))
+	}
+	r = ttsRun(t, ttsAudioServer(t, &accept), "", "speak", "--voice", "v", "--text", strings.Repeat("a", 20001), "--out", out, "--yes")
+	if ttsCode(r.err) != clierr.CodeBadInput || len(r.reqs) != 0 {
+		t.Errorf("20,001 characters: code %q, %d requests; want %s and none", ttsCode(r.err), len(r.reqs), clierr.CodeBadInput)
+	}
+}
+
+// Without --timeout the request waits for the text's length: the default 30 s
+// cut a long text after it was billed. With --timeout it is the user's limit.
+func TestTTSSpeak_waitsForTheTextsLength(t *testing.T) {
+	var accept string
+	var wait time.Duration
+	srv := ttsAudioServer(t, &accept)
+	audio := srv.handler
+	srv.handler = func(w http.ResponseWriter, r *http.Request) bool {
+		wait = clientForTest.HTTP.Timeout // the client the command is sending with
+		return audio(w, r)
+	}
+	out := filepath.Join(t.TempDir(), "a.wav")
+	for _, c := range []struct {
+		chars int
+		flags []string
+		want  time.Duration
+	}{
+		{20, nil, 30 * time.Second},
+		{3000, nil, 90 * time.Second},
+		{20000, nil, 430 * time.Second},
+		{20000, []string{"--timeout", "45"}, 45 * time.Second},
+	} {
+		wait = 0
+		r := ttsRun(t, srv, "", append([]string{"speak", "--voice", "v", "--text", strings.Repeat("a", c.chars), "--out", out, "--yes"}, c.flags...)...)
+		if r.err != nil || wait != c.want {
+			t.Errorf("%d characters %v: err %v, the request waits %s; want %s", c.chars, c.flags, r.err, wait, c.want)
 		}
 	}
 }
@@ -192,7 +238,7 @@ func TestTTSSpeak_apiErrorWritesNothing(t *testing.T) {
 }
 
 const ttsVoicesJSON = `{"api_id": "x", "meta": {"total_count": 3}, "objects": [
- {"voice_id": "r4_ashley", "name": "Ashley", "gender": "female", "languages": ["en"], "accent_type": "American", "description": "Warm", "sample_url": "https://example.test/ashley.mp3"},
+ {"voice_id": "r4_ashley", "is_owner": true, "name": "Ashley", "gender": "female", "languages": ["en"], "accent_type": "American", "description": "Warm", "sample_url": "https://example.test/ashley.mp3", "created_at": "2026-11-17T09:30:00.000Z"},
  {"voice_id": "r4_riya", "name": "Riya", "gender": "female", "languages": ["hi"], "accent_type": "Indian"},
  {"voice_id": "r4_aditya", "name": "Aditya", "gender": "male", "languages": ["hi"], "accent_type": "Indian"}]}`
 
@@ -213,61 +259,95 @@ func TestTTSVoices_filterHere(t *testing.T) {
 	if err := json.Unmarshal([]byte(r.stdout), &out); err != nil || len(out.Data.Objects) != 1 || out.Data.Objects[0].VoiceID != "r4_riya" {
 		t.Errorf("--language HI --gender Female -o json: %v\n%s", err, r.stdout)
 	}
-	if r = ttsRun(t, srv, "", "voices", "--language", "en", "-o", "json"); r.err != nil || !strings.Contains(r.stdout, `"sample_url": "https://example.test/ashley.mp3"`) || !strings.Contains(r.stdout, `"description": "Warm"`) {
-		t.Errorf("a voice must keep its sample_url and description: err %v\n%s", r.err, r.stdout)
+	if r = ttsRun(t, srv, "", "voices", "--language", "en", "-o", "json"); r.err != nil || !strings.Contains(r.stdout, `"sample_url": "https://example.test/ashley.mp3"`) || !strings.Contains(r.stdout, `"description": "Warm"`) ||
+		!strings.Contains(r.stdout, `"is_owner": true`) || !strings.Contains(r.stdout, `"created_at": "2026-11-17T09:30:00.000Z"`) {
+		t.Errorf("a voice must keep its sample_url, description, is_owner and created_at: err %v\n%s", r.err, r.stdout)
 	}
 	if r = ttsRun(t, srv, "", "voices", "--language", "kn", "-o", "json"); r.err != nil || !strings.Contains(r.stdout, `"objects": []`) {
 		t.Errorf("no match must be an empty list: err %v\n%s", r.err, r.stdout)
 	}
-	srv = newQAServer(t, map[string]string{"GET TTS/Voices/": `{"voices": [{"voice_id": "r4_riya", "languages": ["hi"]}]}`})
-	if r = ttsRun(t, srv, "", "voices", "-o", "table"); r.err != nil || !strings.Contains(r.stdout, "r4_riya") {
-		t.Errorf("the docs' voices shape: err %v\n%s", r.err, r.stdout)
-	}
 }
 
-const ttsLexJSON = `{"lexicon_id": "lx_1", "name": "brands", "kind": "respell", "version": 1, "rules": [{"word": "Plivo", "value": "PLEE-voh"}]}`
+const ttsDictJSON = `{"pronunciation_dictionary_id": "pd_1", "name": "brands", "description": "Brand names", "version": 1, "created_at": "2026-11-17T09:30:00.000Z",
+ "rules": [{"word": "Plivo", "kind": "respell", "value": "PLEE-voh", "case_sensitive": false}]}`
 
-func TestTTSLexicons_createChecksThenPosts(t *testing.T) {
-	srv := newQAServer(t, map[string]string{"POST TTS/Lexicons/": ttsLexJSON})
-	rules := filepath.Join(t.TempDir(), "rules.json")
-	_ = os.WriteFile(rules, []byte(`[{"word": "Plivo", "value": "PLEE-voh"}]`), 0o600)
+func TestTTSDictionaries_createChecksThenPosts(t *testing.T) {
+	srv := newQAServer(t, map[string]string{"POST TTS/PronunciationDictionaries/": ttsDictJSON})
+	dir := t.TempDir()
+	rules, noKind, misspelt := filepath.Join(dir, "rules.json"), filepath.Join(dir, "nokind.json"), filepath.Join(dir, "misspelt.json")
+	_ = os.WriteFile(rules, []byte(`[{"word": "Plivo", "kind": "ipa", "value": "ˈpliːvoʊ", "case_sensitive": true}]`), 0o600)
+	_ = os.WriteFile(noKind, []byte(`[{"word": "Plivo", "value": "PLEE-voh"}, {"word": "SMS", "value": "ess em ess"}]`), 0o600)
+	_ = os.WriteFile(misspelt, []byte(`[{"word": "Plivo", "kind": "ipa", "value": "ˈpliːvoʊ", "caseSensitive": true}]`), 0o600)
 
-	r := ttsRun(t, srv, "", "lexicons", "create", "--name", "brands", "--kind", "respell", "--file", rules, "--rule", "SMS=ess em ess")
-	want := `[map[value:PLEE-voh word:Plivo] map[value:ess em ess word:SMS]]`
-	if r.err != nil || len(r.reqs) != 1 || r.reqs[0].Body["name"] != "brands" || r.reqs[0].Body["kind"] != "respell" ||
-		fmt.Sprint(r.reqs[0].Body["rules"]) != want || !strings.Contains(r.stdout, "lx_1") {
+	// The kind is each rule's own: the file's, else --kind. The dictionary has none.
+	r := ttsRun(t, srv, "", "pronunciation-dictionaries", "create", "--name", "brands", "--kind", "respell", "--file", rules, "--rule", "SMS=ess em ess")
+	want := `[map[case_sensitive:true kind:ipa value:ˈpliːvoʊ word:Plivo] map[kind:respell value:ess em ess word:SMS]]`
+	if r.err != nil || len(r.reqs) != 1 || r.reqs[0].Body["name"] != "brands" || r.reqs[0].Body["kind"] != nil ||
+		fmt.Sprint(r.reqs[0].Body["rules"]) != want || !strings.Contains(r.stdout, "pd_1") {
 		t.Fatalf("err %v, requests %v, stdout %s", r.err, r.reqs, r.stdout)
+	}
+	// A file whose rules name no kind takes --kind for each of them.
+	r = ttsRun(t, srv, "", "pronunciation-dictionaries", "create", "--name", "brands", "--kind", "respell", "--file", noKind)
+	want = `[map[kind:respell value:PLEE-voh word:Plivo] map[kind:respell value:ess em ess word:SMS]]`
+	if r.err != nil || len(r.reqs) != 1 || fmt.Sprint(r.reqs[0].Body["rules"]) != want {
+		t.Fatalf("--kind for a file with no kinds: err %v, requests %v; want rules %s", r.err, r.reqs, want)
+	}
+	// A file whose rules carry their own kind needs no --kind.
+	r = ttsRun(t, srv, "", "pronunciation-dictionaries", "create", "--name", "brands", "--file", rules)
+	want = `[map[case_sensitive:true kind:ipa value:ˈpliːvoʊ word:Plivo]]`
+	if r.err != nil || len(r.reqs) != 1 || fmt.Sprint(r.reqs[0].Body["rules"]) != want {
+		t.Fatalf("a file with its own kinds and no --kind: err %v, requests %v; want rules %s", r.err, r.reqs, want)
 	}
 	for _, line := range []string{
 		"--name n --kind phoneme --rule a=b",
+		"--name n --kind phoneme --file " + rules,
+		"--name n --file " + misspelt,
 		"--name n --kind ipa",
 		"--name n --kind ipa --rule noequals",
 		"--name n --kind ipa --rule =b",
 		"--name n --kind ipa --rule a=" + strings.Repeat("v", ttsMaxValueChars+1),
+		"--name n --rule a=b",
+		"--name n --file " + noKind,
 	} {
-		if r := ttsRun(t, srv, "", append([]string{"lexicons", "create"}, strings.Fields(line)...)...); r.err == nil || len(r.reqs) != 0 {
+		if r := ttsRun(t, srv, "", append([]string{"pronunciation-dictionaries", "create"}, strings.Fields(line)...)...); r.err == nil || len(r.reqs) != 0 {
 			t.Errorf("%.50s: err %v, requests %v; want a refusal and none", line, r.err, r.reqs)
 		}
 	}
 }
 
-func TestTTSLexicons_listGetDelete(t *testing.T) {
+func TestTTSDictionaries_listGetDelete(t *testing.T) {
 	srv := newQAServer(t, map[string]string{
-		"GET TTS/Lexicons/":         `{"objects": [` + ttsLexJSON + `]}`,
-		"GET TTS/Lexicons/lx_1/":    ttsLexJSON,
-		"DELETE TTS/Lexicons/lx_1/": ``,
+		"GET TTS/PronunciationDictionaries/":         `{"objects": [` + ttsDictJSON + `]}`,
+		"GET TTS/PronunciationDictionaries/pd_1/":    ttsDictJSON,
+		"DELETE TTS/PronunciationDictionaries/pd_1/": `{"api_id": "x", "pronunciation_dictionary_id": "pd_1", "message": "deleted"}`,
 	})
-	if r := ttsRun(t, srv, "", "lexicons", "list", "-o", "table"); r.err != nil || !strings.Contains(r.stdout, "lx_1") || !strings.Contains(r.stdout, "respell") {
+	if r := ttsRun(t, srv, "", "pronunciation-dictionaries", "list", "-o", "table"); r.err != nil || !strings.Contains(r.stdout, "pd_1") || !strings.Contains(r.stdout, "brands") {
 		t.Errorf("list: err %v\n%s", r.err, r.stdout)
 	}
-	if r := ttsRun(t, srv, "", "lexicon", "get", "lx_1", "-o", "table"); r.err != nil || !strings.Contains(r.stdout, "PLEE-voh") {
+	if r := ttsRun(t, srv, "", "pronunciation-dictionary", "get", "pd_1", "-o", "table"); r.err != nil || !strings.Contains(r.stdout, "PLEE-voh") ||
+		!strings.Contains(r.stdout, "respell") || !strings.Contains(r.stdout, "Brand names") {
 		t.Errorf("get: err %v\n%s", r.err, r.stdout)
 	}
-	if r := ttsRun(t, srv, "", "lexicons", "delete", "lx_1"); ttsCode(r.err) != clierr.CodeDestructiveRefused || len(r.reqs) != 0 {
+	if r := ttsRun(t, srv, "", "pronunciation-dictionaries", "delete", "pd_1"); ttsCode(r.err) != clierr.CodeDestructiveRefused || len(r.reqs) != 0 {
 		t.Errorf("delete without --yes: code %q, requests %v", ttsCode(r.err), r.reqs)
 	}
-	if r := ttsRun(t, srv, "", "lexicons", "delete", "lx_1", "--yes"); r.err != nil || len(r.reqs) != 1 || r.reqs[0].String() != "DELETE TTS/Lexicons/lx_1/" {
+	if r := ttsRun(t, srv, "", "pronunciation-dictionaries", "delete", "pd_1", "--yes"); r.err != nil || len(r.reqs) != 1 || r.reqs[0].String() != "DELETE TTS/PronunciationDictionaries/pd_1/" {
 		t.Errorf("delete --yes: err %v, requests %v", r.err, r.reqs)
+	}
+}
+
+// The API has one name for a pronunciation dictionary: the old commands and
+// flag are gone, not aliases, and send nothing.
+func TestTTS_noLexiconNames(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "a.wav")
+	for _, args := range [][]string{
+		{"lexicons", "list"},
+		{"lexicon", "get", "lx_1"},
+		{"speak", "--voice", "v", "--text", "hi", "--out", out, "--yes", "--lexicon", "lx_1"},
+	} {
+		if r := ttsRun(t, newQAServer(t, nil), "", args...); r.err == nil || len(r.reqs) != 0 {
+			t.Errorf("%v: err %v, requests %v; want an error and no request", args, r.err, r.reqs)
+		}
 	}
 }
 
@@ -299,28 +379,28 @@ func TestTTSSpeak_regionalEnglishCodes(t *testing.T) {
 	}
 }
 
-func TestTTSVoices_englishFamilyAndLexicon(t *testing.T) {
+func TestTTSVoices_englishFamily(t *testing.T) {
 	srv := newQAServer(t, map[string]string{"GET TTS/Voices/": `{"objects": [
- {"voice_id": "a", "languages": ["en-US"], "lexicon": true}, {"voice_id": "b", "languages": ["en-GB"]}, {"voice_id": "c", "languages": ["hi"]}]}`})
+ {"voice_id": "a", "languages": ["en-US"]}, {"voice_id": "b", "languages": ["en-GB"]}, {"voice_id": "c", "languages": ["hi"]}]}`})
 	r := ttsRun(t, srv, "", "voices", "--language", "en", "-o", "table")
 	if r.err != nil || !strings.Contains(r.stdout, "a ") || !strings.Contains(r.stdout, "b ") || strings.Contains(r.stdout, "c ") {
 		t.Errorf("--language en: err %v\n%s", r.err, r.stdout)
 	}
 	r = ttsRun(t, srv, "", "voices", "--language", "en-GB", "-o", "json")
-	if r.err != nil || !strings.Contains(r.stdout, `"voice_id": "b"`) || strings.Contains(r.stdout, `"voice_id": "a"`) || !strings.Contains(r.stdout, `"lexicon": false`) {
+	if r.err != nil || !strings.Contains(r.stdout, `"voice_id": "b"`) || strings.Contains(r.stdout, `"voice_id": "a"`) || strings.Contains(r.stdout, "lexicon") {
 		t.Errorf("--language en-GB: err %v\n%s", r.err, r.stdout)
 	}
 }
 
 func TestTTSVoice_showsOne(t *testing.T) {
-	srv := newQAServer(t, map[string]string{"GET TTS/Voices/v1/": `{"api_id": "x1", "voice_id": "v1", "name": "Hailey", "gender": "female",
- "languages": ["en-US"], "accent_type": "American", "description": "Warm", "lexicon": true, "sample_url": "https://example.test/h.mp3"}`})
+	srv := newQAServer(t, map[string]string{"GET TTS/Voices/v1/": `{"api_id": "x1", "voice_id": "v1", "is_owner": true, "name": "Hailey", "gender": "female",
+ "languages": ["en-US"], "accent_type": "American", "description": "Warm", "sample_url": "https://example.test/h.mp3", "created_at": "2026-11-17T09:30:00.000Z"}`})
 	r := ttsRun(t, srv, "", "voice", "v1", "-o", "table")
 	if r.err != nil || len(r.reqs) != 1 || r.reqs[0].String() != "GET TTS/Voices/v1/" || !strings.Contains(r.stdout, "Hailey") ||
-		!strings.Contains(r.stdout, "en-US") || !strings.Contains(r.stdout, "true") {
+		!strings.Contains(r.stdout, "en-US") || !strings.Contains(r.stdout, "true") || !strings.Contains(r.stdout, "2026-11-17") {
 		t.Errorf("table: err %v, requests %v\n%s", r.err, r.reqs, r.stdout)
 	}
-	if r = ttsRun(t, srv, "", "voice", "v1", "-o", "json"); r.err != nil || !strings.Contains(r.stdout, `"api_id": "x1"`) || !strings.Contains(r.stdout, `"lexicon": true`) {
+	if r = ttsRun(t, srv, "", "voice", "v1", "-o", "json"); r.err != nil || !strings.Contains(r.stdout, `"api_id": "x1"`) || !strings.Contains(r.stdout, `"is_owner": true`) {
 		t.Errorf("json: err %v\n%s", r.err, r.stdout)
 	}
 	if r = ttsRun(t, srv, "", "voice"); r.err == nil || len(r.reqs) != 0 {

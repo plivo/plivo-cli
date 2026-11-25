@@ -1,7 +1,7 @@
-List pronunciation lexicons
+List pronunciation dictionaries
 
 Usage:
-  plivo tts lexicons list [flags]
+  plivo tts pronunciation-dictionaries list [flags]
 
 Flags:
   -h, --help   help for list
