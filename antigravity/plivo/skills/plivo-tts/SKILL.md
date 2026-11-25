@@ -1,6 +1,6 @@
 ---
 name: plivo-tts
-description: "Gives a Plivo user the right Text-to-Speech setup, from the Plivo CLI. It first asks what you are building: an audio file, prompts to play on a call, or a live voice agent. For files and prompts it picks a voice, synthesizes WAV, MP3, raw PCM or 8 kHz mu-law and A-law, applies pronunciation dictionaries and checks usage. For a voice agent it picks the audio format for Pipecat, LiveKit Agents or your own WebSocket code over Audio Streaming or SIP trunking, outlines a Plivo TTS service for each framework, and covers barge-in, word timestamps, latency, Indian and mixed Hindi-English replies and characters per call. Use when someone wants text to speech, a Plivo voice, a realtime TTS socket or a voice for an AI agent. Not for speech inside a live call by Voice XML (plivo-voice-xml) or for connecting an agent to calls (plivo-audio-streaming, plivo-sip-trunking)."
+description: "Gives a Plivo user the right Text-to-Speech setup, from the Plivo CLI. It first asks what you are building: an audio file, prompts to play on a call, or a live voice agent. For files and prompts it picks a voice, synthesizes WAV, MP3, raw PCM or 8 kHz mu-law and A-law, applies pronunciation dictionaries and checks usage. For a voice agent it picks the audio format for Pipecat, LiveKit Agents or your own WebSocket code over Audio Streaming or SIP trunking, explains how to connect Plivo TTS to each, and covers barge-in, word timestamps, latency, Indian and mixed Hindi-English replies and characters per call. Use when someone wants text to speech, a Plivo voice, a realtime TTS socket or a voice for an AI agent. Not for speech inside a live call by Voice XML (plivo-voice-xml) or for connecting an agent to calls (plivo-audio-streaming, plivo-sip-trunking)."
 license: Apache-2.0
 ---
 
@@ -17,7 +17,7 @@ Take a developer, or their coding agent, from a Plivo account to speech that fit
 - Check the credit before every billed step: `cash_credits` in `plivo auth whoami -o json`. At 0 or less, tell the user to add credits on the console home page, <https://cx.plivo.com/home>, and stop before the billed step. The docs list `insufficient_balance` (400) for an empty balance and `usage_limit_exceeded` (403) for a reached monthly usage limit, but check first so the user never meets the error mid-call.
 - Never read, print or ask for the Auth Token in the chat: the user writes it and the Auth ID into `.env` with an editor, and code that needs them reads that file (`uv run --env-file .env`). Never read, cat or print `.env`. The `--dry-run` URL carries the Auth ID in its account segment, so when you show a preview, mask it: keep the first 4 and last 3 characters. Never run `plivo login` yourself (step 1).
 - Report each step as observed, not known or failed. Observed means you saw the evidence in this session. You cannot hear audio: a file with the right size and type, or a `done` event with `reason: "complete"`, is not proof that it sounds right, so say what you checked and ask the user to listen.
-- Framework code in this file is a starting point written against Pipecat 1.17.0 and livekit-agents 1.8.13. Neither framework has a Plivo TTS service or plugin, and the code here is not an official package. Before you hand it over, read the user's installed version (`uv pip show pipecat-ai`, or `livekit-agents`) and compare the names with that version's own Cartesia service; where a name differs, follow the installed version and say so.
+- The framework guidance in this file was checked against Pipecat 1.17.0 and livekit-agents 1.8.13. Neither framework has a Plivo TTS service or plugin. Read the user's installed version (`uv pip show pipecat-ai`, or `livekit-agents`) and compare the names with that version's own Cartesia service; where a name differs, follow the installed version and say so.
 - Verdicts: **will break** when a documented rule or an observed failure says so (name the failure); **risky** when plausible or untested (say what to check); **style** when nothing changes. A rule here with no label is risky.
 
 ## Talking to the user
@@ -169,7 +169,7 @@ plivo tts pronunciation-dictionaries delete pd_... --dry-run      # then --yes, 
 
 ## Voice agent branch: steps V1 to V8, from a working call to a voice that holds a conversation
 
-Create these eight tasks first, then run the steps in order. Stop at the first failed check and fix it before you go on. Steps V4 (the first test), V5 and V6 bill per character when they run a reply, so each test follows the billing rule above.
+Create these eight tasks first, then run the steps in order. Stop at the first failed check and fix it before you go on. Steps V4 to V8 bill per character when they run a reply, so each test follows the billing rule above.
 
 1. Ask the setup questions
 2. Pick a voice and plan the languages
@@ -191,20 +191,9 @@ Ask in one structured call:
 | Test call | Does a test call to your voice agent already work? | Yes, it works · Not yet: "I'll point you to the skill that gets a call working first." |
 | Language | Which language will the voice agent speak? | English · An Indian language · Mixed, for example Hindi and English |
 
-An Indian language: ask in plain text which one (Hindi, Bengali, Tamil, Telugu, Marathi, Gujarati or Kannada). Then ask the target in a second call:
+For an Indian language, ask in plain text which one (Hindi, Bengali, Tamil, Telugu, Marathi, Gujarati or Kannada). Then ask the target in a second call: "How fast should the voice agent's first sound start once it has a sentence to say?" (header Latency) · Fast: "About 300 ms. Needs a ready connection and a short first sentence." · Balanced (recommended): "About 600 ms." · Relaxed: "About 1 second." These are budgets for the user's own agent, not Plivo promises: the docs publish no latency number.
 
-- Latency: "How fast should the voice agent's first sound start once it has a sentence to say?" (header Latency) · Fast: "About 300 ms. Needs a ready connection and a short first sentence." · Balanced (recommended): "About 600 ms." · Relaxed: "About 1 second." These are budgets for the user's own agent, not Plivo promises: the docs publish no latency number.
-
-What each combination means:
-
-| Framework and calls | Path |
-|---|---|
-| Pipecat and Audio Streaming | The standard path: Pipecat's Plivo serializer talks to `<Stream>` |
-| LiveKit Agents and SIP trunking | The standard path: LiveKit's SIP service takes the call |
-| My own WebSocket code and Audio Streaming | Your handler is the `<Stream>` WebSocket |
-| Pipecat and SIP trunking | **Risky:** Pipecat then gets the call through a different transport that this file does not cover. Ask which one and check the audio rate it takes |
-| LiveKit Agents and Audio Streaming | Not a LiveKit path: LiveKit takes phone calls through its SIP service. Offer SIP trunking |
-| My own WebSocket code and SIP trunking | Your own SIP and media stack: G.711 at 8 kHz (see step V3) |
+The standard paths are Pipecat with Audio Streaming (Pipecat's Plivo serializer talks to `<Stream>`), LiveKit Agents with SIP trunking (LiveKit's SIP service takes the call) and your own WebSocket code with Audio Streaming (your handler is the `<Stream>` WebSocket). LiveKit with Audio Streaming is not a LiveKit path: offer SIP trunking. Pipecat with SIP trunking is **risky**: it needs a transport this file does not cover, so ask which one and check the audio rate it takes. Your own code with SIP trunking means your own SIP and media stack, with G.711 at 8 kHz (step V3).
 
 If Test call is "Not yet": stop. Send the user to `plivo skill install audio-streaming` (Audio Streaming) or `plivo skill install sip-trunking` (SIP trunking), tell them to come back when a test call connects, and leave the later tasks pending. If it is "Yes", you can confirm the setup without placing a call: `plivo voice streams readiness <number> -o json` (v1.3.2 or later, Audio Streaming only; `fail` lines come first, `unknown` is not a pass).
 
@@ -216,12 +205,13 @@ Check: all five answers are recorded, and either a test call works or the user h
 plivo tts voices --language hi -o json      # the language code from V1; en-IN is Indian-accented English
 ```
 
-Each voice speaks one language, so the voice decides the language code, and `language` stays fixed for the whole reply: a reply's options (voice, language, format, pace) are fixed when it opens, and a later message cannot change them. For a phone call, read each voice's `description` and `accent_type`, offer up to three that read as conversational, and give the `sample_url` of each. Tell the user that a phone line carries 8 kHz audio, so the real test is a call: a voice that sounds best in a browser may not on a phone. Ask "Which voice?" (header Voice).
+Each voice speaks one language, so the voice decides the language code, and `language` stays fixed for the whole reply (a reply's options are fixed when it opens). For a phone call, read each voice's `description` and `accent_type`, offer up to three that read as conversational, and give each `sample_url`. A phone line carries 8 kHz audio, so the real test is a call: a voice that sounds best in a browser may not on a phone. Ask "Which voice?" (header Voice).
 
-- English only: pick an English voice and set `language` to its own accent code (`en-US`, `en-GB`, `en-IN`, `en-AU`). There is no plain `en`.
-- One Indian language: pick a voice for it (`hi`, `bn`, `ta`, `te`, `mr`, `gu`, `kn`) and set that code. Leave `auto` for later: `auto` detects the language of the text, and a wrong guess returns `language_not_supported`.
-- Mixed, for example Hindi with English words: the docs do not say how a voice handles it, so treat everything here as **risky** until the user has heard it. Pick one Hindi voice, set `language` to `hi`, and keep English brand names and terms in Latin script inside the Hindi text (the docs' own example reply reads "नमस्ते, Plivo में आपका स्वागत है।"). Do not change voice or language inside one reply. If a word is said wrong, fix it with a pronunciation dictionary rule of kind `respell` (see "Pronunciation dictionaries").
-- Ask the user for two real replies of their own, one pure and one mixed, count the characters, and offer a short test: "Run a test of about <N> characters now? Plivo bills per character." (header Run test). On yes, run it through the script in "Realtime socket reference" with that text, adding `"language": "<the code from this step>"` to its first message, and ask "Does it sound right?" (header Listen).
+- English only: an English voice with its own accent code (`en-US`, `en-GB`, `en-IN`, `en-AU`). There is no plain `en`.
+- One Indian language: a voice for it and its code (`hi`, `bn`, `ta`, `te`, `mr`, `gu`, `kn`). Leave `auto` out for a call: it detects the language of the text, and a wrong guess returns `language_not_supported`.
+- Mixed, for example Hindi with English words: the docs do not say how a voice handles it, so everything here is **risky** until the user has heard it. Use one Hindi voice with `language` set to `hi`, keep English names and terms in Latin script inside the Hindi text (the docs' own example reply reads "नमस्ते, Plivo में आपका स्वागत है।"), and never change voice or language inside one reply. Fix a wrong word with a `respell` rule in a pronunciation dictionary.
+
+For a mixed plan, ask for two real replies, one pure and one mixed, count the characters, and ask the Run test question. On yes, run them through the script in "Realtime socket reference" with `"language": "<the code>"` added to its first message, then ask "Does it sound right?" (header Listen).
 
 Check: the chosen `voice_id` appears in the list with the language, and for a mixed plan the user has listened to a mixed sample.
 
@@ -231,422 +221,32 @@ The format goes in the first message of every reply as `output_format`, and it d
 
 | Framework and calls | Ask Plivo for | Why |
 |---|---|---|
-| Pipecat on Audio Streaming | `{"container": "raw", "encoding": "pcm_s16le", "sample_rate": 16000}` | Pipecat's `PlivoFrameSerializer` takes 16-bit PCM, resamples it to 8 kHz and converts it to mu-law itself. Mu-law from Plivo TTS would be encoded a second time and come out as noise |
-| LiveKit Agents on SIP trunking | `{"container": "raw", "encoding": "pcm_s16le", "sample_rate": 24000}` (16000 also works) | LiveKit works in 24 kHz mono and resamples to the phone leg itself. Its audio emitter takes 16-bit PCM, so ask for PCM and never for mu-law |
-| Your own WebSocket code on Audio Streaming | `{"container": "raw", "encoding": "pcm_mulaw", "sample_rate": 8000}` | `<Stream contentType="audio/x-mulaw;rate=8000">` takes raw mu-law: send each piece as `playAudio` at real-time pace (step V4) |
+| Pipecat on Audio Streaming | `{"container": "raw", "encoding": "pcm_s16le", "sample_rate": 16000}` | Pipecat's `PlivoFrameSerializer` takes 16-bit PCM, resamples it to 8 kHz and converts it to mu-law itself. Mu-law from Plivo would be encoded twice and come out as noise |
+| LiveKit Agents on SIP trunking | `{"container": "raw", "encoding": "pcm_s16le", "sample_rate": 24000}` (16000 also works) | LiveKit works in 24 kHz mono and resamples to the phone leg itself, and its audio emitter takes 16-bit PCM: never mu-law |
+| Your own WebSocket code on Audio Streaming | `{"container": "raw", "encoding": "pcm_mulaw", "sample_rate": 8000}` | `<Stream contentType="audio/x-mulaw;rate=8000">` takes raw mu-law, sent as `playAudio` at real-time pace (step V4) |
 | Your own SIP and media stack | `pcm_mulaw` (US, India) or `pcm_alaw` (Europe), `raw`, 8000 | G.711 over RTP |
 
-Do not use `wav` or `mp3` on a call path. The docs list `pcm_s16le` at 16000 and 24000 in their format table. PCM at 8000 appears only in the docs' summary line, so prefer 16000 or 24000.
+Do not use `wav` or `mp3` on a call path. The docs list `pcm_s16le` at 16000 and 24000 in their format table; PCM at 8000 appears only in a summary line, so prefer 16000 or 24000.
 
 Check: the format row for this combination is chosen and recorded. Noise or static on the first test call (step V4) means the wrong format reached the wrong receiver, most often mu-law into a framework that expects PCM.
 
 ### Step V4: connect Plivo TTS to the framework
 
-First the user adds `PLIVO_AUTH_ID`, `PLIVO_AUTH_TOKEN` and `VOICE_ID` (the voice from V2) to their `.env` with an editor, as in the rules. Then the facts that every integration shares (full tables are in "Realtime socket reference"):
+First the user adds `PLIVO_AUTH_ID`, `PLIVO_AUTH_TOKEN` and `VOICE_ID` (the voice from V2) to their `.env` with an editor, as in the rules. These facts hold for every integration (the tables are in "Realtime socket reference"):
 
-- One socket for the whole call. Open it when the call connects and reuse it for every reply: "Reuse the socket across turns instead of reconnecting." There is no fixed number of replies per socket: each open reply counts toward the organization's concurrency limit of 50.
-- One reply is one `context_id`, and a `context_id` can be used once per socket. Use a new one for every reply (every turn), never a reused one: a reused id returns an `error` with `invalid_request` and `param: context_id`.
+- One socket for the whole call. Open it when the call connects and reuse it for every reply. There is no fixed number of replies per socket: each open reply counts toward the organization's concurrency limit of 50.
+- One reply is one `context_id`, used once per socket: a new one for every turn. A reused id returns an `error` with `invalid_request` and `param: context_id`.
 - The first `text` message of a reply carries `voice_id`, `language`, `output_format` and `timestamps`. Later messages carry only `type`, `context_id`, `text` and `finish`: an option repeated with a changed value returns `invalid_request`. `"finish": true` ends the reply.
 - Plivo speaks each sentence as soon as it ends and holds an unfinished one, so a few words with no sentence end make no sound until a `flush` or `finish`.
 - Keep reading the socket: a client that stops reading for 30 s is dropped. Audio comes as binary frames (2-byte little-endian length, the `context_id`, then audio) and everything else as JSON.
 
-Write the small helper that both outlines import. Plivo's character timings become word timings in step V6, and the helper is the same for both frameworks:
+Neither Pipecat nor LiveKit Agents has a Plivo TTS service, so the user writes a small one over this socket, modelled on the framework's own Cartesia service. Tell them it is their own code, not an official Plivo package. This file gives the shape, not the code: read the installed version first (`uv pip show pipecat-ai` or `livekit-agents`; checked against 1.17.0 and 1.8.13) and follow its names where they differ, and say so.
 
-```python
-# plivo_words.py
-def words_from_chars(chars, start_ms, duration_ms):
-    """Plivo gives one entry per character; frameworks want (word, start_s, end_s)."""
-    words, current, first, last_end = [], "", 0, 0
-    for ch, start, dur in zip(chars, start_ms, duration_ms):
-        if ch.isspace():
-            if current:
-                words.append((current, first / 1000, last_end / 1000))
-                current = ""
-            continue
-        if not current:
-            first = start
-        current += ch
-        last_end = start + dur
-    if current:
-        words.append((current, first / 1000, last_end / 1000))
-    return words
-```
+- **Pipecat** (Python 3.11 or later): start from the Plivo example `pipecat-examples/plivo-chatbot/inbound` (see `plivo skill install audio-streaming`, step 5) and replace only the `tts = ...` block of `bot.py`. Subclass `WebsocketTTSService` with one Plivo reply per Pipecat turn, `push_start_frame=True`, `append_trailing_space=True` (Plivo joins the text it receives) and `can_generate_metrics()` returning true, and add `enable_metrics=True` to the pipeline params, or no TTFB is reported. Open the socket in `setup`, not at the first reply. `run_tts(text, context_id)` sends the `text` message and yields `None`. The receive loop turns each binary frame into a `TTSAudioRawFrame` for `append_to_audio_context` (dropping frames of a context that is gone), a `done` into a `TTSStoppedFrame` and `remove_audio_context`, and an `error` into `push_error`. `flush_audio` sends an empty final `text` with `"finish": true`, and `on_audio_context_interrupted` sends `cancel` (step V5).
+- **LiveKit Agents** (1.8.13 or later): LiveKit has no guide for custom TTS plugins, so the source of its Cartesia plugin is the model. Subclass `tts.TTS` (with a `utils.ConnectionPool` of sockets) and `tts.SynthesizeStream`. In `_run(output_emitter)`, call `output_emitter.initialize(...)` with `mime_type="audio/pcm"` and `stream=True`, take a new `context_id` per stream, and run one task that sends text and one that receives, calling `start_segment` and `push` for each audio frame and `end_input` on `done`. A flush sentinel sends `flush`, the end of the input sends the empty final `text` with `"finish": true`, and a cancelled stream sends `cancel`. Use it as `AgentSession(tts=PlivoTTS(...))`.
+- **Your own WebSocket code:** the TTS socket is a second WebSocket next to the `<Stream>` one. Use the script in "Realtime socket reference" for a first test. Then, per reply, send one `text` message with `"finish": true` and the mu-law `output_format` from step V3, and forward each audio frame of that `context_id` as `{"event": "playAudio", "streamId": "<id>", "media": {"contentType": "audio/x-mulaw", "sampleRate": 8000, "payload": "<base64>"}}`. Send pieces of 1,600 bytes (200 ms; **risky:** untested, and one piece takes at most 12,000), and wait the piece's length divided by 8000 seconds between sends: bursting overflows the playback buffer and makes `clearAudio` late (see the audio-streaming skill).
 
-**Pipecat.** Install `pipecat-ai[websocket,openai,silero,deepgram,runner]` (the Plivo example's extras without `cartesia`; Python 3.11 or later). Start from the Plivo example, `pipecat-examples/plivo-chatbot/inbound` (see `plivo skill install audio-streaming`, step 5), and replace only the `tts = ...` block of `bot.py` with the service below. It follows Pipecat's own Cartesia service: a `WebsocketTTSService` with one Plivo reply per Pipecat turn. Mark it clearly to the user as a starting point.
-
-```python
-# plivo_tts.py: a starting point for Pipecat 1.17.0, not an official package
-import base64
-import json
-from collections.abc import AsyncGenerator
-
-from loguru import logger
-from websockets.protocol import State
-
-from pipecat.frames.frames import ErrorFrame, Frame, TTSAudioRawFrame, TTSStoppedFrame
-from pipecat.processors.frame_processor import FrameProcessorSetup
-from pipecat.services.settings import TTSSettings
-from pipecat.services.tts_service import WebsocketTTSService
-
-from plivo_words import words_from_chars
-
-PLIVO_RATE = 16000  # pcm_s16le; the Plivo serializer resamples to 8 kHz and encodes mu-law
-
-
-class PlivoTTSService(WebsocketTTSService):
-    Settings = TTSSettings
-    _settings: Settings
-
-    def __init__(self, *, auth_id: str, auth_token: str, voice_id: str,
-                 language: str = "auto", word_timestamps: bool = False, **kwargs):
-        defaults = self.Settings(model=None, voice=voice_id, language=None)
-        super().__init__(
-            push_text_frames=not word_timestamps,  # with word times, Pipecat builds the text frames
-            push_start_frame=True,                 # the base class opens the audio context and starts TTFB
-            pause_frame_processing=False,
-            append_trailing_space=True,            # Plivo joins the text it receives: keep sentences apart
-            settings=defaults,
-            **kwargs,
-        )
-        basic = base64.b64encode(f"{auth_id}:{auth_token}".encode()).decode()
-        self._url = f"wss://api.plivo.com/v1/Account/{auth_id}/TTS/Realtime/"
-        self._headers = {"Authorization": f"Basic {basic}"}
-        self._language = language
-        self._word_timestamps = word_timestamps
-        self._opened: set[str] = set()      # replies already opened on this socket
-        self._receive_task = None
-
-    def can_generate_metrics(self) -> bool:
-        return True                         # without this, no TTFB metric is reported
-
-    async def setup(self, setup: FrameProcessorSetup):
-        await super().setup(setup)
-        await self._connect()               # open the socket when the call starts, not at the first reply
-
-    async def _connect(self):
-        await super()._connect()
-        await self._connect_websocket()
-        if self._websocket and not self._receive_task:
-            self._receive_task = self.create_task(self._receive_task_handler(self._report_error))
-
-    async def _disconnect(self):
-        await super()._disconnect()
-        if self._receive_task:
-            await self.cancel_task(self._receive_task)
-            self._receive_task = None
-        await self._disconnect_websocket()
-
-    async def _connect_websocket(self):
-        try:
-            if self._websocket and self._websocket.state is State.OPEN:
-                return
-            self._websocket = await self._websocket_connect(self._url, additional_headers=self._headers)
-            await self._call_event_handler("on_connected")
-        except Exception as e:
-            await self.push_error(error_msg=f"Unknown error occurred: {e}", exception=e)
-            self._websocket = None
-            await self._call_event_handler("on_connection_error", f"{e}")
-
-    async def _disconnect_websocket(self):
-        try:
-            await self.stop_all_metrics()
-            if self._websocket:
-                await self._websocket.close()
-        finally:
-            self._websocket = None
-            self._opened.clear()
-            await self._call_event_handler("on_disconnected")
-
-    def _get_websocket(self):
-        if self._websocket:
-            return self._websocket
-        raise Exception("Websocket not connected")
-
-    async def on_audio_context_interrupted(self, context_id: str):
-        # Barge-in: stop this reply at Plivo. The serializer sends clearAudio to the call itself.
-        await self.stop_all_metrics()
-        if self._websocket and context_id in self._opened:
-            await self._websocket.send(json.dumps({"type": "cancel", "context_id": context_id}))
-        await super().on_audio_context_interrupted(context_id)
-
-    async def flush_audio(self, context_id: str | None = None):
-        # The turn's text is complete: finish the reply so Plivo speaks any held sentence and sends done.
-        ctx = context_id or self.get_active_audio_context_id()
-        if ctx and self._websocket and ctx in self._opened:
-            await self._websocket.send(json.dumps({"type": "text", "context_id": ctx, "text": "", "finish": True}))
-
-    async def _process_messages(self):
-        async for message in self._get_websocket():
-            if isinstance(message, bytes):  # audio: 2-byte length, context_id, PCM
-                n = int.from_bytes(message[:2], "little")
-                ctx = message[2 : 2 + n].decode()
-                if self.audio_context_available(ctx):  # drops audio of a cancelled reply
-                    frame = TTSAudioRawFrame(audio=message[2 + n :], sample_rate=PLIVO_RATE,
-                                             num_channels=1, context_id=ctx)
-                    await self.append_to_audio_context(ctx, frame)
-                continue
-            msg = json.loads(message)
-            kind, ctx = msg.get("type"), msg.get("context_id")
-            if kind == "done":
-                self._opened.discard(ctx)
-                logger.debug(f"{self} Plivo reply {ctx}: {msg.get('reason')}, "
-                             f"ttfb_ms={msg.get('ttfb_ms')}, characters={msg.get('characters')}")
-                if self.audio_context_available(ctx):
-                    await self.stop_ttfb_metrics()
-                    await self.append_to_audio_context(ctx, TTSStoppedFrame(context_id=ctx))
-                    await self.remove_audio_context(ctx)
-            elif kind == "timestamps" and self.audio_context_available(ctx):
-                words = words_from_chars(msg["chars"], msg["start_ms"], msg["duration_ms"])
-                await self.add_word_timestamps(words, ctx)
-            elif kind == "error":
-                self._opened.discard(ctx)
-                if ctx and self.audio_context_available(ctx):
-                    await self.push_frame(TTSStoppedFrame(context_id=ctx))
-                await self.stop_all_metrics()
-                await self.push_error(error_msg=f"Plivo TTS error: {msg}")
-                self.reset_active_audio_context()
-            # flush_done and warning need no action
-
-    async def _receive_messages(self):
-        while True:
-            await self._process_messages()
-            logger.debug(f"{self} Plivo socket closed, reconnecting")
-            await self._connect_websocket()
-
-    async def run_tts(self, text: str, context_id: str) -> AsyncGenerator[Frame | None, None]:
-        try:
-            if not self._websocket or self._websocket.state is State.CLOSED:
-                await self._connect()
-            msg = {"type": "text", "context_id": context_id, "text": text}
-            if context_id not in self._opened:  # the first message of a reply carries every option
-                msg.update(
-                    voice_id=self._settings.voice,
-                    language=self._language,
-                    timestamps=self._word_timestamps,
-                    output_format={"container": "raw", "encoding": "pcm_s16le", "sample_rate": PLIVO_RATE},
-                )
-                self._opened.add(context_id)
-            try:
-                await self._get_websocket().send(json.dumps(msg))
-                await self.start_tts_usage_metrics(text)
-            except Exception as e:
-                yield ErrorFrame(error=f"Unknown error occurred: {e}")
-                yield TTSStoppedFrame(context_id=context_id)
-                await self._disconnect()
-                await self._connect()
-                return
-            yield None  # the audio arrives in the receive loop
-        except Exception as e:
-            yield ErrorFrame(error=f"Unknown error occurred: {e}")
-```
-
-In `bot.py`, keep the example's 8000 Hz `PipelineParams` and add `enable_metrics=True` (without it no TTFB is reported), then build the service in place of Cartesia:
-
-```python
-tts = PlivoTTSService(
-    auth_id=os.environ["PLIVO_AUTH_ID"],
-    auth_token=os.environ["PLIVO_AUTH_TOKEN"],
-    voice_id=os.environ["VOICE_ID"],
-    language="hi",   # the voice's own language code, or "auto"
-)
-```
-
-Four things to tell the user about this outline. The Plivo docs show `text` as required but never show an empty final `text`, so `flush_audio` is **risky**: on the first test, the reply must end with a `done` event. If the socket answers with an `error` there instead, report it to Plivo support and try the fallback (**untested**): pass `reuse_context_id_within_turn=False` to the service so Pipecat opens one context per sentence, and send each sentence as one `text` message with `"finish": true` (drop `flush_audio`). A socket with no message and no open reply for 5 minutes is closed with `1000`, and a reply with no message and no audio for 60 s ends as if its `finish` came, so keep the call's socket busy or let the receive loop reconnect when the socket ends. A close code of `1008` is an error to read, not to reconnect past: log the last `error` event first. Last, the socket closes with the call: at Pipecat 1.17.0 `WebsocketTTSService` calls `_disconnect()` when the pipeline stops, is cancelled or is cleaned up, which cancels the receive loop, and an open socket counts one toward the organization's concurrency limit of 50 until then.
-
-**LiveKit Agents.** Install `livekit-agents` (1.8.13 or later). LiveKit has no guide for custom TTS plugins, so the source of its Cartesia plugin is the model: a pooled socket, one reply per stream, one segment per stream. This outline uses it. A stream is one turn, which fits Plivo's one `context_id` per reply.
-
-```python
-# plivo_tts.py: a starting point for livekit-agents 1.8.13, not an official plugin
-from __future__ import annotations
-
-import asyncio
-import base64
-import contextlib
-import json
-import weakref
-
-import aiohttp
-from livekit.agents import APIConnectionError, APIConnectOptions, APIError, APIStatusError, APITimeoutError, tts, utils
-from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS
-from livekit.agents.voice.io import TimedString
-
-from plivo_words import words_from_chars
-
-RATE = 24000  # pcm_s16le; LiveKit resamples to the phone leg
-
-
-class PlivoTTS(tts.TTS):
-    def __init__(self, *, auth_id: str, auth_token: str, voice_id: str, language: str = "auto",
-                 word_timestamps: bool = False, http_session: aiohttp.ClientSession | None = None):
-        super().__init__(
-            capabilities=tts.TTSCapabilities(streaming=True, aligned_transcript=word_timestamps),
-            sample_rate=RATE,
-            num_channels=1,
-        )
-        basic = base64.b64encode(f"{auth_id}:{auth_token}".encode()).decode()
-        self._url = f"wss://api.plivo.com/v1/Account/{auth_id}/TTS/Realtime/"
-        self._headers = {"Authorization": f"Basic {basic}"}
-        self._voice_id, self._language, self._word_timestamps = voice_id, language, word_timestamps
-        self._session = http_session
-        self._pool = utils.ConnectionPool[aiohttp.ClientWebSocketResponse](
-            connect_cb=self._connect_ws, close_cb=self._close_ws,
-            max_session_duration=300, mark_refreshed_on_get=True,
-        )
-        self._streams = weakref.WeakSet[PlivoStream]()
-
-    @property
-    def provider(self) -> str:
-        return "Plivo"
-
-    async def _connect_ws(self, timeout: float) -> aiohttp.ClientWebSocketResponse:
-        session = self._session or utils.http_context.http_session()
-        try:
-            return await asyncio.wait_for(session.ws_connect(self._url, headers=self._headers), timeout)
-        except asyncio.TimeoutError:
-            raise APITimeoutError() from None
-        except aiohttp.ClientResponseError as e:
-            raise APIStatusError(message=e.message, status_code=e.status, request_id=None, body=None) from None
-        except Exception as e:
-            raise APIConnectionError(type(e).__name__) from None  # no credentials in the message
-
-    async def _close_ws(self, ws: aiohttp.ClientWebSocketResponse) -> None:
-        await ws.close()
-
-    def synthesize(self, text: str, *, conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS):
-        return self._synthesize_with_stream(text, conn_options=conn_options)
-
-    def stream(self, *, conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS) -> PlivoStream:
-        stream = PlivoStream(tts=self, conn_options=conn_options)
-        self._streams.add(stream)
-        return stream
-
-    def prewarm(self) -> None:
-        self._pool.prewarm()
-
-    async def aclose(self) -> None:
-        for stream in list(self._streams):
-            await stream.aclose()
-        self._streams.clear()
-        await self._pool.aclose()
-
-
-class PlivoStream(tts.SynthesizeStream):
-    def __init__(self, *, tts: PlivoTTS, conn_options: APIConnectOptions):
-        super().__init__(tts=tts, conn_options=conn_options)
-        self._tts = tts
-
-    async def _run(self, output_emitter: tts.AudioEmitter) -> None:
-        context_id = utils.shortuuid()  # a new id per turn: Plivo allows each id once per socket
-        output_emitter.initialize(request_id=context_id, sample_rate=RATE, num_channels=1,
-                                  mime_type="audio/pcm", stream=True)
-        t = self._tts
-        state = {"done": False}
-        sent = asyncio.Event()  # recv waits for the first message, as Cartesia's plugin does
-
-        async def send(ws):
-            first = True
-            try:
-                async for data in self._input_ch:
-                    if isinstance(data, self._FlushSentinel):
-                        if not first:
-                            await ws.send_str(json.dumps({"type": "flush", "context_id": context_id}))
-                        continue
-                    msg = {"type": "text", "context_id": context_id, "text": data}
-                    if first:  # the first message of a reply carries every option
-                        msg.update(voice_id=t._voice_id, language=t._language, timestamps=t._word_timestamps,
-                                   output_format={"container": "raw", "encoding": "pcm_s16le", "sample_rate": RATE})
-                        first = False
-                    self._mark_started()
-                    await ws.send_str(json.dumps(msg))
-                    sent.set()
-                if not first:  # input ended: finish the reply
-                    await ws.send_str(json.dumps({"type": "text", "context_id": context_id, "text": "", "finish": True}))
-            finally:
-                sent.set()
-
-        async def recv(ws):
-            await sent.wait()  # the LLM may take longer than the receive timeout to its first token
-            started = False
-            while True:
-                msg = await ws.receive(timeout=self._conn_options.timeout)
-                if msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.CLOSE, aiohttp.WSMsgType.CLOSING):
-                    raise APIStatusError("Plivo TTS socket closed", request_id=context_id,
-                                         status_code=ws.close_code or -1, body=None)
-                if msg.type == aiohttp.WSMsgType.BINARY:  # audio: 2-byte length, context_id, PCM
-                    n = int.from_bytes(msg.data[:2], "little")
-                    if msg.data[2 : 2 + n].decode() != context_id:
-                        continue  # a pooled socket may still carry a cancelled reply
-                    if not started:
-                        output_emitter.start_segment(segment_id=context_id)
-                        started = True
-                    output_emitter.push(msg.data[2 + n :])
-                    continue
-                if msg.type != aiohttp.WSMsgType.TEXT:
-                    continue
-                data = json.loads(msg.data)
-                if data.get("context_id") not in (None, context_id):
-                    continue
-                kind = data.get("type")
-                if kind == "timestamps":
-                    for word, start, end in words_from_chars(data["chars"], data["start_ms"], data["duration_ms"]):
-                        output_emitter.push_timed_transcript(TimedString(text=word + " ", start_time=start, end_time=end))
-                elif kind == "done":
-                    state["done"] = True
-                    output_emitter.end_input()
-                    break
-                elif kind == "error":
-                    raise APIError(f"Plivo TTS error: {data}")
-
-        try:
-            async with t._pool.connection(timeout=self._conn_options.timeout) as ws:
-                tasks = [asyncio.create_task(send(ws)), asyncio.create_task(recv(ws))]
-                try:
-                    await asyncio.gather(*tasks)
-                finally:
-                    await utils.aio.gracefully_cancel(*tasks)
-                    if not state["done"]:  # interrupted: LiveKit cancelled this stream (barge-in)
-                        with contextlib.suppress(Exception):
-                            await ws.send_str(json.dumps({"type": "cancel", "context_id": context_id}))
-        except asyncio.TimeoutError:
-            raise APITimeoutError() from None
-        except aiohttp.ClientResponseError as e:
-            raise APIStatusError(message=e.message, status_code=e.status, request_id=None, body=None) from None
-        except APIError:
-            raise
-        except Exception as e:
-            raise APIConnectionError() from e
-```
-
-Use it as the session's `tts=PlivoTTS(auth_id=..., auth_token=..., voice_id=..., language="hi")` in `AgentSession`, inside the quickstart's `@server.rtc_session(...)` function. The pool drops the socket of an interrupted stream (Cartesia behaves the same), so the next turn opens or reuses another one: for a socket that survives interruptions, return it to the pool after the `cancel` instead (the ElevenLabs plugin keeps its socket and cancels the context). The same empty final `text` caveat applies as for Pipecat (**risky**): the reply must end with `done` on the first test.
-
-**Your own WebSocket code.** Plivo's `<Stream>` WebSocket is yours, and the TTS socket is a second WebSocket your code opens. Use the runnable script in "Realtime socket reference" for a first test, then, per reply: open (or reuse) the TTS socket, send the reply's `text` message with `"finish": true` and the mu-law `output_format` from step V3, and for each binary frame of that `context_id` send the audio down the stream. Send each piece as `{"event": "playAudio", "media": {"contentType": "audio/x-mulaw", "sampleRate": 8000, "payload": "<base64>"}}`, in pieces of 12,000 raw bytes or fewer, and at real-time pace: bursting overflows the playback buffer and makes `clearAudio` late (see the audio-streaming skill). Keep the pieces small, 1,600 bytes (200 ms) for example, so an interruption takes effect quickly (**risky:** that size is untested):
-
-```python
-CHUNK = 1600  # 200 ms of mu-law at 8 kHz
-
-
-async def play(stream_ws, stream_id: str, tts_ws, context_id: str, text: str, voice_id: str):
-    await tts_ws.send(json.dumps({
-        "type": "text", "context_id": context_id, "voice_id": voice_id, "text": text, "finish": True,
-        "output_format": {"container": "raw", "encoding": "pcm_mulaw", "sample_rate": 8000},
-    }))
-    async for message in tts_ws:
-        if isinstance(message, bytes):
-            n = int.from_bytes(message[:2], "little")
-            if message[2 : 2 + n].decode() != context_id:
-                continue  # audio of a cancelled reply
-            audio = message[2 + n :]
-            for i in range(0, len(audio), CHUNK):
-                piece = audio[i : i + CHUNK]
-                await stream_ws.send(json.dumps({
-                    "event": "playAudio", "streamId": stream_id,
-                    "media": {"contentType": "audio/x-mulaw", "sampleRate": 8000,
-                              "payload": base64.b64encode(piece).decode()},
-                }))
-                await asyncio.sleep(len(piece) / 8000)  # real-time pace
-        elif json.loads(message).get("type") == "done":
-            return
-```
+The docs show no empty final `text`, so that message is **risky** in both frameworks: on the first test every reply must end with a `done` event. If the socket answers with an `error` instead, tell Plivo support and send the last sentence with `"finish": true` instead (**untested**). A socket with no message and no open reply for 5 minutes closes with `1000`, so let the receive loop reconnect when it ends. A `1008` close is an error to read, not to reconnect past: log the last `error` event first. The socket closes with the call, and until then it counts one toward the concurrency limit of 50.
 
 Before the first test: do the credit check, take a `plivo tts usage -o json` reading, count the characters the test will send, and ask the Run test question from the rules. Then place the test call.
 
@@ -656,53 +256,49 @@ Check: on a test call the voice agent speaks in the chosen voice, the agent's lo
 
 When the caller talks over the voice agent, three things must stop, in this order:
 
-1. The reply at Plivo: send `{"type": "cancel", "context_id": "<the reply's id>"}` on the TTS socket (leave out `context_id` to cancel every open reply). Plivo ends each cancelled reply with a `done` event whose `reason` is `cancelled`. Billing still counts all the text the reply received (`characters`), while `spoken_chars` is what was spoken before the cancel.
-2. The audio already queued for the caller (Audio Streaming only): send `{"event": "clearAudio", "streamId": "<the stream's id>"}` on the `<Stream>` WebSocket. Plivo drops the queued audio and answers with `clearedAudio`. SIP trunking has no such event: the SIP side and the framework clear their own buffers.
-3. Your own buffer: discard every audio frame that still arrives for the cancelled `context_id`. The docs do not say whether frames already in flight can still arrive after a cancel, so assume they can.
+1. The reply at Plivo: send `{"type": "cancel", "context_id": "<the reply's id>"}` (no `context_id` cancels every open reply). Each cancelled reply ends with a `done` whose `reason` is `cancelled`. Billing still counts all the text the reply received (`characters`); `spoken_chars` is what was spoken before the cancel.
+2. The audio already queued for the caller (Audio Streaming only): send `{"event": "clearAudio", "streamId": "<the stream's id>"}` on the `<Stream>` WebSocket. Plivo drops the queue and answers `clearedAudio`. SIP trunking has no such event: the SIP side and the framework clear their own buffers.
+3. Your own buffer: discard every frame that still arrives for the cancelled `context_id`. The docs do not say whether frames in flight can arrive after a cancel, so assume they can.
 
-Then the next reply uses a new `context_id`, on the same socket: ids are single use per socket, and each open reply counts toward the organization's concurrency limit of 50. A cancelled reply ends with its `done`, and it should stop counting as open then (**risky:** the docs do not say when the slot frees, so wait for `done` before you count it free). Keep one socket for the whole call, and keep reading it (30 s rule). Pace the audio you send to the call in real time, so the queue stays short and `clearAudio` takes effect at once.
+The next reply uses a new `context_id` on the same socket. A cancelled reply counts as open until its `done` (**risky:** the docs do not say when the slot frees, so wait for `done`). Pace the audio you send to the call in real time, so the queue stays short and `clearAudio` takes effect at once.
 
-Per framework:
+- **Pipecat:** both stops are wired. `PlivoFrameSerializer` sends `clearAudio` when an `InterruptionFrame` passes, and the service's `on_audio_context_interrupted` sends `cancel`. Voice activity detection (Silero in the example) raises the interruption.
+- **LiveKit Agents:** LiveKit stops its own playback and cancels the stream's `_run`, where the plugin sends `cancel`. There is no `clearAudio` on SIP. How easily a caller interrupts is set with `turn_handling=TurnHandlingOptions(...)` on `AgentSession` (`interruption` of `"adaptive"` or `"vad"`, `min_duration`, `min_words`); the bare `turn_detection` and `allow_interruptions` arguments are deprecated in 1.8.13.
+- **Your own code:** on your voice activity or speech-to-text "speech started" event, run the three stops in that order, from the handler that plays the audio.
 
-- **Pipecat:** the two stops are already wired. `PlivoFrameSerializer` sends `clearAudio` when an `InterruptionFrame` passes through, and the outline's `on_audio_context_interrupted` sends `cancel`. The interruption itself comes from the pipeline's voice activity detection (the example uses Silero).
-- **LiveKit Agents:** LiveKit stops its own playback and cancels the stream's `_run`, where the outline sends `cancel`. There is no `clearAudio` on SIP. How easily a caller interrupts is set with `turn_handling=TurnHandlingOptions(...)` on `AgentSession` (an `interruption` mode of `"adaptive"` or `"vad"`, `min_duration`, `min_words`); the bare `turn_detection` and `allow_interruptions` arguments are deprecated in 1.8.13.
-- **Your own code:** on your voice activity or speech-to-text "speech started" event, run the three stops above in that order, from the same handler that plays audio.
-
-Ask "Did it stop speaking when you interrupted?" (header Interrupt) · Yes, right away · It kept talking · It stopped, then said old words. Check: the answer is "Yes, right away". If it kept talking: was `cancel` sent with the id of the reply that is playing, was `clearAudio` sent with the right `streamId`, and is audio being sent faster than real time? If it said old words: frames for the cancelled `context_id` are not being discarded. Test it on a call, since you cannot hear it, and make the test reply long enough to interrupt: that costs characters, so ask the Run test question first.
+Ask "Did it stop speaking when you interrupted?" (header Interrupt) · Yes, right away · It kept talking · It stopped, then said old words. Check: the answer is "Yes, right away". If it kept talking: was `cancel` sent with the id of the reply that is playing, was `clearAudio` sent with the right `streamId`, and is audio sent faster than real time? If it said old words: frames for the cancelled `context_id` are not being discarded. Test it on a call, with a test reply long enough to interrupt: that costs characters, so ask the Run test question first.
 
 ### Step V6: add word timestamps
 
-Word timings keep the transcript in step with the audio. In Pipecat they decide which words reach the conversation history, so after an interruption it holds the words that were spoken; in LiveKit they only feed the transcript the agent shows (below). Turn them on with `timestamps: true` in the reply's first message (not in later messages, which would return `invalid_request`). Plivo then sends `timestamps` events, one per sentence, each with three parallel arrays, one entry per character including spaces and punctuation: `chars`, `start_ms` and `duration_ms`. Times are milliseconds from the start of that reply's audio and keep counting across sentences, so no offset is needed within a reply. `words_from_chars` (step V4) turns them into `(word, start_seconds, end_seconds)`; punctuation stays attached to its word.
+Word timings keep the transcript in step with the audio. In Pipecat they decide which words reach the conversation history, so after an interruption it holds the words that were spoken; in LiveKit they only feed the transcript the agent shows. Turn them on with `timestamps: true` in the reply's first message (not in later ones). Plivo then sends `timestamps` events, each holding whole words, as three parallel arrays with one entry per character, spaces and punctuation included: `chars`, `start_ms` and `duration_ms`. Times are milliseconds from the start of the reply's audio and keep counting, so no offset is needed. Group the characters into words at whitespace, punctuation staying with its word.
 
-- **Pipecat:** create the service with `word_timestamps=True`. The outline then sends `timestamps: true`, calls `add_word_timestamps(words, context_id)` for each event, and sets `push_text_frames=False`, so the spoken text reaches the conversation aligned with the audio instead of the whole unspoken reply.
-- **LiveKit Agents:** create the plugin with `word_timestamps=True`. The outline declares `aligned_transcript=True` and pushes a `TimedString` per word. LiveKit uses them only when the session sets `use_tts_aligned_transcript` (off by default), and then they replace the model's text as the input of the transcript. The docs do not say that they change how history is cut after an interruption, so do not claim it.
+- **Pipecat:** create the service with word timestamps on. It then sends `timestamps: true`, calls `add_word_timestamps(words, context_id)` for each event, and sets `push_text_frames=False`, so the spoken text reaches the conversation aligned with the audio instead of the whole unspoken reply.
+- **LiveKit Agents:** declare `aligned_transcript=True` in the plugin's `TTSCapabilities` and push a `TimedString` per word with `push_timed_transcript`. LiveKit uses them only when the session sets `use_tts_aligned_transcript` (off by default). The docs do not say they change how history is cut after an interruption, so do not claim it.
 
 The docs do not say how `chars` line up with the text after normalization (digits and currency are rewritten for speech) or for Hindi, and not whether a `timestamps` event arrives before or after its sentence's audio. **Risky:** check with a real reply. Check: for one test reply, print the words with their times, and confirm that they come in order, that the first word starts near 0 and that the last word's end is not past the reply's `audio_seconds` in its `done` event. A test reply bills per character, so ask the Run test question first.
 
 ### Step V7: set and check latency
 
-The docs publish no latency figure, so the target from V1 is the user's own budget. Each `done` event carries `ttfb_ms`. The docs show it in an example without a description, so read it as milliseconds to first audio on Plivo's side (**risky**: its start point is not documented), and also timestamp your own first send and first audio frame, which includes the network. Collect at least 10 replies from a test call, then compute the median and the worst. The call bills per character: estimate the characters from the replies you expect (the average characters per reply from the earlier `done` events times 10), say so, and ask the Run test question before it, as in the rules. Check: the median is within the target. If not, work down this list, one change at a time, and measure again:
+The docs publish no latency figure, so the target from V1 is the user's own budget. Each `done` event carries `ttfb_ms`. The docs show it without a description, so read it as milliseconds to first audio on Plivo's side (**risky:** its start point is not documented), and also timestamp your own first send and first audio frame, which includes the network. Collect at least 10 replies from a test call and compute the median and the worst. The call bills per character: estimate the characters (the average per reply from the earlier `done` events times 10), say so, and ask the Run test question first. Check: the median is within the target. If not, change one thing at a time and measure again:
 
-1. Reuse the socket. Open it when the call connects, and send every reply on it. A new connection per reply adds the handshake to every reply.
-2. Send text as it is produced, not after the whole answer. Plivo speaks a sentence as soon as it ends and holds an unfinished one, so audio can start after the first sentence ends.
-3. Flush early. A few words with no sentence end make no sound until `flush` or `finish`. Which characters end a sentence is not documented (for Hindi, whether `।` counts): test it, and if the first sound waits for the next sentence, send `flush` where your tokenizer sees a sentence end.
-4. Start each answer with a short first sentence (tell the model to). **Style:** it only helps the first sound.
+1. Reuse the socket: a new connection per reply adds the handshake to every reply.
+2. Send text as the model produces it, not after the whole answer: audio can start once the first sentence ends.
+3. Flush early. Which characters end a sentence is not documented (for Hindi, whether `।` counts): test it, and if the first sound waits for the next sentence, send `flush` where your tokenizer sees a sentence end.
+4. Tell the model to start each answer with a short first sentence (**style**: it only helps the first sound).
 5. Ask for the right format (step V3): PCM, never mp3, and no extra conversion on your side.
-6. Keep the agent near `api.plivo.com`. The docs name no TTS host in India or any other region, so do not assume one.
+6. Keep the agent near `api.plivo.com`. The docs name no TTS host in India or any other region.
 
-No minimum amount of text before audio starts is documented: the first sentence is what starts it. Sending the reply in a few big messages, or only at the end, is the common cause of a slow first sound.
+No minimum amount of text before audio starts is documented: the first sentence starts it. A few big messages, or one at the end, is the common cause of a slow first sound.
 
 ### Step V8: estimate the cost and report
 
-Plivo bills per character, and gives no price in its docs, so the estimate is characters per minute and no price. Take the numbers from the agent's own `done` events when you can: each has `characters` (billed) and `audio_seconds`, per reply, which stays exact when other traffic shares the account. As a cross-check, `plivo tts usage -o json` reports account totals with no time window, split by route, and `data.routes.live` is realtime: read it before and after a test call, and subtract. Other realtime traffic on the account during the call breaks the subtraction, so say so if the account is busy. The test call bills per character: before it, estimate the characters (the average per reply from step V7 times the replies you expect in about 2 minutes), say so, and ask the Run test question.
+Plivo bills per character and gives no price in its docs, so the estimate is characters per minute and no price. Take the numbers from the agent's own `done` events: each has `characters` (billed) and `audio_seconds` per reply, which stays exact when other traffic shares the account. As a cross-check, `data.routes.live` in `plivo tts usage -o json` is realtime: read it before and after a test call of known length and subtract (other realtime traffic on the account breaks that, so say so). The test call bills per character: estimate the characters (the V7 average per reply times the replies you expect in about 2 minutes), say so, and ask the Run test question first.
 
 ```bash
-plivo tts usage -o json --query 'data.routes.live'    # before the call
-# ... a test call of known length, say 2 minutes of conversation ...
-plivo tts usage -o json --query 'data.routes.live'    # after the call
+plivo tts usage -o json --query 'data.routes.live'    # before the call, and again after it
 ```
 
-Over the call: characters per call minute is the characters difference divided by the call's minutes, and characters per spoken minute is the characters difference divided by (the `audio_seconds` difference divided by 60). A reply can be cancelled, and cancelled replies still bill all the text they received, so interruptions raise the figure: say how many replies were cancelled. To turn characters into money, the user asks their Plivo account manager or support for the current per-character rate: never quote one.
+Characters per call minute is the characters difference divided by the call's minutes; characters per spoken minute is that difference divided by the `audio_seconds` difference over 60. Cancelled replies still bill all the text they received, so interruptions raise the figure: say how many were cancelled. For money, the user asks their Plivo account manager or support for the current per-character rate: never quote one.
 
 Check: you have characters per call minute and per spoken minute from the `done` events, and the usage difference as a cross-check when the account was quiet.
 
@@ -854,16 +450,6 @@ Check in this order: the voice and language pair (`plivo tts voices`); the text 
 
 Do not guess from other platforms. The Plivo Text-to-Speech docs are published: read the page for the topic, and add `.md` to a page's URL for plain Markdown.
 
-| Topic | Page under https://www.plivo.com/docs/models/text-to-speech/ |
-|---|---|
-| What it is, formats, languages | `overview` |
-| A first request | `quickstart`, `ai-coding-agent` |
-| Voices and languages | `concepts/voices`, `api/voices` |
-| Pronunciation dictionaries | `concepts/pronunciation`, `api/pronunciation-dictionaries` |
-| Replies, flush and cancel | `concepts/realtime`, `api/realtime` |
-| Base URL, authentication, limits | `api/overview` |
-| Batch requests and `output_format` | `api/batch` |
-| Usage | `api/usage` |
-| Errors and close codes | `troubleshooting/errors` |
+The pages are under https://www.plivo.com/docs/models/text-to-speech/: `overview`, `quickstart`, `ai-coding-agent`, `concepts/voices`, `api/voices`, `concepts/pronunciation`, `api/pronunciation-dictionaries`, `concepts/realtime`, `api/realtime`, `api/overview`, `api/batch`, `api/usage` and `troubleshooting/errors`.
 
 `plivo docs search` does not reliably reach these pages: `text-to-speech` finds the overview, the API overview and the batch page, and a phrase such as `text-to-speech realtime` finds nothing, so open the page above instead of searching (`plivo docs show models/text-to-speech/api/realtime` works for a known page). A hit counts only if it is about the TTS models API: `<Speak>`, SSML, voice use-case and integration pages are a different product, so ignore them. Next, `plivo ask "<question>"`, which can also see the account; treat its answer as evidence and prefer the docs where they conflict. The docs do not give a price, a latency figure, a TTS host in India, how a voice handles mixed-language text, or whether an empty final `text` with `finish: true` is accepted: say so and route to Plivo support or the account manager. Out of scope: speech to text, the model behind a voice agent, the call itself (`plivo skill install audio-streaming`, `plivo skill install sip-trunking`), and the `<Speak>` element's own voices (`plivo skill install voice-xml`).
