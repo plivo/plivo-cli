@@ -99,7 +99,7 @@ org         list | use | current   (switch between the organizations one login a
 sip         calls | connect | credentials | ip-acl | test | trunks | uris   (connect, test: v1.2.0+)
 skill       install [--project] | list | update   (update, --project: v1.2.0+)
 support     past support escalations
-tts         voices | speak | lexicons (list | get | create | delete) | usage
+tts         voices | speak | pronunciation-dictionaries (list | get | create | delete) | usage
 upgrade     self-update
 verify      sessions (create | get | list | validate)
 voice       calls | conferences | endpoints | multiparty | recordings | streams
@@ -162,6 +162,6 @@ Each is bundled in the binary and installed separately, with no network: `plivo 
 - `plivo-cx-agents`: build, test and publish Plivo CX agents, the AI conversation flows of the console builder, through the Agents API.
 - `plivo-audio-streaming`: take a voice bot (a test bot or your own WebSocket bot) to real calls with `<Stream>`, from setup to go-live.
 - `plivo-sip-trunking`: connect LiveKit, ElevenLabs, Retell, Vapi or another SIP platform over SIP trunking.
-- `plivo-tts`: make speech audio from text, pick voices, manage pronunciation lexicons, stream realtime TTS.
+- `plivo-tts`: make speech audio from text, pick voices, manage pronunciation dictionaries, stream realtime TTS.
 - `plivo-voice-xml`: write and fix the XML an answer URL returns.
 - `plivo-call-forwarding`: debug forwarded calls: `ForwardedFrom` on the answer URL, a forwarded leg that fails, `Diversion` on a SIP trunk.

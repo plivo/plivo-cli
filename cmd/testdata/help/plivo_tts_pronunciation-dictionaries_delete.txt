@@ -1,20 +1,10 @@
-Create a lexicon: up to 100 rules, each a word and how to say it. --kind sets
-how every value is written: ipa, arpa or respell. Give the rules with --rule
-word=value (repeatable) or --file, a JSON array of {"word": ..., "value": ...}.
-Use the lexicon with plivo tts speak --lexicon <lexicon_id>.
+Delete a pronunciation dictionary (requires --yes)
 
 Usage:
-  plivo tts lexicons create [flags]
-
-Examples:
-  plivo tts lexicon create --name brands --kind respell --rule "Plivo=PLEE-voh"
+  plivo tts pronunciation-dictionaries delete <pronunciation_dictionary_id> [flags]
 
 Flags:
-      --file string        JSON file: an array of {"word": ..., "value": ...}
-  -h, --help               help for create
-      --kind string        how the values are written: ipa, arpa or respell (required)
-      --name string        lexicon name, up to 100 characters (required)
-      --rule stringArray   a rule as word=value (repeatable)
+  -h, --help   help for delete
 
 Global Flags:
       --dry-run            preview requests and local changes without sending or writing anything

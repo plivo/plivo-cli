@@ -1,6 +1,6 @@
 ---
 name: plivo-tts
-description: "Gives a Plivo user the right Text-to-Speech setup, from the Plivo CLI. It first asks what you are building: an audio file, prompts to play on a call, or a live voice agent. For files and prompts it picks a voice, synthesizes WAV, MP3, raw PCM or 8 kHz mu-law and A-law, applies pronunciation lexicons and checks usage. For a voice agent it picks the audio format for Pipecat, LiveKit Agents or your own WebSocket code over Audio Streaming or SIP trunking, outlines a Plivo TTS service for each framework, and covers barge-in, word timestamps, latency, Indian and mixed Hindi-English replies and characters per call. Use when someone wants text to speech, a Plivo voice, a realtime TTS socket or a voice for an AI agent. Not for speech inside a live call by Voice XML (plivo-voice-xml) or for connecting an agent to calls (plivo-audio-streaming, plivo-sip-trunking)."
+description: "Gives a Plivo user the right Text-to-Speech setup, from the Plivo CLI. It first asks what you are building: an audio file, prompts to play on a call, or a live voice agent. For files and prompts it picks a voice, synthesizes WAV, MP3, raw PCM or 8 kHz mu-law and A-law, applies pronunciation dictionaries and checks usage. For a voice agent it picks the audio format for Pipecat, LiveKit Agents or your own WebSocket code over Audio Streaming or SIP trunking, outlines a Plivo TTS service for each framework, and covers barge-in, word timestamps, latency, Indian and mixed Hindi-English replies and characters per call. Use when someone wants text to speech, a Plivo voice, a realtime TTS socket or a voice for an AI agent. Not for speech inside a live call by Voice XML (plivo-voice-xml) or for connecting an agent to calls (plivo-audio-streaming, plivo-sip-trunking)."
 license: Apache-2.0
 ---
 
@@ -10,10 +10,10 @@ Take a developer, or their coding agent, from a Plivo account to speech that fit
 
 ## Rules for every step
 
-- Use the CLI for every Plivo step and `-o json` to read values. `plivo <command> --help` wins on which commands and flags exist; this file wins on how Plivo behaves. Never invent a flag, field, error code, class, import or number: where the CLI has no flag, say so. Inline pronunciations are one such case for the CLI (use a lexicon), and realtime is another (use the WebSocket below).
+- Use the CLI for every Plivo step and `-o json` to read values. `plivo <command> --help` wins on which commands and flags exist; this file wins on how Plivo behaves. Never invent a flag, field, error code, class, import or number: where the CLI has no flag, say so. Inline pronunciations are one such case for the CLI (use a pronunciation dictionary), and realtime is another (use the WebSocket below).
 - Track the steps in your agent's own task or todo tool: TaskCreate and TaskUpdate in Claude Code (TodoWrite in older versions), the plan tool in Codex CLI. Mark a step done only when its check passes. With no task tool, print the step list, and print it again with ticks after each step.
 - Ask every question with your agent's own structured question tool. In Claude Code it is AskUserQuestion: one call takes 1 to 4 questions with 2 to 4 options each, and it adds a free-text "Other" option itself, so do not add one. Without such a tool, ask a numbered list with an "Other" choice and wait for the answer. Never assume an answer: ask, even when the request seems to imply it.
-- Synthesis is billed per character, so it is a write, and so is every test of a realtime reply: two commands, never one. First `plivo tts speak ... --dry-run` (prints the request, sends nothing), then, after you show the preview and the character count and the user agrees, the same command with `--yes`. Without either flag the CLI refuses. A realtime test (the script below, or a test call to a voice agent that speaks) has no `--dry-run`: before it, count the characters it will send, show that number, and ask "Run a test of about <N> characters now? Plivo bills per character." (header Run test). Billing consent comes before every billed call, and an earlier yes does not carry over to a later one. `plivo tts lexicons delete` also needs `--yes`, after a `--dry-run`. `plivo tts lexicons create` is free and writes at once, so its `--dry-run` preview is the only check: show it and ask before you run it for real. If a command rejects `--dry-run`, show the current state from `list` or `get` instead and ask.
+- Synthesis is billed per character, so it is a write, and so is every test of a realtime reply: two commands, never one. First `plivo tts speak ... --dry-run` (prints the request, sends nothing), then, after you show the preview and the character count and the user agrees, the same command with `--yes`. Without either flag the CLI refuses. A realtime test (the script below, or a test call to a voice agent that speaks) has no `--dry-run`: before it, count the characters it will send, show that number, and ask "Run a test of about <N> characters now? Plivo bills per character." (header Run test). Billing consent comes before every billed call, and an earlier yes does not carry over to a later one. `plivo tts pronunciation-dictionaries delete` also needs `--yes`, after a `--dry-run`. `plivo tts pronunciation-dictionaries create` is free and writes at once, so its `--dry-run` preview is the only check: show it and ask before you run it for real. If a command rejects `--dry-run`, show the current state from `list` or `get` instead and ask.
 - Check the credit before every billed step: `cash_credits` in `plivo auth whoami -o json`. At 0 or less, tell the user to add credits on the console home page, <https://cx.plivo.com/home>, and stop before the billed step. The docs list `insufficient_balance` (400) for an empty balance and `usage_limit_exceeded` (403) for a reached monthly usage limit, but check first so the user never meets the error mid-call.
 - Never read, print or ask for the Auth Token in the chat: the user writes it and the Auth ID into `.env` with an editor, and code that needs them reads that file (`uv run --env-file .env`). Never read, cat or print `.env`. The `--dry-run` URL carries the Auth ID in its account segment, so when you show a preview, mask it: keep the first 4 and last 3 characters. Never run `plivo login` yourself (step 1).
 - Report each step as observed, not known or failed. Observed means you saw the evidence in this session. You cannot hear audio: a file with the right size and type, or a `done` event with `reason: "complete"`, is not proof that it sounds right, so say what you checked and ask the user to listen.
@@ -40,10 +40,10 @@ Create these three tasks first, then run the steps in order. Stop at the first f
 ```bash
 plivo --version                  # if missing: brew install plivo/tap/plivo, or the install.sh one-liner from the Plivo docs
 plivo auth whoami -o json        # exit 2 with AUTH_MISSING: the user logs in (below), then run this again
-plivo tts voices --help          # missing: the CLI is too old for this skill; upgrade it (plivo upgrade)
+plivo tts pronunciation-dictionaries     # exit 1 with an unknown command: the CLI is too old for this skill; upgrade it (plivo upgrade)
 ```
 
-Check: `whoami` shows the account the user expects, and `plivo tts` exists.
+Check: `whoami` shows the account the user expects, and `plivo tts pronunciation-dictionaries` exits 0 and prints its help.
 
 - Login opens a browser, so the user runs it. On their own computer: `plivo login` in a terminal (in Claude Code, `! plivo login`). In a container, over SSH or in WSL, the browser cannot reach the CLI: the user runs `plivo login` in a terminal on that machine, approves in the browser, then copies the full URL from the browser's address bar and pastes it into that terminal.
 - Wrong organization: `plivo auth list`, then `plivo auth use <profile>`. Sub-accounts use their own Auth ID and Auth Token, and the main account is billed.
@@ -75,7 +75,7 @@ Create these four tasks first, then run the steps in order. Only step F3 costs m
 
 Ask in plain text what the speech should say (or which file holds it). Then ask the language, in one structured call:
 
-- Language: infer it from the text, and ask only if it is unclear. Ask "Which language is the text in?" with English, Hindi and Detect from the text (recommended); the tool's own free-text Other covers Bengali, Tamil, Telugu, Marathi, Gujarati and Kannada. Codes: `en-US`, `en-GB`, `en-IN`, `en-AU`, `hi`, `bn`, `ta`, `te`, `mr`, `gu`, `kn`. English has four regional codes and there is no plain `en`: for English, the voice's accent decides which one it speaks. Each voice speaks one language, so this decides the voice list. For Detect from the text, leave `--language` out (it defaults to `auto`, which detects the language of the text) and use the language you inferred to filter the voices in step F2.
+- Language: infer it from the text, and ask only if it is unclear. Ask "Which language is the text in?" with English, Hindi and Detect from the text (recommended); the tool's own free-text Other covers Bengali, Tamil, Telugu, Marathi, Gujarati and Kannada. Codes: `en-US`, `en-GB`, `en-IN`, `en-AU`, `hi`, `bn`, `ta`, `te`, `mr`, `gu`, `kn`. English has four regional codes and there is no plain `en`: an English voice takes any of the four, the code sets how numbers and dates are read (`en-US` reads millions and the month first, the others lakh and crore and the day first), and the voice keeps its accent. Each voice speaks one language, so this decides the voice list. For Detect from the text, leave `--language` out (it defaults to `auto`, which detects the language of the text) and use the language you inferred to filter the voices in step F2.
 
 The Build answer sets the format, so do not ask "Use" again:
 
@@ -95,13 +95,13 @@ plivo tts voices --language hi -o json     # add --gender male|female to narrow 
 plivo tts voices -o json                   # every voice
 ```
 
-Each voice has `voice_id`, `name`, `gender`, `languages`, `accent_type`, `description`, `lexicon` (whether the voice takes custom pronunciations) and, when Plivo has set one, `sample_url`, a link to a short sample that stops working after about an hour, so fetch the list again instead of saving it (the CLI leaves it out while it is empty). `plivo tts voice <voice_id>` shows one voice, and `plivo tts voices --language en` lists every English voice. When the user wants to hear voices before choosing, show the `sample_url` of each option that has one, or point them to Voice Studio in the console (https://cx.plivo.com/voice-studio/explore). The list holds Plivo's public voices and any voices the organization owns, so take it from the CLI and do not hardcode one. Voice IDs are opaque strings (for example `6uWzc4xFj31t4jNJUaED` speaks Hindi and `lC7qzMoRE7SSjaNCVeff` speaks US English), and the catalogue changes, so never reuse an ID from this page without checking it is in the list.
+Each voice has `voice_id`, `is_owner` (true for a voice the organization owns), `name`, `gender`, `languages`, `accent_type`, `description`, `created_at` and, when Plivo has set one, `sample_url`, a link to a short sample that stops working after about an hour, so fetch the list again instead of saving it (the CLI leaves it out while it is empty). `plivo tts voice <voice_id>` shows one voice, and `plivo tts voices --language en` lists every English voice. When the user wants to hear voices before choosing, show the `sample_url` of each option that has one, or point them to Voice Studio in the console (https://cx.plivo.com/voice-studio/explore). The list holds Plivo's public voices and any voices the organization owns, so take it from the CLI and do not hardcode one. Voice IDs are opaque strings (for example `6uWzc4xFj31t4jNJUaED` speaks Hindi and `lC7qzMoRE7SSjaNCVeff` speaks US English), and the catalogue changes, so never reuse an ID from this page without checking it is in the list.
 
-Ask "Which voice?" (header Voice) with up to three options, each "<name>: <gender>, <accent>" for a voice whose `languages` contain the language. Check: the chosen `voice_id` appears in the list with that language. **Will break:** text in a language the voice does not speak, which returns `400 language_not_supported`.
+Ask "Which voice?" (header Voice) with up to three options, each "<name>: <gender>, <accent>" for a voice whose `languages` contain the language. Check: the chosen `voice_id` appears in the list with that language. **Will break:** a `--language` the voice does not speak, which returns `400 language_not_supported`.
 
 ### Step F3: synthesize
 
-Put the text in the command, or in a file for anything long (`--file text.txt`). `--file -` reads stdin once, so keep it for a one-shot pipe, never for the `--dry-run` then `--yes` pair: the second command would find nothing to read. The limit is 5,000 characters per request: for more, split at sentence ends and synthesize each part, and ask the consent question below once, for the total number of characters across all the parts. Long text takes longer to synthesize: pass a longer global `--timeout` in seconds (the default is 30), for example `--timeout 120`. Raw formats (`mulaw`, `alaw`, `pcm`) join byte for byte; `wav` and `mp3` need a tool such as `ffmpeg`.
+Put the text in the command, or in a file for anything long (`--file text.txt`). `--file -` reads stdin once, so keep it for a one-shot pipe, never for the `--dry-run` then `--yes` pair: the second command would find nothing to read. The limit is 20,000 characters per request: for more, split at sentence ends and synthesize each part, and ask the consent question below once, for the total number of characters across all the parts. Without `--timeout`, `speak` waits long enough for the text's length (30 seconds plus one second for every 50 characters); a global `--timeout` sets your own limit. Raw formats (`mulaw`, `alaw`, `pcm`) join byte for byte; `wav` and `mp3` need a tool such as `ffmpeg`.
 
 ```bash
 plivo tts speak --voice 6uWzc4xFj31t4jNJUaED --language hi --text "आपका पैकेज कल पहुंचेगा।" \
@@ -110,7 +110,7 @@ plivo tts speak --voice 6uWzc4xFj31t4jNJUaED --language hi --text "आपका 
 
 The preview prints the character count on its first line (`[dry-run] <N> characters, ...`): quote that number and do not count bytes yourself. Show the preview, then ask: "Synthesize <N> characters now? Plivo bills per character." Synthesize / Not now (header Synthesize). On yes, take a reading with `plivo tts usage -o json`, then run the same command with `--yes` in place of `--dry-run`.
 
-If a billed run fails with any `UPSTREAM_*` code (`UPSTREAM_TIMEOUT`, `UPSTREAM_UNAVAILABLE`, and `UPSTREAM_ERROR`, which includes a 200 answer that is not audio), with `NETWORK_ERROR`, or with an error whose hint says the request was or may have been billed, do not run it again. In those cases ignore `retryable: true` and any "retry" hint: the request may have been billed. Read `plivo tts usage -o json` again and compare it with the reading from before the send. If it did not change and the failure was a 502 or 503 (`backend_error`, `at_capacity`, `draining`, `auth_unavailable`), the request was refused before it ran: wait a second and send it once more. In every other case, such as a timeout or a network error, tell the user what changed (or that nothing did) and ask before you send again, because a request that timed out may still finish and bill. Take a usage reading before every billed run.
+If a billed run fails with any `UPSTREAM_*` code (`UPSTREAM_TIMEOUT`, `UPSTREAM_UNAVAILABLE`, and `UPSTREAM_ERROR`, which includes a 200 answer that is not audio), with `NETWORK_ERROR`, or with an error whose hint says the request was or may have been billed, do not run it again. In those cases ignore `retryable: true` and any "retry" hint: the request may have been billed. Read `plivo tts usage -o json` again and compare its `characters` with the reading from before the send (`requests` counts a failed request too, so it says nothing here). If `characters` did not change and the failure was a 502 or 503 (`backend_error`, `at_capacity`, `draining`, `auth_unavailable`), the request was refused before it ran: wait a second and send it once more. In every other case, such as a timeout or a network error, tell the user what changed (or that nothing did) and ask before you send again, because a request that timed out may still finish and bill. Take a usage reading before every billed run.
 
 Optional flags:
 
@@ -119,7 +119,7 @@ Optional flags:
 | `--language` | `auto`, `en-US`, `en-GB`, `en-IN`, `en-AU`, `hi`, `bn`, `ta`, `te`, `mr`, `gu`, `kn` | Default `auto`; the voice must speak it. A plain `en` is refused |
 | `--pace` | 0.7 to 1.2 (default 1.0) | Speaking speed |
 | `--volume` | 0.5 to 2.0 (default 1.0) | Loudness |
-| `--lexicon <id>` | a saved lexicon, `lx_...` | Custom pronunciations (below) |
+| `--pronunciation-dictionary <id>` | a saved pronunciation dictionary: `pd_...`, or `lx_...` for one created as a lexicon | Custom pronunciations (below) |
 | `--seed N` | integer | Same text, voice and seed give identical audio, for tests |
 
 Numbers, currency and dates are normalized for you ("1,250" is spoken as an amount, not digits). `--out -` writes the audio to stdout for a pipe; the CLI refuses to print audio to a terminal.
@@ -137,28 +137,30 @@ To listen to a raw file, the user runs `ffplay -autoexit -f mulaw -ar 8000 remin
 
 Report: the file path, its size, the format flags you used, and the character count. Ask "Does it sound right?" (header Listen), since you cannot hear it. Then read `plivo tts usage -o json` again and compare it with the reading from before the run (see "Billing and usage").
 
-## Pronunciation and lexicons
+## Pronunciation dictionaries
 
-A lexicon is a saved list of rules that change how words are said. Use one when a brand, name or term comes out wrong. `plivo tts speak` has no inline-rule flag: save the rules as a lexicon, then pass `--lexicon`. (The API itself takes up to 100 inline `pronunciations` on a request, each `{"word", "value", "kind"}` with `kind` required, so a realtime client can send them without a lexicon. Which kinds a voice takes depends on the voice: a kind it does not take returns `invalid_request`.)
+A pronunciation dictionary is a saved list of rules that change how words are said. Use one when a brand, name or term comes out wrong. `plivo tts speak` has no inline-rule flag, and the API takes no inline rules: save the rules as a pronunciation dictionary, then pass `--pronunciation-dictionary`. To set one word in one request, write it in the text as a phoneme span in braces: `{kəmˈpjutɚ}` (IPA) or `{K AH0 M P Y UW1 T ER0}` (ARPAbet).
 
-| `--kind` | A rule's `value` is written as |
+Each rule has a `word`, a `value` and a `kind`, which says how the value is written:
+
+| `kind` | A rule's `value` is written as |
 |---|---|
 | `respell` | plain respelling, for example `plee-voh` |
 | `ipa` | International Phonetic Alphabet |
 | `arpa` | ARPAbet |
 
 ```bash
-# rules.json: [{"word": "Plivo", "value": "plee-voh"}]
-plivo tts lexicons create --name brands --kind respell --file rules.json --dry-run   # preview, then run it again without --dry-run
-plivo tts lexicons create --name brands --kind respell --rule "Plivo=plee-voh"       # or the rules inline; --rule repeats
-plivo tts lexicons list -o json
-plivo tts lexicons get lx_... -o json
+# rules.json: [{"word": "Plivo", "kind": "respell", "value": "plee-voh"}]
+plivo tts pronunciation-dictionaries create --name brands --file rules.json --dry-run            # preview, then run it again without --dry-run
+plivo tts pronunciation-dictionaries create --name brands --kind respell --rule "Plivo=plee-voh"   # or the rules inline; --rule repeats
+plivo tts pronunciation-dictionaries list -o json
+plivo tts pronunciation-dictionaries get pd_... -o json
 plivo tts speak --voice lC7qzMoRE7SSjaNCVeff --text "Welcome to Plivo" --format mp3 --sample-rate 44100 \
-  --bitrate 128000 --lexicon lx_... --out welcome.mp3 --dry-run
-plivo tts lexicons delete lx_... --dry-run      # then --yes, after the user agrees
+  --bitrate 128000 --pronunciation-dictionary pd_... --out welcome.mp3 --dry-run
+plivo tts pronunciation-dictionaries delete pd_... --dry-run      # then --yes, after the user agrees
 ```
 
-`--file` and `--rule` can be combined: the rules are merged, and `--rule` repeats. The create command prints the lexicon with its `lexicon_id` (starts with `lx_`): record it. Limits: 100 lexicons per organization, 100 rules per lexicon, a name up to 100 characters, a `word` up to 100 and a `value` up to 120. **Will break:** synthesizing with a deleted `lexicon_id` returns `422 invalid_request` with `param: lexicon_id`; `get` or `delete` on an unknown ID returns `404 not_found`. Deleting a lexicon cannot be undone: ask first.
+`--file` and `--rule` can be combined: the rules are merged, and `--rule` repeats. `--kind` is the kind of every `--rule`, and of a rule in the file that names none; a rule in the file can also set `"case_sensitive": true` to match the word only as written. The create command prints the dictionary with its `pronunciation_dictionary_id` (starts with `pd_`): record it. A dictionary created as a lexicon, before the rename, keeps its `lx_` ID and still works. Each create makes a new dictionary, also with a name already in use, so do not run it twice. The CLI has no command that edits a dictionary: create a new one, then delete the old one. Limits: 100 dictionaries per organization, 100 rules per dictionary, a name up to 100 characters, a `word` up to 100 and a `value` up to 120. **Will break:** synthesizing with a deleted `pronunciation_dictionary_id` returns `404 not_found` with `param: pronunciation_dictionary_id`; `get` or `delete` on an unknown ID returns `404 not_found`. Deleting a dictionary cannot be undone: ask first.
 
 ## Use the audio on a call (file branch)
 
@@ -218,7 +220,7 @@ Each voice speaks one language, so the voice decides the language code, and `lan
 
 - English only: pick an English voice and set `language` to its own accent code (`en-US`, `en-GB`, `en-IN`, `en-AU`). There is no plain `en`.
 - One Indian language: pick a voice for it (`hi`, `bn`, `ta`, `te`, `mr`, `gu`, `kn`) and set that code. Leave `auto` for later: `auto` detects the language of the text, and a wrong guess returns `language_not_supported`.
-- Mixed, for example Hindi with English words: the docs do not say how a voice handles it, so treat everything here as **risky** until the user has heard it. Pick one Hindi voice, set `language` to `hi`, and keep English brand names and terms in Latin script inside the Hindi text (the docs' own example reply reads "नमस्ते, Plivo में आपका स्वागत है।"). Do not change voice or language inside one reply. If a word is said wrong, fix it with a lexicon rule of kind `respell` (see "Pronunciation and lexicons").
+- Mixed, for example Hindi with English words: the docs do not say how a voice handles it, so treat everything here as **risky** until the user has heard it. Pick one Hindi voice, set `language` to `hi`, and keep English brand names and terms in Latin script inside the Hindi text (the docs' own example reply reads "नमस्ते, Plivo में आपका स्वागत है।"). Do not change voice or language inside one reply. If a word is said wrong, fix it with a pronunciation dictionary rule of kind `respell` (see "Pronunciation dictionaries").
 - Ask the user for two real replies of their own, one pure and one mixed, count the characters, and offer a short test: "Run a test of about <N> characters now? Plivo bills per character." (header Run test). On yes, run it through the script in "Realtime socket reference" with that text, adding `"language": "<the code from this step>"` to its first message, and ask "Does it sound right?" (header Listen).
 
 Check: the chosen `voice_id` appears in the list with the language, and for a mixed plan the user has listened to a mixed sample.
@@ -242,9 +244,9 @@ Check: the format row for this combination is chosen and recorded. Noise or stat
 
 First the user adds `PLIVO_AUTH_ID`, `PLIVO_AUTH_TOKEN` and `VOICE_ID` (the voice from V2) to their `.env` with an editor, as in the rules. Then the facts that every integration shares (full tables are in "Realtime socket reference"):
 
-- One socket for the whole call. Open it when the call connects and reuse it for every reply: "Reuse the socket across turns instead of reconnecting." One socket holds up to 8 open replies.
+- One socket for the whole call. Open it when the call connects and reuse it for every reply: "Reuse the socket across turns instead of reconnecting." There is no fixed number of replies per socket: each open reply counts toward the organization's concurrency limit of 50.
 - One reply is one `context_id`, and a `context_id` can be used once per socket. Use a new one for every reply (every turn), never a reused one: a reused id returns an `error` with `invalid_request` and `param: context_id`.
-- The first `text` message of a reply carries `voice_id`, `language`, `output_format` and `timestamps`. Later messages carry only `type`, `context_id`, `text` and `finish`: any other field returns `invalid_request`. `"finish": true` ends the reply.
+- The first `text` message of a reply carries `voice_id`, `language`, `output_format` and `timestamps`. Later messages carry only `type`, `context_id`, `text` and `finish`: an option repeated with a changed value returns `invalid_request`. `"finish": true` ends the reply.
 - Plivo speaks each sentence as soon as it ends and holds an unfinished one, so a few words with no sentence end make no sound until a `flush` or `finish`.
 - Keep reading the socket: a client that stops reading for 30 s is dropped. Audio comes as binary frames (2-byte little-endian length, the `context_id`, then audio) and everything else as JSON.
 
@@ -449,7 +451,7 @@ tts = PlivoTTSService(
 )
 ```
 
-Four things to tell the user about this outline. The Plivo docs show `text` as required but never show an empty final `text`, so `flush_audio` is **risky**: on the first test, the reply must end with a `done` event. If the socket answers with an `error` there instead, report it to Plivo support and try the fallback (**untested**): pass `reuse_context_id_within_turn=False` to the service so Pipecat opens one context per sentence, and send each sentence as one `text` message with `"finish": true` (drop `flush_audio`). The docs give no idle timeout for the socket, so there is no keepalive: the receive loop reconnects when the socket ends. A close code of `1008` is an error to read, not to reconnect past: log the last `error` event first. Last, the socket closes with the call: at Pipecat 1.17.0 `WebsocketTTSService` calls `_disconnect()` when the pipeline stops, is cancelled or is cleaned up, which cancels the receive loop, and an open socket counts toward the account's 50-connection limit until then.
+Four things to tell the user about this outline. The Plivo docs show `text` as required but never show an empty final `text`, so `flush_audio` is **risky**: on the first test, the reply must end with a `done` event. If the socket answers with an `error` there instead, report it to Plivo support and try the fallback (**untested**): pass `reuse_context_id_within_turn=False` to the service so Pipecat opens one context per sentence, and send each sentence as one `text` message with `"finish": true` (drop `flush_audio`). A socket with no message and no open reply for 5 minutes is closed with `1000`, and a reply with no message and no audio for 60 s ends as if its `finish` came, so keep the call's socket busy or let the receive loop reconnect when the socket ends. A close code of `1008` is an error to read, not to reconnect past: log the last `error` event first. Last, the socket closes with the call: at Pipecat 1.17.0 `WebsocketTTSService` calls `_disconnect()` when the pipeline stops, is cancelled or is cleaned up, which cancels the receive loop, and an open socket counts one toward the organization's concurrency limit of 50 until then.
 
 **LiveKit Agents.** Install `livekit-agents` (1.8.13 or later). LiveKit has no guide for custom TTS plugins, so the source of its Cartesia plugin is the model: a pooled socket, one reply per stream, one segment per stream. This outline uses it. A stream is one turn, which fits Plivo's one `context_id` per reply.
 
@@ -658,7 +660,7 @@ When the caller talks over the voice agent, three things must stop, in this orde
 2. The audio already queued for the caller (Audio Streaming only): send `{"event": "clearAudio", "streamId": "<the stream's id>"}` on the `<Stream>` WebSocket. Plivo drops the queued audio and answers with `clearedAudio`. SIP trunking has no such event: the SIP side and the framework clear their own buffers.
 3. Your own buffer: discard every audio frame that still arrives for the cancelled `context_id`. The docs do not say whether frames already in flight can still arrive after a cancel, so assume they can.
 
-Then the next reply uses a new `context_id`, on the same socket: ids are single use per socket, and a socket holds up to 8 open replies. A cancelled reply ends with its `done`, and it should stop counting as open then (**risky:** the docs do not say when a slot frees, so count the open replies yourself and wait for `done` before opening an eighth). Keep one socket for the whole call, and keep reading it (30 s rule). Pace the audio you send to the call in real time, so the queue stays short and `clearAudio` takes effect at once.
+Then the next reply uses a new `context_id`, on the same socket: ids are single use per socket, and each open reply counts toward the organization's concurrency limit of 50. A cancelled reply ends with its `done`, and it should stop counting as open then (**risky:** the docs do not say when the slot frees, so wait for `done` before you count it free). Keep one socket for the whole call, and keep reading it (30 s rule). Pace the audio you send to the call in real time, so the queue stays short and `clearAudio` takes effect at once.
 
 Per framework:
 
@@ -708,7 +710,7 @@ Report, short, in this order: the framework and call path; the voice and languag
 
 ## Realtime socket reference
 
-Use it when text arrives piece by piece, as a model writes it, and the audio must start before the text ends. It is not a CLI command. Endpoint: `wss://api.plivo.com/v1/Account/<auth_id>/TTS/Realtime/`, with the Auth ID and Auth Token as HTTP Basic auth on the upgrade request. A bad credential is refused with an HTTP status, so the socket never opens. There are no query parameters: one returns `422 invalid_request` and the socket does not open, and a plain GET with no upgrade returns `426`. Every option goes in the first `text` message of a reply.
+Use it when text arrives piece by piece, as a model writes it, and the audio must start before the text ends. It is not a CLI command. Endpoint: `wss://api.plivo.com/v1/Account/<auth_id>/TTS/Realtime/`, with the Auth ID and Auth Token as HTTP Basic auth on the upgrade request. A bad credential is refused with an HTTP status, so the socket never opens. There are no query parameters: one returns `400 invalid_request` and the socket does not open, and a plain GET with no upgrade returns `426`. Every option goes in the first `text` message of a reply.
 
 A runnable start. Save it as `realtime_tts.py`. The user puts `PLIVO_AUTH_ID`, `PLIVO_AUTH_TOKEN` and `VOICE_ID` in `.env`; never read, cat or print that file. Running the script bills per character, like step F3: do the credit check (step 2) and take a `plivo tts usage -o json` reading, then ask "Run a test of about <N> characters now? Plivo bills per character." (header Run test; the script as written sends 16 characters, so count the new text if you change it), and run it only on yes. `uv run --script` alone does not load `.env`, so run:
 
@@ -765,12 +767,12 @@ async def main():
 asyncio.run(main())
 ```
 
-Messages you send (JSON text frames, up to 64 KiB each):
+Messages you send (JSON text frames, up to 1 MiB each):
 
 | `type` | Fields | Meaning |
 |---|---|---|
-| `text` | `context_id`, `text` (up to 5,000 characters), `finish` (default `false`); on a reply's first message also `voice_id` (required), `timestamps` (default `false`), `language`, `output_format`, `pace`, `volume`, `pronunciations`, `lexicon_id`, `continuation`, `seed` | A new `context_id` opens a reply, and each `context_id` can be used once per socket. Send the text in pieces, and `finish: true` on the last. Later messages for the same reply take only `type`, `context_id`, `text` and `finish`: any other field returns an `error` with `invalid_request` and the field in `param` |
-| `flush` | `context_id`, optional `flush_id` | Speak everything received so far for that reply, including a sentence that has not ended, and keep the reply open. With a `flush_id` the server answers `flush_done` with the same id; without one it sends none. A flush on a reply that is not open returns `invalid_request` |
+| `text` | `context_id`, `text` (up to 20,000 characters a reply), `finish` (default `false`); on a reply's first message also `voice_id` (required), `model_id`, `language`, `text_normalization`, `output_format`, `pace`, `volume`, `pronunciation_dictionary_id`, `continuation`, `seed`, `timestamps` (default `false`), `use_normalized_timestamps` (default `false`) | A new `context_id` opens a reply, and each `context_id` can be used once per socket. Send the text in pieces, and `finish: true` on the last. A later message for the same reply may repeat the first message's options with the same values; a changed value ends the reply with an `error` of `invalid_request` and the field in `param` |
+| `flush` | `context_id`, optional `flush_id` | Speak everything received so far for that reply, including a sentence that has not ended, and keep the reply open. With a `flush_id` the server answers `flush_done` with the same id; without one it sends none. A flush on a reply that was never opened returns `invalid_request` |
 | `cancel` | optional `context_id` | Stop that reply now; with no `context_id`, stop all replies. A `context_id` that is not open is ignored |
 
 Messages you receive:
@@ -778,11 +780,11 @@ Messages you receive:
 | Frame | Meaning |
 |---|---|
 | binary | A 2-byte little-endian length, then that many bytes of `context_id`, then audio in that reply's `output_format` |
-| `timestamps` | Character timings, once per sentence, only when the reply's first message set `timestamps: true`: `chars`, `start_ms` and `duration_ms`, one entry per character, in milliseconds from the start of the reply's audio |
+| `timestamps` | Character timings, in events that each hold whole words, only when the reply's first message set `timestamps: true`: `chars`, `start_ms` and `duration_ms`, one entry per character, in milliseconds from the start of the reply's audio |
 | `flush_done` | A flush that carried a `flush_id` has been generated |
-| `done` | The reply ended. Sent once per reply, after its last audio frame or when you cancel it. It carries `reason` (`complete` or `cancelled`), `normalized_text`, the billed `characters`, `spoken_chars` and `audio_seconds`, and shows `continued`, `ttfb_ms` and `connection_id` in the docs' example |
-| `warning` | A non-fatal problem. Its fields are not documented |
-| `error` | `type`, `code`, `message`, `param`, `context_id`, `connection_id`. It does not close the socket and affects only the reply named in `context_id`; `context_id` is left out when the error is not about one reply |
+| `done` | The reply ended without an error, after its last audio frame or when you cancel it. It carries `reason` (`complete` or `cancelled`), `continued`, `normalized_text`, the billed `characters`, `spoken_chars`, `tokens`, `audio_seconds`, `ttfb_ms` and `api_id`. A reply that fails ends with its `error` and gets no `done` |
+| `warning` | A problem that does not end the reply: `code` (`text_too_long` for text dropped past the reply's limit, `invalid_request` for a phoneme span that cannot be read or text sent after `finish`), `number`, `message`, `param`, `context_id` and `api_id` |
+| `error` | `type`, `code`, `number`, `status_code` (the status the same error has over HTTP), `message`, `param`, `context_id`, `api_id`. It does not close the socket and ends only the reply named in `context_id`; `context_id` is left out when the error is not about one reply |
 
 `output_format` takes the same fields the batch request sends. These are the values behind each CLI `--format`; `--sample-rate` replaces the rate, and mp3 adds a `bitrate`, which only some rates accept (below the table):
 
@@ -796,25 +798,24 @@ Messages you receive:
 
 mp3 takes a bitrate only in these pairs (from the CLI's own table, not the docs): 44100 and 48000 Hz take 32000, 64000, 96000, 128000 or 192000; 24000 Hz takes 48000; 16000 Hz takes 32000 or 64000; 8000 and 22050 Hz take 32000. The CLI picks a valid default for the rate (128000, 48000, 64000 or 32000), so leave `--bitrate` out unless the user asks. A pair that is not offered returns `400 unsupported_format`.
 
-The docs' format table lists these uses: a phone call in the US or India `raw` `pcm_mulaw` 8000, a phone call in Europe `raw` `pcm_alaw` 8000, a wideband agent or web `raw` or `wav` `pcm_s16le` at 16000 or 24000, and a download `mp3` at 44100. Only `raw` `pcm_mulaw` at 8000 is exercised by the script above; **risky:** the other combinations are untested on the socket, and the docs do not say how a `wav` or `mp3` reply is framed on it. A `seed` repeats the audio only with `continuation` set to `false`, which is what `--seed` sends; what `continuation` does by itself is not documented.
+The docs' format table lists these uses: a phone call in the US or India `raw` `pcm_mulaw` 8000, a phone call in Europe `raw` `pcm_alaw` 8000, a wideband agent or web `raw` or `wav` `pcm_s16le` at 16000 or 24000, and a download `mp3` at 44100. Only `raw` `pcm_mulaw` at 8000 is exercised by the script above; **risky:** the other combinations are untested on the socket, and the docs do not say how a `wav` or `mp3` reply is framed on it. A `seed` repeats the audio only with `continuation` set to `false`, which is what `--seed` sends; a continued reply builds on the reply before it, so the same seed and text can sound different.
 
-Rules that matter: keep reading the socket, because a client that reads nothing for 30 s is dropped. One socket carries up to 8 open replies, each with its own `context_id`. The realtime messages use the same field names as the batch request, so `pace`, `volume` and `lexicon_id` mean what they mean for `plivo tts speak`; the batch-only `--file`, `--out` and `--format` flags have no counterpart. Omit an optional field rather than send `null`, which returns `422`. Close codes: `1013` is a retryable error (reconnect), `1011` is a server (5xx) error (reconnect with backoff), `1008` is any other error (read the last `error` event first, and do not reconnect past it).
+Rules that matter: keep reading the socket, because a client that reads nothing for 30 s is dropped. One socket carries many replies at once, each with its own `context_id`, and each open reply counts toward the organization's concurrency limit. A reply with no message and no audio for 60 s ends as if its `finish` came, and a socket with no message and no open reply for 5 minutes is closed with `1000`. The realtime messages use the same field names as the batch request, so `pace`, `volume` and `pronunciation_dictionary_id` mean what they mean for `plivo tts speak`; the batch-only `--file`, `--out` and `--format` flags have no counterpart. Omit an optional field rather than send `null`, which returns `400`. Close codes: `1009` is a message over 1 MiB, `1013` is a retryable error (reconnect), `1011` is a server (5xx) error (reconnect with backoff), `1008` is any other error (read the last `error` event first, and do not reconnect past it).
 
 ## Limits
 
 | Limit | Value |
 |---|---|
-| Open connections per account | 50, then `429 concurrency_limit` |
-| Text per request or `text` message | 5,000 characters |
-| Replies (contexts) per socket | 8 open |
+| Concurrency per organization | 50, then `429 concurrency_limit`: each batch request and each open realtime reply counts one, and a socket with no open reply counts one |
+| Text per batch request, or per realtime reply | 20,000 characters |
+| Replies (contexts) per socket | No fixed number: each open reply counts toward concurrency |
 | Request body | 1 MiB |
-| WebSocket frame | 64 KiB |
+| WebSocket frame | 1 MiB |
 | Slow reader | dropped after 30 s without reading |
 | Pace, volume | 0.7 to 1.2, 0.5 to 2.0 |
-| Inline pronunciations per request | 100 |
-| Lexicons per organization, rules per lexicon | 100, 100 |
+| Pronunciation dictionaries per organization, rules per dictionary | 100, 100 |
 
-Not documented, so never state them as fact: an idle timeout or maximum lifetime for a socket, what a ninth open reply returns, a total text limit per reply, and a rate limit on messages.
+Not documented, so never state them as fact: a maximum lifetime for a socket, and a rate limit on messages.
 
 ## Billing and usage
 
@@ -822,31 +823,32 @@ Billing is per character: each `done` event and the usage report give the billed
 
 ## When a request fails
 
-With the CLI, add `-o json`: the error envelope prints on stderr. Its `error.code` is the CLI's own code (`VALIDATION_ERROR`, `RESOURCE_NOT_FOUND`, `UPSTREAM_TIMEOUT` and so on), not Plivo's. Plivo's answer is at `error.context.upstream.body`: its `code`, the text in `error` (not `message`), a `param` when a field is at fault, and `api_id`. Read that body first, and key the table on `upstream.body.code`. These are the documented codes:
+With the CLI, add `-o json`: the error envelope prints on stderr. Its `error.code` is the CLI's own code (`VALIDATION_ERROR`, `RESOURCE_NOT_FOUND`, `UPSTREAM_TIMEOUT` and so on), not Plivo's. Plivo's answer is at `error.context.upstream.body`: its `code` and the code's `number`, the text in `error` (not `message`), a `param` when a field is at fault, and `api_id`. Read that body first, and key the table on `upstream.body.code`. These are the documented codes:
 
 | `upstream.body.code` (HTTP status) | Meaning | Fix |
 |---|---|---|
 | `unauthorized` (401) | Bad or missing Auth ID or Auth Token | `plivo auth whoami`, then log in again |
 | `forbidden` (403) | The credentials are not for the Auth ID in the request path | Use the account that owns the credentials |
 | `insufficient_balance` (400) | Insufficient credits in the account | Add credits at <https://cx.plivo.com/home> |
-| `usage_limit_exceeded` (403) | The account has reached its configured monthly usage limit | Raise the limit, or ask Plivo support |
+| `usage_limit_exceeded` (403) | The account has reached its configured monthly usage limit | Raise the limit at <https://cx.plivo.com/account-settings>, or ask your account manager |
 | `voice_not_found` (404) | Unknown voice, or one the account may not use | `plivo tts voices` |
-| `language_not_supported` (400) | The voice does not speak the text's language | Pick a voice from `plivo tts voices --language <code>`, or set `--language` |
-| `empty_text`, `text_too_long` (400) | Nothing to speak, or over 5,000 characters | Send 1 to 5,000 characters; split longer text |
-| `unsupported_format` (400) | That format, rate or bitrate pair is not offered | Fix `--format`, `--sample-rate` and `--bitrate` (mp3 pairs are above) |
-| `invalid_request` (422; 400 if not JSON, 413 over 1 MiB, 408 for a slow upload) | A bad value; `param` names the field (`lexicon_id` for a deleted lexicon, `language` for a plain `en` or an unknown code, `context_id` for a reused reply id, or a query parameter, which no TTS route takes). A `null` for an optional field also returns it | Fix that field, or omit it |
-| `not_found` (404), `method_not_allowed` (405) | A wrong path or method, or a lexicon ID that does not exist | `plivo tts lexicons list` |
-| `concurrency_limit` (429) | More than 50 open connections on the account | Close idle sockets, wait 1 s, then retry |
+| `model_not_found` (404) | Unknown `model_id`: `koyal-v1` is the only model | Leave `model_id` out |
+| `language_not_supported` (400) | The `--language` given is one the voice does not speak (`param: language`) | Leave `--language` out, or pick a voice from `plivo tts voices --language <code>` |
+| `empty_text`, `text_too_long` (400) | Nothing to speak, or over 20,000 characters | Send 1 to 20,000 characters; split longer text |
+| `unsupported_format` (400) | That format, rate or bitrate pair is not offered; nothing is billed | Fix `--format`, `--sample-rate` and `--bitrate` (mp3 pairs are above) |
+| `invalid_request` (400; 408 for a slow upload, 413 over 1 MiB, 426 for a plain GET on the realtime URL) | A bad value or a field the API does not know; `param` names it (`language` for a plain `en` or an unknown code, `context_id` for a reused reply id, or a query parameter, which only the voice list takes). A `null` for an optional field also returns it | Fix that field, or omit it |
+| `not_found` (404), `method_not_allowed` (405) | A wrong path or method, or a pronunciation dictionary ID that does not exist (`param: pronunciation_dictionary_id`) | `plivo tts pronunciation-dictionaries list` |
+| `concurrency_limit` (429) | The organization's batch requests and open realtime replies are at its limit of 50; a socket with no open reply counts one | Close idle sockets, wait 1 s, then retry |
 | `at_capacity`, `draining`, `auth_unavailable` (503) | Busy right now | Wait 1 s, then retry (see the billed-run rule in step F3) |
-| `backend_error` (502) | The engine failed | Wait 1 s, then retry (same rule) |
+| `backend_error` (502) | The service failed this request | Wait 1 s, then retry (same rule) |
 | `internal_error` (500) | A bug on Plivo's side | Give support the `api_id` |
 | `cancelled` (499) | The request was cancelled or the client left | Nothing to fix |
 
 A realtime WebSocket client has no CLI envelope: its `error` frame carries `code`, `message` and `param` at the top level.
 
-For any other code, show the user the whole `upstream.body` and do not guess a cause. To get help, give Plivo support `upstream.body.api_id` and `error.request_id`, with the UTC time and the command (not the text, if it is private). A direct HTTP or WebSocket client, such as the realtime script, has no envelope: every response carries a `connection-id` header that matches `api_id` in an error body (and the `connection_id` of an `error` or `done` event), so give support that. A request may also carry a `client-ref` header (1 to 64 letters, digits, `_` or `-`): the id then starts with it.
+For any other code, show the user the whole `upstream.body` and do not guess a cause. To get help, give Plivo support `upstream.body.api_id` and `error.request_id`, with the UTC time and the command (not the text, if it is private). A direct HTTP or WebSocket client, such as the realtime script, has no envelope: every response carries an `api-id` header that matches `api_id` in an error body and in a realtime event, so give support that. A request may also carry a `client-ref` header (1 to 64 letters, digits, `_` or `-`): the id then starts with it.
 
-Check in this order: the voice and language pair (`plivo tts voices`); the text length (5,000 characters) and the `--pace` and `--volume` ranges; for mp3, the `--sample-rate` and `--bitrate` pair; `cash_credits`; then the error body.
+Check in this order: the voice and language pair (`plivo tts voices`); the text length (20,000 characters) and the `--pace` and `--volume` ranges; for mp3, the `--sample-rate` and `--bitrate` pair; `cash_credits`; then the error body.
 
 ## When this skill does not have the answer
 
@@ -857,11 +859,11 @@ Do not guess from other platforms. The Plivo Text-to-Speech docs are published: 
 | What it is, formats, languages | `overview` |
 | A first request | `quickstart`, `ai-coding-agent` |
 | Voices and languages | `concepts/voices`, `api/voices` |
-| Pronunciation and lexicons | `concepts/pronunciation`, `api/lexicons` |
+| Pronunciation dictionaries | `concepts/pronunciation`, `api/pronunciation-dictionaries` |
 | Replies, flush and cancel | `concepts/realtime`, `api/realtime` |
 | Base URL, authentication, limits | `api/overview` |
 | Batch requests and `output_format` | `api/batch` |
 | Usage | `api/usage` |
 | Errors and close codes | `troubleshooting/errors` |
 
-`plivo docs search` does not reliably reach these pages: `text-to-speech` finds the overview, the API overview and the batch page, and a phrase such as `text-to-speech realtime` finds nothing, so open the page above instead of searching (`plivo docs show models/text-to-speech/api/realtime` works for a known page). A hit counts only if it is about the TTS models API: `<Speak>`, SSML, voice use-case and integration pages are a different product, so ignore them. Next, `plivo ask "<question>"`, which can also see the account; treat its answer as evidence and prefer the docs where they conflict. The docs do not give a price, a latency figure, a socket idle timeout, a TTS host in India, what `continuation` does by itself, how a voice handles mixed-language text, or whether an empty final `text` with `finish: true` is accepted: say so and route to Plivo support or the account manager. Out of scope: speech to text, the model behind a voice agent, the call itself (`plivo skill install audio-streaming`, `plivo skill install sip-trunking`), and the `<Speak>` element's own voices (`plivo skill install voice-xml`).
+`plivo docs search` does not reliably reach these pages: `text-to-speech` finds the overview, the API overview and the batch page, and a phrase such as `text-to-speech realtime` finds nothing, so open the page above instead of searching (`plivo docs show models/text-to-speech/api/realtime` works for a known page). A hit counts only if it is about the TTS models API: `<Speak>`, SSML, voice use-case and integration pages are a different product, so ignore them. Next, `plivo ask "<question>"`, which can also see the account; treat its answer as evidence and prefer the docs where they conflict. The docs do not give a price, a latency figure, a TTS host in India, how a voice handles mixed-language text, or whether an empty final `text` with `finish: true` is accepted: say so and route to Plivo support or the account manager. Out of scope: speech to text, the model behind a voice agent, the call itself (`plivo skill install audio-streaming`, `plivo skill install sip-trunking`), and the `<Speak>` element's own voices (`plivo skill install voice-xml`).

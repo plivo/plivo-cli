@@ -1104,8 +1104,9 @@ type TTSVoice struct {
 	Languages   []string `json:"languages"`
 	AccentType  string   `json:"accent_type"`
 	Description string   `json:"description,omitempty"`
-	Lexicon     bool     `json:"lexicon"`
+	IsOwner     bool     `json:"is_owner"`
 	SampleURL   string   `json:"sample_url,omitempty"`
+	CreatedAt   string   `json:"created_at,omitempty"`
 }
 
 // TTSVoiceDetail is one voice from /Account/{id}/TTS/Voices/{voice_id}/.
@@ -1118,8 +1119,9 @@ type TTSVoiceDetail struct {
 	Languages   []string `json:"languages"`
 	AccentType  string   `json:"accent_type"`
 	Description string   `json:"description,omitempty"`
-	Lexicon     bool     `json:"lexicon"`
+	IsOwner     bool     `json:"is_owner"`
 	SampleURL   string   `json:"sample_url,omitempty"`
+	CreatedAt   string   `json:"created_at,omitempty"`
 }
 
 // TTSVoiceList is what plivo tts voices prints: the voices, filtered here.
@@ -1128,27 +1130,32 @@ type TTSVoiceList struct {
 	Objects []TTSVoice `json:"objects"`
 }
 
-// TTSLexiconRule is how one word is said, written in its lexicon's kind.
-type TTSLexiconRule struct {
-	Word  string `json:"word"`
-	Value string `json:"value"`
+// TTSPronunciationRule is how one word is said. Kind is how Value is written:
+// ipa, arpa or respell.
+type TTSPronunciationRule struct {
+	Word          string `json:"word"`
+	Kind          string `json:"kind"`
+	Value         string `json:"value"`
+	CaseSensitive bool   `json:"case_sensitive,omitempty"`
 }
 
-// TTSLexicon is a pronunciation lexicon in /Account/{id}/TTS/Lexicons/.
-type TTSLexicon struct {
+// TTSPronunciationDictionary is a pronunciation dictionary in
+// /Account/{id}/TTS/PronunciationDictionaries/.
+type TTSPronunciationDictionary struct {
 	RawBody
-	LexiconID string           `json:"lexicon_id"`
-	Name      string           `json:"name"`
-	Kind      string           `json:"kind"`
-	Version   int              `json:"version"`
-	Rules     []TTSLexiconRule `json:"rules"`
+	PronunciationDictionaryID string                 `json:"pronunciation_dictionary_id"`
+	Name                      string                 `json:"name"`
+	Description               string                 `json:"description"`
+	Rules                     []TTSPronunciationRule `json:"rules"`
+	Version                   int                    `json:"version"`
+	CreatedAt                 string                 `json:"created_at"`
 }
 
-type TTSLexiconList struct {
+type TTSPronunciationDictionaryList struct {
 	RawBody
-	APIID   string       `json:"api_id"`
-	Meta    PageMeta     `json:"meta"`
-	Objects []TTSLexicon `json:"objects"`
+	APIID   string                       `json:"api_id"`
+	Meta    PageMeta                     `json:"meta"`
+	Objects []TTSPronunciationDictionary `json:"objects"`
 }
 
 // TTSUsageRoute totals one route: http is batch, live is realtime.

@@ -473,14 +473,14 @@ var qaDocsRequests = func() []qaSDKRequest {
 		{"POST", "Call/{}/Speak", []string{"voice"}},
 		{"POST", "Call/{}/DTMF", []string{"leg"}},
 		{"PATCH", "PhoneNumber/Compliance/{}", none},
-		{"POST", "TTS", []string{"voice_id", "text", "language", "output_format", "pace", "volume", "pronunciations", "lexicon_id", "continuation", "seed"}},
-		{"GET", "TTS/Voices", none},
+		{"POST", "TTS", []string{"voice_id", "text", "model_id", "language", "text_normalization", "output_format", "pace", "volume", "pronunciation_dictionary_id", "seed", "continuation"}},
+		{"GET", "TTS/Voices", []string{"language", "gender"}},
 		{"GET", "TTS/Voices/{}", none},
 		{"GET", "TTS/Usage", none},
-		{"GET", "TTS/Lexicons", none},
-		{"POST", "TTS/Lexicons", []string{"name", "kind", "rules"}},
-		{"GET", "TTS/Lexicons/{}", none},
-		{"DELETE", "TTS/Lexicons/{}", none},
+		{"GET", "TTS/PronunciationDictionaries", none},
+		{"POST", "TTS/PronunciationDictionaries", []string{"name", "description", "rules"}},
+		{"GET", "TTS/PronunciationDictionaries/{}", none},
+		{"DELETE", "TTS/PronunciationDictionaries/{}", none},
 	}
 	for _, r := range []string{"Credential", "IPAccessControlList", "URI"} {
 		reqs = append(reqs, qaSDKRequest{"GET", "Zentrunk/" + r, page})
